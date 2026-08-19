@@ -182,7 +182,6 @@ var DeckView = class extends import_obsidian.ItemView {
     this.renderToolbar(shell);
     const stage = shell.createDiv({ cls: "zk-deck-stage" });
     this.stageEl = stage;
-    stage.setAttr("aria-label", "Zettelkasten card deck");
     this.attachBrowsingEvents(stage);
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0 || this.activeId === null) {

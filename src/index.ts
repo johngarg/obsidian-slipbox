@@ -15,3 +15,14 @@ export type {
   ParsedZettelId,
   PathToken,
 } from "./zettel-id.js";
+
+export { indexZettelMetadata } from "./zettel-metadata.js";
+
+export type {
+  DuplicateZettelIssue,
+  FiledZettelRecord,
+  InvalidZettelIssue,
+  ZettelIssue,
+  ZettelMetadataIndex,
+  ZettelMetadataRecord,
+} from "./zettel-metadata.js";

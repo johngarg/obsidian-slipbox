@@ -2,14 +2,19 @@
   "name": "luhmann-zettelkasten",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "description": "A physical, sequential Luhmann-style Zettelkasten for Obsidian",
+  "main": "main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist/test/*.test.js",
+    "check": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
     "typescript": "^5.9.0"
   }
 }

@@ -1,39 +1,52 @@
-# Luhmann Zettelkasten
+# Zettelkasten Deck
 
-Pure TypeScript domain logic for a Luhmann-inspired Obsidian plugin.
+Zettelkasten Deck is a desktop Obsidian plugin for browsing ordinary Markdown
+notes as a physical, sequential Luhmann-style card index. A note participates
+only when its frontmatter contains `zettel-id`:
 
-The current package implements only canonical Zettelkasten address parsing,
-formatting, ordering, and filing. It intentionally has no dependency on the
-Obsidian API, vault files, or frontmatter.
+```yaml
+---
+zettel-id: ""
+---
+```
 
-## Public API
+An empty value is an unfiled card on the Desk. A canonical nonempty value such
+as `1/2b1` is a permanently filed card. The address is the sole source of Deck
+order; the plugin stores no hidden filing sequence and imposes no folder.
 
-- `parseZettelId` and `formatZettelId` convert between canonical strings and
-  an immutable, explicitly tokenized representation.
-- `isValidZettelId` provides non-throwing validation.
-- `compareZettelIds` orders canonical IDs for physical filing.
-- `incrementAlphaToken` implements the unbounded sequence `a` through `z`,
-  then `aa`, `ab`, and so on.
-- `generateFiledId` prefers the attachment's next sibling. If that address is
-  occupied, it fills the first free direct-child address, alternating child
-  token type between letters and numbers.
-- `generateNextSectionId` returns `<highest existing section + 1>/1`.
+## v0.1 features
 
-Malformed addresses, malformed existing collections, and absent attachment
-points throw `ZettelIdError`. Duplicate existing IDs are normalized without
-affecting generation.
+- A custom, read-only Deck view with rendered Obsidian Markdown.
+- Continuous horizontal trackpad and background-drag browsing, neighbour-card
+  clicks, arrow-key navigation, internal vertical scrolling, and snap-to-card.
+- A persistent Spread control that changes spacing without resizing cards.
+- A session-only thumb with an edge tab when the held card is out of view.
+- Persistent named entry points with add, rename, delete, and jump actions.
+- A minimal Desk dialog listing every unfiled card and starting Filing Mode.
+- Deliberate filing from the active attachment point, with immutable addresses.
+- Global new-card, convert-note, new-section, Deck, thumb, filing, and
+  entry-point commands.
+- Persistent last position and reactive vault/metadata indexing.
+- Visible malformed-address and duplicate-address diagnostics.
+- Windowed rendering around the active card rather than rendering the vault.
 
-Numeric components use JavaScript numbers and are restricted to positive safe
-integers so parsing, formatting, and comparison cannot lose precision.
-Alphabetic components have no artificial length limit.
+## Address domain
+
+The pure TypeScript domain in `src/zettel-id.ts` parses, formats, compares, and
+generates canonical addresses. Numeric components compare numerically;
+alphabetic components follow the unbounded sequence `a … z, aa, ab …`; and a
+prefix card precedes all of its extensions.
+
+The public domain API is exported from `src/index.ts` and has no dependency on
+Obsidian. Metadata classification is likewise pure and tested independently.
 
 ## Development
 
 ```sh
 npm install
-npm run typecheck
-npm test
+npm run check
 ```
 
-The test command performs a clean TypeScript build before running the compiled
-tests with Node's built-in test runner. No lint tool is currently configured.
+`npm run build` produces the Obsidian bundle `main.js`. The installable plugin
+consists of `manifest.json`, `main.js`, and `styles.css`. The test suite uses
+Node's built-in test runner, while strict TypeScript checks the complete plugin.

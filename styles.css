@@ -1,0 +1,493 @@
+.zk-deck-view {
+  --zk-card-radius: 10px;
+  height: 100%;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.zk-deck-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 360px;
+  color: var(--text-normal);
+  background:
+    radial-gradient(circle at 50% 42%, var(--background-primary) 0, transparent 62%),
+    var(--background-secondary);
+  user-select: none;
+}
+
+.zk-deck-toolbar {
+  position: relative;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.zk-deck-identity,
+.zk-toolbar-group,
+.zk-problem-button,
+.zk-spread-control,
+.zk-desk-button {
+  display: flex;
+  align-items: center;
+}
+
+.zk-deck-identity {
+  gap: 7px;
+  padding-right: 4px;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.02em;
+}
+
+.zk-deck-icon,
+.zk-deck-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.zk-toolbar-group {
+  gap: 5px;
+}
+
+.zk-toolbar-main {
+  flex: 1;
+}
+
+.zk-deck-toolbar button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--button-radius);
+  box-shadow: none;
+  color: var(--text-muted);
+  background: var(--background-primary-alt);
+  font-size: var(--font-ui-smaller);
+}
+
+.zk-deck-toolbar button:hover {
+  color: var(--text-normal);
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+}
+
+.zk-deck-toolbar .zk-icon-button {
+  width: 30px;
+  padding: 5px;
+}
+
+.zk-count {
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  font-size: 0.75em;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.zk-problem-button {
+  gap: 5px;
+  color: var(--text-warning) !important;
+}
+
+.zk-problem-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.zk-spread-control {
+  gap: 8px;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+
+.zk-spread-control input {
+  width: clamp(80px, 10vw, 145px);
+}
+
+.zk-deck-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.zk-deck-stage.is-dragging {
+  cursor: grabbing;
+}
+
+.zk-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(62%, 900px);
+  max-height: calc(100% - 54px);
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--zk-card-radius);
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.12),
+    0 12px 36px rgb(0 0 0 / 0.12);
+  background: var(--background-primary);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  will-change: transform, opacity;
+  cursor: pointer;
+}
+
+.zk-card.is-active {
+  border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
+  box-shadow:
+    0 2px 7px rgb(0 0 0 / 0.14),
+    0 18px 52px rgb(0 0 0 / 0.18);
+  cursor: default;
+}
+
+.zk-deck-stage.is-snapping .zk-card {
+  transition:
+    transform 300ms cubic-bezier(0.22, 0.68, 0.22, 1),
+    opacity 300ms ease;
+}
+
+.zk-card-address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 39px;
+  padding: 8px 15px 7px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary-alt);
+}
+
+.zk-card-address {
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.075em;
+  font-variant-numeric: tabular-nums;
+}
+
+.zk-thumb-marker {
+  position: relative;
+  margin-top: -16px;
+  padding: 3px 8px 5px;
+  border-radius: 5px 5px 2px 2px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  font-size: var(--font-ui-smaller);
+  line-height: 1;
+}
+
+.zk-card-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: clamp(20px, 3.2vw, 42px) clamp(22px, 4vw, 58px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  user-select: text;
+  cursor: text;
+  scrollbar-gutter: stable;
+}
+
+.zk-card-scroll.markdown-rendered > :first-child,
+.zk-in-hand-preview.markdown-rendered > :first-child {
+  margin-top: 0;
+}
+
+.zk-card-scroll.markdown-rendered > :last-child,
+.zk-in-hand-preview.markdown-rendered > :last-child {
+  margin-bottom: 0;
+}
+
+.zk-card:not(.is-active) .zk-card-scroll {
+  pointer-events: none;
+  user-select: none;
+}
+
+.zk-render-error {
+  color: var(--text-error);
+}
+
+.zk-thumb-tab {
+  position: absolute;
+  top: 50%;
+  z-index: 220;
+  padding: 7px 10px;
+  border: 1px solid var(--interactive-accent);
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  box-shadow: var(--shadow-s);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-50%);
+}
+
+.zk-thumb-tab.is-left {
+  left: 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.zk-thumb-tab.is-right {
+  right: 0;
+  border-radius: 6px 0 0 6px;
+}
+
+.zk-in-hand {
+  position: absolute;
+  top: 61px;
+  left: 50%;
+  z-index: 210;
+  display: flex;
+  flex-direction: column;
+  width: min(38%, 520px);
+  max-height: 27%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 60%, var(--background-modifier-border));
+  border-radius: 8px;
+  box-shadow: 0 13px 40px rgb(0 0 0 / 0.22);
+  background: var(--background-primary);
+  transform: translateX(-50%) rotate(-0.7deg);
+}
+
+.zk-in-hand-label {
+  padding: 5px 10px;
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.zk-in-hand-name {
+  padding: 5px 11px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-in-hand-preview {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 14px;
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: 0.8em;
+  user-select: text;
+}
+
+.zk-in-hand.is-entering-deck {
+  pointer-events: none;
+  animation: zk-enter-deck 280ms cubic-bezier(0.4, 0, 0.25, 1) forwards;
+}
+
+@keyframes zk-enter-deck {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) rotate(-0.7deg) scale(1);
+  }
+
+  to {
+    top: 56%;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.9);
+  }
+}
+
+.is-filing .zk-card {
+  top: 62%;
+  width: min(56%, 800px);
+  max-height: 58%;
+}
+
+.zk-filing-actions {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.zk-filing-prompt {
+  margin-right: 8px;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+}
+
+.zk-deck-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(460px, calc(100% - 48px));
+  padding: 28px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.zk-deck-empty h2 {
+  margin-top: 0;
+}
+
+.zk-deck-empty p,
+.zk-empty-copy {
+  color: var(--text-muted);
+}
+
+.zk-modal .modal-content {
+  max-height: min(72vh, 720px);
+}
+
+.zk-prompt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.zk-prompt-form input {
+  width: 100%;
+}
+
+.zk-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: min(55vh, 580px);
+  overflow: auto;
+}
+
+.zk-list-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  background: var(--background-primary-alt);
+}
+
+.zk-entry-visit,
+.zk-file-visit {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  text-align: left;
+}
+
+.zk-entry-name {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-entry-id {
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+
+.zk-file-path {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.zk-issue-group {
+  padding: 9px 11px;
+  border-left: 3px solid var(--text-error);
+  border-radius: 4px;
+  background: var(--background-primary-alt);
+}
+
+.zk-issue-message {
+  margin-bottom: 5px;
+  color: var(--text-error);
+  font-weight: var(--font-semibold);
+}
+
+.zk-issue-file {
+  display: block;
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  box-shadow: none;
+  color: var(--text-muted);
+  background: transparent;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  text-align: left;
+}
+
+@media (max-width: 850px) {
+  .zk-deck-identity,
+  .zk-toolbar-group:first-of-type {
+    display: none;
+  }
+
+  .zk-deck-toolbar {
+    gap: 6px;
+  }
+
+  .zk-card {
+    width: 72%;
+  }
+
+  .zk-in-hand {
+    width: 52%;
+  }
+}

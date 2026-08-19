@@ -3,9 +3,11 @@ import {
   ItemView,
   MarkdownRenderer,
   Notice,
+  Scope,
   TFile,
   WorkspaceLeaf,
   setIcon,
+  setTooltip,
 } from "obsidian";
 
 import type ZettelkastenPlugin from "./main.js";
@@ -44,6 +46,13 @@ export class DeckView extends ItemView {
     private readonly plugin: ZettelkastenPlugin,
   ) {
     super(leaf);
+    this.scope = new Scope(this.app.scope);
+    this.scope.register([], "ArrowLeft", (event) =>
+      this.handleArrowNavigation(event, -1),
+    );
+    this.scope.register([], "ArrowRight", (event) =>
+      this.handleArrowNavigation(event, 1),
+    );
   }
 
   getViewType(): string {
@@ -61,9 +70,6 @@ export class DeckView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass("zk-deck-view");
     this.contentEl.tabIndex = 0;
-    this.registerDomEvent(this.contentEl, "keydown", (event) => {
-      this.onKeyDown(event);
-    });
     await this.refresh();
   }
 
@@ -108,7 +114,7 @@ export class DeckView extends ItemView {
       new Notice("There is no active filed card to hold.");
       return;
     }
-    this.thumbId = this.activeId;
+    this.thumbId = this.thumbId === this.activeId ? null : this.activeId;
     void this.renderDeck();
   }
 
@@ -261,7 +267,7 @@ export class DeckView extends ItemView {
 
     const hold = controls.createEl("button", {
       text: this.thumbId === this.activeId && this.activeId !== null
-        ? "Place held"
+        ? "Release hold"
         : "Hold place",
       attr: { type: "button" },
     });
@@ -343,7 +349,12 @@ export class DeckView extends ItemView {
       cardEl.dataset.offset = String(offset);
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", offset === 0);
-      cardEl.setAttr("aria-label", `${card.id}, ${card.file.basename}`);
+      const cardLabel = `${card.id} · ${card.file.basename}`;
+      cardEl.setAttr("aria-label", cardLabel);
+      setTooltip(cardEl, cardLabel, {
+        placement: "bottom",
+        delay: 350,
+      });
       cardEl.style.zIndex = String(100 - Math.abs(offset));
       this.renderedCards.push(cardEl);
 
@@ -624,7 +635,10 @@ export class DeckView extends ItemView {
     }
   }
 
-  private onKeyDown(event: KeyboardEvent): void {
+  private handleArrowNavigation(
+    event: KeyboardEvent,
+    delta: -1 | 1,
+  ): boolean {
     const target = event.target;
     if (
       target instanceof HTMLInputElement ||
@@ -632,16 +646,12 @@ export class DeckView extends ItemView {
       target instanceof HTMLSelectElement ||
       (target instanceof HTMLElement && target.isContentEditable)
     ) {
-      return;
+      return false;
     }
 
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      void this.moveBy(-1);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      void this.moveBy(1);
-    }
+    event.preventDefault();
+    void this.moveBy(delta);
+    return true;
   }
 
   private positionCards(stripOffset: number, animate: boolean): void {

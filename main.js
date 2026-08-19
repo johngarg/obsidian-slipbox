@@ -51,6 +51,17 @@ var DeckView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
+    this.scope = new import_obsidian.Scope(this.app.scope);
+    this.scope.register(
+      [],
+      "ArrowLeft",
+      (event) => this.handleArrowNavigation(event, -1)
+    );
+    this.scope.register(
+      [],
+      "ArrowRight",
+      (event) => this.handleArrowNavigation(event, 1)
+    );
   }
   activeId = null;
   thumbId = null;
@@ -75,9 +86,6 @@ var DeckView = class extends import_obsidian.ItemView {
   async onOpen() {
     this.contentEl.addClass("zk-deck-view");
     this.contentEl.tabIndex = 0;
-    this.registerDomEvent(this.contentEl, "keydown", (event) => {
-      this.onKeyDown(event);
-    });
     await this.refresh();
   }
   async onClose() {
@@ -115,7 +123,7 @@ var DeckView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice("There is no active filed card to hold.");
       return;
     }
-    this.thumbId = this.activeId;
+    this.thumbId = this.thumbId === this.activeId ? null : this.activeId;
     void this.renderDeck();
   }
   async goToId(id, releasedDragOffset = 0) {
@@ -244,7 +252,7 @@ var DeckView = class extends import_obsidian.ItemView {
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
     const hold = controls.createEl("button", {
-      text: this.thumbId === this.activeId && this.activeId !== null ? "Place held" : "Hold place",
+      text: this.thumbId === this.activeId && this.activeId !== null ? "Release hold" : "Hold place",
       attr: { type: "button" }
     });
     hold.addEventListener("click", () => this.holdPlace());
@@ -309,7 +317,12 @@ var DeckView = class extends import_obsidian.ItemView {
       cardEl.dataset.offset = String(offset);
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", offset === 0);
-      cardEl.setAttr("aria-label", `${card.id}, ${card.file.basename}`);
+      const cardLabel = `${card.id} \xB7 ${card.file.basename}`;
+      cardEl.setAttr("aria-label", cardLabel);
+      (0, import_obsidian.setTooltip)(cardEl, cardLabel, {
+        placement: "bottom",
+        delay: 350
+      });
       cardEl.style.zIndex = String(100 - Math.abs(offset));
       this.renderedCards.push(cardEl);
       const addressRow = cardEl.createDiv({ cls: "zk-card-address-row" });
@@ -554,18 +567,14 @@ var DeckView = class extends import_obsidian.ItemView {
       await this.goToId(target.id);
     }
   }
-  onKeyDown(event) {
+  handleArrowNavigation(event, delta) {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable) {
-      return;
+      return false;
     }
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      void this.moveBy(-1);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      void this.moveBy(1);
-    }
+    event.preventDefault();
+    void this.moveBy(delta);
+    return true;
   }
   positionCards(stripOffset, animate) {
     const stage = this.stageEl;

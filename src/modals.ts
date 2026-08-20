@@ -145,6 +145,49 @@ export function promptForTemplate(
   });
 }
 
+class CanvasPromptModal extends FuzzySuggestModal<TFile> {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly files: readonly TFile[],
+    private readonly resolveFile: (file: TFile | null) => void,
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a Canvas (Esc to cancel)");
+  }
+
+  getItems(): TFile[] {
+    return [...this.files];
+  }
+
+  getItemText(file: TFile): string {
+    return file.path.slice(0, -".canvas".length);
+  }
+
+  onChooseItem(file: TFile): void {
+    this.settled = true;
+    this.resolveFile(file);
+  }
+
+  onClose(): void {
+    super.onClose();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveFile(null);
+    }
+  }
+}
+
+export function promptForCanvas(
+  app: App,
+  files: readonly TFile[],
+): Promise<TFile | null> {
+  return new Promise((resolve) => {
+    new CanvasPromptModal(app, files, resolve).open();
+  });
+}
+
 export function promptForText(
   app: App,
   heading: string,
@@ -159,6 +202,66 @@ export function promptForText(
       initialValue,
       resolve,
     ).open();
+  });
+}
+
+class ConfirmationModal extends Modal {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly heading: string,
+    private readonly message: string,
+    private readonly confirmLabel: string,
+    private readonly resolveChoice: (confirmed: boolean) => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.addClass("slipbox-modal");
+    contentEl.createEl("h2", { text: this.heading });
+    contentEl.createEl("p", { text: this.message });
+    const actions = contentEl.createDiv({ cls: "slipbox-modal-actions" });
+    const cancel = actions.createEl("button", { text: "Keep", type: "button" });
+    const confirm = actions.createEl("button", {
+      text: this.confirmLabel,
+      type: "button",
+      cls: "mod-warning",
+    });
+    cancel.addEventListener("click", () => this.finish(false));
+    confirm.addEventListener("click", () => this.finish(true));
+    activateDefaultButtonOnEnter(contentEl, confirm);
+    confirm.focus({ preventScroll: true });
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveChoice(false);
+    }
+  }
+
+  private finish(confirmed: boolean): void {
+    if (this.settled) {
+      return;
+    }
+    this.settled = true;
+    this.resolveChoice(confirmed);
+    this.close();
+  }
+}
+
+export function confirmAction(
+  app: App,
+  heading: string,
+  message: string,
+  confirmLabel: string,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    new ConfirmationModal(app, heading, message, confirmLabel, resolve).open();
   });
 }
 
@@ -333,7 +436,7 @@ export class IssuesModal extends Modal {
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Zettel address problems" });
     contentEl.createEl("p", {
-      text: "Deck never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes.",
+      text: "Slipbox never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes.",
     });
 
     const list = contentEl.createDiv({ cls: "slipbox-modal-list" });

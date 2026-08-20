@@ -19,6 +19,9 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["open-note"], [
       { key: "o", modifiers: [] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray"], [
+      { key: "p", modifiers: [] },
+    ]);
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
     assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, false);
@@ -35,9 +38,7 @@ describe("Slipbox settings", () => {
       useTemplatesForNewNotes: false,
       newNoteTemplatePath: " Templates/Zettel.md ",
       showTitleInDeck: true,
-      showTitleInDesk: false,
-      deckHeaderButtons: { bookmark: false },
-      deskHeaderButtons: { remove: false },
+      deckHeaderButtons: { bookmark: false, tray: false },
       deckKeybindings: {
         "previous-card": [
           { key: "K", modifiers: [] },
@@ -56,10 +57,11 @@ describe("Slipbox settings", () => {
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
     assert.equal(settings.showTitleInDeck, true);
-    assert.equal(settings.showTitleInDesk, false);
     assert.equal(settings.deckHeaderButtons.bookmark, false);
-    assert.equal(settings.deckHeaderButtons.desk, true);
-    assert.equal(settings.deskHeaderButtons.remove, false);
+    assert.equal(settings.deckHeaderButtons.tray, false);
+    assert.equal("desk" in settings.deckHeaderButtons, false);
+    assert.equal("showTitleInDesk" in settings, false);
+    assert.equal("deskHeaderButtons" in settings, false);
     assert.deepEqual(settings.deckKeybindings["previous-card"], [
       { key: "k", modifiers: [] },
     ]);

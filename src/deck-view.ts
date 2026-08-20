@@ -30,22 +30,31 @@ import {
   DECK_ACTION_DEFINITIONS,
   type DeckAction,
 } from "./settings.js";
+import { TrayRenderer } from "./tray-view.js";
+import { cardPosition, moveCardWithinPile } from "./tray-state.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
 const FILING_ANIMATION_DURATION_MS = 280;
 const RENDER_EDGE_BUFFER = 2;
 const LAYOUT_MEASUREMENT_RETRIES = 2;
+const SPACE_RECENTER_DURATION_MS = 180;
 
 export class DeckView extends ItemView {
   private activeId: string | null = null;
   private filingFile: TFile | null = null;
   private stageEl: HTMLElement | null = null;
+  private spaceEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
   private renderComponents: Component[] = [];
   private cardScrollPositions = new Map<string, number>();
   private viewportOffset = 0;
   private pointerLastX: number | null = null;
+  private pointerLastY: number | null = null;
+  private pointerMoved = false;
+  private spaceOffsetX = 0;
+  private spaceOffsetY = 0;
+  private spaceRecenteringTimer: number | null = null;
   private filingPromptEl: HTMLElement | null = null;
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
@@ -55,11 +64,11 @@ export class DeckView extends ItemView {
   private backButtonEl: HTMLButtonElement | null = null;
   private forwardButtonEl: HTMLButtonElement | null = null;
   private bookmarksButtonEl: HTMLButtonElement | null = null;
-  private deskButtonEl: HTMLButtonElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
   private readonly cardFooters: CardFooterManager;
+  private readonly trayRenderer: TrayRenderer;
   private keymapHandlers: KeymapEventHandler[] = [];
 
   constructor(
@@ -71,10 +80,12 @@ export class DeckView extends ItemView {
       app: this.app,
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
-      isOnDesk: (file) => this.plugin.state.deskCards.some(
-        (card) => card.cardRef === file.path,
-      ),
-      putOnDesk: (file) => this.plugin.putFileOnDesk(file, false),
+      isInTray: (file) => this.plugin.isFileInTray(file),
+      toggleTray: (file) => this.plugin.toggleFileInTray(file),
+    });
+    this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
+      jumpToFiledCard: (id) => this.jumpToId(id),
+      moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta),
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
@@ -88,7 +99,7 @@ export class DeckView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Slipbox Deck";
+    return "Slipbox";
   }
 
   getIcon(): string {
@@ -103,7 +114,9 @@ export class DeckView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.cancelSpaceRecentering();
     this.cardFooters.clear();
+    this.trayRenderer.clear();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -115,12 +128,14 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.filingFile = null;
     this.stageEl = null;
+    this.spaceEl = null;
+    this.spaceOffsetX = 0;
+    this.spaceOffsetY = 0;
     this.renderedCards = [];
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.deskButtonEl = null;
     this.history.reset();
   }
 
@@ -221,9 +236,9 @@ export class DeckView extends ItemView {
           void this.plugin.createCardFrom(card.id);
         }
         break;
-      case "toggle-desk":
+      case "toggle-tray":
         if (card !== null) {
-          void this.toggleCardDesk(card.file);
+          void this.plugin.toggleFileInTray(card.file);
         }
         break;
       case "toggle-bookmark":
@@ -242,9 +257,6 @@ export class DeckView extends ItemView {
         break;
       case "bookmarks":
         this.plugin.showBookmarks(this);
-        break;
-      case "open-desk":
-        void this.plugin.openDesk();
         break;
       case "problems":
         this.plugin.showIssues();
@@ -287,7 +299,7 @@ export class DeckView extends ItemView {
   async cancelFiling(): Promise<void> {
     this.filingFile = null;
     await this.renderDeck();
-    new Notice("Filing cancelled. The card remains on the Desk.");
+    new Notice("Filing cancelled. The card remains in its pile.");
   }
 
   async goToId(id: string): Promise<void> {
@@ -391,13 +403,13 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.cardFooters.clear();
+    this.trayRenderer.clear();
     this.contentEl.empty();
     this.renderedCards = [];
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.deskButtonEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
@@ -408,17 +420,31 @@ export class DeckView extends ItemView {
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
+    const space = stage.createDiv({ cls: "slipbox-space" });
+    this.spaceEl = space;
+    this.applySpaceOffset();
+    const trayJob = this.trayRenderer.render(
+      stage,
+      space,
+      this.filingFile !== null,
+      () => version === this.renderVersion,
+    );
 
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0 || this.activeId === null) {
-      this.renderEmptyDeck(stage);
+      this.renderEmptyDeck(space);
     } else {
       const activeIndex = filed.findIndex((card) => card.id === this.activeId);
       if (activeIndex >= 0) {
-        await this.renderCardWindow(stage, filed, activeIndex, version);
+        await this.renderCardWindow(space, filed, activeIndex, version);
       }
     }
 
+    if (version !== this.renderVersion) {
+      return;
+    }
+
+    await trayJob;
     if (version !== this.renderVersion) {
       return;
     }
@@ -438,7 +464,7 @@ export class DeckView extends ItemView {
     const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     setIcon(icon, "archive");
-    identity.createSpan({ text: "Deck" });
+    identity.createSpan({ text: "Slipbox" });
 
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
@@ -472,18 +498,6 @@ export class DeckView extends ItemView {
     }
     bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
     this.bookmarksButtonEl = bookmarks;
-
-    const desk = controls.createEl("button", {
-      attr: { type: "button" },
-      cls: "slipbox-desk-button",
-    });
-    desk.createSpan({ text: "Desk" });
-    const deskCount = this.plugin.state.deskCards.length;
-    if (deskCount > 0) {
-      desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
-    }
-    desk.addEventListener("click", () => this.runAction("open-desk"));
-    this.deskButtonEl = desk;
 
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
@@ -568,9 +582,7 @@ export class DeckView extends ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
-      const isOnDesk = this.plugin.state.deskCards.some(
-        (deskCard) => deskCard.cardRef === card.path,
-      );
+      const isInTray = this.plugin.isFileInTray(card.file);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.id} · ${title}`;
       cardEl.setAttr("aria-label", cardLabel);
@@ -594,7 +606,7 @@ export class DeckView extends ItemView {
           cardActions,
           "plus",
           "slipbox-card-add",
-          `Add a card from ${card.id} · ${title}`,
+          "Add a card from here",
           () => this.runAction("add-card", card),
         );
       }
@@ -603,28 +615,26 @@ export class DeckView extends ItemView {
           cardActions,
           "file-pen-line",
           "slipbox-card-open",
-          `Open ${card.id} · ${title} in Markdown`,
+          "Open",
           () => this.runAction("open-note", card),
         );
       }
-      if (this.plugin.settings.deckHeaderButtons.desk) {
-        const deskAction = isOnDesk
-          ? `Remove ${card.id} · ${title} from Desk`
-          : `Add ${card.id} · ${title} to Desk`;
-        const deskToggle = this.renderCardAction(
+      if (this.plugin.settings.deckHeaderButtons.tray) {
+        const trayAction = isInTray ? "Return" : "Pull out";
+        const trayToggle = this.renderCardAction(
           cardActions,
-          "panels-top-left",
-          "slipbox-card-desk-toggle",
-          deskAction,
-          () => this.runAction("toggle-desk", card),
+          isInTray ? "undo-2" : "inbox",
+          "slipbox-card-tray-toggle",
+          trayAction,
+          () => this.runAction("toggle-tray", card),
         );
-        deskToggle.setAttr("aria-pressed", String(isOnDesk));
-        deskToggle.toggleClass("is-on-desk", isOnDesk);
+        trayToggle.setAttr("aria-pressed", String(isInTray));
+        trayToggle.toggleClass("is-in-tray", isInTray);
       }
       if (this.plugin.settings.deckHeaderButtons.bookmark) {
         const bookmarkAction = isBookmarked
-          ? `Remove bookmark from ${card.id} · ${title}`
-          : `Add bookmark to ${card.id} · ${title}`;
+          ? "Remove bookmark"
+          : "Add bookmark";
         const bookmarkToggle = this.renderCardAction(
           cardActions,
           "bookmark",
@@ -743,17 +753,6 @@ export class DeckView extends ItemView {
     }
     this.updateBookmarkUi(bookmarkedIds);
     await this.plugin.toggleBookmark(zettelId);
-  }
-
-  private async toggleCardDesk(file: TFile): Promise<void> {
-    const deskCardRefs = this.deskCardRefs();
-    if (deskCardRefs.has(file.path)) {
-      deskCardRefs.delete(file.path);
-    } else {
-      deskCardRefs.add(file.path);
-    }
-    this.updateDeskUi(deskCardRefs);
-    await this.plugin.toggleFileOnDesk(file);
   }
 
   private attachInternalLinkInteractions(
@@ -910,7 +909,7 @@ export class DeckView extends ItemView {
     });
     const targets = bookmarkEdgeTargets(
       bookmarkIndices,
-      this.viewportPosition(activeIndex),
+      this.viewportPosition(activeIndex) - this.spaceOffsetX / this.cardStep(),
       this.cardStep(),
       stage.clientWidth,
       cardWidth,
@@ -952,32 +951,85 @@ export class DeckView extends ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
+      this.cancelSpaceRecentering();
       this.pointerLastX = event.clientX;
+      this.pointerLastY = event.clientY;
+      this.pointerMoved = false;
       stage.setPointerCapture(event.pointerId);
       stage.addClass("is-dragging");
       this.contentEl.focus({ preventScroll: true });
     });
     stage.addEventListener("pointermove", (event) => {
-      if (this.pointerLastX === null) {
+      if (this.pointerLastX === null || this.pointerLastY === null) {
         return;
       }
-      const movement = event.clientX - this.pointerLastX;
+      const movementX = event.clientX - this.pointerLastX;
+      const movementY = event.clientY - this.pointerLastY;
       this.pointerLastX = event.clientX;
-      this.moveViewportByPixels(-movement);
+      this.pointerLastY = event.clientY;
+      if (Math.hypot(movementX, movementY) > 0) {
+        this.pointerMoved = true;
+      }
+      this.spaceOffsetX += movementX;
+      this.spaceOffsetY += movementY;
+      this.applySpaceOffset();
     });
-    const finishPointer = (event: PointerEvent): void => {
+    const finishPointer = (event: PointerEvent, cancelled = false): void => {
       if (this.pointerLastX === null) {
         return;
       }
+      const wasClick = !cancelled && !this.pointerMoved;
       this.pointerLastX = null;
+      this.pointerLastY = null;
+      this.pointerMoved = false;
       stage.removeClass("is-dragging");
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
       }
+      if (wasClick && this.plugin.tray.expandedPileId !== null) {
+        void this.plugin.expandTrayPile(null);
+      }
+      this.renderBookmarkEdgeTabs(stage);
       this.queueRenderWindowRefresh();
     };
     stage.addEventListener("pointerup", finishPointer);
-    stage.addEventListener("pointercancel", finishPointer);
+    stage.addEventListener("pointercancel", (event) => finishPointer(event, true));
+  }
+
+  private applySpaceOffset(): void {
+    if (this.spaceEl === null) {
+      return;
+    }
+    this.spaceEl.style.transform =
+      `translate(${this.spaceOffsetX}px, ${this.spaceOffsetY}px)`;
+  }
+
+  private recenterSpace(): void {
+    const space = this.spaceEl;
+    const shouldAnimate =
+      space !== null && (this.spaceOffsetX !== 0 || this.spaceOffsetY !== 0);
+    this.cancelSpaceRecentering();
+    if (shouldAnimate) {
+      space.addClass("is-recentering");
+    }
+    this.spaceOffsetX = 0;
+    this.spaceOffsetY = 0;
+    this.applySpaceOffset();
+    if (!shouldAnimate) {
+      return;
+    }
+    this.spaceRecenteringTimer = window.setTimeout(() => {
+      space.removeClass("is-recentering");
+      this.spaceRecenteringTimer = null;
+    }, SPACE_RECENTER_DURATION_MS);
+  }
+
+  private cancelSpaceRecentering(): void {
+    if (this.spaceRecenteringTimer !== null) {
+      window.clearTimeout(this.spaceRecenteringTimer);
+      this.spaceRecenteringTimer = null;
+    }
+    this.spaceEl?.removeClass("is-recentering");
   }
 
   private moveViewportByPixels(deltaPixels: number): void {
@@ -1034,9 +1086,33 @@ export class DeckView extends ItemView {
       return;
     }
     this.viewportOffset = 0;
+    this.recenterSpace();
     this.positionCards();
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
+  }
+
+  private async moveTrayCardBy(
+    cardRef: string,
+    delta: -1 | 1,
+  ): Promise<void> {
+    const position = cardPosition(this.plugin.tray, cardRef);
+    if (position === null) {
+      return;
+    }
+    const target = Math.max(
+      0,
+      Math.min(position.pileSize - 1, position.cardIndex + delta),
+    );
+    if (target === position.cardIndex) {
+      return;
+    }
+    await this.plugin.updateTray(moveCardWithinPile(
+      this.plugin.tray,
+      position.pileId,
+      position.cardIndex,
+      target,
+    ));
   }
 
   private goToDeckBoundary(boundary: "start" | "end"): void {
@@ -1224,10 +1300,6 @@ export class DeckView extends ItemView {
     );
   }
 
-  private deskCardRefs(): Set<string> {
-    return new Set(this.plugin.state.deskCards.map((card) => card.cardRef));
-  }
-
   private updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()): void {
     const bookmarkCount = bookmarkedIds.size;
     if (this.bookmarksButtonEl !== null) {
@@ -1253,9 +1325,7 @@ export class DeckView extends ItemView {
         continue;
       }
       const isBookmarked = bookmarkedIds.has(zettelId);
-      const action = isBookmarked
-        ? `Remove bookmark from ${zettelId}`
-        : `Add bookmark to ${zettelId}`;
+      const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
       toggle.toggleClass("is-bookmarked", isBookmarked);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));
@@ -1267,45 +1337,6 @@ export class DeckView extends ItemView {
 
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
-    }
-  }
-
-  private updateDeskUi(deskCardRefs = this.deskCardRefs()): void {
-    const deskCount = deskCardRefs.size;
-    if (this.deskButtonEl !== null) {
-      const countEl = this.deskButtonEl.querySelector<HTMLElement>(".slipbox-count");
-      if (deskCount === 0) {
-        countEl?.remove();
-      } else if (countEl === null) {
-        this.deskButtonEl.createSpan({
-          cls: "slipbox-count",
-          text: String(deskCount),
-        });
-      } else {
-        countEl.setText(String(deskCount));
-      }
-    }
-
-    for (const cardEl of this.renderedCards) {
-      const cardPath = cardEl.dataset.path;
-      const zettelId = cardEl.dataset.zettelId;
-      const toggle = cardEl.querySelector<HTMLButtonElement>(
-        ".slipbox-card-desk-toggle",
-      );
-      if (cardPath === undefined || zettelId === undefined || toggle === null) {
-        continue;
-      }
-      const isOnDesk = deskCardRefs.has(cardPath);
-      const action = isOnDesk
-        ? `Remove ${zettelId} from Desk`
-        : `Add ${zettelId} to Desk`;
-      toggle.toggleClass("is-on-desk", isOnDesk);
-      toggle.setAttr("aria-label", action);
-      toggle.setAttr("aria-pressed", String(isOnDesk));
-      setTooltip(toggle, action, {
-        placement: "bottom",
-        delay: 250,
-      });
     }
   }
 

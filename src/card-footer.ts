@@ -7,14 +7,15 @@ import {
 } from "obsidian";
 
 import { fitBacklinkPrefix } from "./backlinks.js";
+import { trayToggleLabel } from "./deck-actions.js";
 import type { FiledZettel } from "./zettel-index.js";
 
 export interface CardFooterEnvironment {
   readonly app: App;
   readonly leaf: WorkspaceLeaf;
   readonly hoverSource: string;
-  readonly isOnDesk: (file: TFile) => boolean;
-  readonly putOnDesk: (file: TFile) => void | Promise<void>;
+  readonly isInTray: (file: TFile) => boolean;
+  readonly toggleTray: (file: TFile) => void | Promise<void>;
 }
 
 export interface CardFooterRenderOptions {
@@ -346,14 +347,13 @@ export class CardFooterManager {
     backlink: FiledZettel,
   ): void {
     this.closeOverflowMenu();
-    const onDesk = this.environment.isOnDesk(backlink.file);
+    const inTray = this.environment.isInTray(backlink.file);
     const menu = Menu.forEvent(event);
     menu.addItem((item) => {
       item
-        .setTitle(onDesk ? "On Desk" : "Put on Desk")
-        .setIcon("panels-top-left")
-        .setDisabled(onDesk)
-        .onClick(() => void this.environment.putOnDesk(backlink.file));
+        .setTitle(trayToggleLabel(inTray))
+        .setIcon(inTray ? "undo-2" : "inbox")
+        .onClick(() => void this.environment.toggleTray(backlink.file));
     });
     this.environment.app.workspace.trigger(
       "file-menu",

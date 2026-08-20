@@ -18,20 +18,18 @@ import {
   type DeckBookmark,
 } from "./bookmarks.js";
 import { DECK_VIEW_TYPE, DeckView } from "./deck-view.js";
-import { DESK_VIEW_TYPE, DeskView } from "./desk-view.js";
+import { trayToggleLabel } from "./deck-actions.js";
 import {
-  addDeskCard,
-  bringDeskCardToFront,
-  moveDeskCard,
-  removeDeskCard,
   removeDeskPath,
   renameDeskCard,
 } from "./desk-state.js";
 import { generateFiledId, generateNextSectionId } from "./zettel-id.js";
 import {
   BookmarksModal,
+  confirmAction,
   EntryPointsModal,
   IssuesModal,
+  promptForCanvas,
   promptForNewCardTitle,
   promptForTemplate,
   promptForText,
@@ -60,6 +58,22 @@ import {
 } from "./settings.js";
 import { SlipboxSettingTab } from "./settings-tab.js";
 import { ZettelIndex } from "./zettel-index.js";
+import {
+  EMPTY_TRAY,
+  clearFiledCardsFromPile,
+  clearFiledCardsFromTray,
+  reconcileTray,
+  removeTrayPath,
+  renameTrayPath,
+  setExpandedPile,
+  toggleFiledCard,
+  trayContains,
+  trayHasFiledCards,
+  type TrayCardCandidate,
+  type TrayState,
+} from "./tray-state.js";
+import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
+import { normalizeCanvasPath } from "./canvas-layout.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -77,20 +91,25 @@ export interface TemplatesInfo {
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
   settings: SlipboxSettings = DEFAULT_SETTINGS;
+  tray: TrayState = EMPTY_TRAY;
   index!: ZettelIndex;
+  canvas!: CanvasBridge;
 
   private indexRefreshTimer: number | null = null;
   private spreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
   private cardCreationInProgress = false;
   private persistQueue: Promise<void> = Promise.resolve();
+  private trayPileSequence = 0;
 
   async onload(): Promise<void> {
     const data = normalizePluginData(await this.loadData());
     this.settings = data.settings;
     this.state = data.state;
     this.index = new ZettelIndex(this.app, this.settings.addressProperty);
+    this.canvas = new CanvasBridge(this.app);
     this.index.refresh();
+    this.reconcileSessionTray();
     await this.persistState();
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
@@ -98,20 +117,12 @@ export default class SlipboxPlugin extends Plugin {
       DECK_VIEW_TYPE,
       (leaf) => new DeckView(leaf, this),
     );
-    this.registerView(
-      DESK_VIEW_TYPE,
-      (leaf) => new DeskView(leaf, this),
-    );
     this.registerHoverLinkSource(DECK_VIEW_TYPE, {
-      display: "Slipbox Deck",
-      defaultMod: false,
-    });
-    this.registerHoverLinkSource(DESK_VIEW_TYPE, {
-      display: "Slipbox Desk",
+      display: "Slipbox",
       defaultMod: false,
     });
 
-    this.addRibbonIcon("archive", "Open Slipbox Deck", () => {
+    this.addRibbonIcon("archive", "Open Slipbox", () => {
       void this.openDeck();
     });
 
@@ -143,7 +154,6 @@ export default class SlipboxPlugin extends Plugin {
       window.clearTimeout(this.spreadSaveTimer);
     }
     this.app.workspace.detachLeavesOfType(DECK_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(DESK_VIEW_TYPE);
   }
 
   async openDeck(filingFile?: TFile): Promise<DeckView> {
@@ -159,27 +169,10 @@ export default class SlipboxPlugin extends Plugin {
 
     await this.app.workspace.revealLeaf(leaf);
     if (!(leaf.view instanceof DeckView)) {
-      throw new Error("Obsidian did not create the Slipbox Deck view");
+      throw new Error("Obsidian did not create the Slipbox view");
     }
     if (filingFile !== undefined) {
       await leaf.view.startFiling(filingFile);
-    }
-    return leaf.view;
-  }
-
-  async openDesk(): Promise<DeskView> {
-    await this.refreshIndex();
-    let leaf: WorkspaceLeaf;
-    const existing = this.app.workspace.getLeavesOfType(DESK_VIEW_TYPE)[0];
-    if (existing === undefined) {
-      leaf = this.app.workspace.getLeaf("tab");
-      await leaf.setViewState({ type: DESK_VIEW_TYPE, active: true });
-    } else {
-      leaf = existing;
-    }
-    await this.app.workspace.revealLeaf(leaf);
-    if (!(leaf.view instanceof DeskView)) {
-      throw new Error("Obsidian did not create the Slipbox Desk view");
     }
     return leaf.view;
   }
@@ -255,9 +248,7 @@ export default class SlipboxPlugin extends Plugin {
 
     const isBookmarked =
       zettelId !== null && this.bookmarkAt(zettelId) !== undefined;
-    const isOnDesk = this.state.deskCards.some(
-      (card) => card.cardRef === file.path,
-    );
+    const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
 
@@ -282,10 +273,15 @@ export default class SlipboxPlugin extends Plugin {
     });
     menu.addItem((item) => {
       item
-        .setTitle(isOnDesk ? "Remove from Desk" : "Add to Desk")
-        .setIcon("panels-top-left")
+        .setTitle(trayToggleLabel(isInTray))
+        .setIcon(isInTray ? "undo-2" : "inbox")
         .setSection("slipbox-card")
-        .onClick(() => void this.toggleFileOnDesk(file));
+        .setDisabled(zettelId === null)
+        .onClick(() => {
+          if (zettelId !== null) {
+            void this.toggleFileInTray(file);
+          }
+        });
     });
     menu.addItem((item) => {
       item
@@ -323,10 +319,6 @@ export default class SlipboxPlugin extends Plugin {
     } catch (error) {
       new Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage(error)}`);
     }
-  }
-
-  showDesk(): void {
-    void this.openDesk();
   }
 
   showIssues(): void {
@@ -410,72 +402,170 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async putFileOnDesk(file: TFile, revealDesk = true): Promise<void> {
+  createTrayPileId(): string {
+    this.trayPileSequence += 1;
+    return `tray-pile-${this.trayPileSequence}`;
+  }
+
+  async updateTray(next: TrayState): Promise<void> {
+    this.tray = next;
+    await this.refreshDeckViews();
+  }
+
+  async toggleFileInTray(file: TFile): Promise<void> {
     this.index.refresh();
-    const metadataState = this.cardMetadataState(file);
-    if (metadataState !== "filed" && metadataState !== "unfiled") {
-      new Notice("Only a filed or unfiled Slipbox card can be placed on Desk.");
+    const filed = this.index.filedByFile(file);
+    if (filed === undefined) {
+      new Notice("Only a uniquely filed card can be pulled out.");
       return;
     }
-    if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
-      new Notice(`${this.cardTitle(file)} is already on Desk.`);
-      if (revealDesk) {
-        await this.openDesk();
-      }
+    this.tray = toggleFiledCard(
+      this.tray,
+      { cardRef: file.path, kind: "filed" },
+      this.createTrayPileId(),
+    );
+    await this.refreshDeckViews();
+  }
+
+  isFileInTray(file: TFile): boolean {
+    return trayContains(this.tray, file.path);
+  }
+
+  async expandTrayPile(pileId: string | null): Promise<void> {
+    this.tray = setExpandedPile(this.tray, pileId);
+    await this.refreshDeckViews();
+  }
+
+  async clearTrayPile(pileId: string): Promise<void> {
+    this.tray = clearFiledCardsFromPile(this.tray, pileId);
+    await this.refreshDeckViews();
+  }
+
+  async clearTray(): Promise<void> {
+    this.tray = clearFiledCardsFromTray(this.tray);
+    await this.refreshDeckViews();
+  }
+
+  hasActiveCanvas(): boolean {
+    return this.canvas.hasActiveCanvas();
+  }
+
+  async layOutTrayPileOnActiveCanvas(pileId: string): Promise<void> {
+    const paths = this.trayPilePaths(pileId);
+    if (paths.length === 0) {
       return;
     }
-    const position = this.nextDeskPosition();
-    this.state = {
-      ...this.state,
-      deskCards: addDeskCard(this.state.deskCards, file.path, position),
-    };
-    await this.persistStateAndRefreshViews();
-    if (revealDesk) {
-      await this.openDesk();
+    try {
+      this.reportCanvasWrite(await this.canvas.layoutFilesOnActiveCanvas(paths));
+    } catch (error) {
+      new Notice(`Could not lay out the pile: ${errorMessage(error)}`);
     }
   }
 
-  async toggleFileOnDesk(file: TFile): Promise<void> {
-    if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
-      await this.removeFromDesk(file.path);
+  async layOutTrayPileOnCanvas(pileId: string): Promise<void> {
+    const paths = this.trayPilePaths(pileId);
+    if (paths.length === 0) {
       return;
     }
-    await this.putFileOnDesk(file, false);
-  }
-
-  async removeFromDesk(cardRef: string): Promise<void> {
-    if (!this.state.deskCards.some((card) => card.cardRef === cardRef)) {
+    const canvases = this.canvas.canvasFiles();
+    if (canvases.length === 0) {
+      new Notice("There are no Canvas files in this vault. Create one from the pile instead.");
       return;
     }
-    const next = removeDeskCard(this.state.deskCards, cardRef);
-    this.state = { ...this.state, deskCards: next };
-    await this.persistStateAndRefreshViews();
-  }
-
-  nextDeskZ(): number {
-    return this.state.deskCards.reduce((maximum, card) => Math.max(maximum, card.z), 0) + 1;
-  }
-
-  async updateDeskCardLayout(
-    cardRef: string,
-    x: number,
-    y: number,
-    bringToFront: boolean,
-  ): Promise<void> {
-    let cards = moveDeskCard(this.state.deskCards, cardRef, { x, y });
-    if (bringToFront) {
-      cards = bringDeskCardToFront(cards, cardRef);
+    const file = await promptForCanvas(this.app, canvases);
+    if (file === null) {
+      return;
     }
-    this.state = { ...this.state, deskCards: cards };
+    try {
+      this.reportCanvasWrite(await this.canvas.layoutFilesOnCanvas(file, paths));
+    } catch (error) {
+      new Notice(`Could not lay out the pile: ${errorMessage(error)}`);
+    }
+  }
+
+  async createCanvasFromTrayPile(pileId: string): Promise<void> {
+    const paths = this.trayPilePaths(pileId);
+    if (paths.length === 0) {
+      return;
+    }
+    const entered = await promptForText(
+      this.app,
+      "Create Canvas from pile",
+      "Canvas filename or vault path",
+    );
+    if (entered === null) {
+      return;
+    }
+    const path = normalizeCanvasPath(entered);
+    if (path === null) {
+      new Notice("Enter a valid Canvas filename or vault-relative path.");
+      return;
+    }
+    try {
+      this.reportCanvasWrite(await this.canvas.createCanvas(path, paths));
+    } catch (error) {
+      new Notice(`Could not create the Canvas: ${errorMessage(error)}`);
+    }
+  }
+
+  async exportLegacyDeskToCanvas(): Promise<void> {
+    const legacy = this.state.legacyDeskCards ?? [];
+    if (legacy.length === 0) {
+      new Notice("There is no legacy Desk layout to export.");
+      return;
+    }
+    const entered = await promptForText(
+      this.app,
+      "Export legacy Desk to Canvas",
+      "Canvas filename or vault path",
+      "Legacy Slipbox Desk",
+    );
+    if (entered === null) {
+      return;
+    }
+    const path = normalizeCanvasPath(entered);
+    if (path === null) {
+      new Notice("Enter a valid Canvas filename or vault-relative path.");
+      return;
+    }
+
+    const available = legacy.filter((card) => {
+      const file = this.app.vault.getAbstractFileByPath(card.cardRef);
+      return file instanceof TFile && file.extension === "md";
+    });
+    const missingCount = legacy.length - available.length;
+    if (available.length === 0) {
+      new Notice("None of the cards in the legacy Desk layout still exist. The layout was kept.");
+      return;
+    }
+
+    let result: CanvasWriteResult;
+    try {
+      result = await this.canvas.createLegacyDeskCanvas(path, available);
+    } catch (error) {
+      new Notice(`Could not export the legacy Desk: ${errorMessage(error)}`);
+      return;
+    }
+    const missing = missingCount === 0
+      ? ""
+      : ` Omitted ${missingCount} missing card${missingCount === 1 ? "" : "s"}.`;
+    new Notice(
+      `Exported ${result.addedPaths.length} legacy Desk card${result.addedPaths.length === 1 ? "" : "s"} to ${result.file.basename}.${missing}`,
+    );
+
+    const clear = await confirmAction(
+      this.app,
+      "Clear legacy Desk state?",
+      "The Canvas was created successfully. Clear the old Desk layout from Slipbox’s saved state?",
+      "Clear legacy state",
+    );
+    if (!clear) {
+      return;
+    }
+    const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
+    this.state = state;
     await this.persistState();
-  }
-
-  async raiseDeskCard(cardRef: string): Promise<void> {
-    this.state = {
-      ...this.state,
-      deskCards: bringDeskCardToFront(this.state.deskCards, cardRef),
-    };
-    await this.persistState();
+    new Notice("Legacy Desk state cleared. The Canvas was kept.");
   }
 
   async beginFiling(file: TFile): Promise<void> {
@@ -489,7 +579,7 @@ export default class SlipboxPlugin extends Plugin {
 
   async addEntryPoint(id: string): Promise<void> {
     if (this.index.filedById(id) === undefined) {
-      new Notice(`Card ${id} is not available in Deck.`);
+      new Notice(`Card ${id} is not available in Slipbox.`);
       return;
     }
     if (this.state.entryPoints.some((entry) => entry.id === id)) {
@@ -590,6 +680,7 @@ export default class SlipboxPlugin extends Plugin {
 
       await this.waitForCachedId(file, newId);
       this.index.refresh();
+      this.reconcileSessionTray();
       await this.refreshViews();
       new Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
       return newId;
@@ -604,21 +695,8 @@ export default class SlipboxPlugin extends Plugin {
   private registerCommands(): void {
     this.addCommand({
       id: "open-deck",
-      name: "Open Deck",
+      name: "Open Slipbox",
       callback: () => void this.openDeck(),
-    });
-
-    this.addCommand({
-      id: "open-desk",
-      name: "Open Desk",
-      callback: () => {
-        const deck = this.app.workspace.getActiveViewOfType(DeckView);
-        if (deck === null) {
-          void this.openDesk();
-        } else {
-          deck.runAction("open-desk");
-        }
-      },
     });
 
     this.addCommand({
@@ -699,21 +777,51 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "put-current-card-on-desk",
-      name: "Toggle current card on Desk",
+      id: "toggle-tray",
+      name: "Pull out or return current card",
       checkCallback: (checking) => {
         const file = this.currentCardFile();
-        const available = file !== null;
+        const available = file !== null && this.index.filedByFile(file) !== undefined;
         if (checking) {
           return available;
         }
         if (available && file !== null) {
           const deck = this.app.workspace.getActiveViewOfType(DeckView);
           if (deck !== null) {
-            deck.runAction("toggle-desk");
+            deck.runAction("toggle-tray");
           } else {
-            void this.toggleFileOnDesk(file);
+            void this.toggleFileInTray(file);
           }
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "clear-tray",
+      name: "Return all filed cards",
+      checkCallback: (checking) => {
+        const available = trayHasFiledCards(this.tray);
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          void this.clearTray();
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "export-legacy-desk-to-canvas",
+      name: "Export legacy Desk to Canvas…",
+      checkCallback: (checking) => {
+        const available = (this.state.legacyDeskCards?.length ?? 0) > 0;
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          void this.exportLegacyDeskToCanvas();
         }
         return available;
       },
@@ -879,21 +987,9 @@ export default class SlipboxPlugin extends Plugin {
 
   private async createNewCard(): Promise<void> {
     try {
-      const placeOnDesk = this.app.workspace.getActiveViewOfType(DeskView) !== null;
       const file = await this.createCardFile(null);
       if (file === null) {
         return;
-      }
-      if (placeOnDesk) {
-        this.state = {
-          ...this.state,
-          deskCards: addDeskCard(
-            this.state.deskCards,
-            file.path,
-            this.nextDeskPosition(),
-          ),
-        };
-        await this.persistState();
       }
       this.queueIndexRefresh();
     } catch (error) {
@@ -1180,23 +1276,22 @@ export default class SlipboxPlugin extends Plugin {
 
   private async refreshIndex(): Promise<void> {
     this.index.refresh();
+    this.reconcileSessionTray();
     await this.refreshViews();
   }
 
-  private async refreshViews(): Promise<void> {
-    const refreshes = this.app.workspace
-      .getLeavesOfType(DECK_VIEW_TYPE)
-      .flatMap((leaf) =>
-        leaf.view instanceof DeckView ? [leaf.view.refresh()] : [],
-      );
-    refreshes.push(
-      ...this.app.workspace
-        .getLeavesOfType(DESK_VIEW_TYPE)
+  private async refreshDeckViews(): Promise<void> {
+    await Promise.all(
+      this.app.workspace
+        .getLeavesOfType(DECK_VIEW_TYPE)
         .flatMap((leaf) =>
-          leaf.view instanceof DeskView ? [leaf.view.refresh()] : [],
+          leaf.view instanceof DeckView ? [leaf.view.refresh()] : [],
         ),
     );
-    await Promise.all(refreshes);
+  }
+
+  private async refreshViews(): Promise<void> {
+    await this.refreshDeckViews();
   }
 
   private async persistStateAndRefreshViews(): Promise<void> {
@@ -1231,22 +1326,19 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  private nextDeskPosition(): Readonly<{ x: number; y: number }> {
-    const index = this.state.deskCards.length;
-    return {
-      x: 90 + (index % 4) * 110,
-      y: 90 + (Math.floor(index / 4) % 4) * 90,
-    };
-  }
-
   private handleDeletedFile(file: TAbstractFile): void {
+    this.tray = removeTrayPath(this.tray, file.path);
+    void this.refreshDeckViews();
     const prefix = `${file.path.replace(/\/$/, "")}/`;
-    if (this.state.deskCards.some(
+    const legacyDeskCards = this.state.legacyDeskCards ?? [];
+    if (legacyDeskCards.some(
       (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix),
     )) {
+      const next = removeDeskPath(legacyDeskCards, file.path);
+      const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
       this.state = {
-        ...this.state,
-        deskCards: removeDeskPath(this.state.deskCards, file.path),
+        ...state,
+        ...(next.length > 0 ? { legacyDeskCards: next } : {}),
       };
       void this.persistState();
     }
@@ -1254,17 +1346,54 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
+    this.tray = renameTrayPath(this.tray, oldPath, file.path);
+    void this.refreshDeckViews();
     const prefix = `${oldPath.replace(/\/$/, "")}/`;
-    if (this.state.deskCards.some(
+    const legacyDeskCards = this.state.legacyDeskCards ?? [];
+    if (legacyDeskCards.some(
       (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix),
     )) {
       this.state = {
         ...this.state,
-        deskCards: renameDeskCard(this.state.deskCards, oldPath, file.path),
+        legacyDeskCards: renameDeskCard(legacyDeskCards, oldPath, file.path),
       };
       void this.persistState();
     }
     this.queueIndexRefresh();
+  }
+
+  private reconcileSessionTray(): void {
+    const candidates: TrayCardCandidate[] = [
+      ...this.index.snapshot.unfiled.map((file) => ({
+        cardRef: file.path,
+        kind: "unfiled" as const,
+        modifiedTime: file.stat.mtime,
+      })),
+      ...this.index.snapshot.filed.map((card) => ({
+        cardRef: card.path,
+        kind: "filed" as const,
+        modifiedTime: card.file.stat.mtime,
+      })),
+    ];
+    this.tray = reconcileTray(this.tray, candidates, this.createTrayPileId());
+  }
+
+  private trayPilePaths(pileId: string): string[] {
+    return this.tray.piles
+      .find((pile) => pile.id === pileId)
+      ?.cards.map((card) => card.cardRef) ?? [];
+  }
+
+  private reportCanvasWrite(result: CanvasWriteResult): void {
+    const added = result.addedPaths.length;
+    const skipped = result.skippedPaths.length;
+    const summary = added === 0
+      ? `No cards added to ${result.file.basename}.`
+      : `Added ${added} card${added === 1 ? "" : "s"} to ${result.file.basename}.`;
+    const existing = skipped === 0
+      ? ""
+      : ` Skipped ${skipped} existing node${skipped === 1 ? "" : "s"}.`;
+    new Notice(`${summary}${existing}`);
   }
 }
 

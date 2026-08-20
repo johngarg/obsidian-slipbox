@@ -60,52 +60,6 @@ export function normalizeDeskCards(value: unknown): readonly DeskCardState[] {
   return cards;
 }
 
-function nextZ(cards: readonly DeskCardState[]): number {
-  return cards.reduce((maximum, card) => Math.max(maximum, card.z), 0) + 1;
-}
-
-export function addDeskCard(
-  cards: readonly DeskCardState[],
-  cardRef: string,
-  position: Readonly<{ x: number; y: number }>,
-): readonly DeskCardState[] {
-  if (cards.some((card) => card.cardRef === cardRef)) {
-    return cards;
-  }
-  return [
-    ...cards,
-    { cardRef, ...clampDeskPosition(position.x, position.y), z: nextZ(cards) },
-  ];
-}
-
-export function moveDeskCard(
-  cards: readonly DeskCardState[],
-  cardRef: string,
-  position: Readonly<{ x: number; y: number }>,
-): readonly DeskCardState[] {
-  const nextPosition = clampDeskPosition(position.x, position.y);
-  return cards.map((card) =>
-    card.cardRef === cardRef ? { ...card, ...nextPosition } : card,
-  );
-}
-
-export function bringDeskCardToFront(
-  cards: readonly DeskCardState[],
-  cardRef: string,
-): readonly DeskCardState[] {
-  const frontZ = nextZ(cards);
-  return cards.map((card) =>
-    card.cardRef === cardRef ? { ...card, z: frontZ } : card,
-  );
-}
-
-export function removeDeskCard(
-  cards: readonly DeskCardState[],
-  cardRef: string,
-): readonly DeskCardState[] {
-  return cards.filter((card) => card.cardRef !== cardRef);
-}
-
 /** Remove a deleted note or every note beneath a deleted folder path. */
 export function removeDeskPath(
   cards: readonly DeskCardState[],

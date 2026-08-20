@@ -22,7 +22,7 @@ export {
 } from "./zettel-metadata.js";
 export { generateFiledCardLink } from "./zettel-links.js";
 export { resolveCardTitle } from "./card-title.js";
-export { canRunDeckAction } from "./deck-actions.js";
+export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
@@ -44,11 +44,7 @@ export {
   normalizeBookmarks,
 } from "./bookmarks.js";
 export {
-  addDeskCard,
-  bringDeskCardToFront,
-  moveDeskCard,
   normalizeDeskCards,
-  removeDeskCard,
   removeDeskPath,
   renameDeskCard,
 } from "./desk-state.js";
@@ -63,13 +59,64 @@ export type {
 } from "./zettel-metadata.js";
 
 export type { DeckBookmark } from "./bookmarks.js";
+export {
+  EMPTY_TRAY,
+  addUniqueCardToPile,
+  cardPosition,
+  clearFiledCardsFromPile,
+  clearFiledCardsFromTray,
+  createPile,
+  initialTrayFromUnfiled,
+  insertionIndexForPoint,
+  mergePiles,
+  moveCardBetweenPiles,
+  moveCardWithinPile,
+  pruneTrayCards,
+  reconcileTray,
+  removeCard,
+  removeEmptyPiles,
+  removeTrayPath,
+  renameTrayPath,
+  reorderPiles,
+  setPilePosition,
+  setExpandedPile,
+  splitCardIntoNewPile,
+  toggleFiledCard,
+  trayContains,
+  trayHasFiledCards,
+  trayStackJitter,
+} from "./tray-state.js";
+export {
+  isFileNode,
+  layoutFilesOnCanvas,
+  layoutLegacyDeskOnCanvas,
+  normalizeCanvasPath,
+  parseCanvasDocument,
+  serializeCanvasDocument,
+} from "./canvas-layout.js";
+export type {
+  CanvasDocument,
+  CanvasFileNode,
+  CanvasLayoutOptions,
+  CanvasLayoutResult,
+  CanvasNode,
+  LegacyDeskCanvasCard,
+} from "./canvas-layout.js";
+export type {
+  TrayCard,
+  TrayCardCandidate,
+  TrayCardKind,
+  TrayPile,
+  TrayPilePosition,
+  TrayStackJitter,
+  TrayState,
+} from "./tray-state.js";
 export type { DeskCardState } from "./desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
 export type {
   DeckAction,
   DeckHeaderButton,
   DeckKeyBinding,
-  DeskHeaderButton,
   KeyModifier,
   SlipboxSettings,
   TitleSource,

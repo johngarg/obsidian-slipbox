@@ -3118,13 +3118,18 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         }
       });
     });
+    const info = this.slipbox.templatesInfo();
+    let templateSetting = null;
     new import_obsidian5.Setting(container).setName("Apply a template to new cards").setDesc("Use Obsidian\u2019s Templates core plugin after Slipbox creates and opens the note.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.useTemplatesForNewNotes).onChange((value) => void this.save({
         ...this.slipbox.settings,
         useTemplatesForNewNotes: value
-      }).then(() => this.display()));
+      }).then(() => {
+        templateSetting?.setDisabled(
+          !value || !info.enabled || info.files.length === 0
+        );
+      }));
     });
-    const info = this.slipbox.templatesInfo();
     let description = "Choose a fixed template, or ask each time a card is created.";
     if (!info.enabled) {
       description = "Enable Obsidian\u2019s Templates core plugin to choose a template.";
@@ -3135,6 +3140,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     }
     const templateDisabled = !this.slipbox.settings.useTemplatesForNewNotes || !info.enabled || info.files.length === 0;
     const template = new import_obsidian5.Setting(container).setName("New card template").setDesc(description).setDisabled(templateDisabled);
+    templateSetting = template;
     template.addDropdown((dropdown) => {
       dropdown.addOption("", "Ask each time");
       for (const file of info.files) {

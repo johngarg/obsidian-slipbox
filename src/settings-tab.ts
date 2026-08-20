@@ -182,6 +182,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
         });
     });
 
+    const info = this.slipbox.templatesInfo();
+    let templateSetting: Setting | null = null;
+
     new Setting(container)
       .setName("Apply a template to new cards")
       .setDesc("Use Obsidian’s Templates core plugin after Slipbox creates and opens the note.")
@@ -191,10 +194,13 @@ export class SlipboxSettingTab extends PluginSettingTab {
           .onChange((value) => void this.save({
             ...this.slipbox.settings,
             useTemplatesForNewNotes: value,
-          }).then(() => this.display()));
+          }).then(() => {
+            templateSetting?.setDisabled(
+              !value || !info.enabled || info.files.length === 0,
+            );
+          }));
       });
 
-    const info = this.slipbox.templatesInfo();
     let description = "Choose a fixed template, or ask each time a card is created.";
     if (!info.enabled) {
       description = "Enable Obsidian’s Templates core plugin to choose a template.";
@@ -211,6 +217,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
       .setName("New card template")
       .setDesc(description)
       .setDisabled(templateDisabled);
+    templateSetting = template;
     template.addDropdown((dropdown) => {
       dropdown.addOption("", "Ask each time");
       for (const file of info.files) {

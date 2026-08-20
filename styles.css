@@ -351,8 +351,8 @@ button.slipbox-tray-pile-handle svg {
 }
 
 .slipbox-tray-pile.is-expanded .slipbox-tray-card {
-  flex-basis: 232px;
-  width: 232px;
+  flex-basis: 360px;
+  width: 360px;
   transform: rotate(var(--slipbox-tray-card-tilt, 0deg));
 }
 
@@ -1103,8 +1103,8 @@ button.slipbox-card-backlink-overflow:disabled {
   }
 
   .slipbox-tray-pile.is-expanded .slipbox-tray-card {
-    flex-basis: 196px;
-    width: 196px;
+    flex-basis: 280px;
+    width: 280px;
   }
 
   .slipbox-in-hand {

@@ -1,0 +1,369 @@
+import {
+  App,
+  Notice,
+  Platform,
+  PluginSettingTab,
+  Setting,
+} from "obsidian";
+
+import type SlipboxPlugin from "./main.js";
+import {
+  DECK_ACTION_DEFINITIONS,
+  DEFAULT_DECK_KEYBINDINGS,
+  formatKeyBinding,
+  keyBindingConflict,
+  keyBindingSignature,
+  normalizeKeyBinding,
+  type DeckAction,
+  type DeckKeyBinding,
+  type KeyModifier,
+  type SlipboxSettings,
+} from "./settings.js";
+
+export class SlipboxSettingTab extends PluginSettingTab {
+  constructor(
+    app: App,
+    private readonly slipbox: SlipboxPlugin,
+  ) {
+    super(app, slipbox);
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    new Setting(containerEl).setName("Cards and metadata").setHeading();
+    this.renderAddressProperty(containerEl);
+
+    new Setting(containerEl)
+      .setName("Title source")
+      .setDesc("Choose the filename or a top-level frontmatter property for note titles.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("filename", "Filename")
+          .addOption("frontmatter", "Frontmatter property")
+          .setValue(this.slipbox.settings.titleSource)
+          .onChange((value) => {
+            void this.save({
+              ...this.slipbox.settings,
+              titleSource: value === "frontmatter" ? "frontmatter" : "filename",
+            }).then(() => this.display());
+          });
+      });
+
+    const titleProperty = new Setting(containerEl)
+      .setName("Title property")
+      .setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.")
+      .setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
+    titleProperty.addText((text) => {
+      text
+        .setValue(this.slipbox.settings.titleProperty)
+        .setDisabled(this.slipbox.settings.titleSource !== "frontmatter")
+        .onChange((value) => {
+          const property = value.trim();
+          this.setPropertyValidity(titleProperty, property !== "");
+          if (property !== "") {
+            void this.save({ ...this.slipbox.settings, titleProperty: property });
+          }
+        });
+    });
+
+    new Setting(containerEl)
+      .setName("Show title in Deck headers")
+      .setDesc("Display address · title, truncating the title before the card buttons.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.slipbox.settings.showTitleInDeck)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            showTitleInDeck: value,
+          }));
+      });
+
+    new Setting(containerEl)
+      .setName("Show title in Desk headers")
+      .setDesc("Display address · title, truncating the title before the card buttons.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.slipbox.settings.showTitleInDesk)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            showTitleInDesk: value,
+          }));
+      });
+
+    new Setting(containerEl).setName("Card-header buttons").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Hidden buttons remain available through commands, Deck shortcuts, and card context menus.",
+    });
+    this.renderDeckHeaderButtons(containerEl);
+    this.renderDeskHeaderButtons(containerEl);
+
+    new Setting(containerEl).setName("Deck shortcuts").setHeading();
+    const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
+    shortcutIntro.createEl("p", {
+      cls: "setting-item-description",
+      text: "These shortcuts work only while Deck is active and never fire in text or form controls.",
+    });
+    const resetAll = shortcutIntro.createEl("button", {
+      text: "Reset all shortcuts",
+      attr: { type: "button" },
+    });
+    resetAll.addEventListener("click", () => {
+      void this.save({
+        ...this.slipbox.settings,
+        deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
+      }).then(() => this.display());
+    });
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      this.renderShortcutSetting(containerEl, definition.id, definition.label);
+    }
+  }
+
+  private renderAddressProperty(container: HTMLElement): void {
+    const setting = new Setting(container)
+      .setName("Address property")
+      .setDesc(
+        "Exact top-level YAML key used to identify and order cards. Changing it re-indexes immediately but does not rewrite existing notes.",
+      );
+    setting.addText((text) => {
+      text
+        .setPlaceholder("zettel-id")
+        .setValue(this.slipbox.settings.addressProperty)
+        .onChange((value) => {
+          const property = value.trim();
+          this.setPropertyValidity(setting, property !== "");
+          if (property !== "") {
+            void this.save({ ...this.slipbox.settings, addressProperty: property });
+          }
+        });
+    });
+  }
+
+  private renderDeckHeaderButtons(container: HTMLElement): void {
+    const labels = {
+      "add-card": "Add card from here",
+      "open-note": "Open Markdown note",
+      desk: "Toggle Desk membership",
+      bookmark: "Toggle bookmark",
+    } as const;
+    for (const [id, label] of Object.entries(labels)) {
+      new Setting(container)
+        .setName(`Deck: ${label}`)
+        .addToggle((toggle) => {
+          const key = id as keyof typeof labels;
+          toggle
+            .setValue(this.slipbox.settings.deckHeaderButtons[key])
+            .onChange((value) => void this.save({
+              ...this.slipbox.settings,
+              deckHeaderButtons: {
+                ...this.slipbox.settings.deckHeaderButtons,
+                [key]: value,
+              },
+            }));
+        });
+    }
+  }
+
+  private renderDeskHeaderButtons(container: HTMLElement): void {
+    const labels = {
+      "file-card": "File card",
+      "open-note": "Open Markdown note",
+      remove: "Remove from Desk",
+    } as const;
+    for (const [id, label] of Object.entries(labels)) {
+      new Setting(container)
+        .setName(`Desk: ${label}`)
+        .addToggle((toggle) => {
+          const key = id as keyof typeof labels;
+          toggle
+            .setValue(this.slipbox.settings.deskHeaderButtons[key])
+            .onChange((value) => void this.save({
+              ...this.slipbox.settings,
+              deskHeaderButtons: {
+                ...this.slipbox.settings.deskHeaderButtons,
+                [key]: value,
+              },
+            }));
+        });
+    }
+  }
+
+  private renderShortcutSetting(
+    container: HTMLElement,
+    action: DeckAction,
+    label: string,
+  ): void {
+    const setting = new Setting(container).setName(label);
+    setting.settingEl.addClass("slipbox-shortcut-setting");
+    const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
+    for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
+      const chip = bindings.createEl("button", {
+        cls: "slipbox-shortcut-chip",
+        attr: {
+          type: "button",
+          "aria-label": `Remove ${formatKeyBinding(bindingValue)} from ${label}`,
+        },
+      });
+      chip.createSpan({ text: formatKeyBinding(bindingValue) });
+      chip.createSpan({ cls: "slipbox-shortcut-remove", text: "×" });
+      chip.addEventListener("click", () => {
+        const signature = keyBindingSignature(bindingValue);
+        void this.save({
+          ...this.slipbox.settings,
+          deckKeybindings: {
+            ...this.slipbox.settings.deckKeybindings,
+            [action]: this.slipbox.settings.deckKeybindings[action].filter(
+              (candidate) => keyBindingSignature(candidate) !== signature,
+            ),
+          },
+        }).then(() => this.display());
+      });
+    }
+
+    const add = bindings.createEl("button", {
+      text: "+ Add shortcut",
+      attr: { type: "button" },
+    });
+    const error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
+    add.addEventListener("click", () => {
+      if (add.hasClass("is-capturing")) {
+        return;
+      }
+      error.empty();
+      add.setText("Press shortcut…");
+      add.addClass("is-capturing");
+      add.focus();
+      const capture = (event: KeyboardEvent): void => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === "Escape") {
+          finish();
+          return;
+        }
+        if (["Alt", "Control", "Meta", "Shift"].includes(event.key)) {
+          return;
+        }
+        const candidate = this.bindingFromEvent(event);
+        const conflict = keyBindingConflict(
+          this.slipbox.settings.deckKeybindings,
+          action,
+          candidate,
+        );
+        if (conflict !== null) {
+          const conflictLabel = DECK_ACTION_DEFINITIONS.find(
+            (definition) => definition.id === conflict,
+          )?.label ?? conflict;
+          error.setText(`${formatKeyBinding(candidate)} is already assigned to ${conflictLabel}.`);
+          return;
+        }
+        if (
+          this.slipbox.settings.deckKeybindings[action].some(
+            (bindingValue) =>
+              keyBindingSignature(bindingValue) === keyBindingSignature(candidate),
+          )
+        ) {
+          error.setText(`${formatKeyBinding(candidate)} is already assigned here.`);
+          return;
+        }
+        finish();
+        void this.save({
+          ...this.slipbox.settings,
+          deckKeybindings: {
+            ...this.slipbox.settings.deckKeybindings,
+            [action]: [
+              ...this.slipbox.settings.deckKeybindings[action],
+              candidate,
+            ],
+          },
+        }).then(() => this.display());
+      };
+      const finish = (): void => {
+        add.removeEventListener("keydown", capture);
+        add.removeClass("is-capturing");
+        add.setText("+ Add shortcut");
+      };
+      add.addEventListener("keydown", capture);
+    });
+
+    const definition = DECK_ACTION_DEFINITIONS.find(
+      (candidate) => candidate.id === action,
+    );
+    const reset = bindings.createEl("button", {
+      text: "Reset",
+      attr: { type: "button", "aria-label": `Reset ${label} shortcuts` },
+    });
+    reset.addEventListener("click", () => {
+      const defaults = definition?.defaultBindings ?? [];
+      for (const bindingValue of defaults) {
+        const conflict = keyBindingConflict(
+          this.slipbox.settings.deckKeybindings,
+          action,
+          bindingValue,
+        );
+        if (conflict !== null) {
+          const conflictLabel = DECK_ACTION_DEFINITIONS.find(
+            (candidate) => candidate.id === conflict,
+          )?.label ?? conflict;
+          error.setText(
+            `${formatKeyBinding(bindingValue)} is already assigned to ${conflictLabel}.`,
+          );
+          return;
+        }
+      }
+      void this.save({
+        ...this.slipbox.settings,
+        deckKeybindings: {
+          ...this.slipbox.settings.deckKeybindings,
+          [action]: defaults,
+        },
+      }).then(() => this.display());
+    });
+  }
+
+  private bindingFromEvent(event: KeyboardEvent): DeckKeyBinding {
+    const modifiers: KeyModifier[] = [];
+    const primary = Platform.isMacOS ? event.metaKey : event.ctrlKey;
+    if (primary) {
+      modifiers.push("Mod");
+    }
+    if (event.ctrlKey && Platform.isMacOS) {
+      modifiers.push("Ctrl");
+    }
+    if (event.metaKey && !Platform.isMacOS) {
+      modifiers.push("Meta");
+    }
+    if (event.altKey) {
+      modifiers.push("Alt");
+    }
+    if (event.shiftKey) {
+      modifiers.push("Shift");
+    }
+    return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
+      modifiers,
+      key: event.key,
+    };
+  }
+
+  private setPropertyValidity(setting: Setting, valid: boolean): void {
+    setting.settingEl.toggleClass("is-invalid", !valid);
+    let error = setting.settingEl.querySelector<HTMLElement>(".slipbox-setting-error");
+    if (!valid && error === null) {
+      error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
+    }
+    error?.setText(valid ? "" : "A non-empty top-level property name is required.");
+  }
+
+  private async save(settings: SlipboxSettings): Promise<void> {
+    try {
+      await this.slipbox.updateSettings(settings);
+    } catch (error) {
+      new Notice(`Could not save Slipbox settings: ${errorMessage(error)}`);
+    }
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

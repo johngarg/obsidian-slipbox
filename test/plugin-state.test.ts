@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  DEFAULT_DATA,
   DEFAULT_SPREAD,
+  normalizePluginData,
   normalizePluginState,
 } from "../src/plugin-state.js";
 
@@ -79,5 +81,47 @@ describe("normalizePluginState", () => {
         spread: 0.58,
       },
     );
+  });
+});
+
+describe("normalizePluginData", () => {
+  test("migrates legacy flat state into versioned settings and state", () => {
+    const data = normalizePluginData({
+      entryPoints: [{ name: "Start", id: "1/1" }],
+      bookmarks: [{ zettelId: "1/1" }],
+      deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
+      spread: 0.7,
+    });
+    assert.equal(data.schemaVersion, 1);
+    assert.equal(data.settings.addressProperty, "zettel-id");
+    assert.deepEqual(data.state.entryPoints, [{ name: "Start", id: "1/1" }]);
+    assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
+    assert.equal(data.state.spread, 0.7);
+  });
+
+  test("loads current versioned settings without losing workspace state", () => {
+    const data = normalizePluginData({
+      schemaVersion: 1,
+      settings: {
+        addressProperty: "signature",
+        titleSource: "frontmatter",
+        titleProperty: "name",
+        showTitleInDeck: true,
+      },
+      state: {
+        entryPoints: [],
+        bookmarks: [],
+        deskCards: [],
+        spread: 0.42,
+      },
+    });
+    assert.equal(data.settings.addressProperty, "signature");
+    assert.equal(data.settings.titleProperty, "name");
+    assert.equal(data.settings.showTitleInDeck, true);
+    assert.equal(data.state.spread, 0.42);
+  });
+
+  test("uses complete defaults for unknown data", () => {
+    assert.deepEqual(normalizePluginData(null), DEFAULT_DATA);
   });
 });

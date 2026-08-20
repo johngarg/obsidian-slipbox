@@ -2,7 +2,7 @@ import { App, Modal, Notice, setIcon } from "obsidian";
 
 import type { DeckBookmark } from "./bookmarks.js";
 import type { EntryPoint } from "./plugin-state.js";
-import type { FiledZettel, VaultZettelIndex } from "./zettel-index.js";
+import type { VaultZettelIndex } from "./zettel-index.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -94,6 +94,7 @@ export function promptForText(
 export interface BookmarksModalActions {
   readonly currentId: string | null;
   isAvailable(zettelId: string): boolean;
+  label(zettelId: string): string;
   visit(zettelId: string): void;
   addCurrent(): Promise<void>;
   remove(zettelId: string): Promise<void>;
@@ -130,7 +131,9 @@ export class BookmarksModal extends Modal {
       });
       visit.createSpan({
         cls: "slipbox-entry-name",
-        text: available ? bookmark.zettelId : `${bookmark.zettelId} · missing`,
+        text: available
+          ? this.actions.label(bookmark.zettelId)
+          : `${bookmark.zettelId} · missing`,
       });
       visit.disabled = !available;
       visit.addEventListener("click", () => {
@@ -294,8 +297,4 @@ function iconButton(
   });
   setIcon(button, icon);
   return button;
-}
-
-export function filedLabel(zettel: FiledZettel): string {
-  return `${zettel.id} · ${zettel.file.basename}`;
 }

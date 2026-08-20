@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => SlipboxPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/zettel-id.ts
 var ZettelIdError = class extends Error {
@@ -796,6 +796,261 @@ var CardFooterManager = class {
   }
 };
 
+// src/deck-actions.ts
+function canRunDeckAction(action, context) {
+  switch (action) {
+    case "previous-card":
+      return context.hasPreviousCard;
+    case "next-card":
+      return context.hasNextCard;
+    case "centre-card":
+    case "open-note":
+    case "add-card":
+    case "toggle-desk":
+    case "toggle-bookmark":
+      return context.hasActiveCard;
+    case "first-card":
+    case "last-card":
+      return context.hasActiveCard;
+    case "back":
+      return context.canGoBack;
+    case "forward":
+      return context.canGoForward;
+    case "problems":
+      return context.hasProblems;
+    case "file-here":
+      return context.filing && context.hasActiveCard;
+    case "cancel-filing":
+      return context.filing;
+    case "entry-points":
+    case "bookmarks":
+    case "open-desk":
+    case "new-section":
+      return true;
+  }
+}
+
+// src/settings.ts
+var SLIPBOX_DATA_SCHEMA_VERSION = 1;
+var binding = (key, modifiers = []) => ({ key, modifiers });
+var DECK_ACTION_DEFINITIONS = [
+  {
+    id: "previous-card",
+    label: "Previous card",
+    repeatable: true,
+    defaultBindings: [binding("ArrowLeft"), binding("k")]
+  },
+  {
+    id: "next-card",
+    label: "Next card",
+    repeatable: true,
+    defaultBindings: [binding("ArrowRight"), binding("j")]
+  },
+  {
+    id: "centre-card",
+    label: "Centre active card",
+    repeatable: false,
+    defaultBindings: [binding("c")]
+  },
+  {
+    id: "first-card",
+    label: "First card",
+    repeatable: false,
+    defaultBindings: [binding("g")]
+  },
+  {
+    id: "last-card",
+    label: "Last card",
+    repeatable: false,
+    defaultBindings: [binding("g", ["Shift"])]
+  },
+  {
+    id: "open-note",
+    label: "Open Markdown note",
+    repeatable: false,
+    defaultBindings: [binding("o")]
+  },
+  {
+    id: "add-card",
+    label: "Add card from here",
+    repeatable: false,
+    defaultBindings: [binding("a")]
+  },
+  {
+    id: "toggle-desk",
+    label: "Toggle Desk membership",
+    repeatable: false,
+    defaultBindings: [binding("d")]
+  },
+  {
+    id: "toggle-bookmark",
+    label: "Toggle bookmark",
+    repeatable: false,
+    defaultBindings: [binding("b")]
+  },
+  { id: "back", label: "Back", repeatable: false, defaultBindings: [] },
+  { id: "forward", label: "Forward", repeatable: false, defaultBindings: [] },
+  {
+    id: "entry-points",
+    label: "Manage entry points",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "bookmarks",
+    label: "Manage bookmarks",
+    repeatable: false,
+    defaultBindings: []
+  },
+  { id: "open-desk", label: "Open Desk", repeatable: false, defaultBindings: [] },
+  {
+    id: "problems",
+    label: "Show card problems",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "new-section",
+    label: "New section",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "file-here",
+    label: "File here",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "cancel-filing",
+    label: "Cancel filing",
+    repeatable: false,
+    defaultBindings: []
+  }
+];
+var DECK_ACTION_IDS = DECK_ACTION_DEFINITIONS.map(
+  (definition) => definition.id
+);
+var DEFAULT_DECK_HEADER_BUTTONS = {
+  "add-card": true,
+  "open-note": true,
+  desk: true,
+  bookmark: true
+};
+var DEFAULT_DESK_HEADER_BUTTONS = {
+  "file-card": true,
+  "open-note": true,
+  remove: true
+};
+var DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
+  DECK_ACTION_DEFINITIONS.map((definition) => [
+    definition.id,
+    definition.defaultBindings
+  ])
+);
+var DEFAULT_SETTINGS = {
+  addressProperty: "zettel-id",
+  titleSource: "filename",
+  titleProperty: "title",
+  showTitleInDeck: false,
+  showTitleInDesk: true,
+  deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
+  deskHeaderButtons: DEFAULT_DESK_HEADER_BUTTONS,
+  deckKeybindings: DEFAULT_DECK_KEYBINDINGS
+};
+var MODIFIER_ORDER = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
+function isRecord2(value) {
+  return typeof value === "object" && value !== null;
+}
+function normalizePropertyName(value, fallback) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : fallback;
+}
+function normalizeKeyBinding(value) {
+  if (!isRecord2(value) || typeof value.key !== "string" || value.key === "") {
+    return null;
+  }
+  const key = value.key.length === 1 ? value.key.toLowerCase() : value.key;
+  const supplied = Array.isArray(value.modifiers) ? value.modifiers : [];
+  const modifiers = MODIFIER_ORDER.filter((modifier) => supplied.includes(modifier));
+  return { key, modifiers };
+}
+function keyBindingSignature(bindingValue) {
+  return `${bindingValue.modifiers.join("+")}::${bindingValue.key}`;
+}
+function formatKeyBinding(bindingValue) {
+  const key = bindingValue.key === " " ? "Space" : bindingValue.key;
+  return [...bindingValue.modifiers, key].join("+");
+}
+function normalizeDeckKeybindings(value) {
+  const source = isRecord2(value) ? value : {};
+  const claimed = /* @__PURE__ */ new Set();
+  const result = {};
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    const candidate = source[definition.id];
+    const rawBindings = Array.isArray(candidate) ? candidate : definition.defaultBindings;
+    const normalized = [];
+    for (const rawBinding of rawBindings) {
+      const normalizedBinding = normalizeKeyBinding(rawBinding);
+      if (normalizedBinding === null) {
+        continue;
+      }
+      const signature = keyBindingSignature(normalizedBinding);
+      if (claimed.has(signature)) {
+        continue;
+      }
+      claimed.add(signature);
+      normalized.push(normalizedBinding);
+    }
+    result[definition.id] = normalized;
+  }
+  return result;
+}
+function normalizeBooleanRecord(value, defaults) {
+  const source = isRecord2(value) ? value : {};
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, fallback]) => [
+      key,
+      typeof source[key] === "boolean" ? source[key] : fallback
+    ])
+  );
+}
+function normalizeSettings(value) {
+  const source = isRecord2(value) ? value : {};
+  return {
+    addressProperty: normalizePropertyName(
+      source.addressProperty,
+      DEFAULT_SETTINGS.addressProperty
+    ),
+    titleSource: source.titleSource === "frontmatter" ? "frontmatter" : "filename",
+    titleProperty: normalizePropertyName(
+      source.titleProperty,
+      DEFAULT_SETTINGS.titleProperty
+    ),
+    showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
+    showTitleInDesk: typeof source.showTitleInDesk === "boolean" ? source.showTitleInDesk : DEFAULT_SETTINGS.showTitleInDesk,
+    deckHeaderButtons: normalizeBooleanRecord(
+      source.deckHeaderButtons,
+      DEFAULT_DECK_HEADER_BUTTONS
+    ),
+    deskHeaderButtons: normalizeBooleanRecord(
+      source.deskHeaderButtons,
+      DEFAULT_DESK_HEADER_BUTTONS
+    ),
+    deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings)
+  };
+}
+function keyBindingConflict(keybindings, action, bindingValue) {
+  const signature = keyBindingSignature(bindingValue);
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    if (definition.id !== action && keybindings[definition.id].some(
+      (candidate) => keyBindingSignature(candidate) === signature
+    )) {
+      return definition.id;
+    }
+  }
+  return null;
+}
+
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "slipbox-deck";
 var FILING_ANIMATION_DURATION_MS = 280;
@@ -818,41 +1073,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout())
     );
     this.scope = new import_obsidian2.Scope(this.app.scope);
-    this.scope.register(
-      [],
-      "ArrowLeft",
-      (event) => this.handleDeckKey(event, () => this.moveBy(-1), true)
-    );
-    this.scope.register(
-      [],
-      "ArrowRight",
-      (event) => this.handleDeckKey(event, () => this.moveBy(1), true)
-    );
-    this.scope.register(
-      [],
-      "j",
-      (event) => this.handleDeckKey(event, () => this.moveBy(1), true)
-    );
-    this.scope.register(
-      [],
-      "k",
-      (event) => this.handleDeckKey(event, () => this.moveBy(-1), true)
-    );
-    this.scope.register(
-      [],
-      "c",
-      (event) => this.handleDeckKey(event, () => this.centerActiveCard())
-    );
-    this.scope.register(
-      [],
-      "g",
-      (event) => this.handleDeckKey(event, () => this.goToDeckBoundary("start"))
-    );
-    this.scope.register(
-      ["Shift"],
-      "g",
-      (event) => this.handleDeckKey(event, () => this.goToDeckBoundary("end"))
-    );
+    this.updateKeybindings();
   }
   activeId = null;
   filingFile = null;
@@ -876,6 +1097,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   positioningFrame = null;
   positioningRetriesRemaining = 0;
   cardFooters;
+  keymapHandlers = [];
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -930,6 +1152,115 @@ var DeckView = class extends import_obsidian2.ItemView {
   }
   get canGoForward() {
     return this.history.canForward();
+  }
+  updateKeybindings() {
+    const scope = this.scope;
+    if (scope === null) {
+      return;
+    }
+    for (const handler of this.keymapHandlers) {
+      scope.unregister(handler);
+    }
+    this.keymapHandlers = [];
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
+        const handler = scope.register(
+          [...binding2.modifiers],
+          binding2.key,
+          (event) => this.handleDeckActionKey(
+            event,
+            definition.id,
+            definition.repeatable
+          )
+        );
+        this.keymapHandlers.push(handler);
+      }
+    }
+  }
+  canRunAction(action, target) {
+    const filed = this.plugin.index.snapshot.filed;
+    const active = target ?? this.activeCard;
+    const activeIndex = active === null ? -1 : filed.findIndex((card) => card.id === active.id);
+    return canRunDeckAction(action, {
+      hasActiveCard: activeIndex >= 0,
+      hasPreviousCard: activeIndex > 0,
+      hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
+      canGoBack: this.history.canBack(),
+      canGoForward: this.history.canForward(),
+      hasProblems: this.plugin.index.snapshot.issues.length > 0,
+      filing: this.filingFile !== null
+    });
+  }
+  runAction(action, target) {
+    if (!this.canRunAction(action, target)) {
+      return false;
+    }
+    const card = target ?? this.activeCard;
+    switch (action) {
+      case "previous-card":
+        this.moveBy(-1);
+        break;
+      case "next-card":
+        this.moveBy(1);
+        break;
+      case "centre-card":
+        this.centerActiveCard();
+        break;
+      case "first-card":
+        this.goToDeckBoundary("start");
+        break;
+      case "last-card":
+        this.goToDeckBoundary("end");
+        break;
+      case "open-note":
+        if (card !== null) {
+          void this.plugin.openMarkdownFile(card.file);
+        }
+        break;
+      case "add-card":
+        if (card !== null) {
+          void this.plugin.createCardFrom(card.id);
+        }
+        break;
+      case "toggle-desk":
+        if (card !== null) {
+          void this.toggleCardDesk(card.file);
+        }
+        break;
+      case "toggle-bookmark":
+        if (card !== null) {
+          void this.toggleCardBookmark(card.id);
+        }
+        break;
+      case "back":
+        void this.goBack();
+        break;
+      case "forward":
+        void this.goForward();
+        break;
+      case "entry-points":
+        this.plugin.showEntryPoints(this);
+        break;
+      case "bookmarks":
+        this.plugin.showBookmarks(this);
+        break;
+      case "open-desk":
+        void this.plugin.openDesk();
+        break;
+      case "problems":
+        this.plugin.showIssues();
+        break;
+      case "new-section":
+        void this.plugin.createNewSection();
+        break;
+      case "file-here":
+        void this.fileHere();
+        break;
+      case "cancel-filing":
+        void this.cancelFiling();
+        break;
+    }
+    return true;
   }
   async refresh() {
     const previousActiveId = this.activeId;
@@ -1093,13 +1424,13 @@ var DeckView = class extends import_obsidian2.ItemView {
       text: "\u2190 Back",
       attr: { type: "button" }
     });
-    back.addEventListener("click", () => void this.goBack());
+    back.addEventListener("click", () => this.runAction("back"));
     this.backButtonEl = back;
     const forward = history.createEl("button", {
       text: "Forward \u2192",
       attr: { type: "button" }
     });
-    forward.addEventListener("click", () => void this.goForward());
+    forward.addEventListener("click", () => this.runAction("forward"));
     this.forwardButtonEl = forward;
     this.updateHistoryControls();
     const controls = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-toolbar-main" });
@@ -1107,7 +1438,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       text: "Entry points",
       attr: { type: "button" }
     });
-    entries.addEventListener("click", () => this.plugin.showEntryPoints(this));
+    entries.addEventListener("click", () => this.runAction("entry-points"));
     const bookmarks = controls.createEl("button", {
       attr: { type: "button" },
       cls: "slipbox-bookmarks-button"
@@ -1116,7 +1447,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     if (this.plugin.state.bookmarks.length > 0) {
       bookmarks.createSpan({ cls: "slipbox-count", text: String(this.plugin.state.bookmarks.length) });
     }
-    bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
+    bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
     this.bookmarksButtonEl = bookmarks;
     const desk = controls.createEl("button", {
       attr: { type: "button" },
@@ -1127,7 +1458,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     if (deskCount > 0) {
       desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
     }
-    desk.addEventListener("click", () => this.plugin.showDesk());
+    desk.addEventListener("click", () => this.runAction("open-desk"));
     this.deskButtonEl = desk;
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
@@ -1139,7 +1470,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       problems.createSpan({
         text: `${this.plugin.index.snapshot.issues.length} problem${this.plugin.index.snapshot.issues.length === 1 ? "" : "s"}`
       });
-      problems.addEventListener("click", () => this.plugin.showIssues());
+      problems.addEventListener("click", () => this.runAction("problems"));
     }
     const spreadControl = toolbar.createEl("label", { cls: "slipbox-spread-control" });
     spreadControl.createSpan({ text: "Spread" });
@@ -1173,7 +1504,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       cls: "mod-cta",
       attr: { type: "button" }
     });
-    create.addEventListener("click", () => void this.plugin.createNewSection());
+    create.addEventListener("click", () => this.runAction("new-section"));
   }
   async renderCardWindow(stage, filed, activeIndex, version) {
     const viewportPosition = this.viewportPosition(activeIndex);
@@ -1201,7 +1532,8 @@ var DeckView = class extends import_obsidian2.ItemView {
       const isOnDesk = this.plugin.state.deskCards.some(
         (deskCard) => deskCard.cardRef === card.path
       );
-      const cardLabel = `${card.id} \xB7 ${card.file.basename}`;
+      const title = this.plugin.cardTitle(card.file);
+      const cardLabel = `${card.id} \xB7 ${title}`;
       cardEl.setAttr("aria-label", cardLabel);
       (0, import_obsidian2.setTooltip)(cardEl, cardLabel, {
         placement: "bottom",
@@ -1211,101 +1543,59 @@ var DeckView = class extends import_obsidian2.ItemView {
       this.renderedCards.push(cardEl);
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
-      addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
-      const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-      const addCardAction = `Add a card from ${card.id}`;
-      const addCard = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-add",
-        attr: {
-          type: "button",
-          "aria-label": addCardAction
-        }
-      });
-      (0, import_obsidian2.setIcon)(addCard, "plus");
-      (0, import_obsidian2.setTooltip)(addCard, addCardAction, {
-        placement: "bottom",
-        delay: 250
-      });
-      addCard.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      addCard.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        addCard.disabled = true;
-        void this.plugin.createCardFrom(card.id).finally(() => {
-          if (addCard.isConnected) {
-            addCard.disabled = false;
-          }
+      const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
+      identity.createSpan({ cls: "slipbox-card-address", text: card.id });
+      if (this.plugin.settings.showTitleInDeck) {
+        identity.createSpan({
+          cls: "slipbox-card-header-separator",
+          text: "\xB7",
+          attr: { "aria-hidden": "true" }
         });
-      });
-      const openCardAction = `Open ${card.id} in Markdown`;
-      const openCard = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-open",
-        attr: {
-          type: "button",
-          "aria-label": openCardAction
-        }
-      });
-      (0, import_obsidian2.setIcon)(openCard, "file-pen-line");
-      (0, import_obsidian2.setTooltip)(openCard, openCardAction, {
-        placement: "bottom",
-        delay: 250
-      });
-      openCard.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      openCard.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.plugin.openMarkdownFile(card.file);
-      });
-      const deskAction = isOnDesk ? `Remove ${card.id} from Desk` : `Add ${card.id} to Desk`;
-      const deskToggle = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-desk-toggle",
-        attr: {
-          type: "button",
-          "aria-label": deskAction,
-          "aria-pressed": String(isOnDesk)
-        }
-      });
-      deskToggle.toggleClass("is-on-desk", isOnDesk);
-      (0, import_obsidian2.setIcon)(deskToggle, "panels-top-left");
-      (0, import_obsidian2.setTooltip)(deskToggle, deskAction, {
-        placement: "bottom",
-        delay: 250
-      });
-      deskToggle.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      deskToggle.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.toggleCardDesk(card.file);
-      });
-      const bookmarkAction = isBookmarked ? `Remove bookmark from ${card.id}` : `Add bookmark to ${card.id}`;
-      const bookmarkToggle = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-bookmark-toggle",
-        attr: {
-          type: "button",
-          "aria-label": bookmarkAction,
-          "aria-pressed": String(isBookmarked)
-        }
-      });
-      bookmarkToggle.toggleClass("is-bookmarked", isBookmarked);
-      (0, import_obsidian2.setIcon)(bookmarkToggle, "bookmark");
-      (0, import_obsidian2.setTooltip)(bookmarkToggle, bookmarkAction, {
-        placement: "bottom",
-        delay: 250
-      });
-      bookmarkToggle.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      bookmarkToggle.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.toggleCardBookmark(card.id);
-      });
+        identity.createSpan({ cls: "slipbox-card-header-title", text: title });
+      }
+      const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      if (this.plugin.settings.deckHeaderButtons["add-card"]) {
+        this.renderCardAction(
+          cardActions,
+          "plus",
+          "slipbox-card-add",
+          `Add a card from ${card.id} \xB7 ${title}`,
+          () => this.runAction("add-card", card)
+        );
+      }
+      if (this.plugin.settings.deckHeaderButtons["open-note"]) {
+        this.renderCardAction(
+          cardActions,
+          "file-pen-line",
+          "slipbox-card-open",
+          `Open ${card.id} \xB7 ${title} in Markdown`,
+          () => this.runAction("open-note", card)
+        );
+      }
+      if (this.plugin.settings.deckHeaderButtons.desk) {
+        const deskAction = isOnDesk ? `Remove ${card.id} \xB7 ${title} from Desk` : `Add ${card.id} \xB7 ${title} to Desk`;
+        const deskToggle = this.renderCardAction(
+          cardActions,
+          "panels-top-left",
+          "slipbox-card-desk-toggle",
+          deskAction,
+          () => this.runAction("toggle-desk", card)
+        );
+        deskToggle.setAttr("aria-pressed", String(isOnDesk));
+        deskToggle.toggleClass("is-on-desk", isOnDesk);
+      }
+      if (this.plugin.settings.deckHeaderButtons.bookmark) {
+        const bookmarkAction = isBookmarked ? `Remove bookmark from ${card.id} \xB7 ${title}` : `Add bookmark to ${card.id} \xB7 ${title}`;
+        const bookmarkToggle = this.renderCardAction(
+          cardActions,
+          "bookmark",
+          "slipbox-card-bookmark-toggle",
+          bookmarkAction,
+          () => this.runAction("toggle-bookmark", card)
+        );
+        bookmarkToggle.setAttr("aria-pressed", String(isBookmarked));
+        bookmarkToggle.toggleClass("is-bookmarked", isBookmarked);
+      }
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
       this.cardFooters.render(frame, {
@@ -1343,6 +1633,21 @@ var DeckView = class extends import_obsidian2.ItemView {
     }
     this.positionCards();
     await Promise.all(jobs);
+  }
+  renderCardAction(parent, icon, className, label, action) {
+    const button = parent.createEl("button", {
+      cls: `clickable-icon slipbox-card-toggle ${className}`,
+      attr: { type: "button", "aria-label": label }
+    });
+    (0, import_obsidian2.setIcon)(button, icon);
+    (0, import_obsidian2.setTooltip)(button, label, { placement: "bottom", delay: 250 });
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    });
+    return button;
   }
   async renderMarkdownCard(card, target, version) {
     const component = new import_obsidian2.Component();
@@ -1440,7 +1745,10 @@ var DeckView = class extends import_obsidian2.ItemView {
   async renderFilingCard(shell, file, version) {
     const inHand = shell.createDiv({ cls: "slipbox-in-hand" });
     inHand.createDiv({ cls: "slipbox-in-hand-label", text: "Unfiled card in hand" });
-    inHand.createDiv({ cls: "slipbox-in-hand-name", text: file.basename });
+    inHand.createDiv({
+      cls: "slipbox-in-hand-name",
+      text: this.plugin.cardTitle(file)
+    });
     const preview = inHand.createDiv({ cls: "slipbox-in-hand-preview markdown-rendered" });
     const component = new import_obsidian2.Component();
     component.load();
@@ -1465,14 +1773,14 @@ var DeckView = class extends import_obsidian2.ItemView {
       text: "Cancel",
       attr: { type: "button" }
     });
-    cancel.addEventListener("click", () => void this.cancelFiling());
+    cancel.addEventListener("click", () => this.runAction("cancel-filing"));
     const fileHere = actions.createEl("button", {
       text: "File here",
       cls: "mod-cta",
       attr: { type: "button" }
     });
     fileHere.disabled = attachment === null;
-    fileHere.addEventListener("click", () => void this.fileHere());
+    fileHere.addEventListener("click", () => this.runAction("file-here"));
   }
   async fileHere() {
     const file = this.filingFile;
@@ -1649,14 +1957,17 @@ var DeckView = class extends import_obsidian2.ItemView {
     }
     void this.goToId(target.id);
   }
-  handleDeckKey(event, action, repeatable = false) {
+  handleDeckActionKey(event, action, repeatable = false) {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable) {
       return false;
     }
+    if (!this.canRunAction(action)) {
+      return false;
+    }
     event.preventDefault();
     if (!event.repeat || repeatable) {
-      action();
+      this.runAction(action);
     }
     return true;
   }
@@ -1942,7 +2253,7 @@ var DESK_WIDTH = 2400;
 var DESK_HEIGHT = 1600;
 var DESK_CARD_WIDTH = 520;
 var DESK_CARD_HEIGHT = 346;
-function isRecord2(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null;
 }
 function finiteNumber(value) {
@@ -1961,7 +2272,7 @@ function normalizeDeskCards(value) {
   const seen = /* @__PURE__ */ new Set();
   const cards = [];
   for (const candidate of value) {
-    if (!isRecord2(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
+    if (!isRecord3(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
       continue;
     }
     const cardRef = candidate.cardRef.trim();
@@ -2124,17 +2435,18 @@ var DeskView = class extends import_obsidian3.ItemView {
       });
     }
     for (const file of available) {
+      const title = this.plugin.cardTitle(file);
       const item = list.createDiv({ cls: "slipbox-unfiled-item" });
       const name = item.createEl("button", {
-        text: file.basename,
+        text: title,
         cls: "slipbox-unfiled-open",
         attr: { type: "button" }
       });
       (0, import_obsidian3.setTooltip)(name, file.path);
       name.addEventListener("click", () => this.plugin.openMarkdownFile(file));
-      const place = iconButton(item, "plus", `Place ${file.basename} on Desk`);
+      const place = iconButton(item, "plus", `Place ${title} on Desk`);
       place.addEventListener("click", () => void this.plugin.putFileOnDesk(file));
-      const fileButton = iconButton(item, "archive-restore", `File ${file.basename}`);
+      const fileButton = iconButton(item, "archive-restore", `File ${title}`);
       fileButton.addEventListener("click", () => void this.plugin.beginFiling(file));
     }
   }
@@ -2156,6 +2468,7 @@ var DeskView = class extends import_obsidian3.ItemView {
     const isUnfiled = this.plugin.index.snapshot.unfiled.some(
       (candidate) => candidate.path === file.path
     );
+    const title = this.plugin.cardTitle(file);
     card.toggleClass("is-unfiled", isUnfiled);
     card.toggleClass("is-invalid", filed === void 0 && !isUnfiled);
     const header = card.createDiv({ cls: "slipbox-desk-card-header" });
@@ -2164,19 +2477,34 @@ var DeskView = class extends import_obsidian3.ItemView {
       cls: "slipbox-desk-card-address",
       text: filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel")
     });
-    identity.createSpan({ cls: "slipbox-desk-card-title", text: file.basename });
+    if (this.plugin.settings.showTitleInDesk) {
+      identity.createSpan({
+        cls: "slipbox-card-header-separator",
+        text: "\xB7",
+        attr: { "aria-hidden": "true" }
+      });
+      identity.createSpan({ cls: "slipbox-desk-card-title", text: title });
+    }
+    card.setAttr(
+      "aria-label",
+      `${filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel")} \xB7 ${title}`
+    );
     const actions = header.createDiv({ cls: "slipbox-desk-card-actions" });
-    if (isUnfiled) {
-      const fileButton = iconButton(actions, "archive-restore", `File ${file.basename}`);
+    if (isUnfiled && this.plugin.settings.deskHeaderButtons["file-card"]) {
+      const fileButton = iconButton(actions, "archive-restore", `File ${title}`);
       fileButton.addEventListener("pointerdown", (event) => event.stopPropagation());
       fileButton.addEventListener("click", () => void this.plugin.beginFiling(file));
     }
-    const open = iconButton(actions, "file-pen-line", `Open ${file.basename}`);
-    open.addEventListener("pointerdown", (event) => event.stopPropagation());
-    open.addEventListener("click", () => this.plugin.openMarkdownFile(file));
-    const remove = iconButton(actions, "x", `Remove ${file.basename} from Desk`);
-    remove.addEventListener("pointerdown", (event) => event.stopPropagation());
-    remove.addEventListener("click", () => void this.plugin.removeFromDesk(file.path));
+    if (this.plugin.settings.deskHeaderButtons["open-note"]) {
+      const open = iconButton(actions, "file-pen-line", `Open ${title}`);
+      open.addEventListener("pointerdown", (event) => event.stopPropagation());
+      open.addEventListener("click", () => this.plugin.openMarkdownFile(file));
+    }
+    if (this.plugin.settings.deskHeaderButtons.remove) {
+      const remove = iconButton(actions, "x", `Remove ${title} from Desk`);
+      remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+      remove.addEventListener("click", () => void this.plugin.removeFromDesk(file.path));
+    }
     this.attachDragging(card, header, state);
     card.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || event.target.closest(".slipbox-desk-card-header, button, a") !== null) {
@@ -2406,7 +2734,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
       });
       visit.createSpan({
         cls: "slipbox-entry-name",
-        text: available ? bookmark.zettelId : `${bookmark.zettelId} \xB7 missing`
+        text: available ? this.actions.label(bookmark.zettelId) : `${bookmark.zettelId} \xB7 missing`
       });
       visit.disabled = !available;
       visit.addEventListener("click", () => {
@@ -2544,15 +2872,20 @@ var DEFAULT_STATE = {
   deskCards: [],
   spread: DEFAULT_SPREAD
 };
-function isRecord3(value) {
+var DEFAULT_DATA = {
+  schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+  settings: DEFAULT_SETTINGS,
+  state: DEFAULT_STATE
+};
+function isRecord4(value) {
   return typeof value === "object" && value !== null;
 }
 function normalizePluginState(value) {
-  if (!isRecord3(value)) {
+  if (!isRecord4(value)) {
     return DEFAULT_STATE;
   }
   const entryPoints = Array.isArray(value.entryPoints) ? value.entryPoints.flatMap((entry) => {
-    if (!isRecord3(entry) || typeof entry.name !== "string" || entry.name.trim() === "" || typeof entry.id !== "string" || !isValidZettelId(entry.id)) {
+    if (!isRecord4(entry) || typeof entry.name !== "string" || entry.name.trim() === "" || typeof entry.id !== "string" || !isValidZettelId(entry.id)) {
       return [];
     }
     return [{ name: entry.name.trim(), id: entry.id }];
@@ -2565,16 +2898,331 @@ function normalizePluginState(value) {
     spread: Math.min(1.12, Math.max(0.28, rawSpread))
   };
 }
+function normalizePluginData(value) {
+  if (!isRecord4(value)) {
+    return DEFAULT_DATA;
+  }
+  const versioned = isRecord4(value.state) || isRecord4(value.settings);
+  return {
+    schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+    settings: normalizeSettings(versioned ? value.settings : void 0),
+    state: normalizePluginState(versioned ? value.state : value)
+  };
+}
+
+// src/card-title.ts
+function resolveCardTitle(basename, frontmatter, settings) {
+  if (settings.titleSource !== "frontmatter") {
+    return basename;
+  }
+  const value = frontmatter?.[settings.titleProperty];
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : basename;
+}
+
+// src/settings-tab.ts
+var import_obsidian5 = require("obsidian");
+var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
+  constructor(app, slipbox) {
+    super(app, slipbox);
+    this.slipbox = slipbox;
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    new import_obsidian5.Setting(containerEl).setName("Cards and metadata").setHeading();
+    this.renderAddressProperty(containerEl);
+    new import_obsidian5.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles.").addDropdown((dropdown) => {
+      dropdown.addOption("filename", "Filename").addOption("frontmatter", "Frontmatter property").setValue(this.slipbox.settings.titleSource).onChange((value) => {
+        void this.save({
+          ...this.slipbox.settings,
+          titleSource: value === "frontmatter" ? "frontmatter" : "filename"
+        }).then(() => this.display());
+      });
+    });
+    const titleProperty = new import_obsidian5.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
+    titleProperty.addText((text) => {
+      text.setValue(this.slipbox.settings.titleProperty).setDisabled(this.slipbox.settings.titleSource !== "frontmatter").onChange((value) => {
+        const property = value.trim();
+        this.setPropertyValidity(titleProperty, property !== "");
+        if (property !== "") {
+          void this.save({ ...this.slipbox.settings, titleProperty: property });
+        }
+      });
+    });
+    new import_obsidian5.Setting(containerEl).setName("Show title in Deck headers").setDesc("Display address \xB7 title, truncating the title before the card buttons.").addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        showTitleInDeck: value
+      }));
+    });
+    new import_obsidian5.Setting(containerEl).setName("Show title in Desk headers").setDesc("Display address \xB7 title, truncating the title before the card buttons.").addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.showTitleInDesk).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        showTitleInDesk: value
+      }));
+    });
+    new import_obsidian5.Setting(containerEl).setName("Card-header buttons").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Hidden buttons remain available through commands, Deck shortcuts, and card context menus."
+    });
+    this.renderDeckHeaderButtons(containerEl);
+    this.renderDeskHeaderButtons(containerEl);
+    new import_obsidian5.Setting(containerEl).setName("Deck shortcuts").setHeading();
+    const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
+    shortcutIntro.createEl("p", {
+      cls: "setting-item-description",
+      text: "These shortcuts work only while Deck is active and never fire in text or form controls."
+    });
+    const resetAll = shortcutIntro.createEl("button", {
+      text: "Reset all shortcuts",
+      attr: { type: "button" }
+    });
+    resetAll.addEventListener("click", () => {
+      void this.save({
+        ...this.slipbox.settings,
+        deckKeybindings: DEFAULT_DECK_KEYBINDINGS
+      }).then(() => this.display());
+    });
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      this.renderShortcutSetting(containerEl, definition.id, definition.label);
+    }
+  }
+  renderAddressProperty(container) {
+    const setting = new import_obsidian5.Setting(container).setName("Address property").setDesc(
+      "Exact top-level YAML key used to identify and order cards. Changing it re-indexes immediately but does not rewrite existing notes."
+    );
+    setting.addText((text) => {
+      text.setPlaceholder("zettel-id").setValue(this.slipbox.settings.addressProperty).onChange((value) => {
+        const property = value.trim();
+        this.setPropertyValidity(setting, property !== "");
+        if (property !== "") {
+          void this.save({ ...this.slipbox.settings, addressProperty: property });
+        }
+      });
+    });
+  }
+  renderDeckHeaderButtons(container) {
+    const labels = {
+      "add-card": "Add card from here",
+      "open-note": "Open Markdown note",
+      desk: "Toggle Desk membership",
+      bookmark: "Toggle bookmark"
+    };
+    for (const [id, label] of Object.entries(labels)) {
+      new import_obsidian5.Setting(container).setName(`Deck: ${label}`).addToggle((toggle) => {
+        const key = id;
+        toggle.setValue(this.slipbox.settings.deckHeaderButtons[key]).onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          deckHeaderButtons: {
+            ...this.slipbox.settings.deckHeaderButtons,
+            [key]: value
+          }
+        }));
+      });
+    }
+  }
+  renderDeskHeaderButtons(container) {
+    const labels = {
+      "file-card": "File card",
+      "open-note": "Open Markdown note",
+      remove: "Remove from Desk"
+    };
+    for (const [id, label] of Object.entries(labels)) {
+      new import_obsidian5.Setting(container).setName(`Desk: ${label}`).addToggle((toggle) => {
+        const key = id;
+        toggle.setValue(this.slipbox.settings.deskHeaderButtons[key]).onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          deskHeaderButtons: {
+            ...this.slipbox.settings.deskHeaderButtons,
+            [key]: value
+          }
+        }));
+      });
+    }
+  }
+  renderShortcutSetting(container, action, label) {
+    const setting = new import_obsidian5.Setting(container).setName(label);
+    setting.settingEl.addClass("slipbox-shortcut-setting");
+    const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
+    for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
+      const chip = bindings.createEl("button", {
+        cls: "slipbox-shortcut-chip",
+        attr: {
+          type: "button",
+          "aria-label": `Remove ${formatKeyBinding(bindingValue)} from ${label}`
+        }
+      });
+      chip.createSpan({ text: formatKeyBinding(bindingValue) });
+      chip.createSpan({ cls: "slipbox-shortcut-remove", text: "\xD7" });
+      chip.addEventListener("click", () => {
+        const signature = keyBindingSignature(bindingValue);
+        void this.save({
+          ...this.slipbox.settings,
+          deckKeybindings: {
+            ...this.slipbox.settings.deckKeybindings,
+            [action]: this.slipbox.settings.deckKeybindings[action].filter(
+              (candidate) => keyBindingSignature(candidate) !== signature
+            )
+          }
+        }).then(() => this.display());
+      });
+    }
+    const add = bindings.createEl("button", {
+      text: "+ Add shortcut",
+      attr: { type: "button" }
+    });
+    const error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
+    add.addEventListener("click", () => {
+      if (add.hasClass("is-capturing")) {
+        return;
+      }
+      error.empty();
+      add.setText("Press shortcut\u2026");
+      add.addClass("is-capturing");
+      add.focus();
+      const capture = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === "Escape") {
+          finish();
+          return;
+        }
+        if (["Alt", "Control", "Meta", "Shift"].includes(event.key)) {
+          return;
+        }
+        const candidate = this.bindingFromEvent(event);
+        const conflict = keyBindingConflict(
+          this.slipbox.settings.deckKeybindings,
+          action,
+          candidate
+        );
+        if (conflict !== null) {
+          const conflictLabel = DECK_ACTION_DEFINITIONS.find(
+            (definition2) => definition2.id === conflict
+          )?.label ?? conflict;
+          error.setText(`${formatKeyBinding(candidate)} is already assigned to ${conflictLabel}.`);
+          return;
+        }
+        if (this.slipbox.settings.deckKeybindings[action].some(
+          (bindingValue) => keyBindingSignature(bindingValue) === keyBindingSignature(candidate)
+        )) {
+          error.setText(`${formatKeyBinding(candidate)} is already assigned here.`);
+          return;
+        }
+        finish();
+        void this.save({
+          ...this.slipbox.settings,
+          deckKeybindings: {
+            ...this.slipbox.settings.deckKeybindings,
+            [action]: [
+              ...this.slipbox.settings.deckKeybindings[action],
+              candidate
+            ]
+          }
+        }).then(() => this.display());
+      };
+      const finish = () => {
+        add.removeEventListener("keydown", capture);
+        add.removeClass("is-capturing");
+        add.setText("+ Add shortcut");
+      };
+      add.addEventListener("keydown", capture);
+    });
+    const definition = DECK_ACTION_DEFINITIONS.find(
+      (candidate) => candidate.id === action
+    );
+    const reset = bindings.createEl("button", {
+      text: "Reset",
+      attr: { type: "button", "aria-label": `Reset ${label} shortcuts` }
+    });
+    reset.addEventListener("click", () => {
+      const defaults = definition?.defaultBindings ?? [];
+      for (const bindingValue of defaults) {
+        const conflict = keyBindingConflict(
+          this.slipbox.settings.deckKeybindings,
+          action,
+          bindingValue
+        );
+        if (conflict !== null) {
+          const conflictLabel = DECK_ACTION_DEFINITIONS.find(
+            (candidate) => candidate.id === conflict
+          )?.label ?? conflict;
+          error.setText(
+            `${formatKeyBinding(bindingValue)} is already assigned to ${conflictLabel}.`
+          );
+          return;
+        }
+      }
+      void this.save({
+        ...this.slipbox.settings,
+        deckKeybindings: {
+          ...this.slipbox.settings.deckKeybindings,
+          [action]: defaults
+        }
+      }).then(() => this.display());
+    });
+  }
+  bindingFromEvent(event) {
+    const modifiers = [];
+    const primary = import_obsidian5.Platform.isMacOS ? event.metaKey : event.ctrlKey;
+    if (primary) {
+      modifiers.push("Mod");
+    }
+    if (event.ctrlKey && import_obsidian5.Platform.isMacOS) {
+      modifiers.push("Ctrl");
+    }
+    if (event.metaKey && !import_obsidian5.Platform.isMacOS) {
+      modifiers.push("Meta");
+    }
+    if (event.altKey) {
+      modifiers.push("Alt");
+    }
+    if (event.shiftKey) {
+      modifiers.push("Shift");
+    }
+    return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
+      modifiers,
+      key: event.key
+    };
+  }
+  setPropertyValidity(setting, valid) {
+    setting.settingEl.toggleClass("is-invalid", !valid);
+    let error = setting.settingEl.querySelector(".slipbox-setting-error");
+    if (!valid && error === null) {
+      error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
+    }
+    error?.setText(valid ? "" : "A non-empty top-level property name is required.");
+  }
+  async save(settings) {
+    try {
+      await this.slipbox.updateSettings(settings);
+    } catch (error) {
+      new import_obsidian5.Notice(`Could not save Slipbox settings: ${errorMessage3(error)}`);
+    }
+  }
+};
+function errorMessage3(error) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 // src/zettel-index.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/zettel-metadata.ts
+function zettelMetadataRecord(path, frontmatter, addressProperty) {
+  const hasZettelId = frontmatter !== void 0 && Object.prototype.hasOwnProperty.call(frontmatter, addressProperty);
+  return {
+    path,
+    hasZettelId,
+    zettelId: hasZettelId ? frontmatter[addressProperty] : void 0
+  };
+}
 function displayValue(value) {
   const serialized = JSON.stringify(value);
   return serialized === void 0 ? String(value) : serialized;
 }
-function indexZettelMetadata(records) {
+function indexZettelMetadata(records, addressProperty = "zettel-id") {
   const unfiledPaths = [];
   const issues = [];
   const candidates = /* @__PURE__ */ new Map();
@@ -2590,7 +3238,7 @@ function indexZettelMetadata(records) {
       issues.push({
         kind: "invalid",
         paths: [record.path],
-        message: `Unsupported zettel-id ${displayValue(record.zettelId)}`
+        message: `Unsupported ${addressProperty} ${displayValue(record.zettelId)}`
       });
       continue;
     }
@@ -2620,7 +3268,7 @@ function indexZettelMetadata(records) {
         kind: "duplicate",
         id,
         paths: [first, second, ...paths.slice(2)],
-        message: `Duplicate zettel-id ${id}`
+        message: `Duplicate ${addressProperty} ${id}`
       });
     }
   }
@@ -2649,25 +3297,25 @@ var EMPTY_INDEX = {
 };
 var NO_BACKLINKS = [];
 var ZettelIndex = class {
-  constructor(app) {
+  constructor(app, addressProperty = "zettel-id") {
     this.app = app;
+    this.addressProperty = addressProperty;
   }
   current = EMPTY_INDEX;
   get snapshot() {
     return this.current;
   }
+  setAddressProperty(addressProperty) {
+    this.addressProperty = addressProperty;
+  }
   refresh() {
     const markdownFiles = this.app.vault.getMarkdownFiles();
-    const records = markdownFiles.map((file) => {
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      const hasZettelId = frontmatter !== void 0 && Object.prototype.hasOwnProperty.call(frontmatter, "zettel-id");
-      return {
-        path: file.path,
-        hasZettelId,
-        zettelId: hasZettelId ? frontmatter["zettel-id"] : void 0
-      };
-    });
-    const indexed = indexZettelMetadata(records);
+    const records = markdownFiles.map((file) => zettelMetadataRecord(
+      file.path,
+      this.app.metadataCache.getFileCache(file)?.frontmatter,
+      this.addressProperty
+    ));
+    const indexed = indexZettelMetadata(records, this.addressProperty);
     const filesByPath = new Map(markdownFiles.map((file) => [file.path, file]));
     const filed = [];
     for (const record of indexed.filed) {
@@ -2692,7 +3340,7 @@ var ZettelIndex = class {
   }
   fileAtPath(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian5.TFile ? file : void 0;
+    return file instanceof import_obsidian6.TFile ? file : void 0;
   }
   backlinksForPath(path) {
     return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
@@ -2706,18 +3354,23 @@ var ZettelIndex = class {
 };
 
 // src/main.ts
-var SlipboxPlugin = class extends import_obsidian6.Plugin {
+var SlipboxPlugin = class extends import_obsidian7.Plugin {
   state = DEFAULT_STATE;
+  settings = DEFAULT_SETTINGS;
   index;
   indexRefreshTimer = null;
   spreadSaveTimer = null;
   filingWriteInProgress = false;
   cardCreationInProgress = false;
+  persistQueue = Promise.resolve();
   async onload() {
-    this.state = normalizePluginState(await this.loadData());
-    this.index = new ZettelIndex(this.app);
+    const data = normalizePluginData(await this.loadData());
+    this.settings = data.settings;
+    this.state = data.state;
+    this.index = new ZettelIndex(this.app, this.settings.addressProperty);
     this.index.refresh();
     await this.persistState();
+    this.addSettingTab(new SlipboxSettingTab(this.app, this));
     this.registerView(
       DECK_VIEW_TYPE,
       (leaf) => new DeckView(leaf, this)
@@ -2815,6 +3468,29 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
   openMarkdownFile(file) {
     return this.app.workspace.getLeaf("tab").openFile(file);
   }
+  cardTitle(file) {
+    return resolveCardTitle(
+      file.basename,
+      this.app.metadataCache.getFileCache(file)?.frontmatter,
+      this.settings
+    );
+  }
+  async updateSettings(value) {
+    const previousAddressProperty = this.settings.addressProperty;
+    this.settings = normalizeSettings(value);
+    this.index.setAddressProperty(this.settings.addressProperty);
+    await this.persistState();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.updateKeybindings();
+      }
+    }
+    if (this.settings.addressProperty !== previousAddressProperty) {
+      await this.refreshIndex();
+    } else {
+      await this.refreshViews();
+    }
+  }
   showCardContextMenu(event, file, zettelId, source, leaf) {
     event.preventDefault();
     event.stopPropagation();
@@ -2822,9 +3498,10 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     const isOnDesk = this.state.deskCards.some(
       (card) => card.cardRef === file.path
     );
-    const menu = import_obsidian6.Menu.forEvent(event);
+    const title = this.cardTitle(file);
+    const menu = import_obsidian7.Menu.forEvent(event);
     menu.addItem((item) => {
-      item.setTitle("Open Markdown note").setIcon("file-pen-line").setSection("slipbox-card").onClick(() => void this.openMarkdownFile(file));
+      item.setTitle(`Open ${title}`).setIcon("file-pen-line").setSection("slipbox-card").onClick(() => void this.openMarkdownFile(file));
     });
     menu.addItem((item) => {
       item.setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark").setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
@@ -2837,14 +3514,14 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       item.setTitle(isOnDesk ? "Remove from Desk" : "Add to Desk").setIcon("panels-top-left").setSection("slipbox-card").onClick(() => void this.toggleFileOnDesk(file));
     });
     menu.addItem((item) => {
-      item.setTitle("Add card from here").setIcon("plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
+      item.setTitle(`Add card from ${title}`).setIcon("plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
         if (zettelId !== null) {
           void this.createCardFrom(zettelId);
         }
       });
     });
     menu.addItem((item) => {
-      item.setTitle("Delete card").setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => void this.deleteCard(file));
+      item.setTitle(`Delete ${title}`).setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => void this.deleteCard(file));
     });
     this.app.workspace.trigger("file-menu", menu, file, source, leaf);
     menu.showAtMouseEvent(event);
@@ -2856,7 +3533,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     try {
       await this.app.fileManager.trashFile(file);
     } catch (error) {
-      new import_obsidian6.Notice(`Could not delete ${file.basename}: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage4(error)}`);
     }
   }
   showDesk() {
@@ -2868,7 +3545,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       open: (path) => {
         const file = this.index.fileAtPath(path);
         if (file === void 0) {
-          new import_obsidian6.Notice(`Could not find ${path}.`);
+          new import_obsidian7.Notice(`Could not find ${path}.`);
         } else {
           this.openMarkdownFile(file);
         }
@@ -2890,6 +3567,10 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     new BookmarksModal(this.app, this.state.bookmarks, {
       currentId: view.activeCard?.id ?? null,
       isAvailable: (id) => this.index.filedById(id) !== void 0,
+      label: (id) => {
+        const card = this.index.filedById(id);
+        return card === void 0 ? id : `${id} \xB7 ${this.cardTitle(card.file)}`;
+      },
       visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addBookmarkToCurrent(),
       remove: (zettelId) => view.removeBookmark(zettelId)
@@ -2900,11 +3581,13 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
   }
   async addBookmark(zettelId) {
     if (this.index.filedById(zettelId) === void 0) {
-      new import_obsidian6.Notice("Only an available filed card can be bookmarked.");
+      new import_obsidian7.Notice("Only an available filed card can be bookmarked.");
       return;
     }
     if (this.bookmarkAt(zettelId) !== void 0) {
-      new import_obsidian6.Notice(`${zettelId} already has a bookmark.`);
+      const card = this.index.filedById(zettelId);
+      const label = card === void 0 ? zettelId : `${zettelId} \xB7 ${this.cardTitle(card.file)}`;
+      new import_obsidian7.Notice(`${label} already has a bookmark.`);
       return;
     }
     try {
@@ -2913,9 +3596,11 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
         bookmarks: createBookmark(this.state.bookmarks, zettelId)
       };
       await this.persistStateAndRefreshViews();
-      new import_obsidian6.Notice(`Bookmarked ${zettelId}.`);
+      const card = this.index.filedById(zettelId);
+      const label = card === void 0 ? zettelId : `${zettelId} \xB7 ${this.cardTitle(card.file)}`;
+      new import_obsidian7.Notice(`Bookmarked ${label}.`);
     } catch (error) {
-      new import_obsidian6.Notice(`Could not add bookmark: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not add bookmark: ${errorMessage4(error)}`);
     }
   }
   async toggleBookmark(zettelId) {
@@ -2929,11 +3614,11 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     this.index.refresh();
     const metadataState = this.cardMetadataState(file);
     if (metadataState !== "filed" && metadataState !== "unfiled") {
-      new import_obsidian6.Notice("Only a filed or unfiled Slipbox card can be placed on Desk.");
+      new import_obsidian7.Notice("Only a filed or unfiled Slipbox card can be placed on Desk.");
       return;
     }
     if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
-      new import_obsidian6.Notice(`${file.basename} is already on Desk.`);
+      new import_obsidian7.Notice(`${this.cardTitle(file)} is already on Desk.`);
       if (revealDesk) {
         await this.openDesk();
       }
@@ -2985,18 +3670,18 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
   async beginFiling(file) {
     this.index.refresh();
     if (this.cardMetadataState(file) !== "unfiled") {
-      new import_obsidian6.Notice("Only an unfiled card can enter Filing Mode.");
+      new import_obsidian7.Notice("Only an unfiled card can enter Filing Mode.");
       return;
     }
     await this.openDeck(file);
   }
   async addEntryPoint(id) {
     if (this.index.filedById(id) === void 0) {
-      new import_obsidian6.Notice(`Card ${id} is not available in Deck.`);
+      new import_obsidian7.Notice(`Card ${id} is not available in Deck.`);
       return;
     }
     if (this.state.entryPoints.some((entry) => entry.id === id)) {
-      new import_obsidian6.Notice(`${id} is already an entry point.`);
+      new import_obsidian7.Notice(`${id} is already an entry point.`);
       return;
     }
     const name = await promptForText(
@@ -3012,7 +3697,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       entryPoints: [...this.state.entryPoints, { name, id }]
     };
     await this.persistState();
-    new import_obsidian6.Notice(`Added entry point \u201C${name}\u201D.`);
+    new import_obsidian7.Notice(`Added entry point \u201C${name}\u201D.`);
   }
   async createNewSection() {
     try {
@@ -3022,7 +3707,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       this.openMarkdownFile(file);
       this.queueIndexRefresh();
     } catch (error) {
-      new import_obsidian6.Notice(`Could not create a section: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not create a section: ${errorMessage4(error)}`);
     }
   }
   async createCardFrom(attachmentId) {
@@ -3046,8 +3731,8 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       await this.openMarkdownFile(file);
       this.queueIndexRefresh();
     } catch (error) {
-      new import_obsidian6.Notice(
-        `Could not add a card from ${attachmentId}: ${errorMessage3(error)}`
+      new import_obsidian7.Notice(
+        `Could not add a card from ${attachmentId}: ${errorMessage4(error)}`
       );
     } finally {
       this.cardCreationInProgress = false;
@@ -3067,25 +3752,26 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
         this.index.snapshot.allValidIds
       );
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        const property = this.settings.addressProperty;
         const hasId = Object.prototype.hasOwnProperty.call(
           frontmatter,
-          "zettel-id"
+          property
         );
-        const current = frontmatter["zettel-id"];
+        const current = frontmatter[property];
         if (!hasId || !(current === "" || current === null || current === void 0)) {
           throw new Error(
-            "The card is no longer unfiled; its zettel-id was not changed"
+            `The card is no longer unfiled; its ${property} was not changed`
           );
         }
-        frontmatter["zettel-id"] = newId;
+        frontmatter[property] = newId;
       });
       await this.waitForCachedId(file, newId);
       this.index.refresh();
       await this.refreshViews();
-      new import_obsidian6.Notice(`Filed ${file.basename} as ${newId}.`);
+      new import_obsidian7.Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
       return newId;
     } catch (error) {
-      new import_obsidian6.Notice(`Could not file the card: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not file the card: ${errorMessage4(error)}`);
       return null;
     } finally {
       this.filingWriteInProgress = false;
@@ -3100,7 +3786,14 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     this.addCommand({
       id: "open-desk",
       name: "Open Desk",
-      callback: () => void this.openDesk()
+      callback: () => {
+        const deck = this.app.workspace.getActiveViewOfType(DeckView);
+        if (deck === null) {
+          void this.openDesk();
+        } else {
+          deck.runAction("open-desk");
+        }
+      }
     });
     this.addCommand({
       id: "new-card",
@@ -3140,7 +3833,14 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     this.addCommand({
       id: "new-section",
       name: "New section",
-      callback: () => void this.createNewSection()
+      callback: () => {
+        const deck = this.app.workspace.getActiveViewOfType(DeckView);
+        if (deck === null) {
+          void this.createNewSection();
+        } else {
+          deck.runAction("new-section");
+        }
+      }
     });
     this.addCommand({
       id: "add-current-card-entry-point",
@@ -3163,32 +3863,40 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     });
     this.addCommand({
       id: "put-current-card-on-desk",
-      name: "Put current card on Desk",
+      name: "Toggle current card on Desk",
       checkCallback: (checking) => {
         const file = this.currentCardFile();
-        const available = file !== null && !this.state.deskCards.some(
-          (card) => card.cardRef === file.path
-        );
+        const available = file !== null;
         if (checking) {
           return available;
         }
         if (available && file !== null) {
-          void this.putFileOnDesk(file);
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("toggle-desk");
+          } else {
+            void this.toggleFileOnDesk(file);
+          }
         }
         return available;
       }
     });
     this.addCommand({
       id: "add-bookmark-current-card",
-      name: "Add bookmark to current card",
+      name: "Toggle bookmark on current card",
       checkCallback: (checking) => {
         const id = this.currentFiledId();
-        const available = id !== null && this.bookmarkAt(id) === void 0;
+        const available = id !== null;
         if (checking) {
           return available;
         }
         if (available && id !== null) {
-          void this.addBookmark(id);
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("toggle-bookmark");
+          } else {
+            void this.toggleBookmark(id);
+          }
         }
         return available;
       }
@@ -3203,7 +3911,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
           return available;
         }
         if (available && view !== null) {
-          void view.goBack();
+          view.runAction("back");
         }
         return available;
       }
@@ -3218,7 +3926,103 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
           return available;
         }
         if (available && view !== null) {
-          void view.goForward();
+          view.runAction("forward");
+        }
+        return available;
+      }
+    });
+    this.addCommand({
+      id: "open-current-card-markdown",
+      name: "Open current card in Markdown",
+      checkCallback: (checking) => {
+        const file = this.currentCardFile();
+        if (checking) {
+          return file !== null;
+        }
+        if (file !== null) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("open-note");
+          } else {
+            void this.openMarkdownFile(file);
+          }
+        }
+        return file !== null;
+      }
+    });
+    this.addCommand({
+      id: "add-card-from-current",
+      name: "Add card from current card",
+      checkCallback: (checking) => {
+        const id = this.currentFiledId();
+        if (checking) {
+          return id !== null;
+        }
+        if (id !== null) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("add-card");
+          } else {
+            void this.createCardFrom(id);
+          }
+        }
+        return id !== null;
+      }
+    });
+    this.registerDeckCommand("previous-card", "Previous card", "previous-card");
+    this.registerDeckCommand("next-card", "Next card", "next-card");
+    this.registerDeckCommand("centre-active-card", "Centre active card", "centre-card");
+    this.registerDeckCommand("first-card", "First card", "first-card");
+    this.registerDeckCommand("last-card", "Last card", "last-card");
+    this.addCommand({
+      id: "manage-entry-points",
+      name: "Manage entry points",
+      callback: () => void this.openDeck().then((view) => {
+        view.runAction("entry-points");
+      })
+    });
+    this.addCommand({
+      id: "manage-bookmarks",
+      name: "Manage bookmarks",
+      callback: () => void this.openDeck().then((view) => {
+        view.runAction("bookmarks");
+      })
+    });
+    this.addCommand({
+      id: "show-card-problems",
+      name: "Show card problems",
+      checkCallback: (checking) => {
+        this.index.refresh();
+        const available = this.index.snapshot.issues.length > 0;
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck === null) {
+            this.showIssues();
+          } else {
+            deck.runAction("problems");
+          }
+        }
+        return available;
+      }
+    });
+    this.registerDeckCommand("file-here", "File here", "file-here");
+    this.registerDeckCommand("cancel-filing", "Cancel filing", "cancel-filing");
+  }
+  registerDeckCommand(id, name, action) {
+    this.addCommand({
+      id,
+      name,
+      checkCallback: (checking) => {
+        const view = this.currentDeckView();
+        const available = view?.canRunAction(action) ?? false;
+        if (checking) {
+          return available;
+        }
+        if (available && view !== null) {
+          view.runAction(action);
         }
         return available;
       }
@@ -3242,21 +4046,22 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       this.openMarkdownFile(file);
       this.queueIndexRefresh();
     } catch (error) {
-      new import_obsidian6.Notice(`Could not create a card: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not create a card: ${errorMessage4(error)}`);
     }
   }
   async makeNoteCard(file) {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        if (Object.prototype.hasOwnProperty.call(frontmatter, "zettel-id")) {
-          throw new Error("This note already has a zettel-id property");
+        const property = this.settings.addressProperty;
+        if (Object.prototype.hasOwnProperty.call(frontmatter, property)) {
+          throw new Error(`This note already has a ${property} property`);
         }
-        frontmatter["zettel-id"] = "";
+        frontmatter[property] = "";
       });
       this.queueIndexRefresh();
-      new import_obsidian6.Notice(`${file.basename} is now an unfiled card.`);
+      new import_obsidian7.Notice(`${this.cardTitle(file)} is now an unfiled card.`);
     } catch (error) {
-      new import_obsidian6.Notice(`Could not make this note a card: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not make this note a card: ${errorMessage4(error)}`);
     }
   }
   async createCardFile(id, sourcePath = this.app.workspace.getActiveFile()?.path ?? "") {
@@ -3270,15 +4075,16 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     let path;
     do {
       const suffix = sequence === 0 ? "" : ` ${sequence + 1}`;
-      path = (0, import_obsidian6.normalizePath)(`${prefix}${basename}${suffix}.md`);
+      path = (0, import_obsidian7.normalizePath)(`${prefix}${basename}${suffix}.md`);
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);
-    const yamlValue = id === null ? '""' : `"${id}"`;
+    const frontmatter = (0, import_obsidian7.stringifyYaml)({
+      [this.settings.addressProperty]: id ?? ""
+    });
     return this.app.vault.create(
       path,
       `---
-zettel-id: ${yamlValue}
----
+${frontmatter}---
 
 `
     );
@@ -3299,10 +4105,13 @@ zettel-id: ${yamlValue}
   }
   cardMetadataState(file) {
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (frontmatter === void 0 || !Object.prototype.hasOwnProperty.call(frontmatter, "zettel-id")) {
+    if (frontmatter === void 0 || !Object.prototype.hasOwnProperty.call(
+      frontmatter,
+      this.settings.addressProperty
+    )) {
       return "ordinary";
     }
-    const value = frontmatter["zettel-id"];
+    const value = frontmatter[this.settings.addressProperty];
     if (value === "" || value === null || value === void 0) {
       return "unfiled";
     }
@@ -3343,12 +4152,14 @@ zettel-id: ${yamlValue}
     if (this.bookmarkAt(zettelId) === void 0) {
       return;
     }
+    const card = this.index.filedById(zettelId);
+    const label = card === void 0 ? zettelId : `${zettelId} \xB7 ${this.cardTitle(card.file)}`;
     this.state = {
       ...this.state,
       bookmarks: deleteBookmark(this.state.bookmarks, zettelId)
     };
     await this.persistStateAndRefreshViews();
-    new import_obsidian6.Notice(`Deleted bookmark at ${zettelId}.`);
+    new import_obsidian7.Notice(`Deleted bookmark at ${label}.`);
   }
   async renameEntryPoint(index) {
     const entry = this.state.entryPoints[index];
@@ -3377,7 +4188,7 @@ zettel-id: ${yamlValue}
     }
     this.state = { ...this.state, entryPoints: entries };
     await this.persistState();
-    new import_obsidian6.Notice(`Deleted entry point \u201C${removed.name}\u201D.`);
+    new import_obsidian7.Notice(`Deleted entry point \u201C${removed.name}\u201D.`);
   }
   queueIndexRefresh() {
     if (this.filingWriteInProgress) {
@@ -3411,15 +4222,21 @@ zettel-id: ${yamlValue}
     await this.refreshViews();
   }
   async persistState() {
+    const write = this.persistQueue.then(() => this.saveData({
+      schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+      settings: this.settings,
+      state: this.state
+    }));
+    this.persistQueue = write.catch(() => void 0);
     try {
-      await this.saveData(this.state);
+      await write;
     } catch (error) {
-      new import_obsidian6.Notice(`Could not save Slipbox state: ${errorMessage3(error)}`);
+      new import_obsidian7.Notice(`Could not save Slipbox state: ${errorMessage4(error)}`);
     }
   }
   async waitForCachedId(file, expectedId) {
     for (let attempt = 0; attempt < 40; attempt += 1) {
-      const value = this.app.metadataCache.getFileCache(file)?.frontmatter?.["zettel-id"];
+      const value = this.app.metadataCache.getFileCache(file)?.frontmatter?.[this.settings.addressProperty];
       if (value === expectedId) {
         return;
       }
@@ -3460,6 +4277,6 @@ zettel-id: ${yamlValue}
     this.queueIndexRefresh();
   }
 };
-function errorMessage3(error) {
+function errorMessage4(error) {
   return error instanceof Error ? error.message : String(error);
 }

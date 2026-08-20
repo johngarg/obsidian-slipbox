@@ -5,6 +5,7 @@ import {
   TAbstractFile,
   TFile,
   normalizePath,
+  stringifyYaml,
   type WorkspaceLeaf,
 } from "obsidian";
 
@@ -32,28 +33,42 @@ import {
 } from "./modals.js";
 import {
   DEFAULT_STATE,
-  normalizePluginState,
+  normalizePluginData,
   type EntryPoint,
   type SlipboxPluginState,
 } from "./plugin-state.js";
+import { resolveCardTitle } from "./card-title.js";
+import {
+  DEFAULT_SETTINGS,
+  SLIPBOX_DATA_SCHEMA_VERSION,
+  normalizeSettings,
+  type DeckAction,
+  type SlipboxSettings,
+} from "./settings.js";
+import { SlipboxSettingTab } from "./settings-tab.js";
 import { ZettelIndex } from "./zettel-index.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
+  settings: SlipboxSettings = DEFAULT_SETTINGS;
   index!: ZettelIndex;
 
   private indexRefreshTimer: number | null = null;
   private spreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
   private cardCreationInProgress = false;
+  private persistQueue: Promise<void> = Promise.resolve();
 
   async onload(): Promise<void> {
-    this.state = normalizePluginState(await this.loadData());
-    this.index = new ZettelIndex(this.app);
+    const data = normalizePluginData(await this.loadData());
+    this.settings = data.settings;
+    this.state = data.state;
+    this.index = new ZettelIndex(this.app, this.settings.addressProperty);
     this.index.refresh();
     await this.persistState();
+    this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
     this.registerView(
       DECK_VIEW_TYPE,
@@ -161,6 +176,31 @@ export default class SlipboxPlugin extends Plugin {
     return this.app.workspace.getLeaf("tab").openFile(file);
   }
 
+  cardTitle(file: TFile): string {
+    return resolveCardTitle(
+      file.basename,
+      this.app.metadataCache.getFileCache(file)?.frontmatter,
+      this.settings,
+    );
+  }
+
+  async updateSettings(value: SlipboxSettings): Promise<void> {
+    const previousAddressProperty = this.settings.addressProperty;
+    this.settings = normalizeSettings(value);
+    this.index.setAddressProperty(this.settings.addressProperty);
+    await this.persistState();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.updateKeybindings();
+      }
+    }
+    if (this.settings.addressProperty !== previousAddressProperty) {
+      await this.refreshIndex();
+    } else {
+      await this.refreshViews();
+    }
+  }
+
   showCardContextMenu(
     event: MouseEvent,
     file: TFile,
@@ -176,11 +216,12 @@ export default class SlipboxPlugin extends Plugin {
     const isOnDesk = this.state.deskCards.some(
       (card) => card.cardRef === file.path,
     );
+    const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
 
     menu.addItem((item) => {
       item
-        .setTitle("Open Markdown note")
+        .setTitle(`Open ${title}`)
         .setIcon("file-pen-line")
         .setSection("slipbox-card")
         .onClick(() => void this.openMarkdownFile(file));
@@ -206,7 +247,7 @@ export default class SlipboxPlugin extends Plugin {
     });
     menu.addItem((item) => {
       item
-        .setTitle("Add card from here")
+        .setTitle(`Add card from ${title}`)
         .setIcon("plus")
         .setSection("slipbox-card")
         .setDisabled(zettelId === null)
@@ -218,7 +259,7 @@ export default class SlipboxPlugin extends Plugin {
     });
     menu.addItem((item) => {
       item
-        .setTitle("Delete card")
+        .setTitle(`Delete ${title}`)
         .setIcon("trash-2")
         .setWarning(true)
         .setSection("slipbox-card-danger")
@@ -238,7 +279,7 @@ export default class SlipboxPlugin extends Plugin {
     try {
       await this.app.fileManager.trashFile(file);
     } catch (error) {
-      new Notice(`Could not delete ${file.basename}: ${errorMessage(error)}`);
+      new Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage(error)}`);
     }
   }
 
@@ -276,6 +317,10 @@ export default class SlipboxPlugin extends Plugin {
     new BookmarksModal(this.app, this.state.bookmarks, {
       currentId: view.activeCard?.id ?? null,
       isAvailable: (id) => this.index.filedById(id) !== undefined,
+      label: (id) => {
+        const card = this.index.filedById(id);
+        return card === undefined ? id : `${id} · ${this.cardTitle(card.file)}`;
+      },
       visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addBookmarkToCurrent(),
       remove: (zettelId) => view.removeBookmark(zettelId),
@@ -292,7 +337,11 @@ export default class SlipboxPlugin extends Plugin {
       return;
     }
     if (this.bookmarkAt(zettelId) !== undefined) {
-      new Notice(`${zettelId} already has a bookmark.`);
+      const card = this.index.filedById(zettelId);
+      const label = card === undefined
+        ? zettelId
+        : `${zettelId} · ${this.cardTitle(card.file)}`;
+      new Notice(`${label} already has a bookmark.`);
       return;
     }
     try {
@@ -301,7 +350,11 @@ export default class SlipboxPlugin extends Plugin {
         bookmarks: createBookmark(this.state.bookmarks, zettelId),
       };
       await this.persistStateAndRefreshViews();
-      new Notice(`Bookmarked ${zettelId}.`);
+      const card = this.index.filedById(zettelId);
+      const label = card === undefined
+        ? zettelId
+        : `${zettelId} · ${this.cardTitle(card.file)}`;
+      new Notice(`Bookmarked ${label}.`);
     } catch (error) {
       new Notice(`Could not add bookmark: ${errorMessage(error)}`);
     }
@@ -323,7 +376,7 @@ export default class SlipboxPlugin extends Plugin {
       return;
     }
     if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
-      new Notice(`${file.basename} is already on Desk.`);
+      new Notice(`${this.cardTitle(file)} is already on Desk.`);
       if (revealDesk) {
         await this.openDesk();
       }
@@ -475,23 +528,24 @@ export default class SlipboxPlugin extends Plugin {
       );
 
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        const property = this.settings.addressProperty;
         const hasId = Object.prototype.hasOwnProperty.call(
           frontmatter,
-          "zettel-id",
+          property,
         );
-        const current = frontmatter["zettel-id"];
+        const current = frontmatter[property];
         if (!hasId || !(current === "" || current === null || current === undefined)) {
           throw new Error(
-            "The card is no longer unfiled; its zettel-id was not changed",
+            `The card is no longer unfiled; its ${property} was not changed`,
           );
         }
-        frontmatter["zettel-id"] = newId;
+        frontmatter[property] = newId;
       });
 
       await this.waitForCachedId(file, newId);
       this.index.refresh();
       await this.refreshViews();
-      new Notice(`Filed ${file.basename} as ${newId}.`);
+      new Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
       return newId;
     } catch (error) {
       new Notice(`Could not file the card: ${errorMessage(error)}`);
@@ -511,7 +565,14 @@ export default class SlipboxPlugin extends Plugin {
     this.addCommand({
       id: "open-desk",
       name: "Open Desk",
-      callback: () => void this.openDesk(),
+      callback: () => {
+        const deck = this.app.workspace.getActiveViewOfType(DeckView);
+        if (deck === null) {
+          void this.openDesk();
+        } else {
+          deck.runAction("open-desk");
+        }
+      },
     });
 
     this.addCommand({
@@ -559,7 +620,14 @@ export default class SlipboxPlugin extends Plugin {
     this.addCommand({
       id: "new-section",
       name: "New section",
-      callback: () => void this.createNewSection(),
+      callback: () => {
+        const deck = this.app.workspace.getActiveViewOfType(DeckView);
+        if (deck === null) {
+          void this.createNewSection();
+        } else {
+          deck.runAction("new-section");
+        }
+      },
     });
 
     this.addCommand({
@@ -586,17 +654,20 @@ export default class SlipboxPlugin extends Plugin {
 
     this.addCommand({
       id: "put-current-card-on-desk",
-      name: "Put current card on Desk",
+      name: "Toggle current card on Desk",
       checkCallback: (checking) => {
         const file = this.currentCardFile();
-        const available = file !== null && !this.state.deskCards.some(
-          (card) => card.cardRef === file.path,
-        );
+        const available = file !== null;
         if (checking) {
           return available;
         }
         if (available && file !== null) {
-          void this.putFileOnDesk(file);
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("toggle-desk");
+          } else {
+            void this.toggleFileOnDesk(file);
+          }
         }
         return available;
       },
@@ -604,15 +675,20 @@ export default class SlipboxPlugin extends Plugin {
 
     this.addCommand({
       id: "add-bookmark-current-card",
-      name: "Add bookmark to current card",
+      name: "Toggle bookmark on current card",
       checkCallback: (checking) => {
         const id = this.currentFiledId();
-        const available = id !== null && this.bookmarkAt(id) === undefined;
+        const available = id !== null;
         if (checking) {
           return available;
         }
         if (available && id !== null) {
-          void this.addBookmark(id);
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("toggle-bookmark");
+          } else {
+            void this.toggleBookmark(id);
+          }
         }
         return available;
       },
@@ -628,7 +704,7 @@ export default class SlipboxPlugin extends Plugin {
           return available;
         }
         if (available && view !== null) {
-          void view.goBack();
+          view.runAction("back");
         }
         return available;
       },
@@ -644,7 +720,111 @@ export default class SlipboxPlugin extends Plugin {
           return available;
         }
         if (available && view !== null) {
-          void view.goForward();
+          view.runAction("forward");
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "open-current-card-markdown",
+      name: "Open current card in Markdown",
+      checkCallback: (checking) => {
+        const file = this.currentCardFile();
+        if (checking) {
+          return file !== null;
+        }
+        if (file !== null) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("open-note");
+          } else {
+            void this.openMarkdownFile(file);
+          }
+        }
+        return file !== null;
+      },
+    });
+
+    this.addCommand({
+      id: "add-card-from-current",
+      name: "Add card from current card",
+      checkCallback: (checking) => {
+        const id = this.currentFiledId();
+        if (checking) {
+          return id !== null;
+        }
+        if (id !== null) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("add-card");
+          } else {
+            void this.createCardFrom(id);
+          }
+        }
+        return id !== null;
+      },
+    });
+
+    this.registerDeckCommand("previous-card", "Previous card", "previous-card");
+    this.registerDeckCommand("next-card", "Next card", "next-card");
+    this.registerDeckCommand("centre-active-card", "Centre active card", "centre-card");
+    this.registerDeckCommand("first-card", "First card", "first-card");
+    this.registerDeckCommand("last-card", "Last card", "last-card");
+    this.addCommand({
+      id: "manage-entry-points",
+      name: "Manage entry points",
+      callback: () => void this.openDeck().then((view) => {
+        view.runAction("entry-points");
+      }),
+    });
+    this.addCommand({
+      id: "manage-bookmarks",
+      name: "Manage bookmarks",
+      callback: () => void this.openDeck().then((view) => {
+        view.runAction("bookmarks");
+      }),
+    });
+    this.addCommand({
+      id: "show-card-problems",
+      name: "Show card problems",
+      checkCallback: (checking) => {
+        this.index.refresh();
+        const available = this.index.snapshot.issues.length > 0;
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck === null) {
+            this.showIssues();
+          } else {
+            deck.runAction("problems");
+          }
+        }
+        return available;
+      },
+    });
+    this.registerDeckCommand("file-here", "File here", "file-here");
+    this.registerDeckCommand("cancel-filing", "Cancel filing", "cancel-filing");
+  }
+
+  private registerDeckCommand(
+    id: string,
+    name: string,
+    action: DeckAction,
+  ): void {
+    this.addCommand({
+      id,
+      name,
+      checkCallback: (checking) => {
+        const view = this.currentDeckView();
+        const available = view?.canRunAction(action) ?? false;
+        if (checking) {
+          return available;
+        }
+        if (available && view !== null) {
+          view.runAction(action);
         }
         return available;
       },
@@ -676,13 +856,14 @@ export default class SlipboxPlugin extends Plugin {
   private async makeNoteCard(file: TFile): Promise<void> {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        if (Object.prototype.hasOwnProperty.call(frontmatter, "zettel-id")) {
-          throw new Error("This note already has a zettel-id property");
+        const property = this.settings.addressProperty;
+        if (Object.prototype.hasOwnProperty.call(frontmatter, property)) {
+          throw new Error(`This note already has a ${property} property`);
         }
-        frontmatter["zettel-id"] = "";
+        frontmatter[property] = "";
       });
       this.queueIndexRefresh();
-      new Notice(`${file.basename} is now an unfiled card.`);
+      new Notice(`${this.cardTitle(file)} is now an unfiled card.`);
     } catch (error) {
       new Notice(`Could not make this note a card: ${errorMessage(error)}`);
     }
@@ -707,10 +888,12 @@ export default class SlipboxPlugin extends Plugin {
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);
 
-    const yamlValue = id === null ? '""' : `"${id}"`;
+    const frontmatter = stringifyYaml({
+      [this.settings.addressProperty]: id ?? "",
+    });
     return this.app.vault.create(
       path,
-      `---\nzettel-id: ${yamlValue}\n---\n\n`,
+      `---\n${frontmatter}---\n\n`,
     );
   }
 
@@ -733,11 +916,14 @@ export default class SlipboxPlugin extends Plugin {
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (
       frontmatter === undefined ||
-      !Object.prototype.hasOwnProperty.call(frontmatter, "zettel-id")
+      !Object.prototype.hasOwnProperty.call(
+        frontmatter,
+        this.settings.addressProperty,
+      )
     ) {
       return "ordinary";
     }
-    const value = frontmatter["zettel-id"];
+    const value = frontmatter[this.settings.addressProperty];
     if (value === "" || value === null || value === undefined) {
       return "unfiled";
     }
@@ -782,12 +968,16 @@ export default class SlipboxPlugin extends Plugin {
     if (this.bookmarkAt(zettelId) === undefined) {
       return;
     }
+    const card = this.index.filedById(zettelId);
+    const label = card === undefined
+      ? zettelId
+      : `${zettelId} · ${this.cardTitle(card.file)}`;
     this.state = {
       ...this.state,
       bookmarks: deleteBookmark(this.state.bookmarks, zettelId),
     };
     await this.persistStateAndRefreshViews();
-    new Notice(`Deleted bookmark at ${zettelId}.`);
+    new Notice(`Deleted bookmark at ${label}.`);
   }
 
   private async renameEntryPoint(index: number): Promise<void> {
@@ -861,8 +1051,14 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private async persistState(): Promise<void> {
+    const write = this.persistQueue.then(() => this.saveData({
+      schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+      settings: this.settings,
+      state: this.state,
+    }));
+    this.persistQueue = write.catch(() => undefined);
     try {
-      await this.saveData(this.state);
+      await write;
     } catch (error) {
       new Notice(`Could not save Slipbox state: ${errorMessage(error)}`);
     }
@@ -871,7 +1067,9 @@ export default class SlipboxPlugin extends Plugin {
   private async waitForCachedId(file: TFile, expectedId: string): Promise<void> {
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const value =
-        this.app.metadataCache.getFileCache(file)?.frontmatter?.["zettel-id"];
+        this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+          this.settings.addressProperty
+        ];
       if (value === expectedId) {
         return;
       }

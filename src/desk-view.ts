@@ -135,17 +135,18 @@ export class DeskView extends ItemView {
       });
     }
     for (const file of available) {
+      const title = this.plugin.cardTitle(file);
       const item = list.createDiv({ cls: "slipbox-unfiled-item" });
       const name = item.createEl("button", {
-        text: file.basename,
+        text: title,
         cls: "slipbox-unfiled-open",
         attr: { type: "button" },
       });
       setTooltip(name, file.path);
       name.addEventListener("click", () => this.plugin.openMarkdownFile(file));
-      const place = iconButton(item, "plus", `Place ${file.basename} on Desk`);
+      const place = iconButton(item, "plus", `Place ${title} on Desk`);
       place.addEventListener("click", () => void this.plugin.putFileOnDesk(file));
-      const fileButton = iconButton(item, "archive-restore", `File ${file.basename}`);
+      const fileButton = iconButton(item, "archive-restore", `File ${title}`);
       fileButton.addEventListener("click", () => void this.plugin.beginFiling(file));
     }
   }
@@ -174,6 +175,7 @@ export class DeskView extends ItemView {
     const isUnfiled = this.plugin.index.snapshot.unfiled.some(
       (candidate) => candidate.path === file.path,
     );
+    const title = this.plugin.cardTitle(file);
     card.toggleClass("is-unfiled", isUnfiled);
     card.toggleClass("is-invalid", filed === undefined && !isUnfiled);
 
@@ -183,20 +185,35 @@ export class DeskView extends ItemView {
       cls: "slipbox-desk-card-address",
       text: filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel"),
     });
-    identity.createSpan({ cls: "slipbox-desk-card-title", text: file.basename });
+    if (this.plugin.settings.showTitleInDesk) {
+      identity.createSpan({
+        cls: "slipbox-card-header-separator",
+        text: "·",
+        attr: { "aria-hidden": "true" },
+      });
+      identity.createSpan({ cls: "slipbox-desk-card-title", text: title });
+    }
+    card.setAttr(
+      "aria-label",
+      `${filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel")} · ${title}`,
+    );
 
     const actions = header.createDiv({ cls: "slipbox-desk-card-actions" });
-    if (isUnfiled) {
-      const fileButton = iconButton(actions, "archive-restore", `File ${file.basename}`);
+    if (isUnfiled && this.plugin.settings.deskHeaderButtons["file-card"]) {
+      const fileButton = iconButton(actions, "archive-restore", `File ${title}`);
       fileButton.addEventListener("pointerdown", (event) => event.stopPropagation());
       fileButton.addEventListener("click", () => void this.plugin.beginFiling(file));
     }
-    const open = iconButton(actions, "file-pen-line", `Open ${file.basename}`);
-    open.addEventListener("pointerdown", (event) => event.stopPropagation());
-    open.addEventListener("click", () => this.plugin.openMarkdownFile(file));
-    const remove = iconButton(actions, "x", `Remove ${file.basename} from Desk`);
-    remove.addEventListener("pointerdown", (event) => event.stopPropagation());
-    remove.addEventListener("click", () => void this.plugin.removeFromDesk(file.path));
+    if (this.plugin.settings.deskHeaderButtons["open-note"]) {
+      const open = iconButton(actions, "file-pen-line", `Open ${title}`);
+      open.addEventListener("pointerdown", (event) => event.stopPropagation());
+      open.addEventListener("click", () => this.plugin.openMarkdownFile(file));
+    }
+    if (this.plugin.settings.deskHeaderButtons.remove) {
+      const remove = iconButton(actions, "x", `Remove ${title} from Desk`);
+      remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+      remove.addEventListener("click", () => void this.plugin.removeFromDesk(file.path));
+    }
 
     this.attachDragging(card, header, state);
     card.addEventListener("pointerdown", (event) => {

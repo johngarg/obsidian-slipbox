@@ -1,6 +1,12 @@
 import { isValidZettelId } from "./zettel-id.js";
 import { normalizeBookmarks, type DeckBookmark } from "./bookmarks.js";
 import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
+import {
+  DEFAULT_SETTINGS,
+  SLIPBOX_DATA_SCHEMA_VERSION,
+  normalizeSettings,
+  type SlipboxSettings,
+} from "./settings.js";
 
 export interface EntryPoint {
   readonly name: string;
@@ -14,6 +20,12 @@ export interface SlipboxPluginState {
   readonly spread: number;
 }
 
+export interface SlipboxPluginData {
+  readonly schemaVersion: number;
+  readonly settings: SlipboxSettings;
+  readonly state: SlipboxPluginState;
+}
+
 export const DEFAULT_SPREAD = 0.58;
 
 export const DEFAULT_STATE: SlipboxPluginState = {
@@ -21,6 +33,12 @@ export const DEFAULT_STATE: SlipboxPluginState = {
   bookmarks: [],
   deskCards: [],
   spread: DEFAULT_SPREAD,
+};
+
+export const DEFAULT_DATA: SlipboxPluginData = {
+  schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+  settings: DEFAULT_SETTINGS,
+  state: DEFAULT_STATE,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,5 +76,18 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
     bookmarks: normalizeBookmarks(value.bookmarks),
     deskCards: normalizeDeskCards(value.deskCards),
     spread: Math.min(1.12, Math.max(0.28, rawSpread)),
+  };
+}
+
+/** Load current versioned data or migrate the legacy flat workspace state. */
+export function normalizePluginData(value: unknown): SlipboxPluginData {
+  if (!isRecord(value)) {
+    return DEFAULT_DATA;
+  }
+  const versioned = isRecord(value.state) || isRecord(value.settings);
+  return {
+    schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+    settings: normalizeSettings(versioned ? value.settings : undefined),
+    state: normalizePluginState(versioned ? value.state : value),
   };
 }

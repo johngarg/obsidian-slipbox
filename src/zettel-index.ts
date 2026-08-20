@@ -3,6 +3,7 @@ import { TFile as ObsidianFile } from "obsidian";
 
 import {
   indexZettelMetadata,
+  zettelMetadataRecord,
   type FiledZettelRecord,
   type ZettelMetadataIndex,
 } from "./zettel-metadata.js";
@@ -36,28 +37,28 @@ const NO_BACKLINKS: readonly FiledZettel[] = [];
 export class ZettelIndex {
   private current: VaultZettelIndex = EMPTY_INDEX;
 
-  constructor(private readonly app: App) {}
+  constructor(
+    private readonly app: App,
+    private addressProperty = "zettel-id",
+  ) {}
 
   get snapshot(): VaultZettelIndex {
     return this.current;
   }
 
+  setAddressProperty(addressProperty: string): void {
+    this.addressProperty = addressProperty;
+  }
+
   refresh(): VaultZettelIndex {
     const markdownFiles = this.app.vault.getMarkdownFiles();
-    const records = markdownFiles.map((file) => {
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      const hasZettelId =
-        frontmatter !== undefined &&
-        Object.prototype.hasOwnProperty.call(frontmatter, "zettel-id");
+    const records = markdownFiles.map((file) => zettelMetadataRecord(
+      file.path,
+      this.app.metadataCache.getFileCache(file)?.frontmatter,
+      this.addressProperty,
+    ));
 
-      return {
-        path: file.path,
-        hasZettelId,
-        zettelId: hasZettelId ? frontmatter["zettel-id"] : undefined,
-      };
-    });
-
-    const indexed = indexZettelMetadata(records);
+    const indexed = indexZettelMetadata(records, this.addressProperty);
     const filesByPath = new Map(markdownFiles.map((file) => [file.path, file]));
     const filed: FiledZettel[] = [];
 

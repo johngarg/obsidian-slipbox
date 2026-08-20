@@ -1,0 +1,313 @@
+export const SLIPBOX_DATA_SCHEMA_VERSION = 1;
+
+export type TitleSource = "filename" | "frontmatter";
+
+export type DeckHeaderButton = "add-card" | "open-note" | "desk" | "bookmark";
+export type DeskHeaderButton = "file-card" | "open-note" | "remove";
+
+export type DeckAction =
+  | "previous-card"
+  | "next-card"
+  | "centre-card"
+  | "first-card"
+  | "last-card"
+  | "open-note"
+  | "add-card"
+  | "toggle-desk"
+  | "toggle-bookmark"
+  | "back"
+  | "forward"
+  | "entry-points"
+  | "bookmarks"
+  | "open-desk"
+  | "problems"
+  | "new-section"
+  | "file-here"
+  | "cancel-filing";
+
+export type KeyModifier = "Mod" | "Ctrl" | "Meta" | "Alt" | "Shift";
+
+export interface DeckKeyBinding {
+  readonly modifiers: readonly KeyModifier[];
+  readonly key: string;
+}
+
+export interface DeckActionDefinition {
+  readonly id: DeckAction;
+  readonly label: string;
+  readonly repeatable: boolean;
+  readonly defaultBindings: readonly DeckKeyBinding[];
+}
+
+const binding = (
+  key: string,
+  modifiers: readonly KeyModifier[] = [],
+): DeckKeyBinding => ({ key, modifiers });
+
+export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
+  {
+    id: "previous-card",
+    label: "Previous card",
+    repeatable: true,
+    defaultBindings: [binding("ArrowLeft"), binding("k")],
+  },
+  {
+    id: "next-card",
+    label: "Next card",
+    repeatable: true,
+    defaultBindings: [binding("ArrowRight"), binding("j")],
+  },
+  {
+    id: "centre-card",
+    label: "Centre active card",
+    repeatable: false,
+    defaultBindings: [binding("c")],
+  },
+  {
+    id: "first-card",
+    label: "First card",
+    repeatable: false,
+    defaultBindings: [binding("g")],
+  },
+  {
+    id: "last-card",
+    label: "Last card",
+    repeatable: false,
+    defaultBindings: [binding("g", ["Shift"])],
+  },
+  {
+    id: "open-note",
+    label: "Open Markdown note",
+    repeatable: false,
+    defaultBindings: [binding("o")],
+  },
+  {
+    id: "add-card",
+    label: "Add card from here",
+    repeatable: false,
+    defaultBindings: [binding("a")],
+  },
+  {
+    id: "toggle-desk",
+    label: "Toggle Desk membership",
+    repeatable: false,
+    defaultBindings: [binding("d")],
+  },
+  {
+    id: "toggle-bookmark",
+    label: "Toggle bookmark",
+    repeatable: false,
+    defaultBindings: [binding("b")],
+  },
+  { id: "back", label: "Back", repeatable: false, defaultBindings: [] },
+  { id: "forward", label: "Forward", repeatable: false, defaultBindings: [] },
+  {
+    id: "entry-points",
+    label: "Manage entry points",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "bookmarks",
+    label: "Manage bookmarks",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  { id: "open-desk", label: "Open Desk", repeatable: false, defaultBindings: [] },
+  {
+    id: "problems",
+    label: "Show card problems",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "new-section",
+    label: "New section",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "file-here",
+    label: "File here",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "cancel-filing",
+    label: "Cancel filing",
+    repeatable: false,
+    defaultBindings: [],
+  },
+];
+
+export const DECK_ACTION_IDS = DECK_ACTION_DEFINITIONS.map(
+  (definition) => definition.id,
+);
+
+export interface SlipboxSettings {
+  readonly addressProperty: string;
+  readonly titleSource: TitleSource;
+  readonly titleProperty: string;
+  readonly showTitleInDeck: boolean;
+  readonly showTitleInDesk: boolean;
+  readonly deckHeaderButtons: Readonly<Record<DeckHeaderButton, boolean>>;
+  readonly deskHeaderButtons: Readonly<Record<DeskHeaderButton, boolean>>;
+  readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
+}
+
+export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, boolean>> = {
+  "add-card": true,
+  "open-note": true,
+  desk: true,
+  bookmark: true,
+};
+
+export const DEFAULT_DESK_HEADER_BUTTONS: Readonly<Record<DeskHeaderButton, boolean>> = {
+  "file-card": true,
+  "open-note": true,
+  remove: true,
+};
+
+export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
+  DECK_ACTION_DEFINITIONS.map((definition) => [
+    definition.id,
+    definition.defaultBindings,
+  ]),
+) as Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
+
+export const DEFAULT_SETTINGS: SlipboxSettings = {
+  addressProperty: "zettel-id",
+  titleSource: "filename",
+  titleProperty: "title",
+  showTitleInDeck: false,
+  showTitleInDesk: true,
+  deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
+  deskHeaderButtons: DEFAULT_DESK_HEADER_BUTTONS,
+  deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
+};
+
+const MODIFIER_ORDER: readonly KeyModifier[] = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function normalizePropertyName(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() !== ""
+    ? value.trim()
+    : fallback;
+}
+
+export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
+  if (!isRecord(value) || typeof value.key !== "string" || value.key === "") {
+    return null;
+  }
+  const key = value.key.length === 1 ? value.key.toLowerCase() : value.key;
+  const supplied = Array.isArray(value.modifiers) ? value.modifiers : [];
+  const modifiers = MODIFIER_ORDER.filter((modifier) => supplied.includes(modifier));
+  return { key, modifiers };
+}
+
+export function keyBindingSignature(bindingValue: DeckKeyBinding): string {
+  return `${bindingValue.modifiers.join("+")}::${bindingValue.key}`;
+}
+
+export function formatKeyBinding(bindingValue: DeckKeyBinding): string {
+  const key = bindingValue.key === " " ? "Space" : bindingValue.key;
+  return [...bindingValue.modifiers, key].join("+");
+}
+
+export function normalizeDeckKeybindings(
+  value: unknown,
+): Readonly<Record<DeckAction, readonly DeckKeyBinding[]>> {
+  const source = isRecord(value) ? value : {};
+  const claimed = new Set<string>();
+  const result = {} as Record<DeckAction, readonly DeckKeyBinding[]>;
+
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    const candidate = source[definition.id];
+    const rawBindings = Array.isArray(candidate)
+      ? candidate
+      : definition.defaultBindings;
+    const normalized: DeckKeyBinding[] = [];
+    for (const rawBinding of rawBindings) {
+      const normalizedBinding = normalizeKeyBinding(rawBinding);
+      if (normalizedBinding === null) {
+        continue;
+      }
+      const signature = keyBindingSignature(normalizedBinding);
+      if (claimed.has(signature)) {
+        continue;
+      }
+      claimed.add(signature);
+      normalized.push(normalizedBinding);
+    }
+    result[definition.id] = normalized;
+  }
+
+  return result;
+}
+
+function normalizeBooleanRecord<K extends string>(
+  value: unknown,
+  defaults: Readonly<Record<K, boolean>>,
+): Readonly<Record<K, boolean>> {
+  const source = isRecord(value) ? value : {};
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, fallback]) => [
+      key,
+      typeof source[key] === "boolean" ? source[key] : fallback,
+    ]),
+  ) as Readonly<Record<K, boolean>>;
+}
+
+export function normalizeSettings(value: unknown): SlipboxSettings {
+  const source = isRecord(value) ? value : {};
+  return {
+    addressProperty: normalizePropertyName(
+      source.addressProperty,
+      DEFAULT_SETTINGS.addressProperty,
+    ),
+    titleSource: source.titleSource === "frontmatter" ? "frontmatter" : "filename",
+    titleProperty: normalizePropertyName(
+      source.titleProperty,
+      DEFAULT_SETTINGS.titleProperty,
+    ),
+    showTitleInDeck:
+      typeof source.showTitleInDeck === "boolean"
+        ? source.showTitleInDeck
+        : DEFAULT_SETTINGS.showTitleInDeck,
+    showTitleInDesk:
+      typeof source.showTitleInDesk === "boolean"
+        ? source.showTitleInDesk
+        : DEFAULT_SETTINGS.showTitleInDesk,
+    deckHeaderButtons: normalizeBooleanRecord(
+      source.deckHeaderButtons,
+      DEFAULT_DECK_HEADER_BUTTONS,
+    ),
+    deskHeaderButtons: normalizeBooleanRecord(
+      source.deskHeaderButtons,
+      DEFAULT_DESK_HEADER_BUTTONS,
+    ),
+    deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings),
+  };
+}
+
+export function keyBindingConflict(
+  keybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>,
+  action: DeckAction,
+  bindingValue: DeckKeyBinding,
+): DeckAction | null {
+  const signature = keyBindingSignature(bindingValue);
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    if (
+      definition.id !== action &&
+      keybindings[definition.id].some(
+        (candidate) => keyBindingSignature(candidate) === signature,
+      )
+    ) {
+      return definition.id;
+    }
+  }
+  return null;
+}

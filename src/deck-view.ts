@@ -8,6 +8,8 @@ import {
   WorkspaceLeaf,
   setIcon,
   setTooltip,
+  type KeymapEventHandler,
+  type Modifier,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
@@ -22,6 +24,11 @@ import {
 import { NavigationHistory } from "./navigation-history.js";
 import type { FiledZettel } from "./zettel-index.js";
 import { CardFooterManager } from "./card-footer.js";
+import { canRunDeckAction } from "./deck-actions.js";
+import {
+  DECK_ACTION_DEFINITIONS,
+  type DeckAction,
+} from "./settings.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -52,6 +59,7 @@ export class DeckView extends ItemView {
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
   private readonly cardFooters: CardFooterManager;
+  private keymapHandlers: KeymapEventHandler[] = [];
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -71,27 +79,7 @@ export class DeckView extends ItemView {
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
     );
     this.scope = new Scope(this.app.scope);
-    this.scope.register([], "ArrowLeft", (event) =>
-      this.handleDeckKey(event, () => this.moveBy(-1), true),
-    );
-    this.scope.register([], "ArrowRight", (event) =>
-      this.handleDeckKey(event, () => this.moveBy(1), true),
-    );
-    this.scope.register([], "j", (event) =>
-      this.handleDeckKey(event, () => this.moveBy(1), true),
-    );
-    this.scope.register([], "k", (event) =>
-      this.handleDeckKey(event, () => this.moveBy(-1), true),
-    );
-    this.scope.register([], "c", (event) =>
-      this.handleDeckKey(event, () => this.centerActiveCard()),
-    );
-    this.scope.register([], "g", (event) =>
-      this.handleDeckKey(event, () => this.goToDeckBoundary("start")),
-    );
-    this.scope.register(["Shift"], "g", (event) =>
-      this.handleDeckKey(event, () => this.goToDeckBoundary("end")),
-    );
+    this.updateKeybindings();
   }
 
   getViewType(): string {
@@ -157,6 +145,120 @@ export class DeckView extends ItemView {
 
   get canGoForward(): boolean {
     return this.history.canForward();
+  }
+
+  updateKeybindings(): void {
+    const scope = this.scope;
+    if (scope === null) {
+      return;
+    }
+    for (const handler of this.keymapHandlers) {
+      scope.unregister(handler);
+    }
+    this.keymapHandlers = [];
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
+        const handler = scope.register(
+          [...binding.modifiers] as Modifier[],
+          binding.key,
+          (event) => this.handleDeckActionKey(
+            event,
+            definition.id,
+            definition.repeatable,
+          ),
+        );
+        this.keymapHandlers.push(handler);
+      }
+    }
+  }
+
+  canRunAction(action: DeckAction, target?: FiledZettel): boolean {
+    const filed = this.plugin.index.snapshot.filed;
+    const active = target ?? this.activeCard;
+    const activeIndex = active === null
+      ? -1
+      : filed.findIndex((card) => card.id === active.id);
+    return canRunDeckAction(action, {
+      hasActiveCard: activeIndex >= 0,
+      hasPreviousCard: activeIndex > 0,
+      hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
+      canGoBack: this.history.canBack(),
+      canGoForward: this.history.canForward(),
+      hasProblems: this.plugin.index.snapshot.issues.length > 0,
+      filing: this.filingFile !== null,
+    });
+  }
+
+  runAction(action: DeckAction, target?: FiledZettel): boolean {
+    if (!this.canRunAction(action, target)) {
+      return false;
+    }
+    const card = target ?? this.activeCard;
+    switch (action) {
+      case "previous-card":
+        this.moveBy(-1);
+        break;
+      case "next-card":
+        this.moveBy(1);
+        break;
+      case "centre-card":
+        this.centerActiveCard();
+        break;
+      case "first-card":
+        this.goToDeckBoundary("start");
+        break;
+      case "last-card":
+        this.goToDeckBoundary("end");
+        break;
+      case "open-note":
+        if (card !== null) {
+          void this.plugin.openMarkdownFile(card.file);
+        }
+        break;
+      case "add-card":
+        if (card !== null) {
+          void this.plugin.createCardFrom(card.id);
+        }
+        break;
+      case "toggle-desk":
+        if (card !== null) {
+          void this.toggleCardDesk(card.file);
+        }
+        break;
+      case "toggle-bookmark":
+        if (card !== null) {
+          void this.toggleCardBookmark(card.id);
+        }
+        break;
+      case "back":
+        void this.goBack();
+        break;
+      case "forward":
+        void this.goForward();
+        break;
+      case "entry-points":
+        this.plugin.showEntryPoints(this);
+        break;
+      case "bookmarks":
+        this.plugin.showBookmarks(this);
+        break;
+      case "open-desk":
+        void this.plugin.openDesk();
+        break;
+      case "problems":
+        this.plugin.showIssues();
+        break;
+      case "new-section":
+        void this.plugin.createNewSection();
+        break;
+      case "file-here":
+        void this.fileHere();
+        break;
+      case "cancel-filing":
+        void this.cancelFiling();
+        break;
+    }
+    return true;
   }
 
   async refresh(): Promise<void> {
@@ -342,13 +444,13 @@ export class DeckView extends ItemView {
       text: "← Back",
       attr: { type: "button" },
     });
-    back.addEventListener("click", () => void this.goBack());
+    back.addEventListener("click", () => this.runAction("back"));
     this.backButtonEl = back;
     const forward = history.createEl("button", {
       text: "Forward →",
       attr: { type: "button" },
     });
-    forward.addEventListener("click", () => void this.goForward());
+    forward.addEventListener("click", () => this.runAction("forward"));
     this.forwardButtonEl = forward;
     this.updateHistoryControls();
 
@@ -357,7 +459,7 @@ export class DeckView extends ItemView {
       text: "Entry points",
       attr: { type: "button" },
     });
-    entries.addEventListener("click", () => this.plugin.showEntryPoints(this));
+    entries.addEventListener("click", () => this.runAction("entry-points"));
 
     const bookmarks = controls.createEl("button", {
       attr: { type: "button" },
@@ -367,7 +469,7 @@ export class DeckView extends ItemView {
     if (this.plugin.state.bookmarks.length > 0) {
       bookmarks.createSpan({ cls: "slipbox-count", text: String(this.plugin.state.bookmarks.length) });
     }
-    bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
+    bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
     this.bookmarksButtonEl = bookmarks;
 
     const desk = controls.createEl("button", {
@@ -379,7 +481,7 @@ export class DeckView extends ItemView {
     if (deskCount > 0) {
       desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
     }
-    desk.addEventListener("click", () => this.plugin.showDesk());
+    desk.addEventListener("click", () => this.runAction("open-desk"));
     this.deskButtonEl = desk;
 
     if (this.plugin.index.snapshot.issues.length > 0) {
@@ -394,7 +496,7 @@ export class DeckView extends ItemView {
           this.plugin.index.snapshot.issues.length === 1 ? "" : "s"
         }`,
       });
-      problems.addEventListener("click", () => this.plugin.showIssues());
+      problems.addEventListener("click", () => this.runAction("problems"));
     }
 
     const spreadControl = toolbar.createEl("label", { cls: "slipbox-spread-control" });
@@ -432,7 +534,7 @@ export class DeckView extends ItemView {
       cls: "mod-cta",
       attr: { type: "button" },
     });
-    create.addEventListener("click", () => void this.plugin.createNewSection());
+    create.addEventListener("click", () => this.runAction("new-section"));
   }
 
   private async renderCardWindow(
@@ -468,7 +570,8 @@ export class DeckView extends ItemView {
       const isOnDesk = this.plugin.state.deskCards.some(
         (deskCard) => deskCard.cardRef === card.path,
       );
-      const cardLabel = `${card.id} · ${card.file.basename}`;
+      const title = this.plugin.cardTitle(card.file);
+      const cardLabel = `${card.id} · ${title}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
         placement: "bottom",
@@ -479,108 +582,63 @@ export class DeckView extends ItemView {
 
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
-      addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
-      const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-      const addCardAction = `Add a card from ${card.id}`;
-      const addCard = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-add",
-        attr: {
-          type: "button",
-          "aria-label": addCardAction,
-        },
-      });
-      setIcon(addCard, "plus");
-      setTooltip(addCard, addCardAction, {
-        placement: "bottom",
-        delay: 250,
-      });
-      addCard.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      addCard.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        addCard.disabled = true;
-        void this.plugin.createCardFrom(card.id).finally(() => {
-          if (addCard.isConnected) {
-            addCard.disabled = false;
-          }
+      const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
+      identity.createSpan({ cls: "slipbox-card-address", text: card.id });
+      if (this.plugin.settings.showTitleInDeck) {
+        identity.createSpan({
+          cls: "slipbox-card-header-separator",
+          text: "·",
+          attr: { "aria-hidden": "true" },
         });
-      });
-
-      const openCardAction = `Open ${card.id} in Markdown`;
-      const openCard = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-open",
-        attr: {
-          type: "button",
-          "aria-label": openCardAction,
-        },
-      });
-      setIcon(openCard, "file-pen-line");
-      setTooltip(openCard, openCardAction, {
-        placement: "bottom",
-        delay: 250,
-      });
-      openCard.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      openCard.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.plugin.openMarkdownFile(card.file);
-      });
-
-      const deskAction = isOnDesk
-        ? `Remove ${card.id} from Desk`
-        : `Add ${card.id} to Desk`;
-      const deskToggle = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-desk-toggle",
-        attr: {
-          type: "button",
-          "aria-label": deskAction,
-          "aria-pressed": String(isOnDesk),
-        },
-      });
-      deskToggle.toggleClass("is-on-desk", isOnDesk);
-      setIcon(deskToggle, "panels-top-left");
-      setTooltip(deskToggle, deskAction, {
-        placement: "bottom",
-        delay: 250,
-      });
-      deskToggle.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      deskToggle.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.toggleCardDesk(card.file);
-      });
-
-      const bookmarkAction = isBookmarked
-        ? `Remove bookmark from ${card.id}`
-        : `Add bookmark to ${card.id}`;
-      const bookmarkToggle = cardActions.createEl("button", {
-        cls: "clickable-icon slipbox-card-toggle slipbox-card-bookmark-toggle",
-        attr: {
-          type: "button",
-          "aria-label": bookmarkAction,
-          "aria-pressed": String(isBookmarked),
-        },
-      });
-      bookmarkToggle.toggleClass("is-bookmarked", isBookmarked);
-      setIcon(bookmarkToggle, "bookmark");
-      setTooltip(bookmarkToggle, bookmarkAction, {
-        placement: "bottom",
-        delay: 250,
-      });
-      bookmarkToggle.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-      });
-      bookmarkToggle.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.toggleCardBookmark(card.id);
-      });
+        identity.createSpan({ cls: "slipbox-card-header-title", text: title });
+      }
+      const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      if (this.plugin.settings.deckHeaderButtons["add-card"]) {
+        this.renderCardAction(
+          cardActions,
+          "plus",
+          "slipbox-card-add",
+          `Add a card from ${card.id} · ${title}`,
+          () => this.runAction("add-card", card),
+        );
+      }
+      if (this.plugin.settings.deckHeaderButtons["open-note"]) {
+        this.renderCardAction(
+          cardActions,
+          "file-pen-line",
+          "slipbox-card-open",
+          `Open ${card.id} · ${title} in Markdown`,
+          () => this.runAction("open-note", card),
+        );
+      }
+      if (this.plugin.settings.deckHeaderButtons.desk) {
+        const deskAction = isOnDesk
+          ? `Remove ${card.id} · ${title} from Desk`
+          : `Add ${card.id} · ${title} to Desk`;
+        const deskToggle = this.renderCardAction(
+          cardActions,
+          "panels-top-left",
+          "slipbox-card-desk-toggle",
+          deskAction,
+          () => this.runAction("toggle-desk", card),
+        );
+        deskToggle.setAttr("aria-pressed", String(isOnDesk));
+        deskToggle.toggleClass("is-on-desk", isOnDesk);
+      }
+      if (this.plugin.settings.deckHeaderButtons.bookmark) {
+        const bookmarkAction = isBookmarked
+          ? `Remove bookmark from ${card.id} · ${title}`
+          : `Add bookmark to ${card.id} · ${title}`;
+        const bookmarkToggle = this.renderCardAction(
+          cardActions,
+          "bookmark",
+          "slipbox-card-bookmark-toggle",
+          bookmarkAction,
+          () => this.runAction("toggle-bookmark", card),
+        );
+        bookmarkToggle.setAttr("aria-pressed", String(isBookmarked));
+        bookmarkToggle.toggleClass("is-bookmarked", isBookmarked);
+      }
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
@@ -626,6 +684,28 @@ export class DeckView extends ItemView {
     this.positionCards();
 
     await Promise.all(jobs);
+  }
+
+  private renderCardAction(
+    parent: HTMLElement,
+    icon: Parameters<typeof setIcon>[1],
+    className: string,
+    label: string,
+    action: () => boolean,
+  ): HTMLButtonElement {
+    const button = parent.createEl("button", {
+      cls: `clickable-icon slipbox-card-toggle ${className}`,
+      attr: { type: "button", "aria-label": label },
+    });
+    setIcon(button, icon);
+    setTooltip(button, label, { placement: "bottom", delay: 250 });
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    });
+    return button;
   }
 
   private async renderMarkdownCard(
@@ -740,7 +820,10 @@ export class DeckView extends ItemView {
   ): Promise<void> {
     const inHand = shell.createDiv({ cls: "slipbox-in-hand" });
     inHand.createDiv({ cls: "slipbox-in-hand-label", text: "Unfiled card in hand" });
-    inHand.createDiv({ cls: "slipbox-in-hand-name", text: file.basename });
+    inHand.createDiv({
+      cls: "slipbox-in-hand-name",
+      text: this.plugin.cardTitle(file),
+    });
     const preview = inHand.createDiv({ cls: "slipbox-in-hand-preview markdown-rendered" });
     const component = new Component();
     component.load();
@@ -768,14 +851,14 @@ export class DeckView extends ItemView {
       text: "Cancel",
       attr: { type: "button" },
     });
-    cancel.addEventListener("click", () => void this.cancelFiling());
+    cancel.addEventListener("click", () => this.runAction("cancel-filing"));
     const fileHere = actions.createEl("button", {
       text: "File here",
       cls: "mod-cta",
       attr: { type: "button" },
     });
     fileHere.disabled = attachment === null;
-    fileHere.addEventListener("click", () => void this.fileHere());
+    fileHere.addEventListener("click", () => this.runAction("file-here"));
   }
 
   private async fileHere(): Promise<void> {
@@ -970,9 +1053,9 @@ export class DeckView extends ItemView {
     void this.goToId(target.id);
   }
 
-  private handleDeckKey(
+  private handleDeckActionKey(
     event: KeyboardEvent,
-    action: () => void,
+    action: DeckAction,
     repeatable = false,
   ): boolean {
     const target = event.target;
@@ -985,9 +1068,13 @@ export class DeckView extends ItemView {
       return false;
     }
 
+    if (!this.canRunAction(action)) {
+      return false;
+    }
+
     event.preventDefault();
     if (!event.repeat || repeatable) {
-      action();
+      this.runAction(action);
     }
     return true;
   }

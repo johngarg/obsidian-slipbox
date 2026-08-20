@@ -189,14 +189,21 @@
 .slipbox-card-address-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   min-height: 39px;
   padding: 8px 15px 7px;
   border-bottom: 1px solid var(--background-modifier-border);
   background: var(--background-primary-alt);
 }
 
+.slipbox-card-header-identity {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+}
+
 .slipbox-card-address {
+  flex: 0 0 auto;
   color: var(--text-muted);
   font-family: var(--font-monospace);
   font-size: 0.78rem;
@@ -205,8 +212,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+.slipbox-card-header-separator {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  color: var(--text-faint);
+}
+
+.slipbox-card-header-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .slipbox-card-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 2px;
   margin: -4px -4px -4px 0;
@@ -813,7 +837,7 @@ button.slipbox-card-backlink-overflow:disabled {
   flex: 1;
   min-width: 0;
   align-items: baseline;
-  gap: 10px;
+  gap: 0;
 }
 
 .slipbox-desk-card-address {
@@ -826,11 +850,63 @@ button.slipbox-card-backlink-overflow:disabled {
 }
 
 .slipbox-desk-card-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.slipbox-shortcut-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.slipbox-shortcut-intro p {
+  margin: 0;
+}
+
+.slipbox-shortcut-setting .setting-item-control {
+  flex-wrap: wrap;
+}
+
+.slipbox-shortcut-bindings {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.slipbox-shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-monospace);
+}
+
+.slipbox-shortcut-remove {
+  color: var(--text-muted);
+}
+
+.slipbox-setting-error {
+  flex-basis: 100%;
+  margin-top: 6px;
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+}
+
+.slipbox-setting-error:empty {
+  display: none;
+}
+
+.slipbox-shortcut-bindings .is-capturing {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
 }
 
 .slipbox-desk-card-actions {

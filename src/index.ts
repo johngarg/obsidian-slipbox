@@ -16,8 +16,21 @@ export type {
   PathToken,
 } from "./zettel-id.js";
 
-export { indexZettelMetadata } from "./zettel-metadata.js";
+export {
+  indexZettelMetadata,
+  zettelMetadataRecord,
+} from "./zettel-metadata.js";
 export { generateFiledCardLink } from "./zettel-links.js";
+export { resolveCardTitle } from "./card-title.js";
+export { canRunDeckAction } from "./deck-actions.js";
+export {
+  DECK_ACTION_DEFINITIONS,
+  DEFAULT_SETTINGS,
+  formatKeyBinding,
+  keyBindingConflict,
+  normalizeDeckKeybindings,
+  normalizeSettings,
+} from "./settings.js";
 export {
   fitBacklinkPrefix,
   indexFiledBacklinks,
@@ -50,6 +63,16 @@ export type {
 
 export type { DeckBookmark } from "./bookmarks.js";
 export type { DeskCardState } from "./desk-state.js";
+export type { DeckActionContext } from "./deck-actions.js";
+export type {
+  DeckAction,
+  DeckHeaderButton,
+  DeckKeyBinding,
+  DeskHeaderButton,
+  KeyModifier,
+  SlipboxSettings,
+  TitleSource,
+} from "./settings.js";
 export type {
   BacklinkFit,
   ResolvedLinks,

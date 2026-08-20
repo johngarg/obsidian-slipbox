@@ -7,6 +7,21 @@ export interface ZettelMetadataRecord {
   readonly zettelId: unknown;
 }
 
+export function zettelMetadataRecord(
+  path: string,
+  frontmatter: Readonly<Record<string, unknown>> | undefined,
+  addressProperty: string,
+): ZettelMetadataRecord {
+  const hasZettelId =
+    frontmatter !== undefined &&
+    Object.prototype.hasOwnProperty.call(frontmatter, addressProperty);
+  return {
+    path,
+    hasZettelId,
+    zettelId: hasZettelId ? frontmatter[addressProperty] : undefined,
+  };
+}
+
 export interface FiledZettelRecord {
   readonly path: string;
   readonly id: string;
@@ -50,6 +65,7 @@ function displayValue(value: unknown): string {
  */
 export function indexZettelMetadata(
   records: Iterable<ZettelMetadataRecord>,
+  addressProperty = "zettel-id",
 ): ZettelMetadataIndex {
   const unfiledPaths: string[] = [];
   const issues: ZettelIssue[] = [];
@@ -76,7 +92,7 @@ export function indexZettelMetadata(
       issues.push({
         kind: "invalid",
         paths: [record.path],
-        message: `Unsupported zettel-id ${displayValue(record.zettelId)}`,
+        message: `Unsupported ${addressProperty} ${displayValue(record.zettelId)}`,
       });
       continue;
     }
@@ -111,7 +127,7 @@ export function indexZettelMetadata(
         kind: "duplicate",
         id,
         paths: [first, second, ...paths.slice(2)],
-        message: `Duplicate zettel-id ${id}`,
+        message: `Duplicate ${addressProperty} ${id}`,
       });
     }
   }

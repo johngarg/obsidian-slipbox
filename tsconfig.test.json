@@ -15,6 +15,7 @@
     "src/deck-motion.ts",
     "src/desk-state.ts",
     "src/navigation-history.ts",
+    "src/new-note.ts",
     "src/plugin-state.ts",
     "src/settings.ts",
     "src/zettel-id.ts",

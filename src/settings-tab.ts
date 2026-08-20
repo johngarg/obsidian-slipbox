@@ -10,6 +10,7 @@ import type SlipboxPlugin from "./main.js";
 import {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
+  DEFAULT_SETTINGS,
   formatKeyBinding,
   keyBindingConflict,
   keyBindingSignature,
@@ -92,6 +93,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
           }));
       });
 
+    new Setting(containerEl).setName("New cards").setHeading();
+    this.renderNewCardSettings(containerEl);
+
     new Setting(containerEl).setName("Card-header buttons").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
@@ -119,6 +123,87 @@ export class SlipboxSettingTab extends PluginSettingTab {
     for (const definition of DECK_ACTION_DEFINITIONS) {
       this.renderShortcutSetting(containerEl, definition.id, definition.label);
     }
+  }
+
+  private renderNewCardSettings(container: HTMLElement): void {
+    const timestamp = new Setting(container)
+      .setName("Untitled filename format")
+      .setDesc("Moment format used for the filename when the title prompt is left blank. Filename-unsafe characters become hyphens. Example: ");
+    const sample = timestamp.descEl.createEl("code");
+    timestamp.addMomentFormat((component) => {
+      component
+        .setSampleEl(sample)
+        .setDefaultFormat(DEFAULT_SETTINGS.newNoteTimestampFormat)
+        .setValue(this.slipbox.settings.newNoteTimestampFormat)
+        .onChange((value) => {
+          const format = value.trim();
+          this.setTextValidity(
+            timestamp,
+            format !== "",
+            "A non-empty timestamp format is required.",
+          );
+          if (format !== "") {
+            void this.save({
+              ...this.slipbox.settings,
+              newNoteTimestampFormat: format,
+            });
+          }
+        });
+    });
+
+    new Setting(container)
+      .setName("Apply a template to new cards")
+      .setDesc("Use Obsidian’s Templates core plugin after Slipbox creates and opens the note.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.slipbox.settings.useTemplatesForNewNotes)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            useTemplatesForNewNotes: value,
+          }).then(() => this.display()));
+      });
+
+    const info = this.slipbox.templatesInfo();
+    let description = "Choose a fixed template, or ask each time a card is created.";
+    if (!info.enabled) {
+      description = "Enable Obsidian’s Templates core plugin to choose a template.";
+    } else if (info.folder === "") {
+      description = "Choose a template folder in the Templates core plugin settings first.";
+    } else if (info.files.length === 0) {
+      description = `No Markdown templates were found in ${info.folder}.`;
+    }
+    const templateDisabled =
+      !this.slipbox.settings.useTemplatesForNewNotes ||
+      !info.enabled ||
+      info.files.length === 0;
+    const template = new Setting(container)
+      .setName("New card template")
+      .setDesc(description)
+      .setDisabled(templateDisabled);
+    template.addDropdown((dropdown) => {
+      dropdown.addOption("", "Ask each time");
+      for (const file of info.files) {
+        const prefix = `${info.folder}/`;
+        const label = file.path.startsWith(prefix)
+          ? file.path.slice(prefix.length, -3)
+          : file.basename;
+        dropdown.addOption(file.path, label);
+      }
+      const current = this.slipbox.settings.newNoteTemplatePath;
+      if (
+        current !== "" &&
+        !info.files.some((file) => file.path === current)
+      ) {
+        dropdown.addOption(current, `${current} (missing)`);
+      }
+      dropdown
+        .setValue(current)
+        .setDisabled(templateDisabled)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          newNoteTemplatePath: value,
+        }));
+    });
   }
 
   private renderAddressProperty(container: HTMLElement): void {
@@ -347,12 +432,24 @@ export class SlipboxSettingTab extends PluginSettingTab {
   }
 
   private setPropertyValidity(setting: Setting, valid: boolean): void {
+    this.setTextValidity(
+      setting,
+      valid,
+      "A non-empty top-level property name is required.",
+    );
+  }
+
+  private setTextValidity(
+    setting: Setting,
+    valid: boolean,
+    message: string,
+  ): void {
     setting.settingEl.toggleClass("is-invalid", !valid);
     let error = setting.settingEl.querySelector<HTMLElement>(".slipbox-setting-error");
     if (!valid && error === null) {
       error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
     }
-    error?.setText(valid ? "" : "A non-empty top-level property name is required.");
+    error?.setText(valid ? "" : message);
   }
 
   private async save(settings: SlipboxSettings): Promise<void> {

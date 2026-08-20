@@ -1,4 +1,4 @@
-import { App, Modal, Notice, setIcon } from "obsidian";
+import { App, FuzzySuggestModal, Modal, Notice, TFile, setIcon } from "obsidian";
 
 import type { DeckBookmark } from "./bookmarks.js";
 import type { EntryPoint } from "./plugin-state.js";
@@ -13,6 +13,8 @@ export class TextPromptModal extends Modal {
     private readonly placeholder: string,
     private readonly initialValue: string,
     private readonly resolveValue: (value: string | null) => void,
+    private readonly allowBlank = false,
+    private readonly submitLabel = "Save",
   ) {
     super(app);
   }
@@ -28,12 +30,12 @@ export class TextPromptModal extends Modal {
       placeholder: this.placeholder,
       value: this.initialValue,
     });
-    input.required = true;
+    input.required = !this.allowBlank;
 
     const actions = form.createDiv({ cls: "slipbox-modal-actions" });
     const cancel = actions.createEl("button", { text: "Cancel", type: "button" });
     const submit = actions.createEl("button", {
-      text: "Save",
+      text: this.submitLabel,
       type: "submit",
       cls: "mod-cta",
     });
@@ -42,7 +44,7 @@ export class TextPromptModal extends Modal {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const value = input.value.trim();
-      if (value === "") {
+      if (value === "" && !this.allowBlank) {
         new Notice("A name is required.");
         return;
       }
@@ -72,6 +74,74 @@ export class TextPromptModal extends Modal {
     this.resolveValue(value);
     this.close();
   }
+}
+
+export function promptForNewCardTitle(
+  app: App,
+  timestampPreview: string,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const modal = new TextPromptModal(
+      app,
+      "New card title",
+      `Leave blank for ${timestampPreview}`,
+      "",
+      resolve,
+      true,
+      "Create",
+    );
+    // A Deck letter shortcut can create the modal during its own keydown.
+    // Open on the next task so that keystroke cannot become the first title character.
+    window.setTimeout(() => modal.open());
+  });
+}
+
+class TemplatePromptModal extends FuzzySuggestModal<TFile> {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly files: readonly TFile[],
+    private readonly folder: string,
+    private readonly resolveFile: (file: TFile | null) => void,
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a template (Esc to skip)");
+  }
+
+  getItems(): TFile[] {
+    return [...this.files];
+  }
+
+  getItemText(file: TFile): string {
+    const prefix = `${this.folder}/`;
+    return file.path.startsWith(prefix)
+      ? file.path.slice(prefix.length, -3)
+      : file.basename;
+  }
+
+  onChooseItem(file: TFile): void {
+    this.settled = true;
+    this.resolveFile(file);
+  }
+
+  onClose(): void {
+    super.onClose();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveFile(null);
+    }
+  }
+}
+
+export function promptForTemplate(
+  app: App,
+  files: readonly TFile[],
+  folder: string,
+): Promise<TFile | null> {
+  return new Promise((resolve) => {
+    new TemplatePromptModal(app, files, folder, resolve).open();
+  });
 }
 
 export function promptForText(

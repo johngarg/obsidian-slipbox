@@ -148,6 +148,9 @@ export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
+  readonly newNoteTimestampFormat: string;
+  readonly useTemplatesForNewNotes: boolean;
+  readonly newNoteTemplatePath: string;
   readonly showTitleInDeck: boolean;
   readonly showTitleInDesk: boolean;
   readonly deckHeaderButtons: Readonly<Record<DeckHeaderButton, boolean>>;
@@ -179,6 +182,9 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "zettel-id",
   titleSource: "filename",
   titleProperty: "title",
+  newNoteTimestampFormat: "YYYY-MM-DD HHmmss",
+  useTemplatesForNewNotes: true,
+  newNoteTemplatePath: "",
   showTitleInDeck: false,
   showTitleInDesk: true,
   deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
@@ -273,6 +279,18 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       source.titleProperty,
       DEFAULT_SETTINGS.titleProperty,
     ),
+    newNoteTimestampFormat: normalizePropertyName(
+      source.newNoteTimestampFormat,
+      DEFAULT_SETTINGS.newNoteTimestampFormat,
+    ),
+    useTemplatesForNewNotes:
+      typeof source.useTemplatesForNewNotes === "boolean"
+        ? source.useTemplatesForNewNotes
+        : DEFAULT_SETTINGS.useTemplatesForNewNotes,
+    newNoteTemplatePath:
+      typeof source.newNoteTemplatePath === "string"
+        ? source.newNoteTemplatePath.trim()
+        : DEFAULT_SETTINGS.newNoteTemplatePath,
     showTitleInDeck:
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck

@@ -18,6 +18,9 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["open-note"], [
       { key: "o", modifiers: [] },
     ]);
+    assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYY-MM-DD HHmmss");
+    assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, true);
+    assert.equal(DEFAULT_SETTINGS.newNoteTemplatePath, "");
   });
 
   test("normalizes property names, buttons, and configured shortcuts", () => {
@@ -25,6 +28,9 @@ describe("Slipbox settings", () => {
       addressProperty: " signature ",
       titleSource: "frontmatter",
       titleProperty: " display-name ",
+      newNoteTimestampFormat: " YYYYMMDD-HHmmss ",
+      useTemplatesForNewNotes: false,
+      newNoteTemplatePath: " Templates/Zettel.md ",
       showTitleInDeck: true,
       showTitleInDesk: false,
       deckHeaderButtons: { bookmark: false },
@@ -42,6 +48,9 @@ describe("Slipbox settings", () => {
     assert.equal(settings.addressProperty, "signature");
     assert.equal(settings.titleSource, "frontmatter");
     assert.equal(settings.titleProperty, "display-name");
+    assert.equal(settings.newNoteTimestampFormat, "YYYYMMDD-HHmmss");
+    assert.equal(settings.useTemplatesForNewNotes, false);
+    assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
     assert.equal(settings.showTitleInDeck, true);
     assert.equal(settings.showTitleInDesk, false);
     assert.equal(settings.deckHeaderButtons.bookmark, false);
@@ -59,10 +68,16 @@ describe("Slipbox settings", () => {
       addressProperty: "   ",
       titleSource: "unknown",
       titleProperty: 42,
+      newNoteTimestampFormat: "   ",
+      useTemplatesForNewNotes: "yes",
+      newNoteTemplatePath: 42,
     });
     assert.equal(settings.addressProperty, "zettel-id");
     assert.equal(settings.titleSource, "filename");
     assert.equal(settings.titleProperty, "title");
+    assert.equal(settings.newNoteTimestampFormat, "YYYY-MM-DD HHmmss");
+    assert.equal(settings.useTemplatesForNewNotes, true);
+    assert.equal(settings.newNoteTemplatePath, "");
   });
 
   test("detects cross-action conflicts and formats modifiers", () => {

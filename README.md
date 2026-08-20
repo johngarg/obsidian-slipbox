@@ -50,7 +50,8 @@ address property can be changed in Slipbox settings without rewriting notes.
   actions, and active-card header actions.
 - Native settings for the address property, filename or frontmatter-derived
   display titles, independent Deck and Desk title display, card-header button
-  visibility, and live configurable Deck-scoped shortcuts.
+  visibility, new-card naming and Templates integration, and live configurable
+  Deck-scoped shortcuts.
 - Deterministic Deck startup at the first available entry point or first card;
   browsing position is deliberately not persisted.
 - Visible malformed-address and duplicate-address diagnostics.
@@ -81,6 +82,18 @@ before the configured action buttons.
 
 Header-button settings affect presentation only. Hidden actions remain
 available through commands, Deck shortcuts, and card right-click menus.
+
+Every Slipbox card-creation action asks for a title. A non-empty title becomes
+the note filename; leaving it blank uses the configured Moment timestamp format
+(`YYYY-MM-DD HHmmss` by default). Characters that are unsafe in filenames are
+replaced with hyphens. If frontmatter titles are enabled, a supplied title is
+also written to the configured title property.
+
+New cards use Obsidian's Templates core plugin by default. Choose one fixed
+template in Slipbox settings or leave `New card template` on `Ask each time`.
+Slipbox keeps its address frontmatter in place while the core plugin expands
+template variables and merges any template properties. Template use can be
+disabled without affecting card creation.
 
 ## Default Deck keys
 

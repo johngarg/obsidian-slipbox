@@ -118,6 +118,8 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.addressProperty, "signature");
     assert.equal(data.settings.titleProperty, "name");
     assert.equal(data.settings.showTitleInDeck, true);
+    assert.equal(data.settings.newNoteTimestampFormat, "YYYY-MM-DD HHmmss");
+    assert.equal(data.settings.useTemplatesForNewNotes, true);
     assert.equal(data.state.spread, 0.42);
   });
 

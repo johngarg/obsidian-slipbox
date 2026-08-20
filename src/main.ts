@@ -1,9 +1,11 @@
 import {
+  MarkdownView,
   Menu,
   Notice,
   Plugin,
   TAbstractFile,
   TFile,
+  moment,
   normalizePath,
   stringifyYaml,
   type WorkspaceLeaf,
@@ -29,8 +31,11 @@ import {
   BookmarksModal,
   EntryPointsModal,
   IssuesModal,
+  promptForNewCardTitle,
+  promptForTemplate,
   promptForText,
 } from "./modals.js";
+import { newNoteBasename } from "./new-note.js";
 import {
   DEFAULT_STATE,
   normalizePluginData,
@@ -49,6 +54,17 @@ import { SlipboxSettingTab } from "./settings-tab.js";
 import { ZettelIndex } from "./zettel-index.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
+
+interface TemplatesCorePlugin {
+  readonly options?: { readonly folder?: unknown };
+  insertTemplate(file: TFile): Promise<void> | void;
+}
+
+export interface TemplatesInfo {
+  readonly enabled: boolean;
+  readonly folder: string;
+  readonly files: readonly TFile[];
+}
 
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
@@ -182,6 +198,24 @@ export default class SlipboxPlugin extends Plugin {
       this.app.metadataCache.getFileCache(file)?.frontmatter,
       this.settings,
     );
+  }
+
+  templatesInfo(): TemplatesInfo {
+    const plugin = this.templatesPlugin();
+    const configuredFolder = plugin?.options?.folder;
+    if (plugin === null || typeof configuredFolder !== "string") {
+      return { enabled: plugin !== null, folder: "", files: [] };
+    }
+    const folder = normalizePath(configuredFolder);
+    if (folder === "") {
+      return { enabled: true, folder, files: [] };
+    }
+    const prefix = `${folder}/`;
+    const files = this.app.vault
+      .getMarkdownFiles()
+      .filter((file) => file.path.startsWith(prefix))
+      .sort((left, right) => left.path.localeCompare(right.path));
+    return { enabled: true, folder, files };
   }
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
@@ -477,7 +511,9 @@ export default class SlipboxPlugin extends Plugin {
       this.index.refresh();
       const id = generateNextSectionId(this.index.snapshot.allValidIds);
       const file = await this.createCardFile(id);
-      this.openMarkdownFile(file);
+      if (file === null) {
+        return;
+      }
       this.queueIndexRefresh();
     } catch (error) {
       new Notice(`Could not create a section: ${errorMessage(error)}`);
@@ -502,7 +538,9 @@ export default class SlipboxPlugin extends Plugin {
         this.index.snapshot.allValidIds,
       );
       const file = await this.createCardFile(id, attachment.path);
-      await this.openMarkdownFile(file);
+      if (file === null) {
+        return;
+      }
       this.queueIndexRefresh();
     } catch (error) {
       new Notice(
@@ -835,6 +873,9 @@ export default class SlipboxPlugin extends Plugin {
     try {
       const placeOnDesk = this.app.workspace.getActiveViewOfType(DeskView) !== null;
       const file = await this.createCardFile(null);
+      if (file === null) {
+        return;
+      }
       if (placeOnDesk) {
         this.state = {
           ...this.state,
@@ -846,7 +887,6 @@ export default class SlipboxPlugin extends Plugin {
         };
         await this.persistState();
       }
-      this.openMarkdownFile(file);
       this.queueIndexRefresh();
     } catch (error) {
       new Notice(`Could not create a card: ${errorMessage(error)}`);
@@ -872,8 +912,17 @@ export default class SlipboxPlugin extends Plugin {
   private async createCardFile(
     id: string | null,
     sourcePath = this.app.workspace.getActiveFile()?.path ?? "",
-  ): Promise<TFile> {
-    const basename = this.timestampBasename();
+  ): Promise<TFile | null> {
+    const timestamp = newNoteBasename(
+      "",
+      moment().format(this.settings.newNoteTimestampFormat),
+    );
+    const title = await promptForNewCardTitle(this.app, timestamp);
+    if (title === null) {
+      return null;
+    }
+    const basename = newNoteBasename(title, timestamp);
+    const template = await this.resolveNewNoteTemplate();
     const parent = this.app.fileManager.getNewFileParent(
       sourcePath,
       `${basename}.md`,
@@ -888,28 +937,91 @@ export default class SlipboxPlugin extends Plugin {
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);
 
-    const frontmatter = stringifyYaml({
+    const properties: Record<string, string> = {
       [this.settings.addressProperty]: id ?? "",
-    });
-    return this.app.vault.create(
+    };
+    if (
+      title !== "" &&
+      this.settings.titleSource === "frontmatter" &&
+      this.settings.titleProperty !== this.settings.addressProperty
+    ) {
+      properties[this.settings.titleProperty] = title;
+    }
+    const frontmatter = stringifyYaml(properties);
+    const file = await this.app.vault.create(
       path,
       `---\n${frontmatter}---\n\n`,
     );
+    await this.openMarkdownFile(file);
+    if (template !== null) {
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (view?.file?.path !== file.path) {
+        new Notice("Could not apply the new-card template: the note editor is not active.");
+      } else {
+        const lastLine = view.editor.lastLine();
+        view.editor.setCursor({
+          line: lastLine,
+          ch: view.editor.getLine(lastLine).length,
+        });
+        try {
+          await template.plugin.insertTemplate(template.file);
+        } catch (error) {
+          new Notice(`Could not apply the new-card template: ${errorMessage(error)}`);
+        }
+      }
+    }
+    return file;
   }
 
-  private timestampBasename(): string {
-    const now = new Date();
-    const date = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
-    ].join("-");
-    const time = [
-      String(now.getHours()).padStart(2, "0"),
-      String(now.getMinutes()).padStart(2, "0"),
-      String(now.getSeconds()).padStart(2, "0"),
-    ].join("");
-    return `Zettel ${date} ${time}`;
+  private templatesPlugin(): TemplatesCorePlugin | null {
+    const app = this.app as typeof this.app & {
+      readonly internalPlugins?: {
+        getEnabledPluginById(id: string): unknown;
+      };
+    };
+    const candidate = app.internalPlugins?.getEnabledPluginById("templates");
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      !("insertTemplate" in candidate) ||
+      typeof candidate.insertTemplate !== "function"
+    ) {
+      return null;
+    }
+    return candidate as TemplatesCorePlugin;
+  }
+
+  private async resolveNewNoteTemplate(): Promise<{
+    readonly plugin: TemplatesCorePlugin;
+    readonly file: TFile;
+  } | null> {
+    if (!this.settings.useTemplatesForNewNotes) {
+      return null;
+    }
+    const plugin = this.templatesPlugin();
+    const info = this.templatesInfo();
+    if (plugin === null) {
+      new Notice("Enable Obsidian’s Templates core plugin to apply templates to new cards.");
+      return null;
+    }
+    if (info.folder === "" || info.files.length === 0) {
+      new Notice("Configure a Templates folder containing at least one template to use it for new cards.");
+      return null;
+    }
+
+    let file: TFile | null = null;
+    if (this.settings.newNoteTemplatePath !== "") {
+      file = info.files.find(
+        (candidate) => candidate.path === this.settings.newNoteTemplatePath,
+      ) ?? null;
+      if (file === null) {
+        new Notice("The configured new-card template is missing. Choose another template.");
+      }
+    }
+    if (file === null) {
+      file = await promptForTemplate(this.app, info.files, info.folder);
+    }
+    return file === null ? null : { plugin, file };
   }
 
   private cardMetadataState(file: TFile): CardMetadataState {

@@ -40,6 +40,8 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
 | `c` | Centre the active card |
 | `h` | Toggle the hold at the active card |
 | `H` | Return to the held card |
+| `g` | Jump to the first card |
+| `G` | Jump to the last card |
 
 ## Address domain
 

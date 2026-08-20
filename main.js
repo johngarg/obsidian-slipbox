@@ -124,6 +124,16 @@ var DeckView = class extends import_obsidian.ItemView {
       "h",
       (event) => this.handleDeckKey(event, () => this.returnToHold())
     );
+    this.scope.register(
+      [],
+      "g",
+      (event) => this.handleDeckKey(event, () => this.goToDeckBoundary("start"))
+    );
+    this.scope.register(
+      ["Shift"],
+      "g",
+      (event) => this.handleDeckKey(event, () => this.goToDeckBoundary("end"))
+    );
   }
   activeId = null;
   thumbId = null;
@@ -638,6 +648,15 @@ var DeckView = class extends import_obsidian.ItemView {
       return;
     }
     void this.goToId(this.thumbId);
+  }
+  goToDeckBoundary(boundary) {
+    const filed = this.plugin.index.snapshot.filed;
+    const target = boundary === "start" ? filed[0] : filed[filed.length - 1];
+    if (target === void 0) {
+      new import_obsidian.Notice("There are no filed cards.");
+      return;
+    }
+    void this.goToId(target.id);
   }
   handleDeckKey(event, action, repeatable = false) {
     const target = event.target;

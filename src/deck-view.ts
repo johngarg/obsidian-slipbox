@@ -70,6 +70,12 @@ export class DeckView extends ItemView {
     this.scope.register(["Shift"], "h", (event) =>
       this.handleDeckKey(event, () => this.returnToHold()),
     );
+    this.scope.register([], "g", (event) =>
+      this.handleDeckKey(event, () => this.goToDeckBoundary("start")),
+    );
+    this.scope.register(["Shift"], "g", (event) =>
+      this.handleDeckKey(event, () => this.goToDeckBoundary("end")),
+    );
   }
 
   getViewType(): string {
@@ -652,6 +658,16 @@ export class DeckView extends ItemView {
       return;
     }
     void this.goToId(this.thumbId);
+  }
+
+  private goToDeckBoundary(boundary: "start" | "end"): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const target = boundary === "start" ? filed[0] : filed[filed.length - 1];
+    if (target === undefined) {
+      new Notice("There are no filed cards.");
+      return;
+    }
+    void this.goToId(target.id);
   }
 
   private handleDeckKey(

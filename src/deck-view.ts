@@ -539,6 +539,28 @@ export class DeckView extends ItemView {
         });
       });
 
+      const openCardAction = `Open ${card.id} in Markdown`;
+      const openCard = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-open",
+        attr: {
+          type: "button",
+          "aria-label": openCardAction,
+        },
+      });
+      setIcon(openCard, "file-pen-line");
+      setTooltip(openCard, openCardAction, {
+        placement: "bottom",
+        delay: 250,
+      });
+      openCard.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      openCard.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.plugin.openMarkdownFile(card.file);
+      });
+
       const deskAction = isOnDesk
         ? `Remove ${card.id} from Desk`
         : `Add ${card.id} to Desk`;
@@ -606,16 +628,12 @@ export class DeckView extends ItemView {
         if (!(target instanceof HTMLElement)) {
           return;
         }
-        if (card.id !== this.activeId) {
-          event.preventDefault();
-          event.stopPropagation();
-          this.selectCardWithoutMoving(card.id);
+        if (card.id === this.activeId) {
           return;
         }
-        if (target.closest("a, button, input, textarea, select") !== null) {
-          return;
-        }
-        this.plugin.openMarkdownFile(card.file);
+        event.preventDefault();
+        event.stopPropagation();
+        this.selectCardWithoutMoving(card.id);
       });
     }
 

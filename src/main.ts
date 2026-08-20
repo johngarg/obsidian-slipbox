@@ -8,7 +8,6 @@ import {
 } from "obsidian";
 
 import {
-  BOOKMARK_COLORS,
   createBookmark,
   deleteBookmark,
   updateBookmark,
@@ -205,12 +204,8 @@ export default class ZettelkastenPlugin extends Plugin {
       new Notice(`${zettelId} already has a bookmark.`);
       return;
     }
-    const defaultColor = BOOKMARK_COLORS[
-      this.state.bookmarks.length % BOOKMARK_COLORS.length
-    ] ?? "blue";
     const details = await promptForBookmark(this.app, `Bookmark ${zettelId}`, {
       label: "",
-      color: defaultColor,
     });
     if (details === null) {
       return;
@@ -675,7 +670,7 @@ export default class ZettelkastenPlugin extends Plugin {
     const details = await promptForBookmark(
       this.app,
       `Edit bookmark at ${bookmark.zettelId}`,
-      { label: bookmark.label, color: bookmark.color },
+      { label: bookmark.label },
     );
     if (details === null) {
       return;

@@ -1,36 +1,19 @@
 import { isValidZettelId } from "./zettel-id.js";
 
-export const BOOKMARK_COLORS = [
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "blue",
-  "purple",
-] as const;
-
-export type BookmarkColor = (typeof BOOKMARK_COLORS)[number];
-
 export interface DeckBookmark {
   readonly id: string;
   readonly zettelId: string;
   readonly label: string;
-  readonly color: BookmarkColor;
 }
 
 export interface BookmarkInput {
   readonly id: string;
   readonly zettelId: string;
   readonly label?: string;
-  readonly color: BookmarkColor;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-export function isBookmarkColor(value: unknown): value is BookmarkColor {
-  return BOOKMARK_COLORS.some((color) => color === value);
 }
 
 /** Load bookmark state tolerantly while enforcing one bookmark per card. */
@@ -48,8 +31,7 @@ export function normalizeBookmarks(value: unknown): readonly DeckBookmark[] {
       typeof candidate.id !== "string" ||
       candidate.id.trim() === "" ||
       typeof candidate.zettelId !== "string" ||
-      !isValidZettelId(candidate.zettelId) ||
-      !isBookmarkColor(candidate.color)
+      !isValidZettelId(candidate.zettelId)
     ) {
       continue;
     }
@@ -65,7 +47,6 @@ export function normalizeBookmarks(value: unknown): readonly DeckBookmark[] {
       label: typeof candidate.label === "string"
         ? candidate.label.trim().slice(0, 80)
         : "",
-      color: candidate.color,
     });
   }
   return bookmarks;
@@ -90,7 +71,6 @@ export function createBookmark(
       id: input.id,
       zettelId: input.zettelId,
       label: input.label?.trim().slice(0, 80) ?? "",
-      color: input.color,
     },
   ];
 }
@@ -98,11 +78,11 @@ export function createBookmark(
 export function updateBookmark(
   bookmarks: readonly DeckBookmark[],
   id: string,
-  update: Readonly<{ label: string; color: BookmarkColor }>,
+  update: Readonly<{ label: string }>,
 ): readonly DeckBookmark[] {
   return bookmarks.map((bookmark) =>
     bookmark.id === id
-      ? { ...bookmark, label: update.label.trim().slice(0, 80), color: update.color }
+      ? { ...bookmark, label: update.label.trim().slice(0, 80) }
       : bookmark,
   );
 }

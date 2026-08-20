@@ -23,7 +23,7 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
 - A persistent Spread control that changes spacing without resizing cards.
 - A session-only thumb with an edge tab when the held card is out of view.
 - Persistent named entry points with add, rename, delete, and jump actions.
-- Persistent coloured bookmark tabs with optional labels, one per filed card.
+- Persistent bookmark tabs with optional labels, one per filed card.
 - Browser-style session history for filed links, entry points, and bookmarks;
   ordinary physical Deck browsing does not create history entries.
 - A bounded spatial Desk with fixed-size rendered cards, persistent positions

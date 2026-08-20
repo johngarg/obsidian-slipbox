@@ -20,7 +20,6 @@ export { indexZettelMetadata } from "./zettel-metadata.js";
 
 export { NavigationHistory } from "./navigation-history.js";
 export {
-  BOOKMARK_COLORS,
   createBookmark,
   deleteBookmark,
   normalizeBookmarks,
@@ -45,5 +44,5 @@ export type {
   ZettelMetadataRecord,
 } from "./zettel-metadata.js";
 
-export type { BookmarkColor, DeckBookmark } from "./bookmarks.js";
+export type { DeckBookmark } from "./bookmarks.js";
 export type { DeskCardState } from "./desk-state.js";

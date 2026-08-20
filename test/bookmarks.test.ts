@@ -14,7 +14,6 @@ describe("bookmarks", () => {
     id: "bookmark-1",
     zettelId: "17/4a",
     label: "Theology",
-    color: "red",
   };
 
   test("creates, edits, and deletes a bookmark", () => {
@@ -22,9 +21,8 @@ describe("bookmarks", () => {
     assert.deepEqual(created, [first]);
     const updated = updateBookmark(created, first.id, {
       label: "Magic",
-      color: "purple",
     });
-    assert.deepEqual(updated, [{ ...first, label: "Magic", color: "purple" }]);
+    assert.deepEqual(updated, [{ ...first, label: "Magic" }]);
     assert.deepEqual(deleteBookmark(updated, first.id), []);
   });
 
@@ -33,7 +31,6 @@ describe("bookmarks", () => {
       () => createBookmark([first], {
         id: "bookmark-2",
         zettelId: first.zettelId,
-        color: "blue",
       }),
       /already has a bookmark/,
     );
@@ -42,12 +39,12 @@ describe("bookmarks", () => {
   test("normalizes persisted state and retains stale but valid addresses", () => {
     assert.deepEqual(
       normalizeBookmarks([
-        first,
+        { ...first, color: "red" },
         { id: "bookmark-2", zettelId: "99/1", color: "blue" },
         { id: "duplicate-card", zettelId: "17/4a", color: "green" },
         { id: "invalid", zettelId: "01/1", color: "red" },
       ]),
-      [first, { id: "bookmark-2", zettelId: "99/1", label: "", color: "blue" }],
+      [first, { id: "bookmark-2", zettelId: "99/1", label: "" }],
     );
   });
 });

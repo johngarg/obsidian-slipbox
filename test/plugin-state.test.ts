@@ -21,7 +21,7 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Systems", id: "1/1" }],
         bookmarks: [
-          { id: "bookmark-1", zettelId: "2/3a", label: "Here", color: "blue" },
+          { id: "bookmark-1", zettelId: "2/3a", label: "Here" },
         ],
         deskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
         spread: 0.75,
@@ -40,7 +40,7 @@ describe("normalizePluginState", () => {
         lastActiveId: "not-an-id",
         bookmarks: [
           { id: "bad", zettelId: "1/01", color: "infrared" },
-          { id: "good", zettelId: "4/1", color: "red" },
+          { id: "good", zettelId: "4/1", color: "infrared" },
         ],
         deskCards: [{ cardRef: "", x: 0, y: 0, z: 0 }],
         spread: 99,
@@ -48,7 +48,7 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Good", id: "3/1a" }],
         bookmarks: [
-          { id: "good", zettelId: "4/1", label: "", color: "red" },
+          { id: "good", zettelId: "4/1", label: "" },
         ],
         deskCards: [],
         spread: 1.12,

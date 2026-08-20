@@ -1,10 +1,6 @@
 import { App, Modal, Notice, setIcon } from "obsidian";
 
-import {
-  BOOKMARK_COLORS,
-  type BookmarkColor,
-  type DeckBookmark,
-} from "./bookmarks.js";
+import type { DeckBookmark } from "./bookmarks.js";
 import type { EntryPoint } from "./plugin-state.js";
 import type { FiledZettel, VaultZettelIndex } from "./zettel-index.js";
 
@@ -97,7 +93,6 @@ export function promptForText(
 
 export interface BookmarkDetails {
   readonly label: string;
-  readonly color: BookmarkColor;
 }
 
 export class BookmarkEditorModal extends Modal {
@@ -127,22 +122,6 @@ export class BookmarkEditorModal extends Modal {
       attr: { maxlength: "80" },
     });
 
-    const palette = form.createDiv({ cls: "zk-bookmark-palette" });
-    palette.createDiv({ cls: "zk-field-label", text: "Colour" });
-    const choices = palette.createDiv({ cls: "zk-bookmark-colors" });
-    for (const color of BOOKMARK_COLORS) {
-      const choice = choices.createEl("label", {
-        cls: `zk-bookmark-color-choice is-${color}`,
-      });
-      const radio = choice.createEl("input", {
-        type: "radio",
-        attr: { name: "bookmark-color", value: color },
-      });
-      radio.checked = color === this.initial.color;
-      choice.createSpan({ cls: "zk-bookmark-color-swatch" });
-      choice.createSpan({ text: capitalize(color) });
-    }
-
     const actions = form.createDiv({ cls: "zk-modal-actions" });
     const cancel = actions.createEl("button", { text: "Cancel", type: "button" });
     actions.createEl("button", {
@@ -153,15 +132,7 @@ export class BookmarkEditorModal extends Modal {
     cancel.addEventListener("click", () => this.finish(null));
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const selected = form.querySelector<HTMLInputElement>(
-        'input[name="bookmark-color"]:checked',
-      );
-      const color = BOOKMARK_COLORS.find((candidate) => candidate === selected?.value);
-      if (color === undefined) {
-        new Notice("Choose a bookmark colour.");
-        return;
-      }
-      this.finish({ label: label.value.trim(), color });
+      this.finish({ label: label.value.trim() });
     });
 
     window.setTimeout(() => label.focus());
@@ -228,10 +199,7 @@ export class BookmarksModal extends Modal {
     }
     for (const bookmark of this.bookmarks) {
       const available = this.actions.isAvailable(bookmark.zettelId);
-      const row = list.createDiv({
-        cls: `zk-list-row zk-bookmark-row is-${bookmark.color}`,
-      });
-      row.createSpan({ cls: "zk-bookmark-color-swatch" });
+      const row = list.createDiv({ cls: "zk-list-row zk-bookmark-row" });
       const visit = row.createEl("button", {
         cls: "zk-entry-visit",
         attr: { type: "button" },
@@ -408,10 +376,6 @@ function iconButton(
   });
   setIcon(button, icon);
   return button;
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function filedLabel(zettel: FiledZettel): string {

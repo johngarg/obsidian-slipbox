@@ -260,19 +260,8 @@ function generateNextSectionId(existingIds) {
 }
 
 // src/bookmarks.ts
-var BOOKMARK_COLORS = [
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "blue",
-  "purple"
-];
 function isRecord(value) {
   return typeof value === "object" && value !== null;
-}
-function isBookmarkColor(value) {
-  return BOOKMARK_COLORS.some((color) => color === value);
 }
 function normalizeBookmarks(value) {
   if (!Array.isArray(value)) {
@@ -282,7 +271,7 @@ function normalizeBookmarks(value) {
   const seenZettelIds = /* @__PURE__ */ new Set();
   const bookmarks = [];
   for (const candidate of value) {
-    if (!isRecord(candidate) || typeof candidate.id !== "string" || candidate.id.trim() === "" || typeof candidate.zettelId !== "string" || !isValidZettelId(candidate.zettelId) || !isBookmarkColor(candidate.color)) {
+    if (!isRecord(candidate) || typeof candidate.id !== "string" || candidate.id.trim() === "" || typeof candidate.zettelId !== "string" || !isValidZettelId(candidate.zettelId)) {
       continue;
     }
     const id = candidate.id.trim();
@@ -294,8 +283,7 @@ function normalizeBookmarks(value) {
     bookmarks.push({
       id,
       zettelId: candidate.zettelId,
-      label: typeof candidate.label === "string" ? candidate.label.trim().slice(0, 80) : "",
-      color: candidate.color
+      label: typeof candidate.label === "string" ? candidate.label.trim().slice(0, 80) : ""
     });
   }
   return bookmarks;
@@ -315,14 +303,13 @@ function createBookmark(bookmarks, input) {
     {
       id: input.id,
       zettelId: input.zettelId,
-      label: input.label?.trim().slice(0, 80) ?? "",
-      color: input.color
+      label: input.label?.trim().slice(0, 80) ?? ""
     }
   ];
 }
 function updateBookmark(bookmarks, id, update) {
   return bookmarks.map(
-    (bookmark) => bookmark.id === id ? { ...bookmark, label: update.label.trim().slice(0, 80), color: update.color } : bookmark
+    (bookmark) => bookmark.id === id ? { ...bookmark, label: update.label.trim().slice(0, 80) } : bookmark
   );
 }
 function deleteBookmark(bookmarks, id) {
@@ -864,7 +851,7 @@ var DeckView = class extends import_obsidian.ItemView {
       this.renderedCards.push(cardEl);
       if (bookmark !== void 0) {
         const tab = cardEl.createEl("button", {
-          cls: `zk-bookmark-tab is-${bookmark.color}`,
+          cls: "zk-bookmark-tab",
           text: bookmark.label === "" ? card.id : bookmark.label,
           attr: {
             type: "button",
@@ -878,7 +865,8 @@ var DeckView = class extends import_obsidian.ItemView {
           void this.jumpToId(card.id);
         });
       }
-      const addressRow = cardEl.createDiv({ cls: "zk-card-address-row" });
+      const frame = cardEl.createDiv({ cls: "zk-card-frame" });
+      const addressRow = frame.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
       if (this.thumbId === card.id) {
         const marker = addressRow.createSpan({
@@ -887,7 +875,7 @@ var DeckView = class extends import_obsidian.ItemView {
         });
         marker.setAttr("aria-label", "Held place");
       }
-      const scroll = cardEl.createDiv({ cls: "zk-card-scroll markdown-rendered" });
+      const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
       jobs.push(this.renderMarkdownCard(card, scroll, version));
       cardEl.addEventListener("click", (event) => {
@@ -1784,21 +1772,6 @@ var BookmarkEditorModal = class extends import_obsidian3.Modal {
       placeholder: "e.g. Theology",
       attr: { maxlength: "80" }
     });
-    const palette = form.createDiv({ cls: "zk-bookmark-palette" });
-    palette.createDiv({ cls: "zk-field-label", text: "Colour" });
-    const choices = palette.createDiv({ cls: "zk-bookmark-colors" });
-    for (const color of BOOKMARK_COLORS) {
-      const choice = choices.createEl("label", {
-        cls: `zk-bookmark-color-choice is-${color}`
-      });
-      const radio = choice.createEl("input", {
-        type: "radio",
-        attr: { name: "bookmark-color", value: color }
-      });
-      radio.checked = color === this.initial.color;
-      choice.createSpan({ cls: "zk-bookmark-color-swatch" });
-      choice.createSpan({ text: capitalize(color) });
-    }
     const actions = form.createDiv({ cls: "zk-modal-actions" });
     const cancel = actions.createEl("button", { text: "Cancel", type: "button" });
     actions.createEl("button", {
@@ -1809,15 +1782,7 @@ var BookmarkEditorModal = class extends import_obsidian3.Modal {
     cancel.addEventListener("click", () => this.finish(null));
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const selected = form.querySelector(
-        'input[name="bookmark-color"]:checked'
-      );
-      const color = BOOKMARK_COLORS.find((candidate) => candidate === selected?.value);
-      if (color === void 0) {
-        new import_obsidian3.Notice("Choose a bookmark colour.");
-        return;
-      }
-      this.finish({ label: label.value.trim(), color });
+      this.finish({ label: label.value.trim() });
     });
     window.setTimeout(() => label.focus());
   }
@@ -1862,10 +1827,7 @@ var BookmarksModal = class extends import_obsidian3.Modal {
     }
     for (const bookmark of this.bookmarks) {
       const available = this.actions.isAvailable(bookmark.zettelId);
-      const row = list.createDiv({
-        cls: `zk-list-row zk-bookmark-row is-${bookmark.color}`
-      });
-      row.createSpan({ cls: "zk-bookmark-color-swatch" });
+      const row = list.createDiv({ cls: "zk-list-row zk-bookmark-row" });
       const visit = row.createEl("button", {
         cls: "zk-entry-visit",
         attr: { type: "button" }
@@ -2006,9 +1968,6 @@ function iconButton3(parent, icon, label) {
   });
   (0, import_obsidian3.setIcon)(button, icon);
   return button;
-}
-function capitalize(value) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 // src/plugin-state.ts
@@ -2318,10 +2277,8 @@ var ZettelkastenPlugin = class extends import_obsidian5.Plugin {
       new import_obsidian5.Notice(`${zettelId} already has a bookmark.`);
       return;
     }
-    const defaultColor = BOOKMARK_COLORS[this.state.bookmarks.length % BOOKMARK_COLORS.length] ?? "blue";
     const details = await promptForBookmark(this.app, `Bookmark ${zettelId}`, {
-      label: "",
-      color: defaultColor
+      label: ""
     });
     if (details === null) {
       return;
@@ -2740,7 +2697,7 @@ zettel-id: ${yamlValue}
     const details = await promptForBookmark(
       this.app,
       `Edit bookmark at ${bookmark.zettelId}`,
-      { label: bookmark.label, color: bookmark.color }
+      { label: bookmark.label }
     );
     if (details === null) {
       return;

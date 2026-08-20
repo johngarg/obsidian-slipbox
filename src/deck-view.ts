@@ -482,7 +482,7 @@ export class DeckView extends ItemView {
 
       if (bookmark !== undefined) {
         const tab = cardEl.createEl("button", {
-          cls: `zk-bookmark-tab is-${bookmark.color}`,
+          cls: "zk-bookmark-tab",
           text: bookmark.label === "" ? card.id : bookmark.label,
           attr: {
             type: "button",
@@ -497,7 +497,8 @@ export class DeckView extends ItemView {
         });
       }
 
-      const addressRow = cardEl.createDiv({ cls: "zk-card-address-row" });
+      const frame = cardEl.createDiv({ cls: "zk-card-frame" });
+      const addressRow = frame.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
       if (this.thumbId === card.id) {
         const marker = addressRow.createSpan({
@@ -507,7 +508,7 @@ export class DeckView extends ItemView {
         marker.setAttr("aria-label", "Held place");
       }
 
-      const scroll = cardEl.createDiv({ cls: "zk-card-scroll markdown-rendered" });
+      const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
       jobs.push(this.renderMarkdownCard(card, scroll, version));
 

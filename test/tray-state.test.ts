@@ -45,7 +45,7 @@ function tray(...piles: readonly TrayCard[][]): TrayState {
   };
 }
 
-describe("session Tray piles", () => {
+describe("working piles", () => {
   test("constructs one deterministic newest-first pile from unfiled cards", () => {
     const state = initialTrayFromUnfiled([
       unfiled("B.md", 20),
@@ -149,7 +149,7 @@ describe("session Tray piles", () => {
     );
   });
 
-  test("clears only filed cards from a pile or the complete Tray", () => {
+  test("returns only filed cards from one pile or all piles", () => {
     const state = tray(
       [filed("A.md"), unfiled("U.md")],
       [filed("B.md")],

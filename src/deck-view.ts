@@ -38,6 +38,7 @@ export const DECK_VIEW_TYPE = "slipbox-deck";
 const FILING_ANIMATION_DURATION_MS = 280;
 const RENDER_EDGE_BUFFER = 2;
 const LAYOUT_MEASUREMENT_RETRIES = 2;
+const SPACE_RECENTER_DURATION_MS = 180;
 
 export class DeckView extends ItemView {
   private activeId: string | null = null;
@@ -53,6 +54,7 @@ export class DeckView extends ItemView {
   private pointerMoved = false;
   private spaceOffsetX = 0;
   private spaceOffsetY = 0;
+  private spaceRecenteringTimer: number | null = null;
   private filingPromptEl: HTMLElement | null = null;
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
@@ -112,6 +114,7 @@ export class DeckView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.cancelSpaceRecentering();
     this.cardFooters.clear();
     this.trayRenderer.clear();
     this.resizeObserver?.disconnect();
@@ -296,7 +299,7 @@ export class DeckView extends ItemView {
   async cancelFiling(): Promise<void> {
     this.filingFile = null;
     await this.renderDeck();
-    new Notice("Filing cancelled. The card remains in the Tray.");
+    new Notice("Filing cancelled. The card remains in its pile.");
   }
 
   async goToId(id: string): Promise<void> {
@@ -603,7 +606,7 @@ export class DeckView extends ItemView {
           cardActions,
           "plus",
           "slipbox-card-add",
-          `Add a card from ${card.id} · ${title}`,
+          "Add a card from here",
           () => this.runAction("add-card", card),
         );
       }
@@ -612,14 +615,12 @@ export class DeckView extends ItemView {
           cardActions,
           "file-pen-line",
           "slipbox-card-open",
-          `Open ${card.id} · ${title} in Markdown`,
+          "Open",
           () => this.runAction("open-note", card),
         );
       }
       if (this.plugin.settings.deckHeaderButtons.tray) {
-        const trayAction = isInTray
-          ? `Return ${card.id} · ${title} to Slipbox`
-          : `Pull ${card.id} · ${title} into Tray`;
+        const trayAction = isInTray ? "Return" : "Pull out";
         const trayToggle = this.renderCardAction(
           cardActions,
           isInTray ? "undo-2" : "inbox",
@@ -632,8 +633,8 @@ export class DeckView extends ItemView {
       }
       if (this.plugin.settings.deckHeaderButtons.bookmark) {
         const bookmarkAction = isBookmarked
-          ? `Remove bookmark from ${card.id} · ${title}`
-          : `Add bookmark to ${card.id} · ${title}`;
+          ? "Remove bookmark"
+          : "Add bookmark";
         const bookmarkToggle = this.renderCardAction(
           cardActions,
           "bookmark",
@@ -950,6 +951,7 @@ export class DeckView extends ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
+      this.cancelSpaceRecentering();
       this.pointerLastX = event.clientX;
       this.pointerLastY = event.clientY;
       this.pointerMoved = false;
@@ -1000,6 +1002,34 @@ export class DeckView extends ItemView {
     }
     this.spaceEl.style.transform =
       `translate(${this.spaceOffsetX}px, ${this.spaceOffsetY}px)`;
+  }
+
+  private recenterSpace(): void {
+    const space = this.spaceEl;
+    const shouldAnimate =
+      space !== null && (this.spaceOffsetX !== 0 || this.spaceOffsetY !== 0);
+    this.cancelSpaceRecentering();
+    if (shouldAnimate) {
+      space.addClass("is-recentering");
+    }
+    this.spaceOffsetX = 0;
+    this.spaceOffsetY = 0;
+    this.applySpaceOffset();
+    if (!shouldAnimate) {
+      return;
+    }
+    this.spaceRecenteringTimer = window.setTimeout(() => {
+      space.removeClass("is-recentering");
+      this.spaceRecenteringTimer = null;
+    }, SPACE_RECENTER_DURATION_MS);
+  }
+
+  private cancelSpaceRecentering(): void {
+    if (this.spaceRecenteringTimer !== null) {
+      window.clearTimeout(this.spaceRecenteringTimer);
+      this.spaceRecenteringTimer = null;
+    }
+    this.spaceEl?.removeClass("is-recentering");
   }
 
   private moveViewportByPixels(deltaPixels: number): void {
@@ -1056,6 +1086,7 @@ export class DeckView extends ItemView {
       return;
     }
     this.viewportOffset = 0;
+    this.recenterSpace();
     this.positionCards();
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
@@ -1294,9 +1325,7 @@ export class DeckView extends ItemView {
         continue;
       }
       const isBookmarked = bookmarkedIds.has(zettelId);
-      const action = isBookmarked
-        ? `Remove bookmark from ${zettelId}`
-        : `Add bookmark to ${zettelId}`;
+      const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
       toggle.toggleClass("is-bookmarked", isBookmarked);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));

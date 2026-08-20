@@ -492,7 +492,7 @@ function fitBacklinkPrefix(availableWidth, itemWidths, separatorWidth, overflowW
 
 // src/deck-actions.ts
 function trayToggleLabel(inTray) {
-  return inTray ? "Return to Slipbox" : "Pull into Tray";
+  return inTray ? "Return" : "Pull out";
 }
 function canRunDeckAction(action, context) {
   switch (action) {
@@ -942,7 +942,7 @@ var DECK_ACTION_DEFINITIONS = [
   },
   {
     id: "toggle-tray",
-    label: "Pull into or return from Tray",
+    label: "Pull out or return card",
     repeatable: false,
     defaultBindings: [binding("p")]
   },
@@ -1492,6 +1492,7 @@ function compareInitialCards(left, right) {
 // src/tray-view.ts
 var DRAG_THRESHOLD_PX = 5;
 var DEFAULT_PILE_VERTICAL_STEP_PX = 42;
+var DEFAULT_PILE_DECK_CLEARANCE_PX = 24;
 var PILE_BASE_Y_RATIO = 0.31;
 var PILE_BASE_Y_OFFSET_PX = 126;
 var PILE_CARD_HALF_HEIGHT_PX = 58;
@@ -1523,7 +1524,9 @@ var TrayRenderer = class {
     stage.addClass("has-tray");
     const tray = space.createDiv({
       cls: "slipbox-tray",
-      attr: { "aria-label": `Tray, ${cardCount} card${cardCount === 1 ? "" : "s"}` }
+      attr: {
+        "aria-label": `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`
+      }
     });
     this.rootEl = tray;
     this.attachBackgroundMenu(stage);
@@ -1549,7 +1552,7 @@ var TrayRenderer = class {
       event.preventDefault();
       const menu = import_obsidian2.Menu.forEvent(event);
       menu.addItem((item) => {
-        item.setTitle("Clear Tray").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => void this.plugin.clearTray());
+        item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => void this.plugin.clearTray());
       });
       menu.showAtMouseEvent(event);
     });
@@ -1675,7 +1678,7 @@ var TrayRenderer = class {
     identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
     const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
     if (filed === void 0) {
-      const fileButton = trayIconButton(controls, "archive-restore", `File ${title}`);
+      const fileButton = trayIconButton(controls, "archive-restore", "File");
       fileButton.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1685,7 +1688,7 @@ var TrayRenderer = class {
       const returnButton = trayIconButton(
         controls,
         "undo-2",
-        `Return ${filed.id} \xB7 ${title} to Slipbox`
+        "Return"
       );
       returnButton.addEventListener("click", (event) => {
         event.preventDefault();
@@ -1693,7 +1696,7 @@ var TrayRenderer = class {
         void this.plugin.toggleFileInTray(file);
       });
     }
-    const open = trayIconButton(controls, "file-pen-line", `Open ${title} in Markdown`);
+    const open = trayIconButton(controls, "file-pen-line", "Open");
     open.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1802,7 +1805,7 @@ var TrayRenderer = class {
     });
     menu.addSeparator();
     menu.addItem((item) => {
-      item.setTitle("Clear pile").setIcon("eraser").setDisabled(!pile.cards.some((card) => card.kind === "filed")).onClick(() => void this.plugin.clearTrayPile(pile.id));
+      item.setTitle("Return filed cards in this pile").setIcon("eraser").setDisabled(!pile.cards.some((card) => card.kind === "filed")).onClick(() => void this.plugin.clearTrayPile(pile.id));
     });
     menu.showAtMouseEvent(event);
   }
@@ -2095,7 +2098,7 @@ var TrayRenderer = class {
 function defaultPilePosition(pileIndex) {
   return {
     x: 0,
-    y: pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX
+    y: pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX - DEFAULT_PILE_DECK_CLEARANCE_PX
   };
 }
 function trayIconButton(parent, icon, label) {
@@ -2114,6 +2117,7 @@ var DECK_VIEW_TYPE = "slipbox-deck";
 var FILING_ANIMATION_DURATION_MS = 280;
 var RENDER_EDGE_BUFFER = 2;
 var LAYOUT_MEASUREMENT_RETRIES = 2;
+var SPACE_RECENTER_DURATION_MS = 180;
 var DeckView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -2148,6 +2152,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   pointerMoved = false;
   spaceOffsetX = 0;
   spaceOffsetY = 0;
+  spaceRecenteringTimer = null;
   filingPromptEl = null;
   renderWindowStart = 0;
   renderWindowEnd = -1;
@@ -2179,6 +2184,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     await this.refresh();
   }
   async onClose() {
+    this.cancelSpaceRecentering();
     this.cardFooters.clear();
     this.trayRenderer.clear();
     this.resizeObserver?.disconnect();
@@ -2350,7 +2356,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   async cancelFiling() {
     this.filingFile = null;
     await this.renderDeck();
-    new import_obsidian3.Notice("Filing cancelled. The card remains in the Tray.");
+    new import_obsidian3.Notice("Filing cancelled. The card remains in its pile.");
   }
   async goToId(id) {
     const moved = await this.navigateToId(id);
@@ -2619,7 +2625,7 @@ var DeckView = class extends import_obsidian3.ItemView {
           cardActions,
           "plus",
           "slipbox-card-add",
-          `Add a card from ${card.id} \xB7 ${title}`,
+          "Add a card from here",
           () => this.runAction("add-card", card)
         );
       }
@@ -2628,12 +2634,12 @@ var DeckView = class extends import_obsidian3.ItemView {
           cardActions,
           "file-pen-line",
           "slipbox-card-open",
-          `Open ${card.id} \xB7 ${title} in Markdown`,
+          "Open",
           () => this.runAction("open-note", card)
         );
       }
       if (this.plugin.settings.deckHeaderButtons.tray) {
-        const trayAction = isInTray ? `Return ${card.id} \xB7 ${title} to Slipbox` : `Pull ${card.id} \xB7 ${title} into Tray`;
+        const trayAction = isInTray ? "Return" : "Pull out";
         const trayToggle = this.renderCardAction(
           cardActions,
           isInTray ? "undo-2" : "inbox",
@@ -2645,7 +2651,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         trayToggle.toggleClass("is-in-tray", isInTray);
       }
       if (this.plugin.settings.deckHeaderButtons.bookmark) {
-        const bookmarkAction = isBookmarked ? `Remove bookmark from ${card.id} \xB7 ${title}` : `Add bookmark to ${card.id} \xB7 ${title}`;
+        const bookmarkAction = isBookmarked ? "Remove bookmark" : "Add bookmark";
         const bookmarkToggle = this.renderCardAction(
           cardActions,
           "bookmark",
@@ -2917,6 +2923,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
+      this.cancelSpaceRecentering();
       this.pointerLastX = event.clientX;
       this.pointerLastY = event.clientY;
       this.pointerMoved = false;
@@ -2965,6 +2972,31 @@ var DeckView = class extends import_obsidian3.ItemView {
       return;
     }
     this.spaceEl.style.transform = `translate(${this.spaceOffsetX}px, ${this.spaceOffsetY}px)`;
+  }
+  recenterSpace() {
+    const space = this.spaceEl;
+    const shouldAnimate = space !== null && (this.spaceOffsetX !== 0 || this.spaceOffsetY !== 0);
+    this.cancelSpaceRecentering();
+    if (shouldAnimate) {
+      space.addClass("is-recentering");
+    }
+    this.spaceOffsetX = 0;
+    this.spaceOffsetY = 0;
+    this.applySpaceOffset();
+    if (!shouldAnimate) {
+      return;
+    }
+    this.spaceRecenteringTimer = window.setTimeout(() => {
+      space.removeClass("is-recentering");
+      this.spaceRecenteringTimer = null;
+    }, SPACE_RECENTER_DURATION_MS);
+  }
+  cancelSpaceRecentering() {
+    if (this.spaceRecenteringTimer !== null) {
+      window.clearTimeout(this.spaceRecenteringTimer);
+      this.spaceRecenteringTimer = null;
+    }
+    this.spaceEl?.removeClass("is-recentering");
   }
   moveViewportByPixels(deltaPixels) {
     const filed = this.plugin.index.snapshot.filed;
@@ -3016,6 +3048,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       return;
     }
     this.viewportOffset = 0;
+    this.recenterSpace();
     this.positionCards();
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
@@ -3211,7 +3244,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         continue;
       }
       const isBookmarked = bookmarkedIds.has(zettelId);
-      const action = isBookmarked ? `Remove bookmark from ${zettelId}` : `Add bookmark to ${zettelId}`;
+      const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
       toggle.toggleClass("is-bookmarked", isBookmarked);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));
@@ -3863,7 +3896,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     const labels = {
       "add-card": "Add card from here",
       "open-note": "Open Markdown note",
-      tray: "Pull into or return from Tray",
+      tray: "Pull out or return card",
       bookmark: "Toggle bookmark"
     };
     for (const [id, label] of Object.entries(labels)) {
@@ -4738,7 +4771,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     this.index.refresh();
     const filed = this.index.filedByFile(file);
     if (filed === void 0) {
-      new import_obsidian8.Notice("Only a uniquely filed card can be pulled into the Tray.");
+      new import_obsidian8.Notice("Only a uniquely filed card can be pulled out.");
       return;
     }
     this.tray = toggleFiledCard(
@@ -5064,7 +5097,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
     this.addCommand({
       id: "toggle-tray",
-      name: "Pull current card into or return it from Tray",
+      name: "Pull out or return current card",
       checkCallback: (checking) => {
         const file = this.currentCardFile();
         const available = file !== null && this.index.filedByFile(file) !== void 0;
@@ -5084,7 +5117,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
     this.addCommand({
       id: "clear-tray",
-      name: "Clear Tray",
+      name: "Return all filed cards",
       checkCallback: (checking) => {
         const available = trayHasFiledCards(this.tray);
         if (checking) {

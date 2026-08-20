@@ -87,7 +87,7 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
   },
   {
     id: "toggle-tray",
-    label: "Pull into or return from Tray",
+    label: "Pull out or return card",
     repeatable: false,
     defaultBindings: [binding("p")],
   },

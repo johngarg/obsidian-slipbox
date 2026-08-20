@@ -12,8 +12,8 @@ export interface DeckActionContext {
 
 export function trayToggleLabel(
   inTray: boolean,
-): "Return to Slipbox" | "Pull into Tray" {
-  return inTray ? "Return to Slipbox" : "Pull into Tray";
+): "Return" | "Pull out" {
+  return inTray ? "Return" : "Pull out";
 }
 
 export function canRunDeckAction(

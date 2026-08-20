@@ -14,20 +14,21 @@ An empty value is an unfiled card. A canonical nonempty value such as `1/2b1`
 is a permanently filed card. The address is the sole source of filing order;
 Slipbox stores no hidden sequence and imposes no folder.
 
-## Slipbox workspace, Tray, and Canvas
+## Slipbox workspace, working piles, and Canvas
 
 - **Slipbox** is the shared, pannable workspace containing the permanent
   canonical sequence of filed cards and the current working piles.
-- **Tray** is the transient, session-only set of piles. It contains all unfiled
-  cards and any filed cards pulled out for current work, without appearing as a
-  separate panel.
-- **Canvas** is Obsidian's ordinary persistent spatial workspace. A Tray pile
-  can be laid out there when the arrangement should survive a restart.
+- **Working piles** are the transient, session-only workspace. They contain all
+  unfiled cards and any filed cards pulled out for current work, without
+  appearing as a separate panel.
+- **Canvas** is Obsidian's vault-native persistent spatial workspace. A working
+  pile can be laid out there when the arrangement should survive a restart or
+  needs Canvas nodes and connections.
 
-The Tray is deliberately not saved. On startup, Slipbox reconstructs one pile
-from all unfiled cards, newest-modified first. Filed cards pulled into the Tray,
-pile position, expansion, and manual ordering last only for the current Obsidian
-session. No Tray state is written to Markdown or plugin data.
+Working piles are deliberately not saved. On startup, Slipbox reconstructs one
+pile from all unfiled cards, newest-modified first. Filed cards pulled out for
+current work, pile positions, expansion, and manual ordering last only for the
+current Obsidian session. No pile state is written to Markdown or plugin data.
 
 Piles are anonymous and float directly beside the filed cards in the same
 workspace. Their initial positions form a compact vertical stack immediately
@@ -53,15 +54,14 @@ Use drag and drop to:
 - drop a collapsed pile onto another to merge them.
 
 Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu can
-move them to adjacent piles or split them. Pulling a filed card into the Tray
-does not change its address, Slipbox filing order, bookmark, or Canvas
-membership.
+move them to adjacent piles or split them. Pulling a filed card out does not
+change its address, Slipbox filing order, bookmark, or Canvas membership.
 
-Right-click a pile for `Clear pile`, or right-click empty workspace for `Clear
-Tray`. Both remove only manually pulled filed cards; unfiled cards remain, and
-empty piles disappear. Piles are temporarily hidden during Filing Mode.
-Successful filing removes the newly filed card from its former pile without
-reorganising the rest.
+Right-click a pile for `Return filed cards in this pile`, or right-click empty
+workspace for `Return all filed cards`. Both return only manually pulled filed
+cards; unfiled cards remain, and empty piles disappear. Piles are temporarily
+hidden during Filing Mode. Successful filing removes the newly filed card from
+its former pile without reorganising the rest.
 
 ## Canvas integration
 
@@ -70,11 +70,11 @@ Right-click a pile to choose:
 - `Lay out pile on active Canvas`;
 - `Lay out pile on Canvas…`;
 - `Create Canvas from pile…`; or
-- `Clear pile`.
+- `Return filed cards in this pile`.
 
 Canvas layout includes filed and unfiled cards in pile order, places file nodes
 left-to-right, and wraps longer piles into rows. Existing nodes and edges are
-preserved, existing file nodes are not duplicated, and the Tray pile remains
+preserved, existing file nodes are not duplicated, and the working pile remains
 unchanged. Creating a Canvas prompts for a filename or vault-relative path and
 opens the new file after creation.
 
@@ -99,7 +99,7 @@ longer exist.
 - Browser-style session history for filed links, entry points, and bookmarks.
 - Persistent named entry points and one persistent bookmark per filed address.
 - Card-header and context-menu actions for opening notes, adding from a card,
-  pulling into or returning from the Tray, bookmarking, and deletion.
+  pulling cards out or returning them, bookmarking, and deletion.
 - Deliberate Filing Mode from the active attachment point, plus new-section and
   ordinary-note conversion workflows.
 - Filename- or frontmatter-derived centred titles, configurable new-card folder
@@ -149,7 +149,7 @@ Obsidian's Templates core plugin.
 | `G` | Jump to the last card |
 | `o` | Open the active Markdown note |
 | `a` | Add a card from the active card |
-| `p` | Pull the active card into, or return it from, the Tray |
+| `p` | Pull out or return the active card |
 | `b` | Toggle the active-card bookmark |
 
 Every stable Slipbox action can have multiple scoped shortcuts. Changes apply to
@@ -161,7 +161,7 @@ Desk shortcut is removed rather than repurposed.
 The pure TypeScript domain in `src/zettel-id.ts` parses, formats, compares, and
 generates canonical addresses. Numeric components compare numerically;
 alphabetic components follow `a … z, aa, ab …`; and a prefix card precedes its
-extensions. Pure address, Tray, and Canvas layout APIs are exported from
+extensions. Pure address, working-pile, and Canvas layout APIs are exported from
 `src/index.ts` and tested independently of Obsidian.
 
 ## Filed-card links

@@ -255,7 +255,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     const labels = {
       "add-card": "Add card from here",
       "open-note": "Open Markdown note",
-      tray: "Pull into or return from Tray",
+      tray: "Pull out or return card",
       bookmark: "Toggle bookmark",
     } as const;
     for (const [id, label] of Object.entries(labels)) {

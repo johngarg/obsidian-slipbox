@@ -416,7 +416,7 @@ export default class SlipboxPlugin extends Plugin {
     this.index.refresh();
     const filed = this.index.filedByFile(file);
     if (filed === undefined) {
-      new Notice("Only a uniquely filed card can be pulled into the Tray.");
+      new Notice("Only a uniquely filed card can be pulled out.");
       return;
     }
     this.tray = toggleFiledCard(
@@ -778,7 +778,7 @@ export default class SlipboxPlugin extends Plugin {
 
     this.addCommand({
       id: "toggle-tray",
-      name: "Pull current card into or return it from Tray",
+      name: "Pull out or return current card",
       checkCallback: (checking) => {
         const file = this.currentCardFile();
         const available = file !== null && this.index.filedByFile(file) !== undefined;
@@ -799,7 +799,7 @@ export default class SlipboxPlugin extends Plugin {
 
     this.addCommand({
       id: "clear-tray",
-      name: "Clear Tray",
+      name: "Return all filed cards",
       checkCallback: (checking) => {
         const available = trayHasFiledCards(this.tray);
         if (checking) {

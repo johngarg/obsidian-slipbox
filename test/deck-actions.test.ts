@@ -49,8 +49,8 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("new-section", unavailable), true);
   });
 
-  test("uses state-dependent Tray wording in shared card actions", () => {
-    assert.equal(trayToggleLabel(false), "Pull into Tray");
-    assert.equal(trayToggleLabel(true), "Return to Slipbox");
+  test("uses concise state-dependent wording in shared card actions", () => {
+    assert.equal(trayToggleLabel(false), "Pull out");
+    assert.equal(trayToggleLabel(true), "Return");
   });
 });

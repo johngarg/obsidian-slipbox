@@ -138,6 +138,10 @@
   will-change: transform;
 }
 
+.slipbox-space.is-recentering {
+  transition: transform 180ms ease-out;
+}
+
 .slipbox-tray,
 .slipbox-tray-piles {
   position: absolute;

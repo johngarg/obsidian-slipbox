@@ -27,6 +27,7 @@ import {
 
 const DRAG_THRESHOLD_PX = 5;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
+const DEFAULT_PILE_DECK_CLEARANCE_PX = 24;
 const PILE_BASE_Y_RATIO = 0.31;
 const PILE_BASE_Y_OFFSET_PX = 126;
 const PILE_CARD_HALF_HEIGHT_PX = 58;
@@ -73,7 +74,9 @@ export class TrayRenderer {
     stage.addClass("has-tray");
     const tray = space.createDiv({
       cls: "slipbox-tray",
-      attr: { "aria-label": `Tray, ${cardCount} card${cardCount === 1 ? "" : "s"}` },
+      attr: {
+        "aria-label": `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
+      },
     });
     this.rootEl = tray;
     this.attachBackgroundMenu(stage);
@@ -102,7 +105,7 @@ export class TrayRenderer {
       const menu = Menu.forEvent(event);
       menu.addItem((item) => {
         item
-          .setTitle("Clear Tray")
+          .setTitle("Return all filed cards")
           .setIcon("eraser")
           .setDisabled(!trayHasFiledCards(this.plugin.tray))
           .onClick(() => void this.plugin.clearTray());
@@ -268,7 +271,7 @@ export class TrayRenderer {
     identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
     const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
     if (filed === undefined) {
-      const fileButton = trayIconButton(controls, "archive-restore", `File ${title}`);
+      const fileButton = trayIconButton(controls, "archive-restore", "File");
       fileButton.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -278,7 +281,7 @@ export class TrayRenderer {
       const returnButton = trayIconButton(
         controls,
         "undo-2",
-        `Return ${filed.id} · ${title} to Slipbox`,
+        "Return",
       );
       returnButton.addEventListener("click", (event) => {
         event.preventDefault();
@@ -286,7 +289,7 @@ export class TrayRenderer {
         void this.plugin.toggleFileInTray(file);
       });
     }
-    const open = trayIconButton(controls, "file-pen-line", `Open ${title} in Markdown`);
+    const open = trayIconButton(controls, "file-pen-line", "Open");
     open.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -410,7 +413,7 @@ export class TrayRenderer {
     menu.addSeparator();
     menu.addItem((item) => {
       item
-        .setTitle("Clear pile")
+        .setTitle("Return filed cards in this pile")
         .setIcon("eraser")
         .setDisabled(!pile.cards.some((card) => card.kind === "filed"))
         .onClick(() => void this.plugin.clearTrayPile(pile.id));
@@ -795,7 +798,9 @@ export class TrayRenderer {
 function defaultPilePosition(pileIndex: number): TrayPilePosition {
   return {
     x: 0,
-    y: pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX,
+    y:
+      pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX -
+      DEFAULT_PILE_DECK_CLEARANCE_PX,
   };
 }
 

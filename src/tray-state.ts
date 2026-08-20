@@ -398,6 +398,11 @@ export function trayContains(state: TrayState, cardRef: string): boolean {
     pile.cards.some((card) => card.cardRef === cardRef));
 }
 
+export function trayHasFiledCards(state: TrayState): boolean {
+  return state.piles.some((pile) =>
+    pile.cards.some((card) => card.kind === "filed"));
+}
+
 export function cardPosition(
   state: TrayState,
   cardRef: string,

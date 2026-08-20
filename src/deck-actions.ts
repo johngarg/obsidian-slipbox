@@ -10,6 +10,10 @@ export interface DeckActionContext {
   readonly filing: boolean;
 }
 
+export function trayToggleLabel(inTray: boolean): "Return to Deck" | "Pull into Tray" {
+  return inTray ? "Return to Deck" : "Pull into Tray";
+}
+
 export function canRunDeckAction(
   action: DeckAction,
   context: DeckActionContext,
@@ -23,7 +27,6 @@ export function canRunDeckAction(
     case "open-note":
     case "add-card":
     case "toggle-tray":
-    case "toggle-desk":
     case "toggle-bookmark":
       return context.hasActiveCard;
     case "first-card":
@@ -41,7 +44,6 @@ export function canRunDeckAction(
       return context.filing;
     case "entry-points":
     case "bookmarks":
-    case "open-desk":
     case "new-section":
       return true;
   }

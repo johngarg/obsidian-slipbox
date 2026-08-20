@@ -1,5 +1,4 @@
-.slipbox-deck-view,
-.slipbox-desk-view {
+.slipbox-deck-view {
   --slipbox-card-footer-height: 36px;
 }
 
@@ -39,8 +38,7 @@
 .slipbox-deck-identity,
 .slipbox-toolbar-group,
 .slipbox-problem-button,
-.slipbox-spread-control,
-.slipbox-desk-button {
+.slipbox-spread-control {
   display: flex;
   align-items: center;
 }
@@ -559,7 +557,6 @@
 
 .slipbox-card:hover .slipbox-card-toggle,
 .slipbox-card:focus-within .slipbox-card-toggle,
-.slipbox-card-desk-toggle.is-on-desk,
 .slipbox-card-bookmark-toggle.is-bookmarked {
   opacity: 1;
 }
@@ -573,11 +570,6 @@
 .slipbox-card-toggle svg {
   width: 14px;
   height: 14px;
-}
-
-.slipbox-card-desk-toggle.is-on-desk {
-  color: var(--text-normal);
-  background: var(--background-modifier-hover);
 }
 
 .slipbox-card-tray-toggle.is-in-tray {
@@ -1016,174 +1008,6 @@ button.slipbox-card-backlink-overflow:disabled {
   text-align: left;
 }
 
-.slipbox-desk-view {
-  height: 100%;
-  padding: 0 !important;
-  overflow: hidden !important;
-}
-
-.slipbox-desk-shell {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 420px;
-  color: var(--text-normal);
-  background: var(--background-secondary);
-}
-
-.slipbox-desk-toolbar {
-  flex: 0 0 auto;
-}
-
-.slipbox-desk-description {
-  flex: 1;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-}
-
-.slipbox-desk-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.slipbox-unfiled-tray {
-  z-index: 3;
-  flex: 0 0 235px;
-  padding: 14px 12px;
-  overflow: auto;
-  border-right: 1px solid var(--background-modifier-border);
-  background: var(--background-primary-alt);
-}
-
-.slipbox-unfiled-tray h3 {
-  margin: 0 0 4px;
-  font-size: var(--font-ui-medium);
-}
-
-.slipbox-unfiled-tray > p {
-  margin: 0 0 12px;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-}
-
-.slipbox-unfiled-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.slipbox-unfiled-item {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 4px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  background: var(--background-primary);
-}
-
-.slipbox-unfiled-open {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 6px;
-  overflow: hidden;
-  border: 0;
-  box-shadow: none;
-  background: transparent;
-  color: var(--text-normal);
-  font-size: var(--font-ui-smaller);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.slipbox-desk-viewport {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--background-modifier-border) 34%, transparent) 1px, transparent 1px),
-    linear-gradient(color-mix(in srgb, var(--background-modifier-border) 34%, transparent) 1px, transparent 1px),
-    color-mix(in srgb, var(--background-secondary) 88%, var(--background-primary));
-  background-size: 40px 40px;
-}
-
-.slipbox-desk-surface {
-  position: relative;
-  min-width: 100%;
-  min-height: 100%;
-}
-
-.slipbox-desk-card {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 9px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
-  background: var(--background-primary);
-  transition: box-shadow 100ms ease;
-}
-
-.slipbox-desk-card.is-dragging {
-  box-shadow: 0 17px 42px rgb(0 0 0 / 0.27);
-  cursor: grabbing;
-}
-
-.slipbox-desk-card.is-unfiled {
-  border-color: color-mix(in srgb, var(--interactive-accent) 58%, var(--background-modifier-border));
-}
-
-.slipbox-desk-card.is-invalid,
-.slipbox-desk-card.is-missing {
-  border-color: var(--text-error);
-}
-
-.slipbox-desk-card-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-height: 43px;
-  padding: 6px 8px 6px 12px;
-  border-bottom: 1px solid var(--background-modifier-border);
-  background: var(--background-primary-alt);
-  cursor: grab;
-  user-select: none;
-}
-
-.slipbox-desk-card-identity {
-  display: contents;
-}
-
-.slipbox-desk-card-address {
-  grid-column: 1;
-  justify-self: start;
-  flex: 0 0 auto;
-  color: var(--text-muted);
-  font-family: var(--font-monospace);
-  font-size: var(--font-ui-smaller);
-  font-weight: var(--font-semibold);
-  letter-spacing: 0.045em;
-}
-
-.slipbox-desk-card-title {
-  grid-column: 2;
-  justify-self: center;
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-  color: var(--text-normal);
-  font-size: var(--font-ui-small);
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .slipbox-shortcut-intro {
   display: flex;
   align-items: center;
@@ -1234,36 +1058,6 @@ button.slipbox-card-backlink-overflow:disabled {
   background: var(--interactive-accent);
 }
 
-.slipbox-desk-card-actions {
-  display: flex;
-  grid-column: 3;
-  flex: 0 0 auto;
-  justify-self: end;
-  gap: 2px;
-}
-
-.slipbox-desk-card-scroll {
-  flex: 1;
-  min-height: 0;
-  padding: 20px 25px;
-  overflow: auto;
-  overscroll-behavior: contain;
-  user-select: text;
-  scrollbar-gutter: stable;
-}
-
-.slipbox-desk-card > .slipbox-card-footer {
-  padding-right: 12px;
-  padding-left: 12px;
-}
-
-.slipbox-desk-missing-copy {
-  padding: 24px;
-  color: var(--text-error);
-  font-family: var(--font-monospace);
-  font-size: var(--font-ui-small);
-}
-
 @media (max-width: 850px) {
   .slipbox-deck-identity,
   .slipbox-toolbar-group:first-of-type {
@@ -1292,7 +1086,4 @@ button.slipbox-card-backlink-overflow:disabled {
     white-space: nowrap;
   }
 
-  .slipbox-unfiled-tray {
-    flex-basis: 185px;
-  }
 }

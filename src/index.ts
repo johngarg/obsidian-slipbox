@@ -22,7 +22,7 @@ export {
 } from "./zettel-metadata.js";
 export { generateFiledCardLink } from "./zettel-links.js";
 export { resolveCardTitle } from "./card-title.js";
-export { canRunDeckAction } from "./deck-actions.js";
+export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
@@ -44,11 +44,7 @@ export {
   normalizeBookmarks,
 } from "./bookmarks.js";
 export {
-  addDeskCard,
-  bringDeskCardToFront,
-  moveDeskCard,
   normalizeDeskCards,
-  removeDeskCard,
   removeDeskPath,
   renameDeskCard,
 } from "./desk-state.js";
@@ -86,6 +82,7 @@ export {
   splitCardIntoNewPile,
   toggleFiledCard,
   trayContains,
+  trayHasFiledCards,
 } from "./tray-state.js";
 export {
   isFileNode,
@@ -116,7 +113,6 @@ export type {
   DeckAction,
   DeckHeaderButton,
   DeckKeyBinding,
-  DeskHeaderButton,
   KeyModifier,
   SlipboxSettings,
   TitleSource,

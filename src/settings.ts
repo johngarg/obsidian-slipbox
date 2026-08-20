@@ -1,9 +1,8 @@
-export const SLIPBOX_DATA_SCHEMA_VERSION = 1;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 2;
 
 export type TitleSource = "filename" | "frontmatter";
 
-export type DeckHeaderButton = "add-card" | "open-note" | "tray" | "desk" | "bookmark";
-export type DeskHeaderButton = "file-card" | "open-note" | "remove";
+export type DeckHeaderButton = "add-card" | "open-note" | "tray" | "bookmark";
 
 export type DeckAction =
   | "previous-card"
@@ -14,13 +13,11 @@ export type DeckAction =
   | "open-note"
   | "add-card"
   | "toggle-tray"
-  | "toggle-desk"
   | "toggle-bookmark"
   | "back"
   | "forward"
   | "entry-points"
   | "bookmarks"
-  | "open-desk"
   | "problems"
   | "new-section"
   | "file-here"
@@ -95,12 +92,6 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     defaultBindings: [binding("p")],
   },
   {
-    id: "toggle-desk",
-    label: "Toggle Desk membership",
-    repeatable: false,
-    defaultBindings: [binding("d")],
-  },
-  {
     id: "toggle-bookmark",
     label: "Toggle bookmark",
     repeatable: false,
@@ -120,7 +111,6 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     repeatable: false,
     defaultBindings: [],
   },
-  { id: "open-desk", label: "Open Desk", repeatable: false, defaultBindings: [] },
   {
     id: "problems",
     label: "Show card problems",
@@ -160,9 +150,7 @@ export interface SlipboxSettings {
   readonly useTemplatesForNewNotes: boolean;
   readonly newNoteTemplatePath: string;
   readonly showTitleInDeck: boolean;
-  readonly showTitleInDesk: boolean;
   readonly deckHeaderButtons: Readonly<Record<DeckHeaderButton, boolean>>;
-  readonly deskHeaderButtons: Readonly<Record<DeskHeaderButton, boolean>>;
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
 }
 
@@ -170,14 +158,7 @@ export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, bool
   "add-card": true,
   "open-note": true,
   tray: true,
-  desk: true,
   bookmark: true,
-};
-
-export const DEFAULT_DESK_HEADER_BUTTONS: Readonly<Record<DeskHeaderButton, boolean>> = {
-  "file-card": true,
-  "open-note": true,
-  remove: true,
 };
 
 export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
@@ -196,9 +177,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
-  showTitleInDesk: true,
   deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
-  deskHeaderButtons: DEFAULT_DESK_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
 };
 
@@ -321,17 +300,9 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
         : DEFAULT_SETTINGS.showTitleInDeck,
-    showTitleInDesk:
-      typeof source.showTitleInDesk === "boolean"
-        ? source.showTitleInDesk
-        : DEFAULT_SETTINGS.showTitleInDesk,
     deckHeaderButtons: normalizeBooleanRecord(
       source.deckHeaderButtons,
       DEFAULT_DECK_HEADER_BUTTONS,
-    ),
-    deskHeaderButtons: normalizeBooleanRecord(
-      source.deskHeaderButtons,
-      DEFAULT_DESK_HEADER_BUTTONS,
     ),
     deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings),
   };

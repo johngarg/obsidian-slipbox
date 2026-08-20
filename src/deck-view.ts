@@ -57,7 +57,6 @@ export class DeckView extends ItemView {
   private backButtonEl: HTMLButtonElement | null = null;
   private forwardButtonEl: HTMLButtonElement | null = null;
   private bookmarksButtonEl: HTMLButtonElement | null = null;
-  private deskButtonEl: HTMLButtonElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
@@ -74,12 +73,10 @@ export class DeckView extends ItemView {
       app: this.app,
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
-      isOnDesk: (file) => this.plugin.state.deskCards.some(
-        (card) => card.cardRef === file.path,
-      ),
-      putOnDesk: (file) => this.plugin.putFileOnDesk(file, false),
+      isInTray: (file) => this.plugin.isFileInTray(file),
+      toggleTray: (file) => this.plugin.toggleFileInTray(file),
     });
-    this.trayRenderer = new TrayRenderer(this.app, this.plugin, this.leaf, {
+    this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (id) => this.jumpToId(id),
       moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta),
     });
@@ -128,7 +125,6 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.deskButtonEl = null;
     this.history.reset();
   }
 
@@ -234,11 +230,6 @@ export class DeckView extends ItemView {
           void this.plugin.toggleFileInTray(card.file);
         }
         break;
-      case "toggle-desk":
-        if (card !== null) {
-          void this.toggleCardDesk(card.file);
-        }
-        break;
       case "toggle-bookmark":
         if (card !== null) {
           void this.toggleCardBookmark(card.id);
@@ -255,9 +246,6 @@ export class DeckView extends ItemView {
         break;
       case "bookmarks":
         this.plugin.showBookmarks(this);
-        break;
-      case "open-desk":
-        void this.plugin.openDesk();
         break;
       case "problems":
         this.plugin.showIssues();
@@ -300,7 +288,7 @@ export class DeckView extends ItemView {
   async cancelFiling(): Promise<void> {
     this.filingFile = null;
     await this.renderDeck();
-    new Notice("Filing cancelled. The card remains on the Desk.");
+    new Notice("Filing cancelled. The card remains in the Tray.");
   }
 
   async goToId(id: string): Promise<void> {
@@ -411,7 +399,6 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.deskButtonEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
@@ -422,7 +409,6 @@ export class DeckView extends ItemView {
     const trayJob = this.trayRenderer.render(
       shell,
       this.filingFile !== null,
-      version,
       () => version === this.renderVersion,
     );
 
@@ -498,18 +484,6 @@ export class DeckView extends ItemView {
     }
     bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
     this.bookmarksButtonEl = bookmarks;
-
-    const desk = controls.createEl("button", {
-      attr: { type: "button" },
-      cls: "slipbox-desk-button",
-    });
-    desk.createSpan({ text: "Desk" });
-    const deskCount = this.plugin.state.deskCards.length;
-    if (deskCount > 0) {
-      desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
-    }
-    desk.addEventListener("click", () => this.runAction("open-desk"));
-    this.deskButtonEl = desk;
 
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
@@ -595,9 +569,6 @@ export class DeckView extends ItemView {
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
       const isInTray = this.plugin.isFileInTray(card.file);
-      const isOnDesk = this.plugin.state.deskCards.some(
-        (deskCard) => deskCard.cardRef === card.path,
-      );
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.id} · ${title}`;
       cardEl.setAttr("aria-label", cardLabel);
@@ -647,20 +618,6 @@ export class DeckView extends ItemView {
         );
         trayToggle.setAttr("aria-pressed", String(isInTray));
         trayToggle.toggleClass("is-in-tray", isInTray);
-      }
-      if (this.plugin.settings.deckHeaderButtons.desk) {
-        const deskAction = isOnDesk
-          ? `Remove ${card.id} · ${title} from Desk`
-          : `Add ${card.id} · ${title} to Desk`;
-        const deskToggle = this.renderCardAction(
-          cardActions,
-          "panels-top-left",
-          "slipbox-card-desk-toggle",
-          deskAction,
-          () => this.runAction("toggle-desk", card),
-        );
-        deskToggle.setAttr("aria-pressed", String(isOnDesk));
-        deskToggle.toggleClass("is-on-desk", isOnDesk);
       }
       if (this.plugin.settings.deckHeaderButtons.bookmark) {
         const bookmarkAction = isBookmarked
@@ -784,17 +741,6 @@ export class DeckView extends ItemView {
     }
     this.updateBookmarkUi(bookmarkedIds);
     await this.plugin.toggleBookmark(zettelId);
-  }
-
-  private async toggleCardDesk(file: TFile): Promise<void> {
-    const deskCardRefs = this.deskCardRefs();
-    if (deskCardRefs.has(file.path)) {
-      deskCardRefs.delete(file.path);
-    } else {
-      deskCardRefs.add(file.path);
-    }
-    this.updateDeskUi(deskCardRefs);
-    await this.plugin.toggleFileOnDesk(file);
   }
 
   private attachInternalLinkInteractions(
@@ -1288,10 +1234,6 @@ export class DeckView extends ItemView {
     );
   }
 
-  private deskCardRefs(): Set<string> {
-    return new Set(this.plugin.state.deskCards.map((card) => card.cardRef));
-  }
-
   private updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()): void {
     const bookmarkCount = bookmarkedIds.size;
     if (this.bookmarksButtonEl !== null) {
@@ -1331,45 +1273,6 @@ export class DeckView extends ItemView {
 
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
-    }
-  }
-
-  private updateDeskUi(deskCardRefs = this.deskCardRefs()): void {
-    const deskCount = deskCardRefs.size;
-    if (this.deskButtonEl !== null) {
-      const countEl = this.deskButtonEl.querySelector<HTMLElement>(".slipbox-count");
-      if (deskCount === 0) {
-        countEl?.remove();
-      } else if (countEl === null) {
-        this.deskButtonEl.createSpan({
-          cls: "slipbox-count",
-          text: String(deskCount),
-        });
-      } else {
-        countEl.setText(String(deskCount));
-      }
-    }
-
-    for (const cardEl of this.renderedCards) {
-      const cardPath = cardEl.dataset.path;
-      const zettelId = cardEl.dataset.zettelId;
-      const toggle = cardEl.querySelector<HTMLButtonElement>(
-        ".slipbox-card-desk-toggle",
-      );
-      if (cardPath === undefined || zettelId === undefined || toggle === null) {
-        continue;
-      }
-      const isOnDesk = deskCardRefs.has(cardPath);
-      const action = isOnDesk
-        ? `Remove ${zettelId} from Desk`
-        : `Add ${zettelId} to Desk`;
-      toggle.toggleClass("is-on-desk", isOnDesk);
-      toggle.setAttr("aria-label", action);
-      toggle.setAttr("aria-pressed", String(isOnDesk));
-      setTooltip(toggle, action, {
-        placement: "bottom",
-        delay: 250,
-      });
     }
   }
 

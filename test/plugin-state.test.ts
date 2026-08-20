@@ -18,7 +18,7 @@ describe("normalizePluginState", () => {
         bookmarks: [
           { id: "bookmark-1", zettelId: "2/3a", label: " Here ", color: "blue" },
         ],
-        deskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
+        legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
         spread: 0.75,
       }),
       {
@@ -26,7 +26,7 @@ describe("normalizePluginState", () => {
         bookmarks: [
           { zettelId: "2/3a" },
         ],
-        deskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
+        legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
         spread: 0.75,
       },
     );
@@ -53,7 +53,6 @@ describe("normalizePluginState", () => {
         bookmarks: [
           { zettelId: "4/1" },
         ],
-        deskCards: [],
         spread: 1.12,
       },
     );
@@ -68,7 +67,6 @@ describe("normalizePluginState", () => {
     assert.deepEqual(normalizePluginState(null), {
       entryPoints: [],
       bookmarks: [],
-      deskCards: [],
       spread: DEFAULT_SPREAD,
     });
   });
@@ -83,7 +81,6 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Start", id: "1/1" }],
         bookmarks: [],
-        deskCards: [],
         spread: 0.58,
       },
     );
@@ -98,10 +95,13 @@ describe("normalizePluginData", () => {
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 1);
+    assert.equal(data.schemaVersion, 2);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.deepEqual(data.state.entryPoints, [{ name: "Start", id: "1/1" }]);
     assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
+    assert.deepEqual(data.state.legacyDeskCards, [
+      { cardRef: "Start.md", x: 10, y: 20, z: 1 },
+    ]);
     assert.equal(data.state.spread, 0.7);
   });
 
@@ -118,7 +118,6 @@ describe("normalizePluginData", () => {
       state: {
         entryPoints: [],
         bookmarks: [],
-        deskCards: [],
         spread: 0.42,
       },
     });
@@ -129,6 +128,26 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(data.settings.useTemplatesForNewNotes, false);
     assert.equal(data.state.spread, 0.42);
+    assert.equal("legacyDeskCards" in data.state, false);
+  });
+
+  test("normalizes current legacy migration data and removes empty Desk fields", () => {
+    const populated = normalizePluginData({
+      schemaVersion: 2,
+      state: {
+        legacyDeskCards: [{ cardRef: "one.md", x: 1, y: 2, z: 3 }],
+      },
+    });
+    assert.deepEqual(populated.state.legacyDeskCards, [
+      { cardRef: "one.md", x: 1, y: 2, z: 3 },
+    ]);
+
+    const empty = normalizePluginData({
+      schemaVersion: 1,
+      state: { deskCards: [] },
+    });
+    assert.equal("deskCards" in empty.state, false);
+    assert.equal("legacyDeskCards" in empty.state, false);
   });
 
   test("uses complete defaults for unknown data", () => {

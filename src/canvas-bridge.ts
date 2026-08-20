@@ -79,12 +79,28 @@ export class CanvasBridge {
     path: string,
     filePaths: readonly string[],
   ): Promise<CanvasWriteResult> {
+    return this.createCanvasWithLayout(path, (data) =>
+      layoutFilesOnCanvas(data, filePaths));
+  }
+
+  async createLegacyDeskCanvas(
+    path: string,
+    cards: readonly LegacyDeskCanvasCard[],
+  ): Promise<CanvasWriteResult> {
+    return this.createCanvasWithLayout(path, (data) =>
+      layoutLegacyDeskOnCanvas(data, cards));
+  }
+
+  private async createCanvasWithLayout(
+    path: string,
+    transform: CanvasTransform,
+  ): Promise<CanvasWriteResult> {
     const normalized = normalizePath(path);
     if (this.app.vault.getAbstractFileByPath(normalized) !== null) {
       throw new Error(`A file already exists at ${normalized}`);
     }
     await this.ensureParentFolder(normalized);
-    const result = layoutFilesOnCanvas({ nodes: [], edges: [] }, filePaths);
+    const result = transform({ nodes: [], edges: [] });
     const file = await this.app.vault.create(
       normalized,
       serializeCanvasDocument(result.data),

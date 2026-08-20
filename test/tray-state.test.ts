@@ -22,6 +22,7 @@ import {
   setExpandedPile,
   splitCardIntoNewPile,
   toggleFiledCard,
+  trayHasFiledCards,
   type TrayCard,
   type TrayCardCandidate,
   type TrayState,
@@ -144,6 +145,8 @@ describe("session Tray piles", () => {
       ["U.md"],
       ["V.md"],
     ]);
+    assert.equal(trayHasFiledCards(state), true);
+    assert.equal(trayHasFiledCards(all), false);
   });
 
   test("follows exact and descendant renames and deletions", () => {

@@ -16,7 +16,8 @@ export interface EntryPoint {
 export interface SlipboxPluginState {
   readonly entryPoints: readonly EntryPoint[];
   readonly bookmarks: readonly DeckBookmark[];
-  readonly deskCards: readonly DeskCardState[];
+  /** Retained only until an old persistent Desk has been exported to Canvas. */
+  readonly legacyDeskCards?: readonly DeskCardState[];
   readonly spread: number;
 }
 
@@ -33,7 +34,6 @@ export const MAX_SPREAD = 1.12;
 export const DEFAULT_STATE: SlipboxPluginState = {
   entryPoints: [],
   bookmarks: [],
-  deskCards: [],
   spread: DEFAULT_SPREAD,
 };
 
@@ -73,10 +73,15 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
       ? value.spread
       : DEFAULT_SPREAD;
 
+  const legacyDeskCards = normalizeDeskCards(
+    Object.prototype.hasOwnProperty.call(value, "legacyDeskCards")
+      ? value.legacyDeskCards
+      : value.deskCards,
+  );
   return {
     entryPoints,
     bookmarks: normalizeBookmarks(value.bookmarks),
-    deskCards: normalizeDeskCards(value.deskCards),
+    ...(legacyDeskCards.length > 0 ? { legacyDeskCards } : {}),
     spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread)),
   };
 }

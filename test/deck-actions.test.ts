@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { canRunDeckAction, type DeckActionContext } from "../src/deck-actions.js";
+import {
+  canRunDeckAction,
+  trayToggleLabel,
+  type DeckActionContext,
+} from "../src/deck-actions.js";
 
 const READY: DeckActionContext = {
   hasActiveCard: true,
@@ -43,5 +47,10 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
     assert.equal(canRunDeckAction("entry-points", unavailable), true);
     assert.equal(canRunDeckAction("new-section", unavailable), true);
+  });
+
+  test("uses state-dependent Tray wording in shared card actions", () => {
+    assert.equal(trayToggleLabel(false), "Pull into Tray");
+    assert.equal(trayToggleLabel(true), "Return to Deck");
   });
 });

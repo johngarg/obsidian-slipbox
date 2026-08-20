@@ -82,18 +82,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
           }));
       });
 
-    new Setting(containerEl)
-      .setName("Show title in Desk headers")
-      .setDesc("Centre the title between the address and card buttons.")
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.slipbox.settings.showTitleInDesk)
-          .onChange((value) => void this.save({
-            ...this.slipbox.settings,
-            showTitleInDesk: value,
-          }));
-      });
-
     new Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
 
@@ -103,7 +91,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
       text: "Hidden buttons remain available through commands, Deck shortcuts, and card context menus.",
     });
     this.renderDeckHeaderButtons(containerEl);
-    this.renderDeskHeaderButtons(containerEl);
 
     new Setting(containerEl).setName("Deck shortcuts").setHeading();
     const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
@@ -269,7 +256,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
       "add-card": "Add card from here",
       "open-note": "Open Markdown note",
       tray: "Pull into or return from Tray",
-      desk: "Toggle Desk membership",
       bookmark: "Toggle bookmark",
     } as const;
     for (const [id, label] of Object.entries(labels)) {
@@ -283,30 +269,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
               ...this.slipbox.settings,
               deckHeaderButtons: {
                 ...this.slipbox.settings.deckHeaderButtons,
-                [key]: value,
-              },
-            }));
-        });
-    }
-  }
-
-  private renderDeskHeaderButtons(container: HTMLElement): void {
-    const labels = {
-      "file-card": "File card",
-      "open-note": "Open Markdown note",
-      remove: "Remove from Desk",
-    } as const;
-    for (const [id, label] of Object.entries(labels)) {
-      new Setting(container)
-        .setName(`Desk: ${label}`)
-        .addToggle((toggle) => {
-          const key = id as keyof typeof labels;
-          toggle
-            .setValue(this.slipbox.settings.deskHeaderButtons[key])
-            .onChange((value) => void this.save({
-              ...this.slipbox.settings,
-              deskHeaderButtons: {
-                ...this.slipbox.settings.deskHeaderButtons,
                 [key]: value,
               },
             }));

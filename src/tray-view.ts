@@ -6,7 +6,6 @@ import {
   setIcon,
   setTooltip,
   type App,
-  type WorkspaceLeaf,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
@@ -18,6 +17,7 @@ import {
   moveCardWithinPile,
   reorderPiles,
   splitCardIntoNewPile,
+  trayHasFiledCards,
   type TrayCard,
   type TrayPile,
 } from "./tray-state.js";
@@ -39,7 +39,6 @@ export class TrayRenderer {
   constructor(
     private readonly app: App,
     private readonly plugin: SlipboxPlugin,
-    private readonly leaf: WorkspaceLeaf,
     private readonly actions: TrayViewActions,
   ) {}
 
@@ -54,7 +53,6 @@ export class TrayRenderer {
   async render(
     shell: HTMLElement,
     filing: boolean,
-    version: number,
     isCurrent: () => boolean,
   ): Promise<void> {
     const state = this.plugin.tray;
@@ -91,8 +89,7 @@ export class TrayRenderer {
       text: "Clear Tray",
       attr: { type: "button" },
     });
-    clear.disabled = !state.piles.some((pile) =>
-      pile.cards.some((card) => card.kind === "filed"));
+    clear.disabled = !trayHasFiledCards(state);
     clear.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.plugin.clearTray();
@@ -106,7 +103,6 @@ export class TrayRenderer {
         pile,
         pileIndex,
         state.expandedPileId === pile.id,
-        version,
         isCurrent,
       ));
     });
@@ -118,7 +114,6 @@ export class TrayRenderer {
     pile: TrayPile,
     pileIndex: number,
     expanded: boolean,
-    version: number,
     isCurrent: () => boolean,
   ): Promise<void>[] {
     const pileEl = parent.createDiv({
@@ -164,7 +159,6 @@ export class TrayRenderer {
       expanded ? cardIndex : 0,
       pileIndex,
       expanded,
-      version,
       isCurrent,
     ));
 
@@ -206,7 +200,6 @@ export class TrayRenderer {
     cardIndex: number,
     pileIndex: number,
     expanded: boolean,
-    version: number,
     isCurrent: () => boolean,
   ): Promise<void> {
     const file = this.plugin.index.fileAtPath(card.cardRef);
@@ -268,7 +261,7 @@ export class TrayRenderer {
     this.components.push(component);
     try {
       const body = await this.plugin.index.readBody(file);
-      if (isCurrent() && version >= 0) {
+      if (isCurrent()) {
         await MarkdownRenderer.render(
           this.app,
           body,
@@ -461,7 +454,6 @@ export class TrayRenderer {
         this.suppressClickUntil = performance.now() + 400;
         const next = this.cardDropState(
           card.cardRef,
-          pile.id,
           upEvent.clientX,
           upEvent.clientY,
           element,
@@ -551,7 +543,6 @@ export class TrayRenderer {
 
   private cardDropState(
     cardRef: string,
-    sourcePileId: string,
     x: number,
     y: number,
     dragged: HTMLElement,
@@ -593,8 +584,7 @@ export class TrayRenderer {
         pileIndex,
       );
     }
-    const source = state.piles.find((candidate) => candidate.id === sourcePileId);
-    return source === undefined ? state : state;
+    return state;
   }
 
   private pileDropState(

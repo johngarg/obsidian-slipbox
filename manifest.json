@@ -1,7 +1,7 @@
 {
   "id": "luhmann-zettelkasten",
   "name": "Zettelkasten",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.5.0",
   "description": "Browse and file ordinary Markdown notes as a physical Luhmann-style card index.",
   "author": "John Gargalionis",

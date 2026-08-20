@@ -18,6 +18,23 @@ export type {
 
 export { indexZettelMetadata } from "./zettel-metadata.js";
 
+export { NavigationHistory } from "./navigation-history.js";
+export {
+  BOOKMARK_COLORS,
+  createBookmark,
+  deleteBookmark,
+  normalizeBookmarks,
+  updateBookmark,
+} from "./bookmarks.js";
+export {
+  addDeskCard,
+  bringDeskCardToFront,
+  moveDeskCard,
+  normalizeDeskCards,
+  removeDeskCard,
+  renameDeskCard,
+} from "./desk-state.js";
+
 export type {
   DuplicateZettelIssue,
   FiledZettelRecord,
@@ -26,3 +43,6 @@ export type {
   ZettelMetadataIndex,
   ZettelMetadataRecord,
 } from "./zettel-metadata.js";
+
+export type { BookmarkColor, DeckBookmark } from "./bookmarks.js";
+export type { DeskCardState } from "./desk-state.js";

@@ -79,6 +79,15 @@
   background: var(--background-modifier-hover);
 }
 
+.zk-deck-toolbar button:disabled,
+.zk-deck-toolbar button:disabled:hover {
+  opacity: 0.42;
+  color: var(--text-faint);
+  border-color: var(--background-modifier-border);
+  background: var(--background-primary-alt);
+  cursor: not-allowed;
+}
+
 .zk-deck-toolbar .zk-icon-button {
   width: 30px;
   padding: 5px;
@@ -140,7 +149,7 @@
   width: min(62%, 900px);
   max-height: calc(100% - 54px);
   aspect-ratio: 3 / 2;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--zk-card-radius);
   box-shadow:
@@ -151,6 +160,67 @@
   transform-origin: center;
   will-change: transform, opacity;
   cursor: pointer;
+}
+
+.zk-bookmark-tab {
+  position: absolute;
+  top: -27px;
+  z-index: 5;
+  max-width: 42%;
+  min-height: 30px;
+  padding: 6px 12px 9px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--zk-bookmark-color) 75%, var(--background-modifier-border));
+  border-bottom: 0;
+  border-radius: 7px 7px 2px 2px;
+  box-shadow: 0 -3px 9px rgb(0 0 0 / 0.12);
+  color: var(--text-normal);
+  background: color-mix(in srgb, var(--zk-bookmark-color) 70%, var(--background-primary));
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.zk-bookmark-tab:hover {
+  filter: brightness(1.06);
+}
+
+.zk-bookmark-tab.is-red,
+.zk-bookmark-row.is-red,
+.zk-bookmark-color-choice.is-red {
+  --zk-bookmark-color: var(--color-red);
+}
+
+.zk-bookmark-tab.is-orange,
+.zk-bookmark-row.is-orange,
+.zk-bookmark-color-choice.is-orange {
+  --zk-bookmark-color: var(--color-orange);
+}
+
+.zk-bookmark-tab.is-yellow,
+.zk-bookmark-row.is-yellow,
+.zk-bookmark-color-choice.is-yellow {
+  --zk-bookmark-color: var(--color-yellow);
+}
+
+.zk-bookmark-tab.is-green,
+.zk-bookmark-row.is-green,
+.zk-bookmark-color-choice.is-green {
+  --zk-bookmark-color: var(--color-green);
+}
+
+.zk-bookmark-tab.is-blue,
+.zk-bookmark-row.is-blue,
+.zk-bookmark-color-choice.is-blue {
+  --zk-bookmark-color: var(--color-blue);
+}
+
+.zk-bookmark-tab.is-purple,
+.zk-bookmark-row.is-purple,
+.zk-bookmark-color-choice.is-purple {
+  --zk-bookmark-color: var(--color-purple);
 }
 
 .zk-card.is-active {
@@ -380,6 +450,57 @@
   width: 100%;
 }
 
+.zk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zk-field-label {
+  margin-bottom: 7px;
+}
+
+.zk-bookmark-colors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.zk-bookmark-color-choice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary-alt);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.zk-bookmark-color-choice:has(input:checked) {
+  border-color: var(--zk-bookmark-color);
+  box-shadow: 0 0 0 1px var(--zk-bookmark-color);
+}
+
+.zk-bookmark-color-swatch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--zk-bookmark-color);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
+.zk-bookmark-row > .zk-bookmark-color-swatch {
+  width: 9px;
+  height: 34px;
+}
+
+.zk-entry-id.is-missing {
+  color: var(--text-error);
+}
+
 .zk-modal-list {
   display: flex;
   flex-direction: column;
@@ -468,6 +589,193 @@
   text-align: left;
 }
 
+.zk-desk-view {
+  height: 100%;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.zk-desk-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 420px;
+  color: var(--text-normal);
+  background: var(--background-secondary);
+}
+
+.zk-desk-toolbar {
+  flex: 0 0 auto;
+}
+
+.zk-desk-description {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.zk-desk-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.zk-unfiled-tray {
+  z-index: 3;
+  flex: 0 0 235px;
+  padding: 14px 12px;
+  overflow: auto;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-primary-alt);
+}
+
+.zk-unfiled-tray h3 {
+  margin: 0 0 4px;
+  font-size: var(--font-ui-medium);
+}
+
+.zk-unfiled-tray > p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.zk-unfiled-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zk-unfiled-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+}
+
+.zk-unfiled-open {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  overflow: hidden;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-desk-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--background-modifier-border) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--background-modifier-border) 34%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--background-secondary) 88%, var(--background-primary));
+  background-size: 40px 40px;
+}
+
+.zk-desk-surface {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.zk-desk-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  background: var(--background-primary);
+  transition: box-shadow 100ms ease;
+}
+
+.zk-desk-card.is-dragging {
+  box-shadow: 0 17px 42px rgb(0 0 0 / 0.27);
+  cursor: grabbing;
+}
+
+.zk-desk-card.is-unfiled {
+  border-color: color-mix(in srgb, var(--interactive-accent) 58%, var(--background-modifier-border));
+}
+
+.zk-desk-card.is-invalid,
+.zk-desk-card.is-missing {
+  border-color: var(--text-error);
+}
+
+.zk-desk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 43px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary-alt);
+  cursor: grab;
+  user-select: none;
+}
+
+.zk-desk-card-identity {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.zk-desk-card-address {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.045em;
+}
+
+.zk-desk-card-title {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-desk-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.zk-desk-card-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 25px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  user-select: text;
+  scrollbar-gutter: stable;
+}
+
+.zk-desk-missing-copy {
+  padding: 24px;
+  color: var(--text-error);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+}
+
 @media (max-width: 850px) {
   .zk-deck-identity,
   .zk-toolbar-group:first-of-type {
@@ -484,5 +792,19 @@
 
   .zk-in-hand {
     width: 52%;
+  }
+
+  .zk-history-controls {
+    display: flex !important;
+  }
+
+  .zk-history-controls button {
+    max-width: 42px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .zk-unfiled-tray {
+    flex-basis: 185px;
   }
 }

@@ -17,12 +17,12 @@ import {
   clampViewportPosition,
   viewportPositionToRevealCard,
 } from "./deck-motion.js";
+import { NavigationHistory } from "./navigation-history.js";
 import type { FiledZettel } from "./zettel-index.js";
 
 export const DECK_VIEW_TYPE = "zettelkasten-deck";
 
 const FILING_ANIMATION_DURATION_MS = 280;
-const ACTIVE_SAVE_DELAY_MS = 120;
 const RENDER_EDGE_BUFFER = 2;
 
 export class DeckView extends ItemView {
@@ -40,8 +40,10 @@ export class DeckView extends ItemView {
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
   private renderRefreshPending = false;
-  private activeSaveTimer: number | null = null;
   private renderVersion = 0;
+  private readonly history = new NavigationHistory<string>();
+  private backButtonEl: HTMLButtonElement | null = null;
+  private forwardButtonEl: HTMLButtonElement | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -99,12 +101,14 @@ export class DeckView extends ItemView {
   async onClose(): Promise<void> {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
-    this.flushActiveCardSave();
     this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
     this.holdButtonEl = null;
     this.filingPromptEl = null;
+    this.backButtonEl = null;
+    this.forwardButtonEl = null;
+    this.history.reset();
   }
 
   get activeCard(): FiledZettel | null {
@@ -118,11 +122,26 @@ export class DeckView extends ItemView {
     return this.filingFile !== null;
   }
 
+  get canGoBack(): boolean {
+    return this.history.canBack();
+  }
+
+  get canGoForward(): boolean {
+    return this.history.canForward();
+  }
+
   async refresh(): Promise<void> {
     const previousActiveId = this.activeId;
     this.chooseAvailableActiveCard();
     if (this.activeId !== previousActiveId) {
       this.viewportOffset = 0;
+    }
+    if (this.activeId === null) {
+      this.history.reset();
+    } else if (this.history.current() === undefined) {
+      this.history.reset(this.activeId);
+    } else if (this.activeId !== previousActiveId) {
+      this.history.replaceCurrent(this.activeId);
     }
     this.clampViewportOffset();
     await this.renderDeck();
@@ -149,16 +168,67 @@ export class DeckView extends ItemView {
   }
 
   async goToId(id: string): Promise<void> {
+    const moved = await this.navigateToId(id);
+    if (moved) {
+      this.history.replaceCurrent(id);
+      this.updateHistoryControls();
+    }
+  }
+
+  async jumpToId(id: string): Promise<void> {
+    if (this.activeId !== null) {
+      this.history.replaceCurrent(this.activeId);
+    }
+    if (this.plugin.index.filedById(id) === undefined) {
+      new Notice(`Card ${id} is missing, invalid, or duplicated.`);
+      return;
+    }
+    this.history.jump(id);
+    await this.navigateToId(id);
+    this.updateHistoryControls();
+  }
+
+  async goBack(): Promise<void> {
+    const id = this.history.back();
+    if (id === undefined) {
+      return;
+    }
+    if (!(await this.navigateToId(id))) {
+      new Notice(`The Back destination ${id} is no longer available.`);
+    }
+    this.updateHistoryControls();
+  }
+
+  async goForward(): Promise<void> {
+    const id = this.history.forward();
+    if (id === undefined) {
+      return;
+    }
+    if (!(await this.navigateToId(id))) {
+      new Notice(`The Forward destination ${id} is no longer available.`);
+    }
+    this.updateHistoryControls();
+  }
+
+  async addBookmarkToCurrent(): Promise<void> {
+    if (this.activeId === null) {
+      new Notice("There is no active filed card.");
+      return;
+    }
+    await this.plugin.addBookmark(this.activeId);
+  }
+
+  private async navigateToId(id: string): Promise<boolean> {
     const filed = this.plugin.index.snapshot.filed;
     const targetIndex = filed.findIndex((card) => card.id === id);
     if (targetIndex < 0) {
       new Notice(`Card ${id} is missing, invalid, or duplicated.`);
-      return;
+      return false;
     }
     this.activeId = id;
     this.viewportOffset = 0;
-    await this.plugin.rememberActiveCard(id);
     await this.renderDeck();
+    return true;
   }
 
   async addCurrentAsEntryPoint(): Promise<void> {
@@ -177,14 +247,6 @@ export class DeckView extends ItemView {
       return;
     }
 
-    if (
-      this.plugin.state.lastActiveId !== null &&
-      available.has(this.plugin.state.lastActiveId)
-    ) {
-      this.activeId = this.plugin.state.lastActiveId;
-      return;
-    }
-
     const firstEntryPoint = this.plugin.state.entryPoints.find((entry) =>
       available.has(entry.id),
     );
@@ -199,6 +261,8 @@ export class DeckView extends ItemView {
     this.renderedCards = [];
     this.holdButtonEl = null;
     this.filingPromptEl = null;
+    this.backButtonEl = null;
+    this.forwardButtonEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
     if (this.filingFile !== null) {
@@ -245,12 +309,47 @@ export class DeckView extends ItemView {
     const next = iconButton(navigation, "arrow-right", "Next card");
     next.addEventListener("click", () => void this.moveBy(1));
 
+    const history = toolbar.createDiv({ cls: "zk-toolbar-group zk-history-controls" });
+    const back = history.createEl("button", {
+      text: "← Back",
+      attr: { type: "button" },
+    });
+    back.addEventListener("click", () => void this.goBack());
+    this.backButtonEl = back;
+    const forward = history.createEl("button", {
+      text: "Forward →",
+      attr: { type: "button" },
+    });
+    forward.addEventListener("click", () => void this.goForward());
+    this.forwardButtonEl = forward;
+    this.updateHistoryControls();
+
     const controls = toolbar.createDiv({ cls: "zk-toolbar-group zk-toolbar-main" });
     const entries = controls.createEl("button", {
       text: "Entry points",
       attr: { type: "button" },
     });
     entries.addEventListener("click", () => this.plugin.showEntryPoints(this));
+
+    const bookmarks = controls.createEl("button", {
+      attr: { type: "button" },
+      cls: "zk-bookmarks-button",
+    });
+    bookmarks.createSpan({ text: "Bookmarks" });
+    if (this.plugin.state.bookmarks.length > 0) {
+      bookmarks.createSpan({ cls: "zk-count", text: String(this.plugin.state.bookmarks.length) });
+    }
+    bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
+
+    const addBookmark = iconButton(
+      controls,
+      "bookmark-plus",
+      "Add bookmark to current card",
+    );
+    addBookmark.disabled = this.activeId === null || (
+      this.activeId !== null && this.plugin.bookmarkAt(this.activeId) !== undefined
+    );
+    addBookmark.addEventListener("click", () => void this.addBookmarkToCurrent());
 
     const desk = controls.createEl("button", {
       attr: { type: "button" },
@@ -262,6 +361,17 @@ export class DeckView extends ItemView {
       desk.createSpan({ cls: "zk-count", text: String(unfiledCount) });
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
+
+    const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
+    putOnDesk.disabled = this.activeCard === null || this.plugin.state.deskCards.some(
+      (card) => card.cardRef === this.activeCard?.path,
+    );
+    putOnDesk.addEventListener("click", () => {
+      const file = this.activeCard?.file;
+      if (file !== undefined) {
+        void this.plugin.putFileOnDesk(file);
+      }
+    });
 
     const hold = controls.createEl("button", {
       text: this.thumbId === this.activeId && this.activeId !== null
@@ -353,6 +463,8 @@ export class DeckView extends ItemView {
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", index === activeIndex);
+      const bookmark = this.plugin.bookmarkAt(card.id);
+      cardEl.toggleClass("has-bookmark", bookmark !== undefined);
       const cardLabel = `${card.id} · ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
@@ -361,10 +473,29 @@ export class DeckView extends ItemView {
       });
       cardEl.style.zIndex = String(
         index === activeIndex
-          ? 200
-          : 100 - Math.floor(Math.abs(index - viewportPosition)),
+          ? 220
+          : bookmark !== undefined
+            ? 180 - Math.floor(Math.abs(index - viewportPosition))
+            : 100 - Math.floor(Math.abs(index - viewportPosition)),
       );
       this.renderedCards.push(cardEl);
+
+      if (bookmark !== undefined) {
+        const tab = cardEl.createEl("button", {
+          cls: `zk-bookmark-tab is-${bookmark.color}`,
+          text: bookmark.label === "" ? card.id : bookmark.label,
+          attr: {
+            type: "button",
+            "aria-label": `Jump to bookmark ${bookmark.label === "" ? card.id : bookmark.label}`,
+          },
+        });
+        tab.style.left = `${18 + (index % 4) * 34}px`;
+        tab.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.jumpToId(card.id);
+        });
+      }
 
       const addressRow = cardEl.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
@@ -423,6 +554,7 @@ export class DeckView extends ItemView {
         card.file.path,
         component,
       );
+      this.interceptFiledLinks(target, card.file.path);
       target.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
     } catch (error) {
       target.createEl("p", {
@@ -430,6 +562,37 @@ export class DeckView extends ItemView {
         text: `Could not render this card: ${errorMessage(error)}`,
       });
     }
+  }
+
+  private interceptFiledLinks(target: HTMLElement, sourcePath: string): void {
+    target.addEventListener(
+      "click",
+      (event) => {
+        if (!(event.target instanceof Element)) {
+          return;
+        }
+        const link = event.target.closest<HTMLAnchorElement>("a.internal-link");
+        const linkPath = link?.dataset.href ?? link?.getAttribute("href") ?? undefined;
+        if (link === null || linkPath === undefined || linkPath === "") {
+          return;
+        }
+        const destination = this.app.metadataCache.getFirstLinkpathDest(
+          linkPath,
+          sourcePath,
+        );
+        if (destination === null) {
+          return;
+        }
+        const filed = this.plugin.index.filedByFile(destination);
+        if (filed === undefined) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void this.jumpToId(filed.id);
+      },
+      { capture: true },
+    );
   }
 
   private async renderFilingCard(
@@ -492,6 +655,7 @@ export class DeckView extends ItemView {
     this.filingFile = null;
     this.activeId = newId;
     this.viewportOffset = 0;
+    this.history.replaceCurrent(newId);
     await this.renderDeck();
   }
 
@@ -635,9 +799,9 @@ export class DeckView extends ItemView {
     );
     this.activeId = target.id;
     this.viewportOffset = viewportPosition - targetIndex;
+    this.history.replaceCurrent(target.id);
     this.positionCards();
     this.updateActiveUi();
-    this.scheduleActiveCardSave();
     this.queueRenderWindowRefresh();
   }
 
@@ -705,9 +869,9 @@ export class DeckView extends ItemView {
       : this.viewportPosition(previousActiveIndex);
     this.activeId = id;
     this.viewportOffset = viewportPosition - targetIndex;
+    this.history.replaceCurrent(id);
     this.positionCards();
     this.updateActiveUi();
-    this.scheduleActiveCardSave();
   }
 
   private applyViewportPosition(nextPosition: number): void {
@@ -728,14 +892,11 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const activeChanged = activeCard.id !== this.activeId;
     this.activeId = activeCard.id;
     this.viewportOffset = viewportPosition - activeIndex;
+    this.history.replaceCurrent(activeCard.id);
     this.positionCards();
     this.updateActiveUi();
-    if (activeChanged) {
-      this.scheduleActiveCardSave();
-    }
     if (this.pointerLastX === null) {
       this.queueRenderWindowRefresh();
     }
@@ -776,10 +937,13 @@ export class DeckView extends ItemView {
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       card.toggleClass("is-active", index === activeIndex);
+      const bookmarked = card.classList.contains("has-bookmark");
       card.style.zIndex = String(
         index === activeIndex
-          ? 200
-          : 100 - Math.floor(Math.abs(index - viewportPosition)),
+          ? 220
+          : bookmarked
+            ? 180 - Math.floor(Math.abs(index - viewportPosition))
+            : 100 - Math.floor(Math.abs(index - viewportPosition)),
       );
     }
 
@@ -790,6 +954,7 @@ export class DeckView extends ItemView {
     if (this.stageEl !== null) {
       this.renderThumbTab(this.stageEl);
     }
+    this.updateHistoryControls();
   }
 
   private viewportPosition(activeIndex: number): number {
@@ -839,26 +1004,12 @@ export class DeckView extends ItemView {
     });
   }
 
-  private scheduleActiveCardSave(): void {
-    if (this.activeSaveTimer !== null) {
-      window.clearTimeout(this.activeSaveTimer);
+  private updateHistoryControls(): void {
+    if (this.backButtonEl !== null) {
+      this.backButtonEl.disabled = !this.history.canBack();
     }
-    this.activeSaveTimer = window.setTimeout(() => {
-      this.activeSaveTimer = null;
-      if (this.activeId !== null) {
-        void this.plugin.rememberActiveCard(this.activeId);
-      }
-    }, ACTIVE_SAVE_DELAY_MS);
-  }
-
-  private flushActiveCardSave(): void {
-    if (this.activeSaveTimer === null) {
-      return;
-    }
-    window.clearTimeout(this.activeSaveTimer);
-    this.activeSaveTimer = null;
-    if (this.activeId !== null) {
-      void this.plugin.rememberActiveCard(this.activeId);
+    if (this.forwardButtonEl !== null) {
+      this.forwardButtonEl.disabled = !this.history.canForward();
     }
   }
 

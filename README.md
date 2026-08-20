@@ -14,7 +14,7 @@ An empty value is an unfiled card on the Desk. A canonical nonempty value such
 as `1/2b1` is a permanently filed card. The address is the sole source of Deck
 order; the plugin stores no hidden filing sequence and imposes no folder.
 
-## v0.1 features
+## v0.2 features
 
 - A custom, read-only Deck view with rendered Obsidian Markdown.
 - Free horizontal trackpad and background-drag browsing with no snap or settle,
@@ -23,13 +23,24 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
 - A persistent Spread control that changes spacing without resizing cards.
 - A session-only thumb with an edge tab when the held card is out of view.
 - Persistent named entry points with add, rename, delete, and jump actions.
-- A minimal Desk dialog listing every unfiled card and starting Filing Mode.
+- Persistent coloured bookmark tabs with optional labels, one per filed card.
+- Browser-style session history for filed links, entry points, and bookmarks;
+  ordinary physical Deck browsing does not create history entries.
+- A bounded spatial Desk with fixed-size rendered cards, persistent positions
+  and stacking order, overlap, and one Desk representation per Markdown note.
+- An unfiled-card tray and Filing Mode integration that keeps a newly filed
+  card at the same Desk position.
 - Deliberate filing from the active attachment point, with immutable addresses.
-- Global new-card, convert-note, new-section, Deck, thumb, filing, and
-  entry-point commands.
-- Persistent last position and reactive vault/metadata indexing.
+- Global commands for Deck, Desk, bookmarks, Back/Forward, new cards,
+  conversion, filing, sections, the thumb, entry points, and Desk placement.
+- Deterministic Deck startup at the first available entry point or first card;
+  browsing position is deliberately not persisted.
 - Visible malformed-address and duplicate-address diagnostics.
 - Windowed rendering around the active card rather than rendering the vault.
+
+Bookmark and Desk layout state is stored in plugin data, never in Markdown
+frontmatter. Back/Forward history and the thumb are session-local. Existing
+v0.1 `lastActiveId` data is ignored and removed when v0.2 normalizes state.
 
 ## Deck keys
 

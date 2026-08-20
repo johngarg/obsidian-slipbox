@@ -1,4 +1,6 @@
 import { isValidZettelId } from "./zettel-id.js";
+import { normalizeBookmarks, type DeckBookmark } from "./bookmarks.js";
+import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
 
 export interface EntryPoint {
   readonly name: string;
@@ -7,7 +9,8 @@ export interface EntryPoint {
 
 export interface ZettelkastenPluginState {
   readonly entryPoints: readonly EntryPoint[];
-  readonly lastActiveId: string | null;
+  readonly bookmarks: readonly DeckBookmark[];
+  readonly deskCards: readonly DeskCardState[];
   readonly spread: number;
 }
 
@@ -15,7 +18,8 @@ export const DEFAULT_SPREAD = 0.58;
 
 export const DEFAULT_STATE: ZettelkastenPluginState = {
   entryPoints: [],
-  lastActiveId: null,
+  bookmarks: [],
+  deskCards: [],
   spread: DEFAULT_SPREAD,
 };
 
@@ -44,12 +48,6 @@ export function normalizePluginState(value: unknown): ZettelkastenPluginState {
       })
     : [];
 
-  const lastActiveId =
-    typeof value.lastActiveId === "string" &&
-    isValidZettelId(value.lastActiveId)
-      ? value.lastActiveId
-      : null;
-
   const rawSpread =
     typeof value.spread === "number" && Number.isFinite(value.spread)
       ? value.spread
@@ -57,7 +55,8 @@ export function normalizePluginState(value: unknown): ZettelkastenPluginState {
 
   return {
     entryPoints,
-    lastActiveId,
+    bookmarks: normalizeBookmarks(value.bookmarks),
+    deskCards: normalizeDeskCards(value.deskCards),
     spread: Math.min(1.12, Math.max(0.28, rawSpread)),
   };
 }

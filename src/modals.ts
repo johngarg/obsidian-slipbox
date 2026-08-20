@@ -1,5 +1,10 @@
-import { App, Modal, Notice, TFile, setIcon } from "obsidian";
+import { App, Modal, Notice, setIcon } from "obsidian";
 
+import {
+  BOOKMARK_COLORS,
+  type BookmarkColor,
+  type DeckBookmark,
+} from "./bookmarks.js";
 import type { EntryPoint } from "./plugin-state.js";
 import type { FiledZettel, VaultZettelIndex } from "./zettel-index.js";
 
@@ -90,6 +95,188 @@ export function promptForText(
   });
 }
 
+export interface BookmarkDetails {
+  readonly label: string;
+  readonly color: BookmarkColor;
+}
+
+export class BookmarkEditorModal extends Modal {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly heading: string,
+    private readonly initial: BookmarkDetails,
+    private readonly resolveValue: (value: BookmarkDetails | null) => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.addClass("zk-modal");
+    contentEl.createEl("h2", { text: this.heading });
+
+    const form = contentEl.createEl("form", { cls: "zk-prompt-form" });
+    const labelRow = form.createEl("label", { cls: "zk-field" });
+    labelRow.createSpan({ text: "Label (optional)" });
+    const label = labelRow.createEl("input", {
+      type: "text",
+      value: this.initial.label,
+      placeholder: "e.g. Theology",
+      attr: { maxlength: "80" },
+    });
+
+    const palette = form.createDiv({ cls: "zk-bookmark-palette" });
+    palette.createDiv({ cls: "zk-field-label", text: "Colour" });
+    const choices = palette.createDiv({ cls: "zk-bookmark-colors" });
+    for (const color of BOOKMARK_COLORS) {
+      const choice = choices.createEl("label", {
+        cls: `zk-bookmark-color-choice is-${color}`,
+      });
+      const radio = choice.createEl("input", {
+        type: "radio",
+        attr: { name: "bookmark-color", value: color },
+      });
+      radio.checked = color === this.initial.color;
+      choice.createSpan({ cls: "zk-bookmark-color-swatch" });
+      choice.createSpan({ text: capitalize(color) });
+    }
+
+    const actions = form.createDiv({ cls: "zk-modal-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel", type: "button" });
+    actions.createEl("button", {
+      text: "Save bookmark",
+      type: "submit",
+      cls: "mod-cta",
+    });
+    cancel.addEventListener("click", () => this.finish(null));
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const selected = form.querySelector<HTMLInputElement>(
+        'input[name="bookmark-color"]:checked',
+      );
+      const color = BOOKMARK_COLORS.find((candidate) => candidate === selected?.value);
+      if (color === undefined) {
+        new Notice("Choose a bookmark colour.");
+        return;
+      }
+      this.finish({ label: label.value.trim(), color });
+    });
+
+    window.setTimeout(() => label.focus());
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveValue(null);
+    }
+  }
+
+  private finish(value: BookmarkDetails | null): void {
+    if (this.settled) {
+      return;
+    }
+    this.settled = true;
+    this.resolveValue(value);
+    this.close();
+  }
+}
+
+export function promptForBookmark(
+  app: App,
+  heading: string,
+  initial: BookmarkDetails,
+): Promise<BookmarkDetails | null> {
+  return new Promise((resolve) => {
+    new BookmarkEditorModal(app, heading, initial, resolve).open();
+  });
+}
+
+export interface BookmarksModalActions {
+  readonly currentId: string | null;
+  isAvailable(zettelId: string): boolean;
+  visit(zettelId: string): void;
+  addCurrent(): Promise<void>;
+  edit(id: string): Promise<void>;
+  remove(id: string): Promise<void>;
+}
+
+export class BookmarksModal extends Modal {
+  constructor(
+    app: App,
+    private readonly bookmarks: readonly DeckBookmark[],
+    private readonly actions: BookmarksModalActions,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.addClass("zk-modal");
+    contentEl.createEl("h2", { text: "Bookmarks" });
+    contentEl.createEl("p", {
+      cls: "zk-empty-copy",
+      text: "One persistent physical bookmark may be attached to each filed card.",
+    });
+
+    const list = contentEl.createDiv({ cls: "zk-modal-list" });
+    if (this.bookmarks.length === 0) {
+      list.createEl("p", { cls: "zk-empty-copy", text: "No bookmarks yet." });
+    }
+    for (const bookmark of this.bookmarks) {
+      const available = this.actions.isAvailable(bookmark.zettelId);
+      const row = list.createDiv({
+        cls: `zk-list-row zk-bookmark-row is-${bookmark.color}`,
+      });
+      row.createSpan({ cls: "zk-bookmark-color-swatch" });
+      const visit = row.createEl("button", {
+        cls: "zk-entry-visit",
+        attr: { type: "button" },
+      });
+      visit.createSpan({
+        cls: "zk-entry-name",
+        text: bookmark.label === "" ? bookmark.zettelId : bookmark.label,
+      });
+      visit.createSpan({
+        cls: available ? "zk-entry-id" : "zk-entry-id is-missing",
+        text: available ? bookmark.zettelId : `${bookmark.zettelId} · missing`,
+      });
+      visit.disabled = !available;
+      visit.addEventListener("click", () => {
+        this.actions.visit(bookmark.zettelId);
+        this.close();
+      });
+
+      const edit = iconButton(row, "pencil", `Edit bookmark at ${bookmark.zettelId}`);
+      edit.addEventListener("click", () => {
+        void this.actions.edit(bookmark.id).then(() => this.close());
+      });
+      const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
+      remove.addEventListener("click", () => {
+        void this.actions.remove(bookmark.id).then(() => this.close());
+      });
+    }
+
+    const footer = contentEl.createDiv({ cls: "zk-modal-actions" });
+    const add = footer.createEl("button", {
+      text: "+ Bookmark current card",
+      cls: "mod-cta",
+      attr: { type: "button" },
+    });
+    add.disabled = this.actions.currentId === null;
+    add.addEventListener("click", () => {
+      void this.actions.addCurrent().then(() => this.close());
+    });
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export interface EntryPointModalActions {
   readonly currentId: string | null;
   isAvailable(id: string): boolean;
@@ -166,63 +353,6 @@ export class EntryPointsModal extends Modal {
   }
 }
 
-export interface DeskModalActions {
-  open(file: TFile): void;
-  file(file: TFile): void;
-}
-
-export class DeskModal extends Modal {
-  constructor(
-    app: App,
-    private readonly unfiled: readonly TFile[],
-    private readonly actions: DeskModalActions,
-  ) {
-    super(app);
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.addClass("zk-modal");
-    contentEl.createEl("h2", { text: "Desk · unfiled cards" });
-
-    const list = contentEl.createDiv({ cls: "zk-modal-list" });
-    if (this.unfiled.length === 0) {
-      list.createEl("p", {
-        cls: "zk-empty-copy",
-        text: "The Desk has no unfiled cards.",
-      });
-    }
-
-    for (const file of this.unfiled) {
-      const row = list.createDiv({ cls: "zk-list-row" });
-      const open = row.createEl("button", {
-        cls: "zk-file-visit",
-        attr: { type: "button" },
-      });
-      open.createSpan({ cls: "zk-entry-name", text: file.basename });
-      open.createSpan({ cls: "zk-file-path", text: file.path });
-      open.addEventListener("click", () => {
-        this.actions.open(file);
-        this.close();
-      });
-
-      const fileButton = row.createEl("button", {
-        text: "File…",
-        cls: "mod-cta",
-        attr: { type: "button" },
-      });
-      fileButton.addEventListener("click", () => {
-        this.actions.file(file);
-        this.close();
-      });
-    }
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-  }
-}
-
 export interface IssuesModalActions {
   open(path: string): void;
 }
@@ -278,6 +408,10 @@ function iconButton(
   });
   setIcon(button, icon);
   return button;
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function filedLabel(zettel: FiledZettel): string {

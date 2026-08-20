@@ -1,17 +1,34 @@
 import {
   Notice,
   Plugin,
+  TAbstractFile,
   TFile,
   normalizePath,
   type WorkspaceLeaf,
 } from "obsidian";
 
+import {
+  BOOKMARK_COLORS,
+  createBookmark,
+  deleteBookmark,
+  updateBookmark,
+  type DeckBookmark,
+} from "./bookmarks.js";
 import { DECK_VIEW_TYPE, DeckView } from "./deck-view.js";
+import { DESK_VIEW_TYPE, DeskView } from "./desk-view.js";
+import {
+  addDeskCard,
+  bringDeskCardToFront,
+  moveDeskCard,
+  removeDeskCard,
+  renameDeskCard,
+} from "./desk-state.js";
 import { generateFiledId, generateNextSectionId } from "./zettel-id.js";
 import {
-  DeskModal,
+  BookmarksModal,
   EntryPointsModal,
   IssuesModal,
+  promptForBookmark,
   promptForText,
 } from "./modals.js";
 import {
@@ -36,10 +53,15 @@ export default class ZettelkastenPlugin extends Plugin {
     this.state = normalizePluginState(await this.loadData());
     this.index = new ZettelIndex(this.app);
     this.index.refresh();
+    await this.persistState();
 
     this.registerView(
       DECK_VIEW_TYPE,
       (leaf) => new DeckView(leaf, this),
+    );
+    this.registerView(
+      DESK_VIEW_TYPE,
+      (leaf) => new DeskView(leaf, this),
     );
 
     this.addRibbonIcon("archive", "Open Zettelkasten Deck", () => {
@@ -53,14 +75,12 @@ export default class ZettelkastenPlugin extends Plugin {
     this.registerEvent(
       this.app.metadataCache.on("deleted", () => this.queueIndexRefresh()),
     );
+    this.registerEvent(this.app.vault.on("create", () => this.queueIndexRefresh()));
     this.registerEvent(
-      this.app.vault.on("create", () => this.queueIndexRefresh()),
+      this.app.vault.on("delete", (file) => this.handleDeletedFile(file)),
     );
     this.registerEvent(
-      this.app.vault.on("delete", () => this.queueIndexRefresh()),
-    );
-    this.registerEvent(
-      this.app.vault.on("rename", () => this.queueIndexRefresh()),
+      this.app.vault.on("rename", (file, oldPath) => this.handleRenamedFile(file, oldPath)),
     );
     this.app.workspace.onLayoutReady(() => void this.refreshIndex());
   }
@@ -73,6 +93,7 @@ export default class ZettelkastenPlugin extends Plugin {
       window.clearTimeout(this.spreadSaveTimer);
     }
     this.app.workspace.detachLeavesOfType(DECK_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(DESK_VIEW_TYPE);
   }
 
   async openDeck(filingFile?: TFile): Promise<DeckView> {
@@ -96,12 +117,21 @@ export default class ZettelkastenPlugin extends Plugin {
     return leaf.view;
   }
 
-  async rememberActiveCard(id: string): Promise<void> {
-    if (this.state.lastActiveId === id) {
-      return;
+  async openDesk(): Promise<DeskView> {
+    await this.refreshIndex();
+    let leaf: WorkspaceLeaf;
+    const existing = this.app.workspace.getLeavesOfType(DESK_VIEW_TYPE)[0];
+    if (existing === undefined) {
+      leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({ type: DESK_VIEW_TYPE, active: true });
+    } else {
+      leaf = existing;
     }
-    this.state = { ...this.state, lastActiveId: id };
-    await this.persistState();
+    await this.app.workspace.revealLeaf(leaf);
+    if (!(leaf.view instanceof DeskView)) {
+      throw new Error("Obsidian did not create the Zettelkasten Desk view");
+    }
+    return leaf.view;
   }
 
   setSpread(value: number): void {
@@ -121,11 +151,7 @@ export default class ZettelkastenPlugin extends Plugin {
   }
 
   showDesk(): void {
-    this.index.refresh();
-    new DeskModal(this.app, this.index.snapshot.unfiled, {
-      open: (file) => this.openMarkdownFile(file),
-      file: (file) => void this.beginFiling(file),
-    }).open();
+    void this.openDesk();
   }
 
   showIssues(): void {
@@ -147,11 +173,126 @@ export default class ZettelkastenPlugin extends Plugin {
     new EntryPointsModal(this.app, entries, {
       currentId: view.activeCard?.id ?? null,
       isAvailable: (id) => this.index.filedById(id) !== undefined,
-      visit: (id) => void view.goToId(id),
+      visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addCurrentAsEntryPoint(),
       rename: (index) => this.renameEntryPoint(index),
       remove: (index) => this.removeEntryPoint(index),
     }).open();
+  }
+
+  showBookmarks(view: DeckView): void {
+    new BookmarksModal(this.app, this.state.bookmarks, {
+      currentId: view.activeCard?.id ?? null,
+      isAvailable: (id) => this.index.filedById(id) !== undefined,
+      visit: (id) => void view.jumpToId(id),
+      addCurrent: () => view.addBookmarkToCurrent(),
+      edit: (id) => this.editBookmark(id),
+      remove: (id) => this.removeBookmark(id),
+    }).open();
+  }
+
+  bookmarkAt(zettelId: string): DeckBookmark | undefined {
+    return this.state.bookmarks.find((bookmark) => bookmark.zettelId === zettelId);
+  }
+
+  async addBookmark(zettelId: string): Promise<void> {
+    if (this.index.filedById(zettelId) === undefined) {
+      new Notice("Only an available filed card can be bookmarked.");
+      return;
+    }
+    if (this.bookmarkAt(zettelId) !== undefined) {
+      new Notice(`${zettelId} already has a bookmark.`);
+      return;
+    }
+    const defaultColor = BOOKMARK_COLORS[
+      this.state.bookmarks.length % BOOKMARK_COLORS.length
+    ] ?? "blue";
+    const details = await promptForBookmark(this.app, `Bookmark ${zettelId}`, {
+      label: "",
+      color: defaultColor,
+    });
+    if (details === null) {
+      return;
+    }
+    try {
+      this.state = {
+        ...this.state,
+        bookmarks: createBookmark(this.state.bookmarks, {
+          id: createStableId(),
+          zettelId,
+          ...details,
+        }),
+      };
+      await this.persistStateAndRefreshViews();
+      new Notice(`Bookmarked ${zettelId}.`);
+    } catch (error) {
+      new Notice(`Could not add bookmark: ${errorMessage(error)}`);
+    }
+  }
+
+  async putFileOnDesk(file: TFile): Promise<void> {
+    this.index.refresh();
+    const metadataState = this.cardMetadataState(file);
+    if (metadataState !== "filed" && metadataState !== "unfiled") {
+      new Notice("Only a filed or unfiled Zettel can be placed on Desk.");
+      return;
+    }
+    if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
+      new Notice(`${file.basename} is already on Desk.`);
+      await this.openDesk();
+      return;
+    }
+    const position = this.nextDeskPosition();
+    this.state = {
+      ...this.state,
+      deskCards: addDeskCard(this.state.deskCards, file.path, position),
+    };
+    await this.persistStateAndRefreshViews();
+    await this.openDesk();
+  }
+
+  async removeFromDesk(cardRef: string): Promise<void> {
+    if (!this.state.deskCards.some((card) => card.cardRef === cardRef)) {
+      return;
+    }
+    const next = removeDeskCard(this.state.deskCards, cardRef);
+    this.state = { ...this.state, deskCards: next };
+    await this.persistStateAndRefreshViews();
+  }
+
+  nextDeskZ(): number {
+    return this.state.deskCards.reduce((maximum, card) => Math.max(maximum, card.z), 0) + 1;
+  }
+
+  async updateDeskCardLayout(
+    cardRef: string,
+    x: number,
+    y: number,
+    bringToFront: boolean,
+  ): Promise<void> {
+    let cards = moveDeskCard(this.state.deskCards, cardRef, { x, y });
+    if (bringToFront) {
+      cards = bringDeskCardToFront(cards, cardRef);
+    }
+    this.state = { ...this.state, deskCards: cards };
+    await this.persistState();
+  }
+
+  async raiseDeskCard(cardRef: string): Promise<void> {
+    this.state = {
+      ...this.state,
+      deskCards: bringDeskCardToFront(this.state.deskCards, cardRef),
+    };
+    await this.persistState();
+  }
+
+  async beginFiling(file: TFile): Promise<void> {
+    this.index.refresh();
+    if (this.cardMetadataState(file) !== "unfiled") {
+      new Notice("Only an unfiled card can enter Filing Mode.");
+      return;
+    }
+    await this.openDeck(file);
   }
 
   async addEntryPoint(id: string): Promise<void> {
@@ -223,7 +364,7 @@ export default class ZettelkastenPlugin extends Plugin {
 
       await this.waitForCachedId(file, newId);
       this.index.refresh();
-      await this.rememberActiveCard(newId);
+      await this.refreshViews();
       new Notice(`Filed ${file.basename} as ${newId}.`);
       return newId;
     } catch (error) {
@@ -239,6 +380,12 @@ export default class ZettelkastenPlugin extends Plugin {
       id: "open-deck",
       name: "Open Deck",
       callback: () => void this.openDeck(),
+    });
+
+    this.addCommand({
+      id: "open-desk",
+      name: "Open Desk",
+      callback: () => void this.openDesk(),
     });
 
     this.addCommand({
@@ -326,11 +473,89 @@ export default class ZettelkastenPlugin extends Plugin {
         return available;
       },
     });
+
+    this.addCommand({
+      id: "put-current-card-on-desk",
+      name: "Put current card on Desk",
+      checkCallback: (checking) => {
+        const file = this.currentCardFile();
+        const available = file !== null && !this.state.deskCards.some(
+          (card) => card.cardRef === file.path,
+        );
+        if (checking) {
+          return available;
+        }
+        if (available && file !== null) {
+          void this.putFileOnDesk(file);
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "add-bookmark-current-card",
+      name: "Add bookmark to current card",
+      checkCallback: (checking) => {
+        const id = this.currentFiledId();
+        const available = id !== null && this.bookmarkAt(id) === undefined;
+        if (checking) {
+          return available;
+        }
+        if (available && id !== null) {
+          void this.addBookmark(id);
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "history-back",
+      name: "Back",
+      checkCallback: (checking) => {
+        const view = this.currentDeckView();
+        const available = view?.canGoBack ?? false;
+        if (checking) {
+          return available;
+        }
+        if (available && view !== null) {
+          void view.goBack();
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "history-forward",
+      name: "Forward",
+      checkCallback: (checking) => {
+        const view = this.currentDeckView();
+        const available = view?.canGoForward ?? false;
+        if (checking) {
+          return available;
+        }
+        if (available && view !== null) {
+          void view.goForward();
+        }
+        return available;
+      },
+    });
   }
 
   private async createNewCard(): Promise<void> {
     try {
+      const placeOnDesk = this.app.workspace.getActiveViewOfType(DeskView) !== null;
       const file = await this.createCardFile(null);
+      if (placeOnDesk) {
+        this.state = {
+          ...this.state,
+          deskCards: addDeskCard(
+            this.state.deskCards,
+            file.path,
+            this.nextDeskPosition(),
+          ),
+        };
+        await this.persistState();
+      }
       this.openMarkdownFile(file);
       this.queueIndexRefresh();
     } catch (error) {
@@ -351,15 +576,6 @@ export default class ZettelkastenPlugin extends Plugin {
     } catch (error) {
       new Notice(`Could not make this note a card: ${errorMessage(error)}`);
     }
-  }
-
-  private async beginFiling(file: TFile): Promise<void> {
-    this.index.refresh();
-    if (this.cardMetadataState(file) !== "unfiled") {
-      new Notice("Only an unfiled card can enter Filing Mode.");
-      return;
-    }
-    await this.openDeck(file);
   }
 
   private async createCardFile(id: string | null): Promise<TFile> {
@@ -428,6 +644,61 @@ export default class ZettelkastenPlugin extends Plugin {
     return leaf?.view instanceof DeckView ? leaf.view : null;
   }
 
+  private currentFiledId(): string | null {
+    const deckId = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.id;
+    if (deckId !== undefined) {
+      return deckId;
+    }
+    const activeFile = this.app.workspace.getActiveFile();
+    return activeFile === null ? null : this.index.filedByFile(activeFile)?.id ?? null;
+  }
+
+  private currentCardFile(): TFile | null {
+    const deckFile = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.file;
+    if (deckFile !== undefined) {
+      return deckFile;
+    }
+    const activeFile = this.app.workspace.getActiveFile();
+    if (activeFile === null) {
+      return null;
+    }
+    const state = this.cardMetadataState(activeFile);
+    return state === "filed" || state === "unfiled" ? activeFile : null;
+  }
+
+  private async editBookmark(id: string): Promise<void> {
+    const bookmark = this.state.bookmarks.find((candidate) => candidate.id === id);
+    if (bookmark === undefined) {
+      return;
+    }
+    const details = await promptForBookmark(
+      this.app,
+      `Edit bookmark at ${bookmark.zettelId}`,
+      { label: bookmark.label, color: bookmark.color },
+    );
+    if (details === null) {
+      return;
+    }
+    this.state = {
+      ...this.state,
+      bookmarks: updateBookmark(this.state.bookmarks, id, details),
+    };
+    await this.persistStateAndRefreshViews();
+  }
+
+  private async removeBookmark(id: string): Promise<void> {
+    const bookmark = this.state.bookmarks.find((candidate) => candidate.id === id);
+    if (bookmark === undefined) {
+      return;
+    }
+    this.state = {
+      ...this.state,
+      bookmarks: deleteBookmark(this.state.bookmarks, id),
+    };
+    await this.persistStateAndRefreshViews();
+    new Notice(`Deleted bookmark at ${bookmark.zettelId}.`);
+  }
+
   private async renameEntryPoint(index: number): Promise<void> {
     const entry = this.state.entryPoints[index];
     if (entry === undefined) {
@@ -474,12 +745,28 @@ export default class ZettelkastenPlugin extends Plugin {
 
   private async refreshIndex(): Promise<void> {
     this.index.refresh();
+    await this.refreshViews();
+  }
+
+  private async refreshViews(): Promise<void> {
     const refreshes = this.app.workspace
       .getLeavesOfType(DECK_VIEW_TYPE)
       .flatMap((leaf) =>
         leaf.view instanceof DeckView ? [leaf.view.refresh()] : [],
       );
+    refreshes.push(
+      ...this.app.workspace
+        .getLeavesOfType(DESK_VIEW_TYPE)
+        .flatMap((leaf) =>
+          leaf.view instanceof DeskView ? [leaf.view.refresh()] : [],
+        ),
+    );
     await Promise.all(refreshes);
+  }
+
+  private async persistStateAndRefreshViews(): Promise<void> {
+    await this.persistState();
+    await this.refreshViews();
   }
 
   private async persistState(): Promise<void> {
@@ -500,10 +787,51 @@ export default class ZettelkastenPlugin extends Plugin {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
     }
   }
+
+  private nextDeskPosition(): Readonly<{ x: number; y: number }> {
+    const index = this.state.deskCards.length;
+    return {
+      x: 90 + (index % 4) * 110,
+      y: 90 + (Math.floor(index / 4) % 4) * 90,
+    };
+  }
+
+  private handleDeletedFile(file: TAbstractFile): void {
+    if (file instanceof TFile && this.state.deskCards.some(
+      (card) => card.cardRef === file.path,
+    )) {
+      this.state = {
+        ...this.state,
+        deskCards: removeDeskCard(this.state.deskCards, file.path),
+      };
+      void this.persistState();
+    }
+    this.queueIndexRefresh();
+  }
+
+  private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
+    if (file instanceof TFile && this.state.deskCards.some(
+      (card) => card.cardRef === oldPath,
+    )) {
+      this.state = {
+        ...this.state,
+        deskCards: renameDeskCard(this.state.deskCards, oldPath, file.path),
+      };
+      void this.persistState();
+    }
+    this.queueIndexRefresh();
+  }
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function createStableId(): string {
+  if (typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return `bookmark-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export type { EntryPoint };

@@ -8,7 +8,10 @@
   },
   "include": [
     "src/index.ts",
+    "src/bookmarks.ts",
     "src/deck-motion.ts",
+    "src/desk-state.ts",
+    "src/navigation-history.ts",
     "src/plugin-state.ts",
     "src/zettel-id.ts",
     "src/zettel-metadata.ts",

@@ -593,7 +593,7 @@ export class DeckView extends ItemView {
         card.file.path,
         component,
       );
-      this.interceptFiledLinks(target, card.file.path);
+      this.attachInternalLinkInteractions(target, card.file.path);
       target.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
     } catch (error) {
       target.createEl("p", {
@@ -625,7 +625,29 @@ export class DeckView extends ItemView {
     await this.plugin.toggleFileOnDesk(file);
   }
 
-  private interceptFiledLinks(target: HTMLElement, sourcePath: string): void {
+  private attachInternalLinkInteractions(
+    target: HTMLElement,
+    sourcePath: string,
+  ): void {
+    target.addEventListener("mouseover", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const link = event.target.closest<HTMLAnchorElement>("a.internal-link");
+      const linktext = link?.dataset.href ?? link?.getAttribute("href") ?? undefined;
+      if (link === null || linktext === undefined || linktext === "") {
+        return;
+      }
+      this.app.workspace.trigger("hover-link", {
+        event,
+        source: DECK_VIEW_TYPE,
+        hoverParent: this.leaf,
+        targetEl: link,
+        linktext,
+        sourcePath,
+      });
+    });
+
     target.addEventListener(
       "click",
       (event) => {

@@ -957,7 +957,7 @@ var DeckView = class extends import_obsidian.ItemView {
         card.file.path,
         component
       );
-      this.interceptFiledLinks(target, card.file.path);
+      this.attachInternalLinkInteractions(target, card.file.path);
       target.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
     } catch (error) {
       target.createEl("p", {
@@ -986,7 +986,25 @@ var DeckView = class extends import_obsidian.ItemView {
     this.updateDeskUi(deskCardRefs);
     await this.plugin.toggleFileOnDesk(file);
   }
-  interceptFiledLinks(target, sourcePath) {
+  attachInternalLinkInteractions(target, sourcePath) {
+    target.addEventListener("mouseover", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const link = event.target.closest("a.internal-link");
+      const linktext = link?.dataset.href ?? link?.getAttribute("href") ?? void 0;
+      if (link === null || linktext === void 0 || linktext === "") {
+        return;
+      }
+      this.app.workspace.trigger("hover-link", {
+        event,
+        source: DECK_VIEW_TYPE,
+        hoverParent: this.leaf,
+        targetEl: link,
+        linktext,
+        sourcePath
+      });
+    });
     target.addEventListener(
       "click",
       (event) => {
@@ -2287,6 +2305,10 @@ var SlipboxPlugin = class extends import_obsidian5.Plugin {
       DESK_VIEW_TYPE,
       (leaf) => new DeskView(leaf, this)
     );
+    this.registerHoverLinkSource(DECK_VIEW_TYPE, {
+      display: "Slipbox Deck",
+      defaultMod: false
+    });
     this.addRibbonIcon("archive", "Open Slipbox Deck", () => {
       void this.openDeck();
     });

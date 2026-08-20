@@ -21,6 +21,7 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
   hysteretic centre-based card highlighting, non-repositioning card selection,
   minimal-reveal arrow navigation, and internal vertical scrolling.
 - A persistent Spread control that changes spacing without resizing cards.
+- Native Obsidian page previews when hovering rendered internal links.
 - Persistent named entry points with add, rename, delete, and jump actions.
 - Persistent zettel-id bookmarks and Desk membership with paired card-corner
   toggles, plus edge-return arrows when the nearest bookmark on either side is

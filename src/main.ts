@@ -61,6 +61,10 @@ export default class SlipboxPlugin extends Plugin {
       DESK_VIEW_TYPE,
       (leaf) => new DeskView(leaf, this),
     );
+    this.registerHoverLinkSource(DECK_VIEW_TYPE, {
+      display: "Slipbox Deck",
+      defaultMod: false,
+    });
 
     this.addRibbonIcon("archive", "Open Slipbox Deck", () => {
       void this.openDeck();

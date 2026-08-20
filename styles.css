@@ -351,8 +351,8 @@ button.slipbox-tray-pile-handle svg {
 }
 
 .slipbox-tray-pile.is-expanded .slipbox-tray-card {
-  flex-basis: 202px;
-  width: 202px;
+  flex-basis: 232px;
+  width: 232px;
   transform: rotate(var(--slipbox-tray-card-tilt, 0deg));
 }
 
@@ -467,7 +467,7 @@ button.slipbox-tray-pile-handle svg {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: min(62%, 900px);
+  width: min(58%, 840px);
   max-height: calc(100% - 54px);
   aspect-ratio: 3 / 2;
   transform: translate(-50%, -50%);
@@ -1099,12 +1099,12 @@ button.slipbox-card-backlink-overflow:disabled {
   }
 
   .slipbox-card {
-    width: 72%;
+    width: 68%;
   }
 
   .slipbox-tray-pile.is-expanded .slipbox-tray-card {
-    flex-basis: 174px;
-    width: 174px;
+    flex-basis: 196px;
+    width: 196px;
   }
 
   .slipbox-in-hand {

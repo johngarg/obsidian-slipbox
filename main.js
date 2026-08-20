@@ -2092,6 +2092,9 @@ function trayIconButton(parent, icon, label) {
 function filingPreviewKey(sourcePath) {
   return `filing-preview:${sourcePath}`;
 }
+function initialFilingAddress(focusedCard) {
+  return focusedCard?.address ?? "";
+}
 function defaultFilingFocusIndex(preview) {
   return Math.max(0, preview.insertionIndex - 1);
 }
@@ -2208,7 +2211,6 @@ var RENDER_EDGE_BUFFER = 2;
 var LAYOUT_MEASUREMENT_RETRIES = 2;
 var SPACE_RECENTER_DURATION_MS = 180;
 var VIEWPORT_CENTER_DURATION_MS = 180;
-var FILING_GHOST_STACK_ORDER = 230;
 var DeckView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -2284,6 +2286,12 @@ var DeckView = class extends import_obsidian3.ItemView {
   async onOpen() {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.registerDomEvent(this.contentEl, "keydown", (event) => {
+      if (this.filingFile !== null && event.key === "Tab" && event.shiftKey && event.target === this.contentEl) {
+        event.preventDefault();
+        this.focusFilingInputNow();
+      }
+    });
     this.observeDeckSize();
     await this.refresh();
   }
@@ -2525,16 +2533,18 @@ var DeckView = class extends import_obsidian3.ItemView {
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
   }
   async startFiling(file) {
+    const initialAddress = initialFilingAddress(this.activeCard);
     this.filingGhostEl = removeFilingGhost(this.filingGhostEl);
     this.filingFile = file;
     this.filingSourcePath = file.path;
-    this.filingInputValue = "";
+    this.filingInputValue = initialAddress;
     this.filingPreview = null;
     this.filingFocusDisplayIndex = null;
     this.filingViewportPosition = null;
     this.filingMessage = "Enter an address.";
     this.filingConfirmationInProgress = false;
     this.filingOriginViewportOffset = this.viewportOffset;
+    this.recalculateFilingPreview();
     await this.renderDeck();
     this.focusFilingInput();
   }
@@ -2704,7 +2714,6 @@ var DeckView = class extends import_obsidian3.ItemView {
     }
     if (this.filingFile !== null) {
       await this.renderFilingCard(shell, this.filingFile, version);
-      this.renderFilingActions(shell);
     }
     this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
@@ -2826,7 +2835,7 @@ var DeckView = class extends import_obsidian3.ItemView {
           item.displayIndex === focusDisplayIndex
         );
         this.filingGhostEl.style.zIndex = String(
-          this.displayStackOrder(item.displayIndex, focusDisplayIndex)
+          cardStackOrder(item.displayIndex, focusDisplayIndex)
         );
         this.renderedCards.push(this.filingGhostEl);
         continue;
@@ -2852,7 +2861,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         delay: 350
       });
       cardEl.style.zIndex = String(
-        this.displayStackOrder(item.displayIndex, focusDisplayIndex)
+        cardStackOrder(item.displayIndex, focusDisplayIndex)
       );
       this.renderedCards.push(cardEl);
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
@@ -3042,11 +3051,19 @@ var DeckView = class extends import_obsidian3.ItemView {
   async renderFilingCard(shell, file, version) {
     const inHand = shell.createDiv({ cls: "slipbox-in-hand" });
     inHand.createDiv({ cls: "slipbox-in-hand-label", text: "Unfiled card in hand" });
-    inHand.createDiv({
+    const header = inHand.createDiv({ cls: "slipbox-in-hand-header" });
+    this.renderFilingAddressField(header);
+    header.createDiv({
       cls: "slipbox-in-hand-name",
       text: this.plugin.cardTitle(file)
     });
+    this.filingDuplicateEl = inHand.createDiv({
+      cls: "slipbox-filing-duplicate",
+      attr: { "aria-live": "polite" }
+    });
     const preview = inHand.createDiv({ cls: "slipbox-in-hand-preview markdown-rendered" });
+    this.renderFilingFooter(inHand);
+    this.updateFilingControls();
     const component = new import_obsidian3.Component();
     component.load();
     this.renderComponents.push(component);
@@ -3060,9 +3077,8 @@ var DeckView = class extends import_obsidian3.ItemView {
       preview.setText(`Could not render this card: ${errorMessage(error)}`);
     }
   }
-  renderFilingActions(shell) {
-    const actions = shell.createDiv({ cls: "slipbox-filing-actions" });
-    const field = actions.createEl("label", { cls: "slipbox-filing-field" });
+  renderFilingAddressField(header) {
+    const field = header.createEl("label", { cls: "slipbox-filing-field" });
     field.createSpan({ text: "Address" });
     const input = field.createEl("input", {
       type: "text",
@@ -3081,16 +3097,31 @@ var DeckView = class extends import_obsidian3.ItemView {
       if (event.key === "Escape") {
         event.preventDefault();
         void this.cancelFiling();
-      } else if (event.key === "Enter" && this.filingPreview !== null) {
+      } else if (event.key === "Enter") {
         event.preventDefault();
-        void this.confirmFiling();
+        if (this.filingPreview !== null) {
+          void this.confirmFiling();
+        } else {
+          this.recalculateFilingPreview();
+          this.updateFilingControls();
+        }
+      } else if (event.key === "Tab" && !event.shiftKey) {
+        event.preventDefault();
+        this.contentEl.focus({ preventScroll: true });
       }
     });
-    this.filingStatusEl = actions.createDiv({ cls: "slipbox-filing-status" });
-    this.filingDuplicateEl = actions.createDiv({
-      cls: "slipbox-filing-duplicate"
+    this.filingStatusEl = header.createDiv({
+      cls: "slipbox-filing-status",
+      attr: { "aria-live": "polite" }
     });
-    const buttons = actions.createDiv({ cls: "slipbox-filing-buttons" });
+  }
+  renderFilingFooter(inHand) {
+    const footer = inHand.createDiv({ cls: "slipbox-filing-footer" });
+    footer.createDiv({
+      cls: "slipbox-filing-focus-hint",
+      text: "Tab: browse Deck \xB7 Shift+Tab: return to address"
+    });
+    const buttons = footer.createDiv({ cls: "slipbox-filing-buttons" });
     const cancel = buttons.createEl("button", {
       text: "Cancel",
       attr: { type: "button" }
@@ -3104,7 +3135,6 @@ var DeckView = class extends import_obsidian3.ItemView {
     });
     this.filingConfirmEl = confirm;
     confirm.addEventListener("click", () => this.runAction("confirm-filing"));
-    this.updateFilingControls();
   }
   makeRenderedPreviewPassive(target) {
     target.querySelectorAll(
@@ -3227,6 +3257,10 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   updateFilingControls() {
     this.filingStatusEl?.setText(this.filingMessage);
+    this.filingStatusEl?.toggleClass(
+      "is-invalid",
+      this.filingPreview === null && this.filingMessage !== "Enter an address."
+    );
     if (this.filingInputEl !== null) {
       this.filingInputEl.disabled = this.filingConfirmationInProgress;
     }
@@ -3249,10 +3283,15 @@ var DeckView = class extends import_obsidian3.ItemView {
     if (matches.length === 0) {
       return;
     }
-    duplicate.createDiv({
-      text: `Address ${preview.address} is already used by ${matches.length} card${matches.length === 1 ? "" : "s"}. This card will be placed alongside ${matches.length === 1 ? "it" : "them"} in path order.`
+    const details = duplicate.createEl("details");
+    details.createEl("summary", {
+      text: `Address ${preview.address} is already used by ${matches.length} card${matches.length === 1 ? "" : "s"} \xB7 placed in path order`
     });
-    const paths = duplicate.createEl("ul");
+    details.createDiv({
+      cls: "slipbox-filing-duplicate-copy",
+      text: `This card will be placed alongside ${matches.length === 1 ? "it" : "them"}.`
+    });
+    const paths = details.createEl("ul");
     for (const match of matches) {
       paths.createEl("li", { text: match.path });
     }
@@ -3262,8 +3301,16 @@ var DeckView = class extends import_obsidian3.ItemView {
       return;
     }
     window.requestAnimationFrame(() => {
-      this.filingInputEl?.focus({ preventScroll: true });
+      this.focusFilingInputNow();
     });
+  }
+  focusFilingInputNow() {
+    const input = this.filingInputEl;
+    if (input === null) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
   }
   async confirmFiling() {
     const file = this.filingFile;
@@ -3707,9 +3754,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       const isFilingFocus = previewing && index === focusDisplayIndex;
       card.toggleClass("is-active", isActive);
       card.toggleClass("is-filing-focus", isFilingFocus);
-      card.style.zIndex = String(
-        this.displayStackOrder(index, focusDisplayIndex)
-      );
+      card.style.zIndex = String(cardStackOrder(index, focusDisplayIndex));
       const motion = cardMotionStyle(
         index,
         viewportPosition,
@@ -3852,9 +3897,6 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   visualFocusDisplayIndex(activeIndex) {
     return this.filingPreview === null ? this.activeDisplayIndex(activeIndex) : this.currentFilingFocusIndex();
-  }
-  displayStackOrder(index, focusDisplayIndex) {
-    return this.filingPreview !== null && index === this.filingPreview.insertionIndex ? FILING_GHOST_STACK_ORDER : cardStackOrder(index, focusDisplayIndex);
   }
   displayViewportPosition(activeIndex) {
     if (this.filingPreview === null) {

@@ -40,6 +40,7 @@ import { normalizeAddressInput } from "./address-order.js";
 import {
   defaultFilingFocusIndex,
   deckDisplayItems,
+  initialFilingAddress,
   type FilingPreview,
 } from "./filing-preview.js";
 import {
@@ -54,7 +55,6 @@ const RENDER_EDGE_BUFFER = 2;
 const LAYOUT_MEASUREMENT_RETRIES = 2;
 const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
-const FILING_GHOST_STACK_ORDER = 230;
 
 export class DeckView extends ItemView {
   private activePath: string | null = null;
@@ -138,6 +138,17 @@ export class DeckView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.registerDomEvent(this.contentEl, "keydown", (event) => {
+      if (
+        this.filingFile !== null &&
+        event.key === "Tab" &&
+        event.shiftKey &&
+        event.target === this.contentEl
+      ) {
+        event.preventDefault();
+        this.focusFilingInputNow();
+      }
+    });
     this.observeDeckSize();
     await this.refresh();
   }
@@ -402,16 +413,18 @@ export class DeckView extends ItemView {
   }
 
   async startFiling(file: TFile): Promise<void> {
+    const initialAddress = initialFilingAddress(this.activeCard);
     this.filingGhostEl = removeFilingGhost(this.filingGhostEl);
     this.filingFile = file;
     this.filingSourcePath = file.path;
-    this.filingInputValue = "";
+    this.filingInputValue = initialAddress;
     this.filingPreview = null;
     this.filingFocusDisplayIndex = null;
     this.filingViewportPosition = null;
     this.filingMessage = "Enter an address.";
     this.filingConfirmationInProgress = false;
     this.filingOriginViewportOffset = this.viewportOffset;
+    this.recalculateFilingPreview();
     await this.renderDeck();
     this.focusFilingInput();
   }
@@ -604,7 +617,6 @@ export class DeckView extends ItemView {
 
     if (this.filingFile !== null) {
       await this.renderFilingCard(shell, this.filingFile, version);
-      this.renderFilingActions(shell);
     }
     this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
@@ -745,7 +757,7 @@ export class DeckView extends ItemView {
           item.displayIndex === focusDisplayIndex,
         );
         this.filingGhostEl.style.zIndex = String(
-          this.displayStackOrder(item.displayIndex, focusDisplayIndex),
+          cardStackOrder(item.displayIndex, focusDisplayIndex),
         );
         this.renderedCards.push(this.filingGhostEl);
         continue;
@@ -772,7 +784,7 @@ export class DeckView extends ItemView {
         delay: 350,
       });
       cardEl.style.zIndex = String(
-        this.displayStackOrder(item.displayIndex, focusDisplayIndex),
+        cardStackOrder(item.displayIndex, focusDisplayIndex),
       );
       this.renderedCards.push(cardEl);
 
@@ -997,11 +1009,19 @@ export class DeckView extends ItemView {
   ): Promise<void> {
     const inHand = shell.createDiv({ cls: "slipbox-in-hand" });
     inHand.createDiv({ cls: "slipbox-in-hand-label", text: "Unfiled card in hand" });
-    inHand.createDiv({
+    const header = inHand.createDiv({ cls: "slipbox-in-hand-header" });
+    this.renderFilingAddressField(header);
+    header.createDiv({
       cls: "slipbox-in-hand-name",
       text: this.plugin.cardTitle(file),
     });
+    this.filingDuplicateEl = inHand.createDiv({
+      cls: "slipbox-filing-duplicate",
+      attr: { "aria-live": "polite" },
+    });
     const preview = inHand.createDiv({ cls: "slipbox-in-hand-preview markdown-rendered" });
+    this.renderFilingFooter(inHand);
+    this.updateFilingControls();
     const component = new Component();
     component.load();
     this.renderComponents.push(component);
@@ -1016,9 +1036,8 @@ export class DeckView extends ItemView {
     }
   }
 
-  private renderFilingActions(shell: HTMLElement): void {
-    const actions = shell.createDiv({ cls: "slipbox-filing-actions" });
-    const field = actions.createEl("label", { cls: "slipbox-filing-field" });
+  private renderFilingAddressField(header: HTMLElement): void {
+    const field = header.createEl("label", { cls: "slipbox-filing-field" });
     field.createSpan({ text: "Address" });
     const input = field.createEl("input", {
       type: "text",
@@ -1037,16 +1056,32 @@ export class DeckView extends ItemView {
       if (event.key === "Escape") {
         event.preventDefault();
         void this.cancelFiling();
-      } else if (event.key === "Enter" && this.filingPreview !== null) {
+      } else if (event.key === "Enter") {
         event.preventDefault();
-        void this.confirmFiling();
+        if (this.filingPreview !== null) {
+          void this.confirmFiling();
+        } else {
+          this.recalculateFilingPreview();
+          this.updateFilingControls();
+        }
+      } else if (event.key === "Tab" && !event.shiftKey) {
+        event.preventDefault();
+        this.contentEl.focus({ preventScroll: true });
       }
     });
-    this.filingStatusEl = actions.createDiv({ cls: "slipbox-filing-status" });
-    this.filingDuplicateEl = actions.createDiv({
-      cls: "slipbox-filing-duplicate",
+    this.filingStatusEl = header.createDiv({
+      cls: "slipbox-filing-status",
+      attr: { "aria-live": "polite" },
     });
-    const buttons = actions.createDiv({ cls: "slipbox-filing-buttons" });
+  }
+
+  private renderFilingFooter(inHand: HTMLElement): void {
+    const footer = inHand.createDiv({ cls: "slipbox-filing-footer" });
+    footer.createDiv({
+      cls: "slipbox-filing-focus-hint",
+      text: "Tab: browse Deck · Shift+Tab: return to address",
+    });
+    const buttons = footer.createDiv({ cls: "slipbox-filing-buttons" });
     const cancel = buttons.createEl("button", {
       text: "Cancel",
       attr: { type: "button" },
@@ -1060,7 +1095,6 @@ export class DeckView extends ItemView {
     });
     this.filingConfirmEl = confirm;
     confirm.addEventListener("click", () => this.runAction("confirm-filing"));
-    this.updateFilingControls();
   }
 
   private makeRenderedPreviewPassive(target: HTMLElement): void {
@@ -1202,6 +1236,10 @@ export class DeckView extends ItemView {
 
   private updateFilingControls(): void {
     this.filingStatusEl?.setText(this.filingMessage);
+    this.filingStatusEl?.toggleClass(
+      "is-invalid",
+      this.filingPreview === null && this.filingMessage !== "Enter an address.",
+    );
     if (this.filingInputEl !== null) {
       this.filingInputEl.disabled = this.filingConfirmationInProgress;
     }
@@ -1225,14 +1263,19 @@ export class DeckView extends ItemView {
     if (matches.length === 0) {
       return;
     }
-    duplicate.createDiv({
+    const details = duplicate.createEl("details");
+    details.createEl("summary", {
       text: `Address ${preview.address} is already used by ${matches.length} card${
         matches.length === 1 ? "" : "s"
-      }. This card will be placed alongside ${
-        matches.length === 1 ? "it" : "them"
-      } in path order.`,
+      } · placed in path order`,
     });
-    const paths = duplicate.createEl("ul");
+    details.createDiv({
+      cls: "slipbox-filing-duplicate-copy",
+      text: `This card will be placed alongside ${
+        matches.length === 1 ? "it" : "them"
+      }.`,
+    });
+    const paths = details.createEl("ul");
     for (const match of matches) {
       paths.createEl("li", { text: match.path });
     }
@@ -1243,8 +1286,17 @@ export class DeckView extends ItemView {
       return;
     }
     window.requestAnimationFrame(() => {
-      this.filingInputEl?.focus({ preventScroll: true });
+      this.focusFilingInputNow();
     });
+  }
+
+  private focusFilingInputNow(): void {
+    const input = this.filingInputEl;
+    if (input === null) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
   }
 
   private async confirmFiling(): Promise<void> {
@@ -1769,9 +1821,7 @@ export class DeckView extends ItemView {
       const isFilingFocus = previewing && index === focusDisplayIndex;
       card.toggleClass("is-active", isActive);
       card.toggleClass("is-filing-focus", isFilingFocus);
-      card.style.zIndex = String(
-        this.displayStackOrder(index, focusDisplayIndex),
-      );
+      card.style.zIndex = String(cardStackOrder(index, focusDisplayIndex));
       const motion = cardMotionStyle(
         index,
         viewportPosition,
@@ -1944,13 +1994,6 @@ export class DeckView extends ItemView {
     return this.filingPreview === null
       ? this.activeDisplayIndex(activeIndex)
       : this.currentFilingFocusIndex();
-  }
-
-  private displayStackOrder(index: number, focusDisplayIndex: number): number {
-    return this.filingPreview !== null &&
-        index === this.filingPreview.insertionIndex
-      ? FILING_GHOST_STACK_ORDER
-      : cardStackOrder(index, focusDisplayIndex);
   }
 
   private displayViewportPosition(activeIndex: number): number {

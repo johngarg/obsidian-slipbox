@@ -187,18 +187,24 @@ Desk shortcut is removed rather than repurposed.
 
 ## Manual filing and address domain
 
-`File current unfiled card` opens Filing Mode with a focused address field. A
-valid value inserts a render-only ghost at the exact address-and-source-path
-position it would receive. The ghost shows the prospective address and current
-resolved title, reserves space among its neighbours, and remains visibly
-distinct from real cards. It has no path identity, actions, focus targets,
-bookmark or backlink state, and never enters the metadata index or history.
+`File current unfiled card` opens Filing Mode with the active filed card's
+address prefilled when one is available. The straightened card in hand becomes
+a temporary filing form: its header contains the address field above the
+resolved title, validation stays directly beneath the field, duplicate paths
+are available through a compact disclosure, and Cancel/File card sit in its
+footer. No bottom-screen filing bar is used. A valid value inserts a
+render-only ghost at the exact address-and-source-path position it would
+receive. The ghost shows the prospective address and current resolved title,
+reserves space among its neighbours, and remains visibly distinct from real
+cards. It has no path identity, actions, focus targets, bookmark or backlink
+state, and never enters the metadata index or history.
 The Deck initially focuses the real card immediately before the ghost (or the
-ghost itself at the beginning), so the insertion point stays prominent. After
-moving focus out of the address field, the ordinary previous, next, centre,
-first, and last shortcuts and horizontal Deck scrolling navigate a transient
-display sequence that includes the ghost without changing the selected card or
-navigation history.
+ghost itself at the beginning), so the insertion point stays prominent. `Tab`
+moves keyboard focus from the address field to the Deck, where the ordinary
+previous, next, centre, first, and last shortcuts navigate a transient display
+sequence containing the ghost. `Shift+Tab` returns to the address field, and
+horizontal Deck scrolling works in either focus mode. None of this changes the
+selected card or navigation history.
 Blank or invalid input removes it. Duplicate input keeps filing enabled and
 shows the matching paths while positioning the ghost within that group by the
 source path. `Enter` confirms a current preview and `Escape` cancels without

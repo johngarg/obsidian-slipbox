@@ -37,6 +37,13 @@ export function filingPreviewKey(sourcePath: string): string {
   return `filing-preview:${sourcePath}`;
 }
 
+/** Seed manual filing from the currently focused filed card, when available. */
+export function initialFilingAddress(
+  focusedCard: Pick<AddressedPath, "address"> | null | undefined,
+): string {
+  return focusedCard?.address ?? "";
+}
+
 /**
  * Focus the real card immediately before the candidate so the insertion gap
  * and ghost remain prominent. At the beginning (and in an empty Deck), the

@@ -9,6 +9,7 @@ import {
   deckDisplayItems,
   filingPlacementMatches,
   filingPreviewKey,
+  initialFilingAddress,
   removeFilingGhost,
   renderOrUpdateFilingGhost,
 } from "../src/index.js";
@@ -21,6 +22,11 @@ const filed = [
 ] as const;
 
 describe("filing placement preview", () => {
+  test("seeds filing from the focused card address", () => {
+    assert.equal(initialFilingAddress(filed[2]), "A/10");
+    assert.equal(initialFilingAddress(null), "");
+  });
+
   test("calculates beginning, middle, end, and empty Deck positions", () => {
     const beginning = createFilingPreview(
       filed,

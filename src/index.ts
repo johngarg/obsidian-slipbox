@@ -24,6 +24,7 @@ export {
   deckDisplayItems,
   filingPlacementMatches,
   filingPreviewKey,
+  initialFilingAddress,
 } from "./filing-preview.js";
 export {
   removeFilingGhost,

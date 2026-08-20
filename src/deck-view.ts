@@ -406,15 +406,14 @@ export class DeckView extends ItemView {
     }
     this.renderToolbar(shell);
 
-    const trayJob = this.trayRenderer.render(
-      shell,
-      this.filingFile !== null,
-      () => version === this.renderVersion,
-    );
-
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
+    const trayJob = this.trayRenderer.render(
+      stage,
+      this.filingFile !== null,
+      () => version === this.renderVersion,
+    );
 
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0 || this.activeId === null) {

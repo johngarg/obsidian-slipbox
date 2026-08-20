@@ -27,9 +27,13 @@ from all unfiled cards, newest-modified first. Filed cards pulled into the Tray,
 pile order, expansion, and manual ordering last only for the current Obsidian
 session. No Tray state is written to Markdown or plugin data.
 
-Piles are anonymous. A collapsed pile is represented by its top card and card
-count; expand it to see ordered card miniatures with addresses, centred titles,
-previews, and actions. Only one pile is expanded at a time.
+Piles are anonymous and float directly in the Deck stage above the main cards.
+They are arranged vertically so an expanded row does not collide with its
+neighbours. A collapsed pile shows its readable top card and count, with the
+slightly varied corners of the cards beneath it exposed. Click the pile itself
+to expand it into ordered, gently tilted card miniatures with addresses, centred
+titles, previews, and actions; there is no separate disclosure control. Only one
+pile is expanded at a time.
 
 Use drag and drop to:
 
@@ -43,10 +47,11 @@ Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu ca
 move them to adjacent piles or split them. Pulling a filed card into the Tray
 does not change its address, Deck order, bookmark, or Canvas membership.
 
-`Clear pile` and `Clear Tray` remove only manually pulled filed cards. Unfiled
-cards remain, and empty piles disappear. During Filing Mode, the Tray compresses
-to a summary so the Deck keeps enough vertical space. Successful filing removes
-the newly filed card from its former Tray pile without reorganising the rest.
+`Clear pile` and the Tray's `Clear` control remove only manually pulled filed
+cards. Unfiled cards remain, and empty piles disappear. During Filing Mode, the
+Tray compresses to a summary so the Deck keeps enough vertical space. Successful
+filing removes the newly filed card from its former Tray pile without
+reorganising the rest.
 
 ## Canvas integration
 

@@ -21,6 +21,12 @@ export interface TrayState {
   readonly unfiledPileId: string | null;
 }
 
+export interface TrayStackJitter {
+  readonly rotationDegrees: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
 export const EMPTY_TRAY: TrayState = {
   piles: [],
   expandedPileId: null,
@@ -401,6 +407,22 @@ export function trayContains(state: TrayState, cardRef: string): boolean {
 export function trayHasFiledCards(state: TrayState): boolean {
   return state.piles.some((pile) =>
     pile.cards.some((card) => card.kind === "filed"));
+}
+
+/** Stable pseudo-random offsets keep a pile tactile without flickering on rerender. */
+export function trayStackJitter(cardRef: string, depth: number): TrayStackJitter {
+  let hash = 2166136261;
+  for (let index = 0; index < cardRef.length; index += 1) {
+    hash ^= cardRef.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  hash ^= Math.imul(Math.max(0, Math.trunc(depth)) + 1, -1640531527);
+  const unsigned = hash >>> 0;
+  return {
+    rotationDegrees: ((unsigned % 401) - 200) / 100,
+    offsetX: ((unsigned >>> 9) % 9) - 4,
+    offsetY: Math.max(0, Math.max(0, Math.trunc(depth)) * 2 + ((unsigned >>> 17) % 3) - 1),
+  };
 }
 
 export function cardPosition(

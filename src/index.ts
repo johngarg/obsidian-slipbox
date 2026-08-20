@@ -83,6 +83,7 @@ export {
   toggleFiledCard,
   trayContains,
   trayHasFiledCards,
+  trayStackJitter,
 } from "./tray-state.js";
 export {
   isFileNode,
@@ -105,6 +106,7 @@ export type {
   TrayCardCandidate,
   TrayCardKind,
   TrayPile,
+  TrayStackJitter,
   TrayState,
 } from "./tray-state.js";
 export type { DeskCardState } from "./desk-state.js";

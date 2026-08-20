@@ -23,6 +23,7 @@ import {
   splitCardIntoNewPile,
   toggleFiledCard,
   trayHasFiledCards,
+  trayStackJitter,
   type TrayCard,
   type TrayCardCandidate,
   type TrayState,
@@ -208,5 +209,14 @@ describe("session Tray piles", () => {
     assert.equal(insertionIndexForPoint(5, [10, 20, 30]), 0);
     assert.equal(insertionIndexForPoint(15, [10, 20, 30]), 1);
     assert.equal(insertionIndexForPoint(35, [10, 20, 30]), 3);
+  });
+
+  test("gives stacked cards stable, bounded, varied visual jitter", () => {
+    const first = trayStackJitter("Cards/A.md", 2);
+    assert.deepEqual(trayStackJitter("Cards/A.md", 2), first);
+    assert.notDeepEqual(trayStackJitter("Cards/B.md", 2), first);
+    assert.ok(first.rotationDegrees >= -2 && first.rotationDegrees <= 2);
+    assert.ok(first.offsetX >= -4 && first.offsetX <= 4);
+    assert.ok(first.offsetY >= 3 && first.offsetY <= 5);
   });
 });

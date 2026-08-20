@@ -18,6 +18,7 @@ import {
   reorderPiles,
   splitCardIntoNewPile,
   trayHasFiledCards,
+  trayStackJitter,
   type TrayCard,
   type TrayPile,
 } from "./tray-state.js";
@@ -51,7 +52,7 @@ export class TrayRenderer {
   }
 
   async render(
-    shell: HTMLElement,
+    stage: HTMLElement,
     filing: boolean,
     isCurrent: () => boolean,
   ): Promise<void> {
@@ -64,29 +65,33 @@ export class TrayRenderer {
       return;
     }
 
-    const tray = shell.createDiv({ cls: "slipbox-tray" });
+    stage.addClass("has-tray");
+    stage.toggleClass("has-compact-tray", filing);
+    stage.toggleClass("has-expanded-tray", state.expandedPileId !== null && !filing);
+    const tray = stage.createDiv({
+      cls: "slipbox-tray",
+      attr: { "aria-label": `Tray, ${cardCount} card${cardCount === 1 ? "" : "s"}` },
+    });
     this.rootEl = tray;
     tray.toggleClass("is-compact", filing);
-    const header = tray.createDiv({ cls: "slipbox-tray-header" });
-    const title = header.createDiv({ cls: "slipbox-tray-title" });
-    const icon = title.createSpan({ cls: "slipbox-tray-icon" });
-    setIcon(icon, "inbox");
-    title.createSpan({ text: "Tray" });
-    title.createSpan({
+    tray.addEventListener("wheel", (event) => event.stopPropagation());
+    const controls = tray.createDiv({ cls: "slipbox-tray-controls" });
+    controls.createSpan({ cls: "slipbox-tray-title", text: "Tray" });
+    controls.createSpan({
       cls: "slipbox-tray-total",
-      text: `${cardCount} card${cardCount === 1 ? "" : "s"}`,
+      text: `${state.piles.length} pile${state.piles.length === 1 ? "" : "s"} · ${cardCount} card${cardCount === 1 ? "" : "s"}`,
     });
 
     if (filing) {
-      header.createSpan({
+      controls.createSpan({
         cls: "slipbox-tray-filing-note",
-        text: "Piles preserved while filing",
+        text: "preserved while filing",
       });
       return;
     }
 
-    const clear = header.createEl("button", {
-      text: "Clear Tray",
+    const clear = controls.createEl("button", {
+      text: "Clear",
       attr: { type: "button" },
     });
     clear.disabled = !trayHasFiledCards(state);
@@ -127,29 +132,18 @@ export class TrayRenderer {
     });
     pileEl.tabIndex = 0;
 
-    const pileHeader = pileEl.createDiv({ cls: "slipbox-tray-pile-header" });
-    pileHeader.createSpan({
+    pileEl.setAttr("role", "button");
+    pileEl.setAttr("aria-expanded", String(expanded));
+    if (!expanded) {
+      this.renderStackLayers(pileEl, pile);
+    }
+    pileEl.createSpan({
       cls: "slipbox-tray-pile-count",
       text: String(pile.cards.length),
       attr: {
         "aria-label": `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`,
       },
     });
-    const disclosure = pileHeader.createEl("button", {
-      cls: "clickable-icon slipbox-tray-disclosure",
-      attr: {
-        type: "button",
-        "aria-label": expanded ? "Collapse pile" : "Expand pile",
-        "aria-expanded": String(expanded),
-      },
-    });
-    setIcon(disclosure, expanded ? "chevron-up" : "chevron-down");
-    disclosure.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void this.plugin.expandTrayPile(expanded ? null : pile.id);
-    });
-
     const sequence = pileEl.createDiv({ cls: "slipbox-tray-sequence" });
     const visibleCards = expanded ? pile.cards : pile.cards.slice(0, 1);
     const jobs = visibleCards.map((card, cardIndex) => this.renderCard(
@@ -163,16 +157,33 @@ export class TrayRenderer {
     ));
 
     pileEl.addEventListener("click", (event) => {
+      if (performance.now() < this.suppressClickUntil) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (
         event.target instanceof Element &&
-        event.target.closest("button, a, .slipbox-tray-card") !== null
+        event.target.closest("button, a") !== null
       ) {
         return;
       }
+      if (
+        expanded &&
+        event.target instanceof Element &&
+        event.target.closest(".slipbox-tray-card") !== null
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
       void this.plugin.expandTrayPile(expanded ? null : pile.id);
     });
     pileEl.addEventListener("keydown", (event) => {
-      if (event.target !== pileEl || event.key !== "Enter") {
+      if (
+        event.target !== pileEl ||
+        (event.key !== "Enter" && event.key !== " ")
+      ) {
         return;
       }
       event.preventDefault();
@@ -219,6 +230,11 @@ export class TrayRenderer {
         } in pile ${pileIndex + 1}`,
       },
     });
+    const jitter = trayStackJitter(card.cardRef, cardIndex);
+    miniature.style.setProperty(
+      "--slipbox-tray-card-tilt",
+      `${jitter.rotationDegrees}deg`,
+    );
     miniature.tabIndex = expanded ? 0 : -1;
     miniature.toggleClass("is-filed", filed !== undefined);
     miniature.toggleClass("is-unfiled", filed === undefined);
@@ -280,11 +296,16 @@ export class TrayRenderer {
         event.stopPropagation();
         return;
       }
-      if (
-        !expanded ||
-        filed === undefined ||
-        (event.target instanceof Element && event.target.closest("button, a") !== null)
-      ) {
+      if (event.target instanceof Element && event.target.closest("button, a") !== null) {
+        return;
+      }
+      if (!expanded) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.plugin.expandTrayPile(pile.id);
+        return;
+      }
+      if (filed === undefined) {
         return;
       }
       event.preventDefault();
@@ -313,9 +334,32 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      this.showCardMenu(event, pile, card);
+      if (expanded) {
+        this.showCardMenu(event, pile, card);
+      } else {
+        this.showPileMenu(event, pile);
+      }
     });
     this.attachCardDragging(miniature, pile, card, expanded);
+  }
+
+  private renderStackLayers(parent: HTMLElement, pile: TrayPile): void {
+    const hiddenCards = pile.cards.slice(1, 8);
+    hiddenCards.forEach((card, index) => {
+      const depth = index + 1;
+      const jitter = trayStackJitter(card.cardRef, depth);
+      const layer = parent.createDiv({
+        cls: "slipbox-tray-stack-layer",
+        attr: { "aria-hidden": "true" },
+      });
+      layer.style.setProperty("--slipbox-stack-depth", String(depth));
+      layer.style.setProperty("--slipbox-stack-x", `${jitter.offsetX}px`);
+      layer.style.setProperty("--slipbox-stack-y", `${jitter.offsetY}px`);
+      layer.style.setProperty(
+        "--slipbox-stack-tilt",
+        `${jitter.rotationDegrees}deg`,
+      );
+    });
   }
 
   private showPileMenu(event: MouseEvent, pile: TrayPile): void {
@@ -437,7 +481,7 @@ export class TrayRenderer {
         element.style.translate = `${dx}px ${dy}px`;
         this.rootEl?.addClass("is-dragging-card");
         this.updateCardDropCues(moveEvent, pile.id, element);
-        this.autoScroll(moveEvent.clientX);
+        this.autoScroll(moveEvent.clientX, moveEvent.clientY);
       };
       const finish = (upEvent: PointerEvent): void => {
         element.removeEventListener("pointermove", move);
@@ -485,7 +529,7 @@ export class TrayRenderer {
       if (
         event.button !== 0 ||
         (event.target instanceof Element &&
-          event.target.closest("button, a, .slipbox-tray-card") !== null)
+          event.target.closest("button, a") !== null)
       ) {
         return;
       }
@@ -505,7 +549,7 @@ export class TrayRenderer {
         element.addClass("is-dragging");
         element.style.translate = `${dx}px ${dy}px`;
         this.updatePileDropCues(moveEvent, pile.id, element);
-        this.autoScroll(moveEvent.clientX);
+        this.autoScroll(moveEvent.clientX, moveEvent.clientY);
       };
       const finish = (upEvent: PointerEvent): void => {
         element.removeEventListener("pointermove", move);
@@ -564,17 +608,22 @@ export class TrayRenderer {
       );
       return moveCardBetweenPiles(state, cardRef, targetPileId, insertionIndex);
     }
-    const trayEl = this.elementsBelowPoint(x, y, dragged)
-      .find((element) => element.matches(".slipbox-tray-piles"));
-    if (trayEl !== undefined) {
+    const trayEl = this.rootEl?.querySelector<HTMLElement>(".slipbox-tray-piles");
+    const trayRect = trayEl?.getBoundingClientRect();
+    if (
+      trayEl !== null && trayEl !== undefined &&
+      trayRect !== undefined &&
+      x >= trayRect.left && x <= trayRect.right &&
+      y >= trayRect.top && y <= trayRect.bottom
+    ) {
       const pileElements = Array.from(trayEl.querySelectorAll<HTMLElement>(
         ".slipbox-tray-pile:not(.is-dragging)",
       ));
       const pileIndex = insertionIndexForPoint(
-        x,
+        y,
         pileElements.map((element) => {
           const rect = element.getBoundingClientRect();
-          return rect.left + rect.width / 2;
+          return rect.top + rect.height / 2;
         }),
       );
       return splitCardIntoNewPile(
@@ -603,7 +652,11 @@ export class TrayRenderer {
     if (target !== undefined && targetId !== undefined) {
       const rect = target.getBoundingClientRect();
       const relativeX = (x - rect.left) / Math.max(1, rect.width);
-      if (relativeX > 0.2 && relativeX < 0.8) {
+      const relativeY = (y - rect.top) / Math.max(1, rect.height);
+      if (
+        relativeX > 0.2 && relativeX < 0.8 &&
+        relativeY > 0.2 && relativeY < 0.8
+      ) {
         return mergePiles(state, sourcePileId, targetId);
       }
     }
@@ -616,10 +669,10 @@ export class TrayRenderer {
       ".slipbox-tray-pile:not(.is-dragging)",
     ));
     const insertionIndex = insertionIndexForPoint(
-      x,
+      y,
       pileElements.map((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.left + rect.width / 2;
+        return rect.top + rect.height / 2;
       }),
     );
     return reorderPiles(state, sourceIndex, insertionIndex);
@@ -671,9 +724,13 @@ export class TrayRenderer {
     }
     const rect = target.getBoundingClientRect();
     const relativeX = (event.clientX - rect.left) / Math.max(1, rect.width);
-    target.addClass(relativeX > 0.2 && relativeX < 0.8
+    const relativeY = (event.clientY - rect.top) / Math.max(1, rect.height);
+    target.addClass(
+      relativeX > 0.2 && relativeX < 0.8 &&
+      relativeY > 0.2 && relativeY < 0.8
       ? "is-merge-target"
-      : "is-reorder-target");
+      : "is-reorder-target",
+    );
   }
 
   private elementsBelowPoint(
@@ -688,16 +745,33 @@ export class TrayRenderer {
     return elements;
   }
 
-  private autoScroll(clientX: number): void {
+  private autoScroll(clientX: number, clientY: number): void {
     const container = this.rootEl?.querySelector<HTMLElement>(".slipbox-tray-piles");
     if (container === null || container === undefined) {
       return;
     }
     const rect = container.getBoundingClientRect();
-    if (clientX < rect.left + AUTO_SCROLL_EDGE_PX) {
-      container.scrollLeft -= AUTO_SCROLL_STEP_PX;
-    } else if (clientX > rect.right - AUTO_SCROLL_EDGE_PX) {
-      container.scrollLeft += AUTO_SCROLL_STEP_PX;
+    if (clientY < rect.top + AUTO_SCROLL_EDGE_PX) {
+      container.scrollTop -= AUTO_SCROLL_STEP_PX;
+    } else if (clientY > rect.bottom - AUTO_SCROLL_EDGE_PX) {
+      container.scrollTop += AUTO_SCROLL_STEP_PX;
+    }
+
+    const sequence = Array.from(container.querySelectorAll<HTMLElement>(
+      ".slipbox-tray-pile.is-expanded .slipbox-tray-sequence",
+    )).find((element) => {
+      const bounds = element.getBoundingClientRect();
+      return clientX >= bounds.left && clientX <= bounds.right &&
+        clientY >= bounds.top && clientY <= bounds.bottom;
+    });
+    if (sequence === undefined) {
+      return;
+    }
+    const sequenceRect = sequence.getBoundingClientRect();
+    if (clientX < sequenceRect.left + AUTO_SCROLL_EDGE_PX) {
+      sequence.scrollLeft -= AUTO_SCROLL_STEP_PX;
+    } else if (clientX > sequenceRect.right - AUTO_SCROLL_EDGE_PX) {
+      sequence.scrollLeft += AUTO_SCROLL_STEP_PX;
     }
   }
 

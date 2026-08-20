@@ -4,6 +4,9 @@
 
 .slipbox-deck-view {
   --slipbox-card-radius: 10px;
+  --slipbox-tray-card-width: 360px;
+  --slipbox-tray-pile-width: 376px;
+  --slipbox-tray-pile-height: 258px;
   height: 100%;
   padding: 0 !important;
   overflow: hidden !important;
@@ -173,8 +176,8 @@
 }
 
 .slipbox-tray-pile.is-collapsed {
-  width: 190px;
-  height: 134px;
+  width: var(--slipbox-tray-pile-width);
+  height: var(--slipbox-tray-pile-height);
   padding: 2px 8px 6px;
   cursor: pointer;
 }
@@ -184,7 +187,7 @@
   top: 2px;
   left: 50%;
   z-index: calc(8 - var(--slipbox-stack-depth));
-  width: 174px;
+  width: var(--slipbox-tray-card-width);
   aspect-ratio: 3 / 2;
   border: 1px solid var(--background-modifier-border);
   border-radius: 7px;
@@ -281,7 +284,7 @@ button.slipbox-tray-pile-handle svg {
 }
 
 .slipbox-tray-pile.is-collapsed .slipbox-tray-sequence {
-  width: 174px;
+  width: var(--slipbox-tray-card-width);
   margin: 0 auto;
 }
 
@@ -295,8 +298,8 @@ button.slipbox-tray-pile-handle svg {
 .slipbox-tray-card {
   position: relative;
   display: flex;
-  flex: 0 0 174px;
-  width: 174px;
+  flex: 0 0 var(--slipbox-tray-card-width);
+  width: var(--slipbox-tray-card-width);
   aspect-ratio: 3 / 2;
   flex-direction: column;
   overflow: hidden;
@@ -351,8 +354,8 @@ button.slipbox-tray-pile-handle svg {
 }
 
 .slipbox-tray-pile.is-expanded .slipbox-tray-card {
-  flex-basis: 360px;
-  width: 360px;
+  flex-basis: var(--slipbox-tray-card-width);
+  width: var(--slipbox-tray-card-width);
   transform: rotate(var(--slipbox-tray-card-tilt, 0deg));
 }
 
@@ -1089,6 +1092,12 @@ button.slipbox-card-backlink-overflow:disabled {
 }
 
 @media (max-width: 850px) {
+  .slipbox-deck-view {
+    --slipbox-tray-card-width: 280px;
+    --slipbox-tray-pile-width: 296px;
+    --slipbox-tray-pile-height: 205px;
+  }
+
   .slipbox-deck-identity,
   .slipbox-toolbar-group:first-of-type {
     display: none;
@@ -1100,11 +1109,6 @@ button.slipbox-card-backlink-overflow:disabled {
 
   .slipbox-card {
     width: 68%;
-  }
-
-  .slipbox-tray-pile.is-expanded .slipbox-tray-card {
-    flex-basis: 280px;
-    width: 280px;
   }
 
   .slipbox-in-hand {

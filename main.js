@@ -952,6 +952,7 @@ var DEFAULT_SETTINGS = {
   addressProperty: "zettel-id",
   titleSource: "filename",
   titleProperty: "title",
+  newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
@@ -967,6 +968,16 @@ function isRecord2(value) {
 }
 function normalizePropertyName(value, fallback) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : fallback;
+}
+function normalizeFolderPath(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const segments = value.trim().replace(/\\/g, "/").split("/").filter((segment) => segment !== "");
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return "";
+  }
+  return segments.join("/");
 }
 function normalizeKeyBinding(value) {
   if (!isRecord2(value) || typeof value.key !== "string" || value.key === "") {
@@ -1029,6 +1040,7 @@ function normalizeSettings(value) {
       source.titleProperty,
       DEFAULT_SETTINGS.titleProperty
     ),
+    newCardFolder: normalizeFolderPath(source.newCardFolder),
     newNoteTimestampFormat: normalizePropertyName(
       source.newNoteTimestampFormat,
       DEFAULT_SETTINGS.newNoteTimestampFormat
@@ -3070,6 +3082,24 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     }
   }
   renderNewCardSettings(container) {
+    const folderSetting = new import_obsidian5.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note\u2019s folder, or the vault root when no source note is active.");
+    folderSetting.addDropdown((dropdown) => {
+      dropdown.addOption("", "Source note\u2019s folder");
+      const folders = this.app.vault.getAllLoadedFiles().filter(
+        (file) => file instanceof import_obsidian5.TFolder && !file.isRoot()
+      ).sort((left, right) => left.path.localeCompare(right.path));
+      for (const folder of folders) {
+        dropdown.addOption(folder.path, folder.path);
+      }
+      const current = this.slipbox.settings.newCardFolder;
+      if (current !== "" && !folders.some((folder) => folder.path === current)) {
+        dropdown.addOption(current, `${current} (missing)`);
+      }
+      dropdown.setValue(current).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        newCardFolder: value
+      }));
+    });
     const timestamp = new import_obsidian5.Setting(container).setName("Timestamp filename format").setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
     const sample = timestamp.descEl.createEl("code");
     timestamp.addMomentFormat((component) => {
@@ -4225,7 +4255,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       new import_obsidian7.Notice(`Could not make this note a card: ${errorMessage4(error)}`);
     }
   }
-  async createCardFile(id, sourcePath = this.app.workspace.getActiveFile()?.path ?? "") {
+  async createCardFile(id, sourcePath) {
     const timestamp = newNoteBasename(
       "",
       (0, import_obsidian7.moment)().format(this.settings.newNoteTimestampFormat)
@@ -4239,11 +4269,10 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       timestamp,
       this.settings.titleSource
     );
-    const template = await this.resolveNewNoteTemplate();
-    const parent = this.app.fileManager.getNewFileParent(
-      sourcePath,
-      `${basename}.md`
+    const parent = this.newCardParent(
+      sourcePath ?? this.activeCreationSourcePath()
     );
+    const template = await this.resolveNewNoteTemplate();
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;
     let sequence = 0;
     let path;
@@ -4289,6 +4318,23 @@ ${frontmatter}---
       }
     }
     return file;
+  }
+  activeCreationSourcePath() {
+    return this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.file.path ?? this.app.workspace.getActiveFile()?.path;
+  }
+  newCardParent(sourcePath) {
+    const path = this.settings.newCardFolder;
+    if (path === "") {
+      const source = sourcePath === void 0 ? null : this.app.vault.getAbstractFileByPath(sourcePath);
+      return source instanceof import_obsidian7.TFile && source.parent !== null ? source.parent : this.app.vault.getRoot();
+    }
+    const folder = this.app.vault.getAbstractFileByPath(path);
+    if (!(folder instanceof import_obsidian7.TFolder)) {
+      throw new Error(
+        `The configured new-card folder \u201C${path}\u201D does not exist`
+      );
+    }
+    return folder;
   }
   templatesPlugin() {
     const app = this.app;

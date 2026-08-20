@@ -29,6 +29,7 @@ export {
   formatKeyBinding,
   keyBindingConflict,
   normalizeDeckKeybindings,
+  normalizeFolderPath,
   normalizeSettings,
 } from "./settings.js";
 export {

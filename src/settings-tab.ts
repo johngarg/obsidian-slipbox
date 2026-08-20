@@ -4,6 +4,7 @@ import {
   Platform,
   PluginSettingTab,
   Setting,
+  TFolder,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
@@ -126,6 +127,36 @@ export class SlipboxSettingTab extends PluginSettingTab {
   }
 
   private renderNewCardSettings(container: HTMLElement): void {
+    const folderSetting = new Setting(container)
+      .setName("New card folder")
+      .setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note’s folder, or the vault root when no source note is active.");
+    folderSetting.addDropdown((dropdown) => {
+      dropdown.addOption("", "Source note’s folder");
+      const folders = this.app.vault
+        .getAllLoadedFiles()
+        .filter(
+          (file): file is TFolder =>
+            file instanceof TFolder && !file.isRoot(),
+        )
+        .sort((left, right) => left.path.localeCompare(right.path));
+      for (const folder of folders) {
+        dropdown.addOption(folder.path, folder.path);
+      }
+      const current = this.slipbox.settings.newCardFolder;
+      if (
+        current !== "" &&
+        !folders.some((folder) => folder.path === current)
+      ) {
+        dropdown.addOption(current, `${current} (missing)`);
+      }
+      dropdown
+        .setValue(current)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          newCardFolder: value,
+        }));
+    });
+
     const timestamp = new Setting(container)
       .setName("Timestamp filename format")
       .setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");

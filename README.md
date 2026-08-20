@@ -50,8 +50,8 @@ address property can be changed in Slipbox settings without rewriting notes.
   actions, and active-card header actions.
 - Native settings for the address property, filename or frontmatter-derived
   display titles, independent Deck and Desk title display, card-header button
-  visibility, new-card naming and Templates integration, and live configurable
-  Deck-scoped shortcuts.
+  visibility, new-card folder and naming, Templates integration, and live
+  configurable Deck-scoped shortcuts.
 - Deterministic Deck startup at the first available entry point or first card;
   browsing position is deliberately not persisted.
 - Visible malformed-address and duplicate-address diagnostics.
@@ -82,6 +82,15 @@ before the configured action buttons.
 
 Header-button settings affect presentation only. Hidden actions remain
 available through commands, Deck shortcuts, and card right-click menus.
+
+Every note created through Slipbox is placed in the configured `New card
+folder`, including new cards, new sections, and cards added from an existing
+Deck card. The setting is empty by default, which delegates placement to
+the source note's folder. Add-from-card uses that Deck card as the source; new
+cards and sections use the active Markdown note. When no source note is
+available, Slipbox uses the vault root. An explicit Slipbox folder overrides
+this inherited location. If the configured folder is later removed, Slipbox
+reports the missing folder rather than creating the note elsewhere.
 
 Every Slipbox card-creation action asks for a title. With filename-derived
 titles, a non-empty title becomes the note filename and filename-unsafe

@@ -148,6 +148,7 @@ export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
+  readonly newCardFolder: string;
   readonly newNoteTimestampFormat: string;
   readonly useTemplatesForNewNotes: boolean;
   readonly newNoteTemplatePath: string;
@@ -182,6 +183,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "zettel-id",
   titleSource: "filename",
   titleProperty: "title",
+  newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
@@ -202,6 +204,21 @@ export function normalizePropertyName(value: unknown, fallback: string): string 
   return typeof value === "string" && value.trim() !== ""
     ? value.trim()
     : fallback;
+}
+
+export function normalizeFolderPath(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const segments = value
+    .trim()
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((segment) => segment !== "");
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return "";
+  }
+  return segments.join("/");
 }
 
 export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
@@ -279,6 +296,7 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       source.titleProperty,
       DEFAULT_SETTINGS.titleProperty,
     ),
+    newCardFolder: normalizeFolderPath(source.newCardFolder),
     newNoteTimestampFormat: normalizePropertyName(
       source.newNoteTimestampFormat,
       DEFAULT_SETTINGS.newNoteTimestampFormat,

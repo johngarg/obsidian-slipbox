@@ -106,6 +106,7 @@ describe("normalizePluginData", () => {
         addressProperty: "signature",
         titleSource: "frontmatter",
         titleProperty: "name",
+        newCardFolder: "Cards",
         showTitleInDeck: true,
       },
       state: {
@@ -117,6 +118,7 @@ describe("normalizePluginData", () => {
     });
     assert.equal(data.settings.addressProperty, "signature");
     assert.equal(data.settings.titleProperty, "name");
+    assert.equal(data.settings.newCardFolder, "Cards");
     assert.equal(data.settings.showTitleInDeck, true);
     assert.equal(data.settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(data.settings.useTemplatesForNewNotes, false);

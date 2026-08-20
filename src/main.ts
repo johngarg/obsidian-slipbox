@@ -5,6 +5,7 @@ import {
   Plugin,
   TAbstractFile,
   TFile,
+  TFolder,
   moment,
   normalizePath,
   stringifyYaml,
@@ -915,7 +916,7 @@ export default class SlipboxPlugin extends Plugin {
 
   private async createCardFile(
     id: string | null,
-    sourcePath = this.app.workspace.getActiveFile()?.path ?? "",
+    sourcePath?: string,
   ): Promise<TFile | null> {
     const timestamp = newNoteBasename(
       "",
@@ -930,11 +931,10 @@ export default class SlipboxPlugin extends Plugin {
       timestamp,
       this.settings.titleSource,
     );
-    const template = await this.resolveNewNoteTemplate();
-    const parent = this.app.fileManager.getNewFileParent(
-      sourcePath,
-      `${basename}.md`,
+    const parent = this.newCardParent(
+      sourcePath ?? this.activeCreationSourcePath(),
     );
+    const template = await this.resolveNewNoteTemplate();
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;
     let sequence = 0;
     let path: string;
@@ -982,6 +982,31 @@ export default class SlipboxPlugin extends Plugin {
       }
     }
     return file;
+  }
+
+  private activeCreationSourcePath(): string | undefined {
+    return this.app.workspace.getActiveViewOfType(DeckView)
+      ?.activeCard?.file.path ??
+      this.app.workspace.getActiveFile()?.path;
+  }
+
+  private newCardParent(sourcePath: string | undefined): TFolder {
+    const path = this.settings.newCardFolder;
+    if (path === "") {
+      const source = sourcePath === undefined
+        ? null
+        : this.app.vault.getAbstractFileByPath(sourcePath);
+      return source instanceof TFile && source.parent !== null
+        ? source.parent
+        : this.app.vault.getRoot();
+    }
+    const folder = this.app.vault.getAbstractFileByPath(path);
+    if (!(folder instanceof TFolder)) {
+      throw new Error(
+        `The configured new-card folder “${path}” does not exist`,
+      );
+    }
+    return folder;
   }
 
   private templatesPlugin(): TemplatesCorePlugin | null {

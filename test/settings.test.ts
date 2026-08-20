@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   formatKeyBinding,
   keyBindingConflict,
+  normalizeFolderPath,
   normalizeSettings,
 } from "../src/settings.js";
 
@@ -19,6 +20,7 @@ describe("Slipbox settings", () => {
       { key: "o", modifiers: [] },
     ]);
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
+    assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
     assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, false);
     assert.equal(DEFAULT_SETTINGS.newNoteTemplatePath, "");
   });
@@ -28,6 +30,7 @@ describe("Slipbox settings", () => {
       addressProperty: " signature ",
       titleSource: "frontmatter",
       titleProperty: " display-name ",
+      newCardFolder: " /Cards\\Slipbox/ ",
       newNoteTimestampFormat: " YYYYMMDD-HHmmss ",
       useTemplatesForNewNotes: false,
       newNoteTemplatePath: " Templates/Zettel.md ",
@@ -48,6 +51,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.addressProperty, "signature");
     assert.equal(settings.titleSource, "frontmatter");
     assert.equal(settings.titleProperty, "display-name");
+    assert.equal(settings.newCardFolder, "Cards/Slipbox");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDD-HHmmss");
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
@@ -68,6 +72,7 @@ describe("Slipbox settings", () => {
       addressProperty: "   ",
       titleSource: "unknown",
       titleProperty: 42,
+      newCardFolder: 42,
       newNoteTimestampFormat: "   ",
       useTemplatesForNewNotes: "yes",
       newNoteTemplatePath: 42,
@@ -75,9 +80,16 @@ describe("Slipbox settings", () => {
     assert.equal(settings.addressProperty, "zettel-id");
     assert.equal(settings.titleSource, "filename");
     assert.equal(settings.titleProperty, "title");
+    assert.equal(settings.newCardFolder, "");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "");
+  });
+
+  test("normalizes vault folder paths and rejects traversal", () => {
+    assert.equal(normalizeFolderPath(" /Cards//Slipbox/ "), "Cards/Slipbox");
+    assert.equal(normalizeFolderPath("Cards/../Archive"), "");
+    assert.equal(normalizeFolderPath(null), "");
   });
 
   test("detects cross-action conflicts and formats modifiers", () => {

@@ -200,13 +200,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-.slipbox-card-bookmark-toggle {
+.slipbox-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: -4px -4px -4px 0;
+}
+
+.slipbox-card-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
-  margin: -4px -4px -4px 0;
   padding: 4px;
   color: var(--text-muted);
   background: transparent;
@@ -214,21 +220,33 @@
   transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 
-.slipbox-card:hover .slipbox-card-bookmark-toggle,
-.slipbox-card:focus-within .slipbox-card-bookmark-toggle,
+.slipbox-card:hover .slipbox-card-toggle,
+.slipbox-card:focus-within .slipbox-card-toggle,
+.slipbox-card-desk-toggle.is-on-desk,
 .slipbox-card-bookmark-toggle.is-bookmarked {
   opacity: 1;
 }
 
-.slipbox-card-bookmark-toggle:hover,
-.slipbox-card-bookmark-toggle:focus-visible {
+.slipbox-card-toggle:hover,
+.slipbox-card-toggle:focus-visible {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
 
-.slipbox-card-bookmark-toggle svg {
+.slipbox-card-toggle svg {
   width: 14px;
   height: 14px;
+}
+
+.slipbox-card-desk-toggle.is-on-desk {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.slipbox-card-bookmark-toggle,
+.slipbox-card-bookmark-toggle:hover,
+.slipbox-card-bookmark-toggle:focus-visible {
+  color: var(--interactive-accent);
 }
 
 .slipbox-card-bookmark-toggle.is-bookmarked svg {

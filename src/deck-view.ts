@@ -47,6 +47,7 @@ export class DeckView extends ItemView {
   private forwardButtonEl: HTMLButtonElement | null = null;
   private bookmarksButtonEl: HTMLButtonElement | null = null;
   private addBookmarkButtonEl: HTMLButtonElement | null = null;
+  private deskButtonEl: HTMLButtonElement | null = null;
   private putOnDeskButtonEl: HTMLButtonElement | null = null;
 
   constructor(
@@ -107,6 +108,7 @@ export class DeckView extends ItemView {
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
+    this.deskButtonEl = null;
     this.putOnDeskButtonEl = null;
     this.history.reset();
   }
@@ -265,6 +267,7 @@ export class DeckView extends ItemView {
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
+    this.deskButtonEl = null;
     this.putOnDeskButtonEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
@@ -363,6 +366,7 @@ export class DeckView extends ItemView {
       desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
+    this.deskButtonEl = desk;
 
     const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
     this.putOnDeskButtonEl = putOnDesk;
@@ -457,6 +461,9 @@ export class DeckView extends ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
+      const isOnDesk = this.plugin.state.deskCards.some(
+        (deskCard) => deskCard.cardRef === card.path,
+      );
       const cardLabel = `${card.id} · ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
@@ -469,11 +476,38 @@ export class DeckView extends ItemView {
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
+      const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      const deskAction = isOnDesk
+        ? `Remove ${card.id} from Desk`
+        : `Add ${card.id} to Desk`;
+      const deskToggle = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-desk-toggle",
+        attr: {
+          type: "button",
+          "aria-label": deskAction,
+          "aria-pressed": String(isOnDesk),
+        },
+      });
+      deskToggle.toggleClass("is-on-desk", isOnDesk);
+      setIcon(deskToggle, "panels-top-left");
+      setTooltip(deskToggle, deskAction, {
+        placement: "bottom",
+        delay: 250,
+      });
+      deskToggle.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      deskToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.toggleCardDesk(card.file);
+      });
+
       const bookmarkAction = isBookmarked
         ? `Remove bookmark from ${card.id}`
         : `Add bookmark to ${card.id}`;
-      const bookmarkToggle = addressRow.createEl("button", {
-        cls: "clickable-icon slipbox-card-bookmark-toggle",
+      const bookmarkToggle = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-bookmark-toggle",
         attr: {
           type: "button",
           "aria-label": bookmarkAction,
@@ -561,6 +595,17 @@ export class DeckView extends ItemView {
     }
     this.updateBookmarkUi(bookmarkedIds);
     await this.plugin.toggleBookmark(zettelId);
+  }
+
+  private async toggleCardDesk(file: TFile): Promise<void> {
+    const deskCardRefs = this.deskCardRefs();
+    if (deskCardRefs.has(file.path)) {
+      deskCardRefs.delete(file.path);
+    } else {
+      deskCardRefs.add(file.path);
+    }
+    this.updateDeskUi(deskCardRefs);
+    await this.plugin.toggleFileOnDesk(file);
   }
 
   private interceptFiledLinks(target: HTMLElement, sourcePath: string): void {
@@ -949,13 +994,16 @@ export class DeckView extends ItemView {
     bookmarkedIds: readonly string[] = this.plugin.state.bookmarks.map(
       (bookmark) => bookmark.zettelId,
     ),
+    deskCardRefs: readonly string[] = this.plugin.state.deskCards.map(
+      (card) => card.cardRef,
+    ),
   ): void {
     const activeCard = this.activeCard;
     const availability = activeCardActionAvailability(
       activeCard?.id ?? null,
       activeCard?.path ?? null,
       bookmarkedIds,
-      this.plugin.state.deskCards.map((card) => card.cardRef),
+      deskCardRefs,
     );
     if (this.addBookmarkButtonEl !== null) {
       this.addBookmarkButtonEl.disabled = !availability.canAddBookmark;
@@ -969,6 +1017,10 @@ export class DeckView extends ItemView {
     return new Set(
       this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
     );
+  }
+
+  private deskCardRefs(): Set<string> {
+    return new Set(this.plugin.state.deskCards.map((card) => card.cardRef));
   }
 
   private updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()): void {
@@ -1012,6 +1064,47 @@ export class DeckView extends ItemView {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
     }
     this.updateActiveActionControls([...bookmarkedIds]);
+  }
+
+  private updateDeskUi(deskCardRefs = this.deskCardRefs()): void {
+    const deskCount = deskCardRefs.size;
+    if (this.deskButtonEl !== null) {
+      const countEl = this.deskButtonEl.querySelector<HTMLElement>(".slipbox-count");
+      if (deskCount === 0) {
+        countEl?.remove();
+      } else if (countEl === null) {
+        this.deskButtonEl.createSpan({
+          cls: "slipbox-count",
+          text: String(deskCount),
+        });
+      } else {
+        countEl.setText(String(deskCount));
+      }
+    }
+
+    for (const cardEl of this.renderedCards) {
+      const cardPath = cardEl.dataset.path;
+      const zettelId = cardEl.dataset.zettelId;
+      const toggle = cardEl.querySelector<HTMLButtonElement>(
+        ".slipbox-card-desk-toggle",
+      );
+      if (cardPath === undefined || zettelId === undefined || toggle === null) {
+        continue;
+      }
+      const isOnDesk = deskCardRefs.has(cardPath);
+      const action = isOnDesk
+        ? `Remove ${zettelId} from Desk`
+        : `Add ${zettelId} to Desk`;
+      toggle.toggleClass("is-on-desk", isOnDesk);
+      toggle.setAttr("aria-label", action);
+      toggle.setAttr("aria-pressed", String(isOnDesk));
+      setTooltip(toggle, action, {
+        placement: "bottom",
+        delay: 250,
+      });
+    }
+
+    this.updateActiveActionControls(undefined, [...deskCardRefs]);
   }
 
   private viewportPosition(activeIndex: number): number {

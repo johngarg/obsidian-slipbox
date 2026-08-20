@@ -508,6 +508,7 @@ var DeckView = class extends import_obsidian.ItemView {
   forwardButtonEl = null;
   bookmarksButtonEl = null;
   addBookmarkButtonEl = null;
+  deskButtonEl = null;
   putOnDeskButtonEl = null;
   getViewType() {
     return DECK_VIEW_TYPE;
@@ -534,6 +535,7 @@ var DeckView = class extends import_obsidian.ItemView {
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
+    this.deskButtonEl = null;
     this.putOnDeskButtonEl = null;
     this.history.reset();
   }
@@ -673,6 +675,7 @@ var DeckView = class extends import_obsidian.ItemView {
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
+    this.deskButtonEl = null;
     this.putOnDeskButtonEl = null;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
@@ -759,6 +762,7 @@ var DeckView = class extends import_obsidian.ItemView {
       desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
+    this.deskButtonEl = desk;
     const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
     this.putOnDeskButtonEl = putOnDesk;
     putOnDesk.addEventListener("click", () => {
@@ -837,6 +841,9 @@ var DeckView = class extends import_obsidian.ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== void 0;
+      const isOnDesk = this.plugin.state.deskCards.some(
+        (deskCard) => deskCard.cardRef === card.path
+      );
       const cardLabel = `${card.id} \xB7 ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       (0, import_obsidian.setTooltip)(cardEl, cardLabel, {
@@ -848,9 +855,33 @@ var DeckView = class extends import_obsidian.ItemView {
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
+      const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      const deskAction = isOnDesk ? `Remove ${card.id} from Desk` : `Add ${card.id} to Desk`;
+      const deskToggle = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-desk-toggle",
+        attr: {
+          type: "button",
+          "aria-label": deskAction,
+          "aria-pressed": String(isOnDesk)
+        }
+      });
+      deskToggle.toggleClass("is-on-desk", isOnDesk);
+      (0, import_obsidian.setIcon)(deskToggle, "panels-top-left");
+      (0, import_obsidian.setTooltip)(deskToggle, deskAction, {
+        placement: "bottom",
+        delay: 250
+      });
+      deskToggle.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      deskToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.toggleCardDesk(card.file);
+      });
       const bookmarkAction = isBookmarked ? `Remove bookmark from ${card.id}` : `Add bookmark to ${card.id}`;
-      const bookmarkToggle = addressRow.createEl("button", {
-        cls: "clickable-icon slipbox-card-bookmark-toggle",
+      const bookmarkToggle = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-bookmark-toggle",
         attr: {
           type: "button",
           "aria-label": bookmarkAction,
@@ -928,6 +959,16 @@ var DeckView = class extends import_obsidian.ItemView {
     }
     this.updateBookmarkUi(bookmarkedIds);
     await this.plugin.toggleBookmark(zettelId);
+  }
+  async toggleCardDesk(file) {
+    const deskCardRefs = this.deskCardRefs();
+    if (deskCardRefs.has(file.path)) {
+      deskCardRefs.delete(file.path);
+    } else {
+      deskCardRefs.add(file.path);
+    }
+    this.updateDeskUi(deskCardRefs);
+    await this.plugin.toggleFileOnDesk(file);
   }
   interceptFiledLinks(target, sourcePath) {
     target.addEventListener(
@@ -1262,13 +1303,15 @@ var DeckView = class extends import_obsidian.ItemView {
   }
   updateActiveActionControls(bookmarkedIds = this.plugin.state.bookmarks.map(
     (bookmark) => bookmark.zettelId
+  ), deskCardRefs = this.plugin.state.deskCards.map(
+    (card) => card.cardRef
   )) {
     const activeCard = this.activeCard;
     const availability = activeCardActionAvailability(
       activeCard?.id ?? null,
       activeCard?.path ?? null,
       bookmarkedIds,
-      this.plugin.state.deskCards.map((card) => card.cardRef)
+      deskCardRefs
     );
     if (this.addBookmarkButtonEl !== null) {
       this.addBookmarkButtonEl.disabled = !availability.canAddBookmark;
@@ -1281,6 +1324,9 @@ var DeckView = class extends import_obsidian.ItemView {
     return new Set(
       this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId)
     );
+  }
+  deskCardRefs() {
+    return new Set(this.plugin.state.deskCards.map((card) => card.cardRef));
   }
   updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()) {
     const bookmarkCount = bookmarkedIds.size;
@@ -1319,6 +1365,42 @@ var DeckView = class extends import_obsidian.ItemView {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
     }
     this.updateActiveActionControls([...bookmarkedIds]);
+  }
+  updateDeskUi(deskCardRefs = this.deskCardRefs()) {
+    const deskCount = deskCardRefs.size;
+    if (this.deskButtonEl !== null) {
+      const countEl = this.deskButtonEl.querySelector(".slipbox-count");
+      if (deskCount === 0) {
+        countEl?.remove();
+      } else if (countEl === null) {
+        this.deskButtonEl.createSpan({
+          cls: "slipbox-count",
+          text: String(deskCount)
+        });
+      } else {
+        countEl.setText(String(deskCount));
+      }
+    }
+    for (const cardEl of this.renderedCards) {
+      const cardPath = cardEl.dataset.path;
+      const zettelId = cardEl.dataset.zettelId;
+      const toggle = cardEl.querySelector(
+        ".slipbox-card-desk-toggle"
+      );
+      if (cardPath === void 0 || zettelId === void 0 || toggle === null) {
+        continue;
+      }
+      const isOnDesk = deskCardRefs.has(cardPath);
+      const action = isOnDesk ? `Remove ${zettelId} from Desk` : `Add ${zettelId} to Desk`;
+      toggle.toggleClass("is-on-desk", isOnDesk);
+      toggle.setAttr("aria-label", action);
+      toggle.setAttr("aria-pressed", String(isOnDesk));
+      (0, import_obsidian.setTooltip)(toggle, action, {
+        placement: "bottom",
+        delay: 250
+      });
+    }
+    this.updateActiveActionControls(void 0, [...deskCardRefs]);
   }
   viewportPosition(activeIndex) {
     return activeIndex + this.viewportOffset;
@@ -2291,7 +2373,7 @@ var SlipboxPlugin = class extends import_obsidian5.Plugin {
       await this.removeBookmark(zettelId);
     }
   }
-  async putFileOnDesk(file) {
+  async putFileOnDesk(file, revealDesk = true) {
     this.index.refresh();
     const metadataState = this.cardMetadataState(file);
     if (metadataState !== "filed" && metadataState !== "unfiled") {
@@ -2300,7 +2382,9 @@ var SlipboxPlugin = class extends import_obsidian5.Plugin {
     }
     if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
       new import_obsidian5.Notice(`${file.basename} is already on Desk.`);
-      await this.openDesk();
+      if (revealDesk) {
+        await this.openDesk();
+      }
       return;
     }
     const position = this.nextDeskPosition();
@@ -2309,7 +2393,16 @@ var SlipboxPlugin = class extends import_obsidian5.Plugin {
       deskCards: addDeskCard(this.state.deskCards, file.path, position)
     };
     await this.persistStateAndRefreshViews();
-    await this.openDesk();
+    if (revealDesk) {
+      await this.openDesk();
+    }
+  }
+  async toggleFileOnDesk(file) {
+    if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
+      await this.removeFromDesk(file.path);
+      return;
+    }
+    await this.putFileOnDesk(file, false);
   }
   async removeFromDesk(cardRef) {
     if (!this.state.deskCards.some((card) => card.cardRef === cardRef)) {

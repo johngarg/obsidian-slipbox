@@ -221,7 +221,7 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async putFileOnDesk(file: TFile): Promise<void> {
+  async putFileOnDesk(file: TFile, revealDesk = true): Promise<void> {
     this.index.refresh();
     const metadataState = this.cardMetadataState(file);
     if (metadataState !== "filed" && metadataState !== "unfiled") {
@@ -230,7 +230,9 @@ export default class SlipboxPlugin extends Plugin {
     }
     if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
       new Notice(`${file.basename} is already on Desk.`);
-      await this.openDesk();
+      if (revealDesk) {
+        await this.openDesk();
+      }
       return;
     }
     const position = this.nextDeskPosition();
@@ -239,7 +241,17 @@ export default class SlipboxPlugin extends Plugin {
       deskCards: addDeskCard(this.state.deskCards, file.path, position),
     };
     await this.persistStateAndRefreshViews();
-    await this.openDesk();
+    if (revealDesk) {
+      await this.openDesk();
+    }
+  }
+
+  async toggleFileOnDesk(file: TFile): Promise<void> {
+    if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
+      await this.removeFromDesk(file.path);
+      return;
+    }
+    await this.putFileOnDesk(file, false);
   }
 
   async removeFromDesk(cardRef: string): Promise<void> {

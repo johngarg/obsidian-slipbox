@@ -1,4 +1,4 @@
-import { isValidZettelId } from "./zettel-id.js";
+import { validateAddress } from "./address-order.js";
 import {
   pathIsAtOrBelow,
   renamePathReference,
@@ -48,7 +48,7 @@ export function normalizeBookmarks(value: unknown): readonly StoredBookmark[] {
     }
     if (
       typeof candidate.zettelId === "string" &&
-      isValidZettelId(candidate.zettelId) &&
+      validateAddress(candidate.zettelId).valid &&
       !seenLegacyIds.has(candidate.zettelId)
     ) {
       seenLegacyIds.add(candidate.zettelId);
@@ -61,7 +61,7 @@ export function normalizeBookmarks(value: unknown): readonly StoredBookmark[] {
 /** Resolve old address bookmarks to the first path-sorted card at that address. */
 export function migrateAddressBookmarks(
   bookmarks: readonly StoredBookmark[],
-  firstPathAtAddress: (zettelId: string) => string | undefined,
+  firstPathAtAddress: (address: string) => string | undefined,
 ): readonly DeckBookmark[] {
   const seenPaths = new Set<string>();
   const migrated: DeckBookmark[] = [];

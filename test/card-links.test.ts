@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import type { App, TFile } from "obsidian";
 
-import { generateFiledCardLink } from "../src/zettel-links.js";
+import { generateFiledCardLink } from "../src/card-links.js";
 
 function mockApp(
   result: string,
@@ -20,30 +20,30 @@ function mockApp(
 }
 
 describe("generateFiledCardLink", () => {
-  test("uses the zettel-id as Obsidian's link alias", () => {
+  test("uses the address as Obsidian's link alias", () => {
     const calls: unknown[][] = [];
     const file = { path: "Cards/Systems.md" } as TFile;
     const link = generateFiledCardLink(
-      mockApp("[[Systems|1/1]]", calls),
+      mockApp("[[Systems|A/1]]", calls),
       file,
       "Notes/Source.md",
-      "1/1",
+      "A/1",
     );
 
-    assert.equal(link, "[[Systems|1/1]]");
-    assert.deepEqual(calls, [[file, "Notes/Source.md", undefined, "1/1"]]);
+    assert.equal(link, "[[Systems|A/1]]");
+    assert.deepEqual(calls, [[file, "Notes/Source.md", undefined, "A/1"]]);
   });
 
   test("returns Obsidian's preferred Markdown-link form unchanged", () => {
     const calls: unknown[][] = [];
     const file = { path: "Cards/Systems.md" } as TFile;
     const link = generateFiledCardLink(
-      mockApp("[1/1](../Cards/Systems.md)", calls),
+      mockApp("[A/1](../Cards/Systems.md)", calls),
       file,
       "Notes/Source.md",
-      "1/1",
+      "A/1",
     );
 
-    assert.equal(link, "[1/1](../Cards/Systems.md)");
+    assert.equal(link, "[A/1](../Cards/Systems.md)");
   });
 });

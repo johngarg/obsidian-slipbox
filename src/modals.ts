@@ -2,7 +2,7 @@ import { App, FuzzySuggestModal, Modal, Notice, TFile, setIcon } from "obsidian"
 
 import type { DeckBookmark } from "./bookmarks.js";
 import type { EntryPoint } from "./plugin-state.js";
-import type { VaultZettelIndex } from "./zettel-index.js";
+import type { VaultCardIndex } from "./card-index.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -299,7 +299,7 @@ export class BookmarksModal extends Modal {
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
       label: "+ add current card as bookmark",
-      currentId: this.actions.currentPath,
+      currentAddress: this.actions.currentPath,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),
       onAdded: () => this.close(),
@@ -366,9 +366,9 @@ export class BookmarksModal extends Modal {
 }
 
 export interface EntryPointModalActions {
-  readonly currentId: string | null;
-  isAvailable(id: string): boolean;
-  visit(id: string): void;
+  readonly currentAddress: string | null;
+  isAvailable(address: string): boolean;
+  visit(address: string): void;
   addCurrent(): Promise<void>;
   rename(index: number): Promise<void>;
   remove(index: number): Promise<void>;
@@ -396,7 +396,7 @@ export class EntryPointsModal extends Modal {
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
       label: "+ add current card as entry point",
-      currentId: this.actions.currentId,
+      currentAddress: this.actions.currentAddress,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),
       onAdded: () => this.close(),
@@ -424,19 +424,19 @@ export class EntryPointsModal extends Modal {
 
     this.entryPoints.forEach((entry, index) => {
       const row = list.createDiv({ cls: "slipbox-list-row" });
-      const available = this.actions.isAvailable(entry.id);
+      const available = this.actions.isAvailable(entry.address);
       const visit = row.createEl("button", {
         cls: "slipbox-entry-visit",
         attr: { type: "button" },
       });
       visit.createSpan({ cls: "slipbox-entry-name", text: entry.name });
-      visit.createSpan({ cls: "slipbox-entry-id", text: entry.id });
+      visit.createSpan({ cls: "slipbox-entry-address", text: entry.address });
       if (!available) {
         visit.disabled = true;
         visit.setAttr("aria-label", "The filed card is missing or invalid");
       }
       visit.addEventListener("click", () => {
-        this.actions.visit(entry.id);
+        this.actions.visit(entry.address);
         this.close();
       });
 
@@ -452,7 +452,7 @@ export class EntryPointsModal extends Modal {
           this.renderList();
           updateCurrentCardAddAction(
             this.addButton,
-            this.actions.currentId,
+            this.actions.currentAddress,
             this.currentIsListed(),
           );
         });
@@ -462,14 +462,14 @@ export class EntryPointsModal extends Modal {
 
   private currentIsListed(): boolean {
     return this.entryPoints.some(
-      (entry) => entry.id === this.actions.currentId,
+      (entry) => entry.address === this.actions.currentAddress,
     );
   }
 }
 
 interface CurrentCardAddActionOptions {
   readonly label: string;
-  readonly currentId: string | null;
+  readonly currentAddress: string | null;
   readonly isCurrentListed: boolean;
   addCurrent(): Promise<void>;
   onAdded(): void;
@@ -487,7 +487,7 @@ function renderCurrentCardAddAction(
   });
   updateCurrentCardAddAction(
     add,
-    options.currentId,
+    options.currentAddress,
     options.isCurrentListed,
   );
   add.addEventListener("click", () => {
@@ -500,11 +500,11 @@ function renderCurrentCardAddAction(
 
 function updateCurrentCardAddAction(
   button: HTMLButtonElement | null,
-  currentId: string | null,
+  currentAddress: string | null,
   isCurrentListed: boolean,
 ): void {
   if (button !== null) {
-    button.disabled = currentId === null || isCurrentListed;
+    button.disabled = currentAddress === null || isCurrentListed;
   }
 }
 
@@ -515,7 +515,7 @@ export interface IssuesModalActions {
 export class IssuesModal extends Modal {
   constructor(
     app: App,
-    private readonly index: VaultZettelIndex,
+    private readonly index: VaultCardIndex,
     private readonly actions: IssuesModalActions,
   ) {
     super(app);
@@ -524,7 +524,7 @@ export class IssuesModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
-    contentEl.createEl("h2", { text: "Zettel address issues" });
+    contentEl.createEl("h2", { text: "Card address issues" });
     contentEl.createEl("p", {
       text: "Invalid addresses are excluded until corrected. Duplicate-address cards remain in the Deck beside one another, ordered by file path. Slipbox never repairs addresses automatically.",
     });

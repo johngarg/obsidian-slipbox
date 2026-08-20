@@ -1,29 +1,34 @@
 export {
-  ZettelIdError,
-  compareZettelIds,
-  formatZettelId,
-  generateFiledId,
-  generateNextSectionId,
-  incrementAlphaToken,
-  isValidZettelId,
-  parseZettelId,
-} from "./zettel-id.js";
-
-export type {
-  AlphaToken,
-  NumericToken,
-  ParsedZettelId,
-  PathToken,
-} from "./zettel-id.js";
-
-export {
-  buildFiledZettelLookups,
-  compareFiledZettels,
+  addressComparatorFor,
+  candidateInsertionIndex,
+  cardComparatorFor,
+  compareAddressesLexicographic,
+  compareAddressesNatural,
   compareVaultPaths,
-  indexZettelMetadata,
-  zettelMetadataRecord,
-} from "./zettel-metadata.js";
-export { generateFiledCardLink } from "./zettel-links.js";
+  normalizeAddressInput,
+  validateAddress,
+} from "./address-order.js";
+export type {
+  AddressedPath,
+  AddressValidation,
+  DeckOrdering,
+} from "./address-order.js";
+export {
+  buildFiledCardLookups,
+  cardMetadataRecord,
+  indexCardMetadata,
+} from "./card-metadata.js";
+export {
+  createFilingPreview,
+  deckDisplayItems,
+  filingPlacementMatches,
+  filingPreviewKey,
+} from "./filing-preview.js";
+export {
+  removeFilingGhost,
+  renderOrUpdateFilingGhost,
+} from "./filing-ghost.js";
+export { generateFiledCardLink } from "./card-links.js";
 export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
@@ -35,6 +40,7 @@ export {
   normalizeDeckKeybindings,
   normalizeFolderPath,
   normalizeSettings,
+  settingsForPersistence,
 } from "./settings.js";
 export {
   fitBacklinkPrefix,
@@ -58,13 +64,19 @@ export {
 } from "./desk-state.js";
 
 export type {
-  DuplicateZettelIssue,
-  FiledZettelRecord,
-  InvalidZettelIssue,
-  ZettelIssue,
-  ZettelMetadataIndex,
-  ZettelMetadataRecord,
-} from "./zettel-metadata.js";
+  CardIssue,
+  CardMetadataIndex,
+  CardMetadataRecord,
+  DuplicateAddressIssue,
+  FiledCardRecord,
+  InvalidCardIssue,
+} from "./card-metadata.js";
+export type {
+  DeckDisplayItem,
+  FiledDisplayItem,
+  FilingPreview,
+  PreviewDisplayItem,
+} from "./filing-preview.js";
 
 export type {
   DeckBookmark,

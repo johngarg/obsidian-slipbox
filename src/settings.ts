@@ -1,9 +1,11 @@
-export const SLIPBOX_DATA_SCHEMA_VERSION = 4;
+import type { DeckOrdering } from "./address-order.js";
+
+export const SLIPBOX_DATA_SCHEMA_VERSION = 5;
 
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
 
-export type DeckHeaderButton = "add-card" | "open-note" | "tray" | "bookmark";
+export type DeckHeaderButton = "open-note" | "tray" | "bookmark";
 
 export type DeckAction =
   | "previous-card"
@@ -12,7 +14,6 @@ export type DeckAction =
   | "first-card"
   | "last-card"
   | "open-note"
-  | "add-card"
   | "toggle-tray"
   | "toggle-bookmark"
   | "back"
@@ -20,8 +21,7 @@ export type DeckAction =
   | "entry-points"
   | "bookmarks"
   | "problems"
-  | "new-section"
-  | "file-here"
+  | "confirm-filing"
   | "cancel-filing";
 
 export type KeyModifier = "Mod" | "Ctrl" | "Meta" | "Alt" | "Shift";
@@ -81,12 +81,6 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     defaultBindings: [binding("o")],
   },
   {
-    id: "add-card",
-    label: "Add card from here",
-    repeatable: false,
-    defaultBindings: [binding("a")],
-  },
-  {
     id: "toggle-tray",
     label: "Pull out or return card",
     repeatable: false,
@@ -119,14 +113,8 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     defaultBindings: [],
   },
   {
-    id: "new-section",
-    label: "New section",
-    repeatable: false,
-    defaultBindings: [],
-  },
-  {
-    id: "file-here",
-    label: "File here",
+    id: "confirm-filing",
+    label: "File card",
     repeatable: false,
     defaultBindings: [],
   },
@@ -140,6 +128,7 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
 
 export interface SlipboxSettings {
   readonly addressProperty: string;
+  readonly deckOrdering: DeckOrdering;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
   readonly mainCardSize: CardSize;
@@ -154,7 +143,6 @@ export interface SlipboxSettings {
 }
 
 export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, boolean>> = {
-  "add-card": true,
   "open-note": true,
   tray: true,
   bookmark: true,
@@ -169,6 +157,7 @@ export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
 
 export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "zettel-id",
+  deckOrdering: "natural",
   titleSource: "filename",
   titleProperty: "title",
   mainCardSize: "medium",
@@ -283,6 +272,8 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       source.addressProperty,
       DEFAULT_SETTINGS.addressProperty,
     ),
+    deckOrdering:
+      source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
     titleSource: source.titleSource === "frontmatter" ? "frontmatter" : "filename",
     titleProperty: normalizePropertyName(
       source.titleProperty,
@@ -312,6 +303,32 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       DEFAULT_DECK_HEADER_BUTTONS,
     ),
     deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings),
+  };
+}
+
+/** Keep ignored legacy/unknown keys when writing a normalized settings object. */
+export function settingsForPersistence(
+  rawValue: unknown,
+  settings: SlipboxSettings,
+): Readonly<Record<string, unknown>> {
+  const raw = isRecord(rawValue) ? rawValue : {};
+  const rawButtons = isRecord(raw.deckHeaderButtons)
+    ? raw.deckHeaderButtons
+    : {};
+  const rawKeybindings = isRecord(raw.deckKeybindings)
+    ? raw.deckKeybindings
+    : {};
+  return {
+    ...raw,
+    ...settings,
+    deckHeaderButtons: {
+      ...rawButtons,
+      ...settings.deckHeaderButtons,
+    },
+    deckKeybindings: {
+      ...rawKeybindings,
+      ...settings.deckKeybindings,
+    },
   };
 }
 

@@ -22,7 +22,7 @@ import {
   clampViewportPosition,
 } from "./deck-motion.js";
 import { NavigationHistory } from "./navigation-history.js";
-import type { FiledZettel } from "./zettel-index.js";
+import type { FiledCard } from "./card-index.js";
 import { CardFooterManager } from "./card-footer.js";
 import { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 import { MAX_SPREAD, MIN_SPREAD } from "./plugin-state.js";
@@ -36,6 +36,15 @@ import {
   pathIsAtOrBelow,
   renamePathReference,
 } from "./path-reference.js";
+import { normalizeAddressInput } from "./address-order.js";
+import {
+  deckDisplayItems,
+  type FilingPreview,
+} from "./filing-preview.js";
+import {
+  removeFilingGhost,
+  renderOrUpdateFilingGhost,
+} from "./filing-ghost.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -48,6 +57,18 @@ const VIEWPORT_CENTER_DURATION_MS = 180;
 export class DeckView extends ItemView {
   private activePath: string | null = null;
   private filingFile: TFile | null = null;
+  private filingSourcePath: string | null = null;
+  private filingInputValue = "";
+  private filingPreview: FilingPreview | null = null;
+  private filingMessage = "Enter an address.";
+  private filingOriginViewportOffset = 0;
+  private filingInputEl: HTMLInputElement | null = null;
+  private filingStatusEl: HTMLElement | null = null;
+  private filingDuplicateEl: HTMLElement | null = null;
+  private filingCancelEl: HTMLButtonElement | null = null;
+  private filingConfirmEl: HTMLButtonElement | null = null;
+  private filingGhostEl: HTMLElement | null = null;
+  private filingConfirmationInProgress = false;
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
@@ -60,7 +81,6 @@ export class DeckView extends ItemView {
   private spaceOffsetY = 0;
   private spaceRecenteringTimer: number | null = null;
   private viewportCenteringFrame: number | null = null;
-  private filingPromptEl: HTMLElement | null = null;
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
   private renderRefreshPending = false;
@@ -133,12 +153,20 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.filingFile = null;
+    this.filingSourcePath = null;
+    this.filingPreview = null;
+    this.filingGhostEl = null;
+    this.filingConfirmationInProgress = false;
     this.stageEl = null;
     this.spaceEl = null;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
-    this.filingPromptEl = null;
+    this.filingInputEl = null;
+    this.filingStatusEl = null;
+    this.filingDuplicateEl = null;
+    this.filingCancelEl = null;
+    this.filingConfirmEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
@@ -150,7 +178,7 @@ export class DeckView extends ItemView {
     this.cardFooters.scheduleLayout();
   }
 
-  get activeCard(): FiledZettel | null {
+  get activeCard(): FiledCard | null {
     if (this.activePath === null) {
       return null;
     }
@@ -162,11 +190,11 @@ export class DeckView extends ItemView {
   }
 
   get canGoBack(): boolean {
-    return this.history.canBack();
+    return this.filingFile === null && this.history.canBack();
   }
 
   get canGoForward(): boolean {
-    return this.history.canForward();
+    return this.filingFile === null && this.history.canForward();
   }
 
   handlePathRename(oldPath: string, newPath: string): void {
@@ -182,6 +210,14 @@ export class DeckView extends ItemView {
         scroll,
       ]),
     );
+    if (this.filingSourcePath !== null) {
+      this.filingSourcePath = renamePathReference(
+        this.filingSourcePath,
+        oldPath,
+        newPath,
+      );
+      this.recalculateFilingPreview();
+    }
   }
 
   handlePathDeletion(deletedPath: string): void {
@@ -198,6 +234,13 @@ export class DeckView extends ItemView {
       if (pathIsAtOrBelow(path, deletedPath)) {
         this.cardScrollPositions.delete(path);
       }
+    }
+    if (
+      this.filingSourcePath !== null &&
+      pathIsAtOrBelow(this.filingSourcePath, deletedPath)
+    ) {
+      this.filingPreview = null;
+      this.filingMessage = "The source card no longer exists.";
     }
   }
 
@@ -226,7 +269,13 @@ export class DeckView extends ItemView {
     }
   }
 
-  canRunAction(action: DeckAction, target?: FiledZettel): boolean {
+  canRunAction(action: DeckAction, target?: FiledCard): boolean {
+    if (this.filingFile !== null) {
+      if (action === "confirm-filing") {
+        return this.filingPreview !== null && !this.filingConfirmationInProgress;
+      }
+      return action === "cancel-filing" && !this.filingConfirmationInProgress;
+    }
     const filed = this.plugin.index.snapshot.filed;
     const active = target ?? this.activeCard;
     const activeIndex = active === null
@@ -243,7 +292,7 @@ export class DeckView extends ItemView {
     });
   }
 
-  runAction(action: DeckAction, target?: FiledZettel): boolean {
+  runAction(action: DeckAction, target?: FiledCard): boolean {
     if (!this.canRunAction(action, target)) {
       return false;
     }
@@ -267,11 +316,6 @@ export class DeckView extends ItemView {
       case "open-note":
         if (card !== null) {
           void this.plugin.openMarkdownFile(card.file);
-        }
-        break;
-      case "add-card":
-        if (card !== null) {
-          void this.plugin.createCardFromPath(card.path);
         }
         break;
       case "toggle-tray":
@@ -299,11 +343,8 @@ export class DeckView extends ItemView {
       case "problems":
         this.plugin.showIssues();
         break;
-      case "new-section":
-        void this.plugin.createNewSection();
-        break;
-      case "file-here":
-        void this.fileHere();
+      case "confirm-filing":
+        void this.confirmFiling();
         break;
       case "cancel-filing":
         void this.cancelFiling();
@@ -314,6 +355,7 @@ export class DeckView extends ItemView {
 
   async refresh(): Promise<void> {
     this.cancelViewportCentering();
+    this.recalculateFilingPreview();
     const previousActivePath = this.activePath;
     this.reconcileScrollPositions();
     this.chooseAvailableActiveCard();
@@ -332,14 +374,38 @@ export class DeckView extends ItemView {
   }
 
   async startFiling(file: TFile): Promise<void> {
+    this.filingGhostEl = removeFilingGhost(this.filingGhostEl);
     this.filingFile = file;
+    this.filingSourcePath = file.path;
+    this.filingInputValue = "";
+    this.filingPreview = null;
+    this.filingMessage = "Enter an address.";
+    this.filingConfirmationInProgress = false;
+    this.filingOriginViewportOffset = this.viewportOffset;
     await this.renderDeck();
+    this.focusFilingInput();
   }
 
   async cancelFiling(): Promise<void> {
+    if (this.filingConfirmationInProgress) {
+      return;
+    }
+    this.filingGhostEl = removeFilingGhost(this.filingGhostEl);
     this.filingFile = null;
+    this.filingSourcePath = null;
+    this.filingPreview = null;
+    this.filingInputValue = "";
+    this.filingConfirmationInProgress = false;
+    this.viewportOffset = this.filingOriginViewportOffset;
     await this.renderDeck();
     new Notice("Filing cancelled. The card remains in its pile.");
+  }
+
+  async handleDeckOrderingChanged(): Promise<void> {
+    this.recalculateFilingPreview();
+    this.viewportOffset = 0;
+    await this.renderDeck();
+    this.focusFilingInput();
   }
 
   async goToPath(path: string): Promise<void> {
@@ -364,10 +430,10 @@ export class DeckView extends ItemView {
   }
 
   /** Intentional address-level navigation used by entry points. */
-  async jumpToAddress(id: string): Promise<void> {
-    const card = this.plugin.index.firstFiledAtAddress(id);
+  async jumpToAddress(address: string): Promise<void> {
+    const card = this.plugin.index.firstFiledAtAddress(address);
     if (card === undefined) {
-      new Notice(`Card address ${id} is missing or invalid.`);
+      new Notice(`Card address ${address} is missing or invalid.`);
       return;
     }
     await this.jumpToPath(card.path);
@@ -432,7 +498,7 @@ export class DeckView extends ItemView {
       new Notice("There is no active filed card.");
       return;
     }
-    await this.plugin.addEntryPoint(active.id);
+    await this.plugin.addEntryPoint(active.address);
   }
 
   private chooseAvailableActiveCard(): void {
@@ -444,7 +510,7 @@ export class DeckView extends ItemView {
     }
 
     const firstEntryPoint = this.plugin.state.entryPoints
-      .map((entry) => this.plugin.index.firstFiledAtAddress(entry.id))
+      .map((entry) => this.plugin.index.firstFiledAtAddress(entry.address))
       .find((card) => card !== undefined);
     this.activePath = firstEntryPoint?.path ?? filed[0]?.path ?? null;
   }
@@ -457,7 +523,11 @@ export class DeckView extends ItemView {
     this.trayRenderer.clear();
     this.contentEl.empty();
     this.renderedCards = [];
-    this.filingPromptEl = null;
+    this.filingInputEl = null;
+    this.filingStatusEl = null;
+    this.filingDuplicateEl = null;
+    this.filingCancelEl = null;
+    this.filingConfirmEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
@@ -484,13 +554,11 @@ export class DeckView extends ItemView {
     );
 
     const filed = this.plugin.index.snapshot.filed;
-    if (filed.length === 0 || this.activePath === null) {
+    if (filed.length === 0 && this.filingPreview === null) {
       this.renderEmptyDeck(space);
     } else {
       const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-      if (activeIndex >= 0) {
-        await this.renderCardWindow(space, filed, activeIndex, version);
-      }
+      await this.renderCardWindow(space, filed, activeIndex, version);
     }
 
     if (version !== this.renderVersion) {
@@ -510,6 +578,7 @@ export class DeckView extends ItemView {
     this.positionCards();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
+    this.focusFilingInput();
   }
 
   private renderToolbar(shell: HTMLElement): void {
@@ -540,6 +609,7 @@ export class DeckView extends ItemView {
       attr: { type: "button" },
     });
     entries.addEventListener("click", () => this.runAction("entry-points"));
+    entries.disabled = this.filingFile !== null;
 
     const bookmarks = controls.createEl("button", {
       attr: { type: "button" },
@@ -550,6 +620,7 @@ export class DeckView extends ItemView {
       bookmarks.createSpan({ cls: "slipbox-count", text: String(this.plugin.state.bookmarks.length) });
     }
     bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
+    bookmarks.disabled = this.filingFile !== null;
     this.bookmarksButtonEl = bookmarks;
 
     if (this.plugin.index.snapshot.issues.length > 0) {
@@ -565,6 +636,7 @@ export class DeckView extends ItemView {
         }`,
       });
       problems.addEventListener("click", () => this.runAction("problems"));
+      problems.disabled = this.filingFile !== null;
     }
 
     const spreadControl = toolbar.createEl("label", { cls: "slipbox-spread-control" });
@@ -587,6 +659,7 @@ export class DeckView extends ItemView {
       }
     });
     slider.addEventListener("change", () => void this.renderDeck());
+    slider.disabled = this.filingFile !== null;
   }
 
   private renderEmptyDeck(stage: HTMLElement): void {
@@ -594,76 +667,90 @@ export class DeckView extends ItemView {
     empty.createEl("h2", { text: "The filing box is empty" });
     empty.createEl("p", {
       text: this.filingFile === null
-        ? "Create a new section to place the first filed card."
-        : "There is no filed card to use as an attachment point. Cancel filing, then create the first section.",
+        ? "Create a new card, then file it with a manual address."
+        : "Enter an address to preview the first filed card.",
     });
-    const create = empty.createEl("button", {
-      text: "New section",
-      cls: "mod-cta",
-      attr: { type: "button" },
-    });
-    create.addEventListener("click", () => this.runAction("new-section"));
   }
 
   private async renderCardWindow(
     stage: HTMLElement,
-    filed: readonly FiledZettel[],
+    filed: readonly FiledCard[],
     activeIndex: number,
     version: number,
   ): Promise<void> {
-    const viewportPosition = this.viewportPosition(activeIndex);
+    const displayItems = deckDisplayItems(filed, this.filingPreview);
+    const viewportPosition = this.filingPreview?.insertionIndex ??
+      this.viewportPosition(activeIndex);
     const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
       8,
       Math.max(3, Math.ceil(1 / this.plugin.state.spread) + 2),
     );
     const start = Math.max(0, viewportIndex - radius);
-    const end = Math.min(filed.length - 1, viewportIndex + radius);
+    const end = Math.min(displayItems.length - 1, viewportIndex + radius);
     this.renderWindowStart = start;
     this.renderWindowEnd = end;
     const jobs: Promise<void>[] = [];
 
-    for (let index = start; index <= end; index += 1) {
-      const card = filed[index];
-      if (card === undefined) {
+    const activeDisplayIndex = activeIndex < 0
+      ? -1
+      : activeIndex + (
+        this.filingPreview !== null &&
+        activeIndex >= this.filingPreview.insertionIndex
+          ? 1
+          : 0
+      );
+    const interactive = this.filingFile === null;
+
+    for (let displayIndex = start; displayIndex <= end; displayIndex += 1) {
+      const item = displayItems[displayIndex];
+      if (item === undefined) {
         continue;
       }
+      if (item.kind === "preview") {
+        this.filingGhostEl = renderOrUpdateFilingGhost(
+          stage,
+          item.preview,
+          this.filingGhostEl,
+        );
+        this.filingGhostEl.dataset.index = String(item.displayIndex);
+        this.filingGhostEl.style.zIndex = String(
+          cardStackOrder(item.displayIndex, activeDisplayIndex),
+        );
+        this.renderedCards.push(this.filingGhostEl);
+        continue;
+      }
+      const { card, filedIndex } = item;
 
       const cardEl = stage.createDiv({ cls: "slipbox-card" });
-      cardEl.dataset.index = String(index);
+      cardEl.dataset.index = String(item.displayIndex);
+      cardEl.dataset.filedIndex = String(filedIndex);
       cardEl.dataset.path = card.path;
-      cardEl.toggleClass("is-active", index === activeIndex);
+      cardEl.toggleClass("is-active", filedIndex === activeIndex);
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
       const title = this.plugin.cardTitle(card.file);
-      const cardLabel = `${card.id} · ${title}`;
+      const cardLabel = `${card.address} · ${title}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
         placement: "bottom",
         delay: 350,
       });
-      cardEl.style.zIndex = String(cardStackOrder(index, activeIndex));
+      cardEl.style.zIndex = String(
+        cardStackOrder(item.displayIndex, activeDisplayIndex),
+      );
       this.renderedCards.push(cardEl);
 
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-      identity.createSpan({ cls: "slipbox-card-address", text: card.id });
+      identity.createSpan({ cls: "slipbox-card-address", text: card.address });
       if (this.plugin.settings.showTitleInDeck) {
         identity.createSpan({ cls: "slipbox-card-header-title", text: title });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-      if (this.plugin.settings.deckHeaderButtons["add-card"]) {
-        this.renderCardAction(
-          cardActions,
-          "plus",
-          "slipbox-card-add",
-          "Add a card from here",
-          () => this.runAction("add-card", card),
-        );
-      }
-      if (this.plugin.settings.deckHeaderButtons["open-note"]) {
+      if (interactive && this.plugin.settings.deckHeaderButtons["open-note"]) {
         this.renderCardAction(
           cardActions,
           "file-pen-line",
@@ -672,7 +759,7 @@ export class DeckView extends ItemView {
           () => this.runAction("open-note", card),
         );
       }
-      if (this.plugin.settings.deckHeaderButtons.tray) {
+      if (interactive && this.plugin.settings.deckHeaderButtons.tray) {
         const trayAction = trayToggleLabel(isInTray);
         const trayToggle = this.renderCardAction(
           cardActions,
@@ -684,7 +771,7 @@ export class DeckView extends ItemView {
         trayToggle.setAttr("aria-pressed", String(isInTray));
         trayToggle.toggleClass("is-in-tray", isInTray);
       }
-      if (this.plugin.settings.deckHeaderButtons.bookmark) {
+      if (interactive && this.plugin.settings.deckHeaderButtons.bookmark) {
         const bookmarkAction = isBookmarked
           ? "Remove bookmark"
           : "Add bookmark";
@@ -704,11 +791,14 @@ export class DeckView extends ItemView {
       this.cardFooters.render(frame, {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),
-        interactive: index === activeIndex,
+        interactive: interactive && filedIndex === activeIndex,
         activate: (backlink) => this.jumpToPath(backlink.path),
       });
-      jobs.push(this.renderMarkdownCard(card, scroll, version));
+      jobs.push(this.renderMarkdownCard(card, scroll, version, interactive));
 
+      if (!interactive) {
+        continue;
+      }
       cardEl.addEventListener("contextmenu", (event) => {
         const target = event.target;
         if (
@@ -720,7 +810,7 @@ export class DeckView extends ItemView {
         this.plugin.showCardContextMenu(
           event,
           card.file,
-          card.id,
+          card.address,
           DECK_VIEW_TYPE,
           this.leaf,
         );
@@ -768,9 +858,10 @@ export class DeckView extends ItemView {
   }
 
   private async renderMarkdownCard(
-    card: FiledZettel,
+    card: FiledCard,
     target: HTMLElement,
     version: number,
+    interactive: boolean,
   ): Promise<void> {
     const component = new Component();
     component.load();
@@ -787,7 +878,11 @@ export class DeckView extends ItemView {
         card.file.path,
         component,
       );
-      this.attachInternalLinkInteractions(target, card.file.path);
+      if (interactive) {
+        this.attachInternalLinkInteractions(target, card.file.path);
+      } else {
+        this.makeRenderedPreviewPassive(target);
+      }
       target.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
     } catch (error) {
       target.createEl("p", {
@@ -880,6 +975,7 @@ export class DeckView extends ItemView {
       const body = await this.plugin.index.readBody(file);
       if (version === this.renderVersion) {
         await MarkdownRenderer.render(this.app, body, preview, file.path, component);
+        this.makeRenderedPreviewPassive(preview);
       }
     } catch (error) {
       preview.setText(`Could not render this card: ${errorMessage(error)}`);
@@ -888,53 +984,257 @@ export class DeckView extends ItemView {
 
   private renderFilingActions(shell: HTMLElement): void {
     const actions = shell.createDiv({ cls: "slipbox-filing-actions" });
-    const attachment = this.activeCard;
-    this.filingPromptEl = actions.createSpan({
-      cls: "slipbox-filing-prompt",
-      text: attachment === null
-        ? "Choose an attachment point"
-        : `Attach from ${attachment.id}`,
+    const field = actions.createEl("label", { cls: "slipbox-filing-field" });
+    field.createSpan({ text: "Address" });
+    const input = field.createEl("input", {
+      type: "text",
+      value: this.filingInputValue,
+      attr: {
+        autocomplete: "off",
+        spellcheck: "false",
+        "aria-label": "Card address",
+      },
     });
-    const cancel = actions.createEl("button", {
+    this.filingInputEl = input;
+    input.addEventListener("input", () => {
+      void this.updateFilingInput(input.value);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        void this.cancelFiling();
+      } else if (event.key === "Enter" && this.filingPreview !== null) {
+        event.preventDefault();
+        void this.confirmFiling();
+      }
+    });
+    this.filingStatusEl = actions.createDiv({ cls: "slipbox-filing-status" });
+    this.filingDuplicateEl = actions.createDiv({
+      cls: "slipbox-filing-duplicate",
+    });
+    const buttons = actions.createDiv({ cls: "slipbox-filing-buttons" });
+    const cancel = buttons.createEl("button", {
       text: "Cancel",
       attr: { type: "button" },
     });
+    this.filingCancelEl = cancel;
     cancel.addEventListener("click", () => this.runAction("cancel-filing"));
-    const fileHere = actions.createEl("button", {
-      text: "File here",
+    const confirm = buttons.createEl("button", {
+      text: "File card",
       cls: "mod-cta",
       attr: { type: "button" },
     });
-    fileHere.disabled = attachment === null;
-    fileHere.addEventListener("click", () => this.runAction("file-here"));
+    this.filingConfirmEl = confirm;
+    confirm.addEventListener("click", () => this.runAction("confirm-filing"));
+    this.updateFilingControls();
   }
 
-  private async fileHere(): Promise<void> {
-    const file = this.filingFile;
-    const attachment = this.activeCard;
-    if (file === null || attachment === null) {
-      return;
-    }
+  private makeRenderedPreviewPassive(target: HTMLElement): void {
+    target.querySelectorAll<HTMLElement>(
+      "a, button, input, textarea, select, [tabindex]",
+    ).forEach((descendant) => {
+      descendant.tabIndex = -1;
+      descendant.setAttr("aria-disabled", "true");
+    });
+  }
 
-    const newId = await this.plugin.fileCard(file, attachment.path);
-    if (newId === null) {
+  private recalculateFilingPreview(): void {
+    const file = this.filingFile;
+    const sourcePath = this.filingSourcePath;
+    if (file === null || sourcePath === null) {
+      this.filingPreview = null;
       return;
     }
-    await this.animateFiling(newId);
-    this.filingFile = null;
-    this.activePath = file.path;
-    this.viewportOffset = 0;
-    this.history.replaceCurrent(file.path);
+    if (
+      file.path !== sourcePath ||
+      this.plugin.index.fileAtPath(sourcePath) !== file
+    ) {
+      this.filingPreview = null;
+      this.filingMessage = "The source card no longer exists.";
+      return;
+    }
+    if (!this.plugin.isUnfiledCard(file)) {
+      this.filingPreview = null;
+      this.filingMessage = "The source card is no longer unfiled.";
+      return;
+    }
+    const validation = normalizeAddressInput(this.filingInputValue);
+    if (!validation.valid) {
+      this.filingPreview = null;
+      this.filingMessage = validation.message;
+      return;
+    }
+    this.filingPreview = this.plugin.filingPreviewFor(file, validation.address);
+    if (this.filingPreview.insertionIndex === 0) {
+      this.filingMessage = "Will be filed at the beginning of the Deck.";
+    } else if (
+      this.filingPreview.insertionIndex ===
+      this.plugin.index.snapshot.filed.length
+    ) {
+      this.filingMessage = "Will be filed at the end of the Deck.";
+    } else {
+      this.filingMessage = "Previewing the exact Deck position.";
+    }
+  }
+
+  private async updateFilingInput(value: string): Promise<void> {
+    if (this.filingConfirmationInProgress) {
+      return;
+    }
+    this.filingInputValue = value;
+    this.recalculateFilingPreview();
+    if (this.canUpdateFilingPreviewInPlace()) {
+      this.updateFilingPreviewInPlace();
+      return;
+    }
     await this.renderDeck();
   }
 
-  private async animateFiling(newId: string): Promise<void> {
+  private canUpdateFilingPreviewInPlace(): boolean {
+    if (this.plugin.index.snapshot.filed.length === 0) {
+      return false;
+    }
+    const preview = this.filingPreview;
+    if (preview === null) {
+      return true;
+    }
+    const visiblePaths = new Set(
+      this.renderedCards.flatMap((card) =>
+        card.dataset.path === undefined ? [] : [card.dataset.path]),
+    );
+    return [preview.previousPath, preview.nextPath].every(
+      (path) => path === null || visiblePaths.has(path),
+    );
+  }
+
+  private updateFilingPreviewInPlace(): void {
+    const preview = this.filingPreview;
+    for (const card of this.renderedCards) {
+      const filedIndex = Number(card.dataset.filedIndex ?? "-1");
+      if (filedIndex < 0) {
+        continue;
+      }
+      const displayIndex = preview !== null && filedIndex >= preview.insertionIndex
+        ? filedIndex + 1
+        : filedIndex;
+      card.dataset.index = String(displayIndex);
+    }
+    if (preview === null) {
+      const previousGhost = this.filingGhostEl;
+      this.filingGhostEl = removeFilingGhost(this.filingGhostEl);
+      this.renderedCards = this.renderedCards.filter(
+        (card) => card !== previousGhost,
+      );
+    } else if (this.spaceEl !== null) {
+      this.filingGhostEl = renderOrUpdateFilingGhost(
+        this.spaceEl,
+        preview,
+        this.filingGhostEl,
+      );
+      if (!this.renderedCards.includes(this.filingGhostEl)) {
+        this.renderedCards.push(this.filingGhostEl);
+      }
+    }
+    this.updateFilingControls();
+    this.positionCards();
+    this.scheduleCardPositioning();
+  }
+
+  private updateFilingControls(): void {
+    this.filingStatusEl?.setText(this.filingMessage);
+    if (this.filingInputEl !== null) {
+      this.filingInputEl.disabled = this.filingConfirmationInProgress;
+    }
+    if (this.filingCancelEl !== null) {
+      this.filingCancelEl.disabled = this.filingConfirmationInProgress;
+    }
+    if (this.filingConfirmEl !== null) {
+      this.filingConfirmEl.disabled =
+        this.filingPreview === null || this.filingConfirmationInProgress;
+    }
+    const duplicate = this.filingDuplicateEl;
+    if (duplicate === null) {
+      return;
+    }
+    duplicate.empty();
+    const preview = this.filingPreview;
+    if (preview === null) {
+      return;
+    }
+    const matches = this.plugin.index.filedAtAddress(preview.address);
+    if (matches.length === 0) {
+      return;
+    }
+    duplicate.createDiv({
+      text: `Address ${preview.address} is already used by ${matches.length} card${
+        matches.length === 1 ? "" : "s"
+      }. This card will be placed alongside ${
+        matches.length === 1 ? "it" : "them"
+      } in path order.`,
+    });
+    const paths = duplicate.createEl("ul");
+    for (const match of matches) {
+      paths.createEl("li", { text: match.path });
+    }
+  }
+
+  private focusFilingInput(): void {
+    if (this.filingInputEl === null) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      this.filingInputEl?.focus({ preventScroll: true });
+    });
+  }
+
+  private async confirmFiling(): Promise<void> {
+    const file = this.filingFile;
+    const preview = this.filingPreview;
+    if (
+      file === null ||
+      preview === null ||
+      this.filingConfirmationInProgress
+    ) {
+      return;
+    }
+    this.filingConfirmationInProgress = true;
+    this.updateFilingControls();
+    try {
+      const result = await this.plugin.fileCard(file, preview);
+      if (result.status === "preview-changed") {
+        this.recalculateFilingPreview();
+        await this.renderDeck();
+        new Notice("The Deck changed. Review the updated position and confirm again.");
+        return;
+      }
+      if (result.status === "failed") {
+        this.recalculateFilingPreview();
+        await this.renderDeck();
+        return;
+      }
+      await this.animateFiling(result.address);
+      this.filingGhostEl = removeFilingGhost(this.filingGhostEl);
+      this.filingFile = null;
+      this.filingSourcePath = null;
+      this.filingPreview = null;
+      this.filingInputValue = "";
+      this.activePath = file.path;
+      this.viewportOffset = 0;
+      this.history.replaceCurrent(file.path);
+      await this.plugin.refreshDeckViews();
+    } finally {
+      this.filingConfirmationInProgress = false;
+      this.updateFilingControls();
+    }
+  }
+
+  private async animateFiling(address: string): Promise<void> {
     const inHand = this.contentEl.querySelector<HTMLElement>(".slipbox-in-hand");
     if (inHand === null) {
       return;
     }
     const label = inHand.querySelector<HTMLElement>(".slipbox-in-hand-label");
-    label?.setText(`Filed as ${newId}`);
+    label?.setText(`Filed as ${address}`);
     inHand.addClass("is-entering-deck");
     await new Promise<void>((resolve) =>
       window.setTimeout(resolve, FILING_ANIMATION_DURATION_MS + 40),
@@ -947,7 +1247,11 @@ export class DeckView extends ItemView {
   ): void {
     stage.querySelectorAll<HTMLElement>(".slipbox-bookmark-edge-tab")
       .forEach((tab) => tab.remove());
-    if (this.activePath === null || bookmarkedPaths.size === 0) {
+    if (
+      this.filingFile !== null ||
+      this.activePath === null ||
+      bookmarkedPaths.size === 0
+    ) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
@@ -976,10 +1280,10 @@ export class DeckView extends ItemView {
       }
       const tab = stage.createEl("button", {
         cls: `slipbox-bookmark-edge-tab is-${direction}`,
-        text: `${direction === "left" ? "◀" : "▶"} ${card.id}`,
+        text: `${direction === "left" ? "◀" : "▶"} ${card.address}`,
         attr: {
           type: "button",
-          "aria-label": `Jump to bookmark ${card.id}`,
+          "aria-label": `Jump to bookmark ${card.address}`,
         },
       });
       tab.addEventListener("click", () => void this.jumpToPath(card.path));
@@ -990,6 +1294,10 @@ export class DeckView extends ItemView {
     stage.addEventListener(
       "wheel",
       (event) => {
+        if (this.filingFile !== null) {
+          event.preventDefault();
+          return;
+        }
         if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
           return;
         }
@@ -1307,7 +1615,10 @@ export class DeckView extends ItemView {
 
   private positionCards(): boolean {
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (activeIndex < 0 || this.renderedCards.length === 0) {
+    if (
+      this.renderedCards.length === 0 ||
+      (activeIndex < 0 && this.filingPreview === null)
+    ) {
       return true;
     }
 
@@ -1315,16 +1626,26 @@ export class DeckView extends ItemView {
     if (step <= 0) {
       return false;
     }
-    const viewportPosition = this.viewportPosition(activeIndex);
+    const activeDisplayIndex = activeIndex < 0
+      ? -1
+      : activeIndex + (
+        this.filingPreview !== null &&
+        activeIndex >= this.filingPreview.insertionIndex
+          ? 1
+          : 0
+      );
+    const viewportPosition = this.filingPreview?.insertionIndex ??
+      this.viewportPosition(activeIndex);
 
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
+      const isActive = card.dataset.path === this.activePath;
       const motion = cardMotionStyle(
         index,
         viewportPosition,
         step,
-        index === activeIndex,
-        activeIndex,
+        isActive,
+        activeDisplayIndex,
       );
       card.style.transform =
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
@@ -1382,24 +1703,21 @@ export class DeckView extends ItemView {
   }
 
   private updateActiveUi(): void {
+    if (this.filingFile !== null) {
+      this.updateHistoryControls();
+      return;
+    }
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
 
     for (const card of this.renderedCards) {
-      const index = Number(card.dataset.index ?? "-1");
-      card.toggleClass("is-active", index === activeIndex);
-      card.style.zIndex = String(cardStackOrder(index, activeIndex));
-      this.cardFooters.setInteractive(card, index === activeIndex);
+      const filedIndex = Number(card.dataset.filedIndex ?? "-1");
+      card.toggleClass("is-active", filedIndex === activeIndex);
+      card.style.zIndex = String(cardStackOrder(filedIndex, activeIndex));
+      this.cardFooters.setInteractive(card, filedIndex === activeIndex);
     }
-
-    const activeAddress = this.activeCard?.id;
-    this.filingPromptEl?.setText(
-      activeAddress === undefined
-        ? "Choose an attachment point"
-        : `Attach from ${activeAddress}`,
-    );
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
@@ -1477,7 +1795,11 @@ export class DeckView extends ItemView {
   }
 
   private queueRenderWindowRefresh(): void {
-    if (this.renderRefreshPending || this.pointerLastX !== null) {
+    if (
+      this.filingFile !== null ||
+      this.renderRefreshPending ||
+      this.pointerLastX !== null
+    ) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
@@ -1507,10 +1829,12 @@ export class DeckView extends ItemView {
 
   private updateHistoryControls(): void {
     if (this.backButtonEl !== null) {
-      this.backButtonEl.disabled = !this.history.canBack();
+      this.backButtonEl.disabled =
+        this.filingFile !== null || !this.history.canBack();
     }
     if (this.forwardButtonEl !== null) {
-      this.forwardButtonEl.disabled = !this.history.canForward();
+      this.forwardButtonEl.disabled =
+        this.filingFile !== null || !this.history.canForward();
     }
   }
 

@@ -2,70 +2,80 @@ import type { App, TFile } from "obsidian";
 import { TFile as ObsidianFile } from "obsidian";
 
 import {
-  buildFiledZettelLookups,
-  indexZettelMetadata,
-  zettelMetadataRecord,
-  type FiledZettelRecord,
-  type ZettelMetadataIndex,
-} from "./zettel-metadata.js";
+  buildFiledCardLookups,
+  cardMetadataRecord,
+  indexCardMetadata,
+  type CardMetadataIndex,
+  type FiledCardRecord,
+} from "./card-metadata.js";
 import { indexFiledBacklinks } from "./backlinks.js";
+import type { DeckOrdering } from "./address-order.js";
 
-export interface FiledZettel extends FiledZettelRecord {
+export interface FiledCard extends FiledCardRecord {
   readonly file: TFile;
 }
 
-export interface VaultZettelIndex extends ZettelMetadataIndex {
-  readonly filed: readonly FiledZettel[];
+export interface VaultCardIndex extends CardMetadataIndex {
+  readonly filed: readonly FiledCard[];
   readonly unfiled: readonly TFile[];
-  readonly backlinksByTargetPath: ReadonlyMap<
-    string,
-    readonly FiledZettel[]
-  >;
+  readonly backlinksByTargetPath: ReadonlyMap<string, readonly FiledCard[]>;
 }
 
-const EMPTY_INDEX: VaultZettelIndex = {
+const EMPTY_INDEX: VaultCardIndex = {
   filed: [],
   unfiled: [],
   unfiledPaths: [],
   issues: [],
-  allValidIds: [],
   backlinksByTargetPath: new Map(),
 };
 
-const NO_BACKLINKS: readonly FiledZettel[] = [];
-const NO_FILED_CARDS: readonly FiledZettel[] = [];
+const NO_BACKLINKS: readonly FiledCard[] = [];
+const NO_FILED_CARDS: readonly FiledCard[] = [];
 
 /** A lightweight, cache-backed index over all Markdown files in the vault. */
-export class ZettelIndex {
-  private current: VaultZettelIndex = EMPTY_INDEX;
-  private filedByPathMap = new Map<string, FiledZettel>();
+export class CardIndex {
+  private current: VaultCardIndex = EMPTY_INDEX;
+  private filedByPathMap = new Map<string, FiledCard>();
   private filedIndexByPathMap = new Map<string, number>();
-  private filedByAddressMap = new Map<string, readonly FiledZettel[]>();
+  private filedByAddressMap = new Map<string, readonly FiledCard[]>();
 
   constructor(
     private readonly app: App,
     private addressProperty = "zettel-id",
+    private ordering: DeckOrdering = "natural",
   ) {}
 
-  get snapshot(): VaultZettelIndex {
+  get snapshot(): VaultCardIndex {
     return this.current;
+  }
+
+  get deckOrdering(): DeckOrdering {
+    return this.ordering;
   }
 
   setAddressProperty(addressProperty: string): void {
     this.addressProperty = addressProperty;
   }
 
-  refresh(): VaultZettelIndex {
+  setDeckOrdering(ordering: DeckOrdering): void {
+    this.ordering = ordering;
+  }
+
+  refresh(): VaultCardIndex {
     const markdownFiles = this.app.vault.getMarkdownFiles();
-    const records = markdownFiles.map((file) => zettelMetadataRecord(
+    const records = markdownFiles.map((file) => cardMetadataRecord(
       file.path,
       this.app.metadataCache.getFileCache(file)?.frontmatter,
       this.addressProperty,
     ));
 
-    const indexed = indexZettelMetadata(records, this.addressProperty);
+    const indexed = indexCardMetadata(
+      records,
+      this.addressProperty,
+      this.ordering,
+    );
     const filesByPath = new Map(markdownFiles.map((file) => [file.path, file]));
-    const filed: FiledZettel[] = [];
+    const filed: FiledCard[] = [];
 
     for (const record of indexed.filed) {
       const file = filesByPath.get(record.path);
@@ -82,7 +92,7 @@ export class ZettelIndex {
       this.app.metadataCache.resolvedLinks,
     );
 
-    const lookups = buildFiledZettelLookups(filed);
+    const lookups = buildFiledCardLookups(filed);
     this.filedByPathMap = new Map(lookups.byPath);
     this.filedIndexByPathMap = new Map(lookups.indexByPath);
     this.filedByAddressMap = new Map(lookups.byAddress);
@@ -90,20 +100,20 @@ export class ZettelIndex {
     return this.current;
   }
 
-  filedByPath(path: string): FiledZettel | undefined {
+  filedByPath(path: string): FiledCard | undefined {
     return this.filedByPathMap.get(path);
   }
 
-  filedByFile(file: TFile): FiledZettel | undefined {
+  filedByFile(file: TFile): FiledCard | undefined {
     return this.filedByPath(file.path);
   }
 
-  filedAtAddress(id: string): readonly FiledZettel[] {
-    return this.filedByAddressMap.get(id) ?? NO_FILED_CARDS;
+  filedAtAddress(address: string): readonly FiledCard[] {
+    return this.filedByAddressMap.get(address) ?? NO_FILED_CARDS;
   }
 
-  firstFiledAtAddress(id: string): FiledZettel | undefined {
-    return this.filedAtAddress(id)[0];
+  firstFiledAtAddress(address: string): FiledCard | undefined {
+    return this.filedAtAddress(address)[0];
   }
 
   filedIndexForPath(path: string | null): number {
@@ -115,7 +125,7 @@ export class ZettelIndex {
     return file instanceof ObsidianFile ? file : undefined;
   }
 
-  backlinksForPath(path: string): readonly FiledZettel[] {
+  backlinksForPath(path: string): readonly FiledCard[] {
     return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
   }
 

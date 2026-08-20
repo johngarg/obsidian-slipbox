@@ -8,6 +8,7 @@ import {
   normalizeCardSize,
   normalizeFolderPath,
   normalizeSettings,
+  settingsForPersistence,
 } from "../src/settings.js";
 
 describe("Slipbox settings", () => {
@@ -29,11 +30,13 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.newNoteTemplatePath, "");
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
+    assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
   });
 
   test("normalizes property names, buttons, and configured shortcuts", () => {
     const settings = normalizeSettings({
       addressProperty: " signature ",
+      deckOrdering: "lexicographic",
       titleSource: "frontmatter",
       titleProperty: " display-name ",
       mainCardSize: "large",
@@ -55,6 +58,7 @@ describe("Slipbox settings", () => {
     });
 
     assert.equal(settings.addressProperty, "signature");
+    assert.equal(settings.deckOrdering, "lexicographic");
     assert.equal(settings.titleSource, "frontmatter");
     assert.equal(settings.titleProperty, "display-name");
     assert.equal(settings.mainCardSize, "large");
@@ -74,6 +78,39 @@ describe("Slipbox settings", () => {
     ]);
     assert.deepEqual(settings.deckKeybindings["next-card"], []);
     assert.deepEqual(settings.deckKeybindings["open-note"], []);
+  });
+
+  test("ignores removed settings at runtime but preserves them on save", () => {
+    const raw = {
+      addressProperty: "zettel-id",
+      unknownFutureKey: { retained: true },
+      deckHeaderButtons: { "add-card": false, bookmark: false },
+      deckKeybindings: {
+        "add-card": [{ key: "a", modifiers: [] }],
+        "new-section": [{ key: "n", modifiers: [] }],
+      },
+    };
+    const settings = normalizeSettings(raw);
+    assert.equal("add-card" in settings.deckHeaderButtons, false);
+    assert.equal("add-card" in settings.deckKeybindings, false);
+    assert.equal("new-section" in settings.deckKeybindings, false);
+    assert.equal(
+      Object.values(settings.deckKeybindings).flat().some(
+        (binding) => binding.key === "a",
+      ),
+      false,
+    );
+
+    const persisted = settingsForPersistence(raw, settings);
+    assert.deepEqual(persisted.unknownFutureKey, { retained: true });
+    assert.equal(
+      (persisted.deckHeaderButtons as Record<string, unknown>)["add-card"],
+      false,
+    );
+    assert.deepEqual(
+      (persisted.deckKeybindings as Record<string, unknown>)["add-card"],
+      [{ key: "a", modifiers: [] }],
+    );
   });
 
   test("falls back from invalid property settings", () => {

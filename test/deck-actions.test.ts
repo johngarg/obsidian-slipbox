@@ -6,6 +6,7 @@ import {
   trayToggleLabel,
   type DeckActionContext,
 } from "../src/deck-actions.js";
+import { DECK_ACTION_DEFINITIONS } from "../src/settings.js";
 
 const READY: DeckActionContext = {
   hasActiveCard: true,
@@ -24,7 +25,7 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("toggle-tray", READY), true);
     assert.equal(canRunDeckAction("back", READY), true);
     assert.equal(canRunDeckAction("problems", READY), true);
-    assert.equal(canRunDeckAction("file-here", READY), true);
+    assert.equal(canRunDeckAction("confirm-filing", READY), true);
     assert.equal(canRunDeckAction("cancel-filing", READY), true);
   });
 
@@ -43,10 +44,24 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
     assert.equal(canRunDeckAction("forward", unavailable), false);
     assert.equal(canRunDeckAction("problems", unavailable), false);
-    assert.equal(canRunDeckAction("file-here", unavailable), false);
+    assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
     assert.equal(canRunDeckAction("entry-points", unavailable), true);
-    assert.equal(canRunDeckAction("new-section", unavailable), true);
+  });
+
+  test("does not expose removed creation actions or reuse the a shortcut", () => {
+    const definitions = DECK_ACTION_DEFINITIONS as readonly {
+      readonly id: string;
+      readonly defaultBindings: readonly { readonly key: string }[];
+    }[];
+    assert.equal(definitions.some((definition) => definition.id === "add-card"), false);
+    assert.equal(definitions.some((definition) => definition.id === "new-section"), false);
+    assert.equal(definitions.some((definition) => definition.id === "file-here"), false);
+    assert.equal(
+      definitions.some((definition) =>
+        definition.defaultBindings.some((binding) => binding.key === "a")),
+      false,
+    );
   });
 
   test("uses concise state-dependent wording in shared card actions", () => {

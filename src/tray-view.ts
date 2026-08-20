@@ -244,7 +244,7 @@ export class TrayRenderer {
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const address = filed?.id ?? "unfiled";
+    const address = filed?.address ?? "unfiled";
     const title = this.plugin.cardTitle(file);
     const miniature = parent.createDiv({
       cls: "slipbox-tray-card",

@@ -27,7 +27,6 @@ export function canRunDeckAction(
       return context.hasNextCard;
     case "centre-card":
     case "open-note":
-    case "add-card":
     case "toggle-tray":
     case "toggle-bookmark":
       return context.hasActiveCard;
@@ -40,13 +39,12 @@ export function canRunDeckAction(
       return context.canGoForward;
     case "problems":
       return context.hasProblems;
-    case "file-here":
-      return context.filing && context.hasActiveCard;
+    case "confirm-filing":
+      return context.filing;
     case "cancel-filing":
       return context.filing;
     case "entry-points":
     case "bookmarks":
-    case "new-section":
       return true;
   }
 }

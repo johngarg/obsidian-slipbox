@@ -1,4 +1,4 @@
-import { isValidZettelId } from "./zettel-id.js";
+import { validateAddress } from "./address-order.js";
 import { normalizeBookmarks, type StoredBookmark } from "./bookmarks.js";
 import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
 import {
@@ -10,7 +10,7 @@ import {
 
 export interface EntryPoint {
   readonly name: string;
-  readonly id: string;
+  readonly address: string;
 }
 
 export interface SlipboxPluginState {
@@ -55,16 +55,21 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
 
   const entryPoints = Array.isArray(value.entryPoints)
     ? value.entryPoints.flatMap((entry): EntryPoint[] => {
+        if (!isRecord(entry)) {
+          return [];
+        }
+        const address = typeof entry.address === "string"
+          ? entry.address
+          : entry.id;
         if (
-          !isRecord(entry) ||
           typeof entry.name !== "string" ||
           entry.name.trim() === "" ||
-          typeof entry.id !== "string" ||
-          !isValidZettelId(entry.id)
+          typeof address !== "string" ||
+          !validateAddress(address).valid
         ) {
           return [];
         }
-        return [{ name: entry.name.trim(), id: entry.id }];
+        return [{ name: entry.name.trim(), address }];
       })
     : [];
 

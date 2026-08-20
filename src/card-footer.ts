@@ -8,7 +8,7 @@ import {
 
 import { fitBacklinkPrefix } from "./backlinks.js";
 import { trayToggleLabel } from "./deck-actions.js";
-import type { FiledZettel } from "./zettel-index.js";
+import type { FiledCard } from "./card-index.js";
 
 export interface CardFooterEnvironment {
   readonly app: App;
@@ -20,9 +20,9 @@ export interface CardFooterEnvironment {
 
 export interface CardFooterRenderOptions {
   readonly sourcePath: string;
-  readonly backlinks: readonly FiledZettel[];
+  readonly backlinks: readonly FiledCard[];
   readonly interactive: boolean;
-  readonly activate: (backlink: FiledZettel) => void | Promise<void>;
+  readonly activate: (backlink: FiledCard) => void | Promise<void>;
 }
 
 interface RenderedFooter extends CardFooterRenderOptions {
@@ -76,7 +76,7 @@ export class CardFooterManager {
       const measureItems = options.backlinks.map((backlink) =>
         measure.createSpan({
           cls: "slipbox-card-backlink",
-          text: backlink.id,
+          text: backlink.address,
         }),
       );
       const measureSeparator = measure.createSpan({
@@ -239,7 +239,7 @@ export class CardFooterManager {
   private createBacklinkAnchor(
     parent: HTMLElement | DocumentFragment,
     entry: RenderedFooter,
-    backlink: FiledZettel,
+    backlink: FiledCard,
     tabbable: boolean,
   ): HTMLAnchorElement {
     const linktext = this.environment.app.metadataCache.fileToLinktext(
@@ -248,10 +248,10 @@ export class CardFooterManager {
     );
     const anchor = parent.createEl("a", {
       cls: "internal-link slipbox-card-backlink",
-      text: backlink.id,
+      text: backlink.address,
       attr: {
         href: linktext,
-        "aria-label": `Backlink from Zettel ${backlink.id}`,
+        "aria-label": `Backlink from card ${backlink.address}`,
       },
     });
     anchor.dataset.href = linktext;
@@ -292,7 +292,7 @@ export class CardFooterManager {
 
   private activate(
     entry: RenderedFooter,
-    backlink: FiledZettel,
+    backlink: FiledCard,
     linktext: string,
     event: MouseEvent | KeyboardEvent,
   ): void {
@@ -349,7 +349,7 @@ export class CardFooterManager {
 
   private showBacklinkContextMenu(
     event: MouseEvent,
-    backlink: FiledZettel,
+    backlink: FiledCard,
   ): void {
     this.closeOverflowMenu();
     const inTray = this.environment.isInTray(backlink.file);

@@ -6,19 +6,19 @@ import {
   indexFiledBacklinks,
 } from "../src/backlinks.js";
 import {
-  indexZettelMetadata,
-  type ZettelMetadataRecord,
-} from "../src/zettel-metadata.js";
+  indexCardMetadata,
+  type CardMetadataRecord,
+} from "../src/card-metadata.js";
 
 function backlinks(
-  records: readonly ZettelMetadataRecord[],
+  records: readonly CardMetadataRecord[],
   resolvedLinks: Readonly<Record<string, Readonly<Record<string, number>>>>,
-): ReadonlyMap<string, readonly { readonly id: string; readonly path: string }[]> {
-  return indexFiledBacklinks(indexZettelMetadata(records).filed, resolvedLinks);
+): ReadonlyMap<string, readonly { readonly address: string; readonly path: string }[]> {
+  return indexFiledBacklinks(indexCardMetadata(records).filed, resolvedLinks);
 }
 
-function filed(path: string, id: string): ZettelMetadataRecord {
-  return { path, hasZettelId: true, zettelId: id };
+function filed(path: string, address: string): CardMetadataRecord {
+  return { path, hasAddress: true, address };
 }
 
 describe("filed backlink index", () => {
@@ -38,7 +38,7 @@ describe("filed backlink index", () => {
     );
 
     assert.deepEqual(
-      result.get("target.md")?.map((source) => source.id),
+      result.get("target.md")?.map((source) => source.address),
       ["4/7", "18/2a", "44/1c"],
     );
   });
@@ -48,14 +48,14 @@ describe("filed backlink index", () => {
       [
         filed("target.md", "21/3b"),
         filed("valid.md", "4/7"),
-        { path: "ordinary.md", hasZettelId: false, zettelId: undefined },
-        { path: "unfiled.md", hasZettelId: true, zettelId: "" },
-        { path: "invalid.md", hasZettelId: true, zettelId: "broken" },
+        { path: "ordinary.md", hasAddress: false, address: undefined },
+        { path: "unfiled.md", hasAddress: true, address: "" },
+        { path: "invalid.md", hasAddress: true, address: " broken" },
         filed("duplicate-a.md", "18/2a"),
         filed("duplicate-b.md", "18/2a"),
         filed("duplicate-target-a.md", "44/1c"),
         filed("duplicate-target-b.md", "44/1c"),
-        { path: "unfiled-target.md", hasZettelId: true, zettelId: "" },
+        { path: "unfiled-target.md", hasAddress: true, address: "" },
       ],
       {
         "target.md": { "target.md": 1 },
@@ -74,16 +74,16 @@ describe("filed backlink index", () => {
     );
 
     assert.deepEqual(result.get("target.md"), [
-      { path: "valid.md", id: "4/7" },
-      { path: "duplicate-a.md", id: "18/2a" },
-      { path: "duplicate-b.md", id: "18/2a" },
+      { path: "valid.md", address: "4/7" },
+      { path: "duplicate-a.md", address: "18/2a" },
+      { path: "duplicate-b.md", address: "18/2a" },
     ]);
     assert.equal(result.has("unfiled-target.md"), false);
     assert.deepEqual(result.get("duplicate-target-a.md"), [
-      { path: "valid.md", id: "4/7" },
+      { path: "valid.md", address: "4/7" },
     ]);
     assert.deepEqual(result.get("duplicate-target-b.md"), [
-      { path: "valid.md", id: "4/7" },
+      { path: "valid.md", address: "4/7" },
     ]);
   });
 
@@ -95,19 +95,19 @@ describe("filed backlink index", () => {
     ];
     assert.equal(
       backlinks(initialRecords, { "source.md": { "target.md": 1 } })
-        .get("target.md")?.[0]?.id,
+        .get("target.md")?.[0]?.address,
       "4/7",
     );
     assert.equal(backlinks(initialRecords, { "source.md": {} }).size, 0);
     assert.equal(
       backlinks(initialRecords, { "source.md": { "other.md": 1 } })
-        .get("other.md")?.[0]?.id,
+        .get("other.md")?.[0]?.address,
       "4/7",
     );
     assert.equal(
       backlinks(
         [
-          { path: "source.md", hasZettelId: true, zettelId: "" },
+          { path: "source.md", hasAddress: true, address: "" },
           ...initialRecords.slice(1),
         ],
         { "source.md": { "target.md": 1 } },
@@ -131,7 +131,7 @@ describe("filed backlink index", () => {
 describe("backlink footer fitting", () => {
   const overflow = (count: number): number => String(count).length * 6 + 8;
 
-  it("shows every ID when the complete row fits", () => {
+  it("shows every address when the complete row fits", () => {
     assert.deepEqual(fitBacklinkPrefix(34, [10, 10, 10], 2, overflow), {
       visibleCount: 3,
       hiddenCount: 0,
@@ -145,7 +145,7 @@ describe("backlink footer fitting", () => {
     });
   });
 
-  it("shows only +N when no complete ID fits", () => {
+  it("shows only +N when no complete address fits", () => {
     assert.deepEqual(fitBacklinkPrefix(14, [80, 90], 4, overflow), {
       visibleCount: 0,
       hiddenCount: 2,
@@ -163,15 +163,15 @@ describe("backlink footer fitting", () => {
     );
   });
 
-  it("partitions varied canonical IDs into complete, unique ordered runs", () => {
-    const ids = ["4/7", "18/2a", "44/123456789abcdef", "91/4c"];
+  it("partitions varied addresses into complete, unique ordered runs", () => {
+    const addresses = ["4/7", "18/2a", "44/123456789abcdef", "91/4c"];
     const fit = fitBacklinkPrefix(45, [12, 20, 92, 22], 3, overflow);
-    const shown = ids.slice(0, fit.visibleCount);
-    const omitted = ids.slice(fit.visibleCount);
+    const shown = addresses.slice(0, fit.visibleCount);
+    const omitted = addresses.slice(fit.visibleCount);
 
     assert.deepEqual(shown, ["4/7"]);
     assert.deepEqual(omitted, ["18/2a", "44/123456789abcdef", "91/4c"]);
-    assert.deepEqual([...shown, ...omitted], ids);
+    assert.deepEqual([...shown, ...omitted], addresses);
     assert.equal(new Set(omitted).size, omitted.length);
   });
 });

@@ -1,7 +1,4 @@
-import {
-  compareFiledZettels,
-  type FiledZettelRecord,
-} from "./zettel-metadata.js";
+import type { FiledCardRecord } from "./card-metadata.js";
 
 export type ResolvedLinks = Readonly<
   Record<string, Readonly<Record<string, number>>>
@@ -19,11 +16,12 @@ export interface BacklinkFit {
  * notes. Keeping the result keyed by target path preserves exact file identity
  * while the retained records provide address presentation.
  */
-export function indexFiledBacklinks<T extends FiledZettelRecord>(
+export function indexFiledBacklinks<T extends FiledCardRecord>(
   filed: readonly T[],
   resolvedLinks: ResolvedLinks,
 ): ReadonlyMap<string, readonly T[]> {
   const filedByPath = new Map(filed.map((card) => [card.path, card]));
+  const filedRank = new Map(filed.map((card, index) => [card.path, index]));
   const sourcesByTarget = new Map<string, T[]>();
 
   for (const [sourcePath, destinations] of Object.entries(resolvedLinks)) {
@@ -47,12 +45,13 @@ export function indexFiledBacklinks<T extends FiledZettelRecord>(
   }
 
   for (const sources of sourcesByTarget.values()) {
-    sources.sort(compareFiledZettels);
+    sources.sort((left, right) =>
+      (filedRank.get(left.path) ?? -1) - (filedRank.get(right.path) ?? -1));
   }
   return sourcesByTarget;
 }
 
-/** Choose the longest leading run of complete IDs that fits beside `+N`. */
+/** Choose the longest leading run of complete addresses that fits beside `+N`. */
 export function fitBacklinkPrefix(
   availableWidth: number,
   itemWidths: readonly number[],

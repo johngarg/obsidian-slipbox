@@ -47,7 +47,7 @@ describe("bookmarks", () => {
         { path: "Cards/first.md" },
         { zettelId: "17/4a", color: "red" },
         { zettelId: "17/4a" },
-        { zettelId: "01/1" },
+        { zettelId: " 01/1" },
       ]),
       [first, { path: "Cards/second.md" }, { zettelId: "17/4a" }],
     );
@@ -61,7 +61,7 @@ describe("bookmarks", () => {
     assert.deepEqual(
       migrateAddressBookmarks(
         [{ zettelId: "17/4a" }, { path: "Cards/existing.md" }],
-        (id) => paths.get(id),
+        (address) => paths.get(address),
       ),
       [{ path: "Cards/a.md" }, { path: "Cards/existing.md" }],
     );

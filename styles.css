@@ -888,6 +888,15 @@ button.slipbox-card-backlink-overflow:disabled {
   top: 62%;
   width: min(56%, 800px);
   max-height: 58%;
+  pointer-events: none;
+}
+
+.is-filing .slipbox-in-hand-preview a,
+.is-filing .slipbox-in-hand-preview button,
+.is-filing .slipbox-in-hand-preview input,
+.is-filing .slipbox-in-hand-preview textarea,
+.is-filing .slipbox-in-hand-preview select {
+  pointer-events: none;
 }
 
 .slipbox-filing-actions {
@@ -896,22 +905,122 @@ button.slipbox-card-backlink-overflow:disabled {
   bottom: 0;
   left: 0;
   z-index: 240;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) minmax(180px, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 7px 12px;
+  gap: 8px 14px;
+  min-height: 68px;
+  padding: 8px 14px;
   border-top: 1px solid var(--background-modifier-border);
   background: color-mix(in srgb, var(--background-primary) 94%, transparent);
   backdrop-filter: blur(10px);
 }
 
-.slipbox-filing-prompt {
-  margin-right: 8px;
+.slipbox-filing-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.slipbox-filing-field > span {
   color: var(--text-muted);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);
+}
+
+.slipbox-filing-field input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-monospace);
+}
+
+.slipbox-filing-status,
+.slipbox-filing-duplicate {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.slipbox-filing-duplicate {
+  grid-column: 1 / 3;
+  max-height: 84px;
+  overflow: auto;
+}
+
+.slipbox-filing-duplicate:empty {
+  display: none;
+}
+
+.slipbox-filing-duplicate ul {
+  margin: 3px 0 0;
+  padding-left: 22px;
+  font-family: var(--font-monospace);
+}
+
+.slipbox-filing-buttons {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  gap: 8px;
+}
+
+.slipbox-filing-ghost {
+  border: 2px dashed var(--interactive-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--interactive-accent) 12%, transparent), var(--shadow-s);
+  background: color-mix(in srgb, var(--background-primary) 90%, var(--interactive-accent));
+  filter: saturate(0.78);
+}
+
+.slipbox-filing-ghost .slipbox-card-frame {
+  justify-content: center;
+  border: 0;
+  background: transparent;
+}
+
+.slipbox-filing-ghost-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100%;
+  padding: 36px;
+  text-align: center;
+}
+
+.slipbox-filing-ghost-address {
+  color: var(--interactive-accent);
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  font-weight: var(--font-semibold);
+}
+
+.slipbox-filing-ghost-title {
+  color: var(--text-normal);
+  font-size: clamp(1.1rem, 2.3vw, 1.7rem);
+  font-weight: var(--font-semibold);
+}
+
+.slipbox-filing-ghost-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .slipbox-filing-actions {
+    grid-template-columns: 1fr auto;
+  }
+
+  .slipbox-filing-status,
+  .slipbox-filing-duplicate {
+    grid-column: 1;
+  }
+
+  .slipbox-filing-buttons {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
 }
 
 .slipbox-deck-empty {
@@ -958,7 +1067,7 @@ button.slipbox-card-backlink-overflow:disabled {
   gap: 6px;
 }
 
-.slipbox-entry-id.is-missing {
+.slipbox-entry-address.is-missing {
   color: var(--text-error);
 }
 
@@ -1012,7 +1121,7 @@ button.slipbox-card-backlink-overflow:disabled {
   white-space: nowrap;
 }
 
-.slipbox-entry-id {
+.slipbox-entry-address {
   color: var(--text-muted);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);

@@ -37,6 +37,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl).setName("Cards and metadata").setHeading();
     this.renderAddressProperty(containerEl);
+    this.renderDeckOrdering(containerEl);
 
     new Setting(containerEl)
       .setName("Title source")
@@ -314,9 +315,26 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
   }
 
+  private renderDeckOrdering(container: HTMLElement): void {
+    new Setting(container)
+      .setName("Deck ordering")
+      .setDesc("Controls how manually assigned addresses are arranged in the Deck. Changing this setting reorders cards but does not edit Markdown files.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("natural", "Natural")
+          .addOption("lexicographic", "Lexicographic")
+          .setValue(this.slipbox.settings.deckOrdering)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            deckOrdering: value === "lexicographic"
+              ? "lexicographic"
+              : "natural",
+          }));
+      });
+  }
+
   private renderDeckHeaderButtons(container: HTMLElement): void {
     const labels = {
-      "add-card": "Add card from here",
       "open-note": "Open Markdown note",
       tray: "Pull out or return card",
       bookmark: "Toggle bookmark",

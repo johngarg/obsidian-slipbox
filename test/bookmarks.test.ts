@@ -5,46 +5,36 @@ import {
   createBookmark,
   deleteBookmark,
   normalizeBookmarks,
-  updateBookmark,
   type DeckBookmark,
 } from "../src/bookmarks.js";
 
 describe("bookmarks", () => {
   const first: DeckBookmark = {
-    id: "bookmark-1",
     zettelId: "17/4a",
-    label: "Theology",
   };
 
-  test("creates, edits, and deletes a bookmark", () => {
-    const created = createBookmark([], first);
+  test("creates and deletes a zettel-id bookmark", () => {
+    const created = createBookmark([], first.zettelId);
     assert.deepEqual(created, [first]);
-    const updated = updateBookmark(created, first.id, {
-      label: "Magic",
-    });
-    assert.deepEqual(updated, [{ ...first, label: "Magic" }]);
-    assert.deepEqual(deleteBookmark(updated, first.id), []);
+    assert.deepEqual(deleteBookmark(created, first.zettelId), []);
   });
 
   test("enforces one bookmark per filed card", () => {
     assert.throws(
-      () => createBookmark([first], {
-        id: "bookmark-2",
-        zettelId: first.zettelId,
-      }),
+      () => createBookmark([first], first.zettelId),
       /already has a bookmark/,
     );
   });
 
-  test("normalizes persisted state and retains stale but valid addresses", () => {
+  test("drops legacy names and identifiers while retaining valid addresses", () => {
     assert.deepEqual(
       normalizeBookmarks([
-        { ...first, color: "red" },
+        { id: "bookmark-1", ...first, label: "Theology", color: "red" },
         { id: "bookmark-2", zettelId: "99/1", color: "blue" },
         { id: "duplicate-card", zettelId: "17/4a", color: "green" },
         { id: "invalid", zettelId: "01/1", color: "red" },
       ]),
-      [first, { id: "bookmark-2", zettelId: "99/1", label: "" }],
+      [first, { zettelId: "99/1" }],
     );
   });
 });

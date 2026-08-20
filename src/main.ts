@@ -10,7 +10,6 @@ import {
 import {
   createBookmark,
   deleteBookmark,
-  updateBookmark,
   type DeckBookmark,
 } from "./bookmarks.js";
 import { DECK_VIEW_TYPE, DeckView } from "./deck-view.js";
@@ -28,7 +27,6 @@ import {
   BookmarksModal,
   EntryPointsModal,
   IssuesModal,
-  promptForBookmark,
   promptForText,
 } from "./modals.js";
 import {
@@ -186,8 +184,7 @@ export default class ZettelkastenPlugin extends Plugin {
       isAvailable: (id) => this.index.filedById(id) !== undefined,
       visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addBookmarkToCurrent(),
-      edit: (id) => this.editBookmark(id),
-      remove: (id) => this.removeBookmark(id),
+      remove: (zettelId) => this.removeBookmark(zettelId),
     }).open();
   }
 
@@ -204,25 +201,23 @@ export default class ZettelkastenPlugin extends Plugin {
       new Notice(`${zettelId} already has a bookmark.`);
       return;
     }
-    const details = await promptForBookmark(this.app, `Bookmark ${zettelId}`, {
-      label: "",
-    });
-    if (details === null) {
-      return;
-    }
     try {
       this.state = {
         ...this.state,
-        bookmarks: createBookmark(this.state.bookmarks, {
-          id: createStableId(),
-          zettelId,
-          ...details,
-        }),
+        bookmarks: createBookmark(this.state.bookmarks, zettelId),
       };
       await this.persistStateAndRefreshViews();
       new Notice(`Bookmarked ${zettelId}.`);
     } catch (error) {
       new Notice(`Could not add bookmark: ${errorMessage(error)}`);
+    }
+  }
+
+  async toggleBookmark(zettelId: string): Promise<void> {
+    if (this.bookmarkAt(zettelId) === undefined) {
+      await this.addBookmark(zettelId);
+    } else {
+      await this.removeBookmark(zettelId);
     }
   }
 
@@ -646,37 +641,16 @@ export default class ZettelkastenPlugin extends Plugin {
     return state === "filed" || state === "unfiled" ? activeFile : null;
   }
 
-  private async editBookmark(id: string): Promise<void> {
-    const bookmark = this.state.bookmarks.find((candidate) => candidate.id === id);
-    if (bookmark === undefined) {
-      return;
-    }
-    const details = await promptForBookmark(
-      this.app,
-      `Edit bookmark at ${bookmark.zettelId}`,
-      { label: bookmark.label },
-    );
-    if (details === null) {
+  private async removeBookmark(zettelId: string): Promise<void> {
+    if (this.bookmarkAt(zettelId) === undefined) {
       return;
     }
     this.state = {
       ...this.state,
-      bookmarks: updateBookmark(this.state.bookmarks, id, details),
+      bookmarks: deleteBookmark(this.state.bookmarks, zettelId),
     };
     await this.persistStateAndRefreshViews();
-  }
-
-  private async removeBookmark(id: string): Promise<void> {
-    const bookmark = this.state.bookmarks.find((candidate) => candidate.id === id);
-    if (bookmark === undefined) {
-      return;
-    }
-    this.state = {
-      ...this.state,
-      bookmarks: deleteBookmark(this.state.bookmarks, id),
-    };
-    await this.persistStateAndRefreshViews();
-    new Notice(`Deleted bookmark at ${bookmark.zettelId}.`);
+    new Notice(`Deleted bookmark at ${zettelId}.`);
   }
 
   private async renameEntryPoint(index: number): Promise<void> {
@@ -807,13 +781,6 @@ export default class ZettelkastenPlugin extends Plugin {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function createStableId(): string {
-  if (typeof window.crypto.randomUUID === "function") {
-    return window.crypto.randomUUID();
-  }
-  return `bookmark-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export type { EntryPoint };

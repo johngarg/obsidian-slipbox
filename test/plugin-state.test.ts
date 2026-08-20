@@ -21,7 +21,7 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Systems", id: "1/1" }],
         bookmarks: [
-          { id: "bookmark-1", zettelId: "2/3a", label: "Here" },
+          { zettelId: "2/3a" },
         ],
         deskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
         spread: 0.75,
@@ -48,7 +48,7 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Good", id: "3/1a" }],
         bookmarks: [
-          { id: "good", zettelId: "4/1", label: "" },
+          { zettelId: "4/1" },
         ],
         deskCards: [],
         spread: 1.12,

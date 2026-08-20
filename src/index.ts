@@ -23,7 +23,6 @@ export {
   createBookmark,
   deleteBookmark,
   normalizeBookmarks,
-  updateBookmark,
 } from "./bookmarks.js";
 export {
   addDeskCard,

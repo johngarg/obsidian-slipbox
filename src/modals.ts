@@ -91,88 +91,12 @@ export function promptForText(
   });
 }
 
-export interface BookmarkDetails {
-  readonly label: string;
-}
-
-export class BookmarkEditorModal extends Modal {
-  private settled = false;
-
-  constructor(
-    app: App,
-    private readonly heading: string,
-    private readonly initial: BookmarkDetails,
-    private readonly resolveValue: (value: BookmarkDetails | null) => void,
-  ) {
-    super(app);
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.addClass("zk-modal");
-    contentEl.createEl("h2", { text: this.heading });
-
-    const form = contentEl.createEl("form", { cls: "zk-prompt-form" });
-    const labelRow = form.createEl("label", { cls: "zk-field" });
-    labelRow.createSpan({ text: "Label (optional)" });
-    const label = labelRow.createEl("input", {
-      type: "text",
-      value: this.initial.label,
-      placeholder: "e.g. Theology",
-      attr: { maxlength: "80" },
-    });
-
-    const actions = form.createDiv({ cls: "zk-modal-actions" });
-    const cancel = actions.createEl("button", { text: "Cancel", type: "button" });
-    actions.createEl("button", {
-      text: "Save bookmark",
-      type: "submit",
-      cls: "mod-cta",
-    });
-    cancel.addEventListener("click", () => this.finish(null));
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      this.finish({ label: label.value.trim() });
-    });
-
-    window.setTimeout(() => label.focus());
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveValue(null);
-    }
-  }
-
-  private finish(value: BookmarkDetails | null): void {
-    if (this.settled) {
-      return;
-    }
-    this.settled = true;
-    this.resolveValue(value);
-    this.close();
-  }
-}
-
-export function promptForBookmark(
-  app: App,
-  heading: string,
-  initial: BookmarkDetails,
-): Promise<BookmarkDetails | null> {
-  return new Promise((resolve) => {
-    new BookmarkEditorModal(app, heading, initial, resolve).open();
-  });
-}
-
 export interface BookmarksModalActions {
   readonly currentId: string | null;
   isAvailable(zettelId: string): boolean;
   visit(zettelId: string): void;
   addCurrent(): Promise<void>;
-  edit(id: string): Promise<void>;
-  remove(id: string): Promise<void>;
+  remove(zettelId: string): Promise<void>;
 }
 
 export class BookmarksModal extends Modal {
@@ -206,10 +130,6 @@ export class BookmarksModal extends Modal {
       });
       visit.createSpan({
         cls: "zk-entry-name",
-        text: bookmark.label === "" ? bookmark.zettelId : bookmark.label,
-      });
-      visit.createSpan({
-        cls: available ? "zk-entry-id" : "zk-entry-id is-missing",
         text: available ? bookmark.zettelId : `${bookmark.zettelId} · missing`,
       });
       visit.disabled = !available;
@@ -218,13 +138,9 @@ export class BookmarksModal extends Modal {
         this.close();
       });
 
-      const edit = iconButton(row, "pencil", `Edit bookmark at ${bookmark.zettelId}`);
-      edit.addEventListener("click", () => {
-        void this.actions.edit(bookmark.id).then(() => this.close());
-      });
       const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
       remove.addEventListener("click", () => {
-        void this.actions.remove(bookmark.id).then(() => this.close());
+        void this.actions.remove(bookmark.zettelId).then(() => this.close());
       });
     }
 
@@ -234,7 +150,9 @@ export class BookmarksModal extends Modal {
       cls: "mod-cta",
       attr: { type: "button" },
     });
-    add.disabled = this.actions.currentId === null;
+    add.disabled = this.actions.currentId === null || this.bookmarks.some(
+      (bookmark) => bookmark.zettelId === this.actions.currentId,
+    );
     add.addEventListener("click", () => {
       void this.actions.addCurrent().then(() => this.close());
     });

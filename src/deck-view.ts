@@ -441,7 +441,7 @@ export class DeckView extends ItemView {
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", index === activeIndex);
-      const bookmark = this.plugin.bookmarkAt(card.id);
+      const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
       const cardLabel = `${card.id} · ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
@@ -454,21 +454,31 @@ export class DeckView extends ItemView {
       const frame = cardEl.createDiv({ cls: "zk-card-frame" });
       const addressRow = frame.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
-      if (bookmark !== undefined) {
-        const marker = addressRow.createSpan({
-          cls: "zk-bookmark-marker",
-        });
-        const icon = marker.createSpan({ cls: "zk-bookmark-marker-icon" });
-        setIcon(icon, "bookmark");
-        marker.createSpan({
-          cls: "zk-bookmark-marker-label",
-          text: bookmark.label === "" ? "bookmark" : bookmark.label,
-        });
-        marker.setAttr(
-          "aria-label",
-          `Bookmark ${bookmark.label === "" ? card.id : bookmark.label}`,
-        );
-      }
+      const bookmarkAction = isBookmarked
+        ? `Remove bookmark from ${card.id}`
+        : `Add bookmark to ${card.id}`;
+      const bookmarkToggle = addressRow.createEl("button", {
+        cls: "clickable-icon zk-card-bookmark-toggle",
+        attr: {
+          type: "button",
+          "aria-label": bookmarkAction,
+          "aria-pressed": String(isBookmarked),
+        },
+      });
+      bookmarkToggle.toggleClass("is-bookmarked", isBookmarked);
+      setIcon(bookmarkToggle, "bookmark");
+      setTooltip(bookmarkToggle, bookmarkAction, {
+        placement: "bottom",
+        delay: 250,
+      });
+      bookmarkToggle.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      bookmarkToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.plugin.toggleBookmark(card.id);
+      });
 
       const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
@@ -662,17 +672,15 @@ export class DeckView extends ItemView {
     for (const direction of ["left", "right"] as const) {
       const index = targets[direction];
       const card = index === null ? undefined : filed[index];
-      const bookmark = card === undefined ? undefined : this.plugin.bookmarkAt(card.id);
-      if (card === undefined || bookmark === undefined) {
+      if (card === undefined) {
         continue;
       }
-      const label = bookmark.label === "" ? card.id : bookmark.label;
       const tab = stage.createEl("button", {
         cls: `zk-bookmark-edge-tab is-${direction}`,
-        text: `${direction === "left" ? "◀" : "▶"} ${label}`,
+        text: `${direction === "left" ? "◀" : "▶"} ${card.id}`,
         attr: {
           type: "button",
-          "aria-label": `Jump to bookmark ${label}`,
+          "aria-label": `Jump to bookmark ${card.id}`,
         },
       });
       tab.addEventListener("click", () => void this.jumpToId(card.id));

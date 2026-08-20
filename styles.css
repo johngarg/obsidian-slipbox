@@ -200,35 +200,41 @@
   font-variant-numeric: tabular-nums;
 }
 
-.zk-bookmark-marker {
-  display: flex;
+.zk-card-bookmark-toggle {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 42%;
-  padding: 3px 7px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 5px;
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
-  font-size: var(--font-ui-smaller);
-  line-height: 1;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -4px -4px 0;
+  padding: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 
-.zk-bookmark-marker-icon {
-  display: flex;
-  flex: 0 0 auto;
+.zk-card:hover .zk-card-bookmark-toggle,
+.zk-card:focus-within .zk-card-bookmark-toggle,
+.zk-card-bookmark-toggle.is-bookmarked {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.zk-bookmark-marker-icon svg {
-  width: 12px;
-  height: 12px;
+.zk-card-bookmark-toggle:hover,
+.zk-card-bookmark-toggle:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
 }
 
-.zk-bookmark-marker-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.zk-card-bookmark-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.zk-card-bookmark-toggle.is-bookmarked svg {
+  fill: currentColor;
 }
 
 .zk-card-scroll {

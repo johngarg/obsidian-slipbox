@@ -15,28 +15,6 @@ export interface FilingPreview {
   readonly placementSignature: string;
 }
 
-export interface FiledDisplayItem<T extends AddressedPath> {
-  readonly kind: "filed";
-  readonly card: T;
-  readonly filedIndex: number;
-  readonly displayIndex: number;
-}
-
-export interface PreviewDisplayItem {
-  readonly kind: "preview";
-  readonly preview: FilingPreview;
-  readonly displayIndex: number;
-  readonly key: string;
-}
-
-export type DeckDisplayItem<T extends AddressedPath> =
-  | FiledDisplayItem<T>
-  | PreviewDisplayItem;
-
-export function filingPreviewKey(sourcePath: string): string {
-  return `filing-preview:${sourcePath}`;
-}
-
 /** Seed manual filing from the currently focused filed card, when available. */
 export function initialFilingAddress(
   focusedCard: Pick<AddressedPath, "address"> | null | undefined,
@@ -45,12 +23,11 @@ export function initialFilingAddress(
 }
 
 /**
- * Focus the real card immediately before the candidate so the insertion gap
- * and ghost remain prominent. At the beginning (and in an empty Deck), the
- * ghost itself is the only useful focus target.
+ * Focus the real card immediately before the candidate. At the beginning,
+ * where there is no predecessor, use the first real card as spatial context.
  */
-export function defaultFilingFocusIndex(preview: FilingPreview): number {
-  return Math.max(0, preview.insertionIndex - 1);
+export function filingPreviewFocusPath(preview: FilingPreview): string | null {
+  return preview.previousPath ?? preview.nextPath;
 }
 
 export function createFilingPreview<T extends AddressedPath>(
@@ -80,35 +57,6 @@ export function createFilingPreview<T extends AddressedPath>(
     ordering,
     placementSignature,
   };
-}
-
-export function deckDisplayItems<T extends AddressedPath>(
-  filed: readonly T[],
-  preview: FilingPreview | null,
-): readonly DeckDisplayItem<T>[] {
-  if (preview === null) {
-    return filed.map((card, filedIndex) => ({
-      kind: "filed",
-      card,
-      filedIndex,
-      displayIndex: filedIndex,
-    }));
-  }
-
-  const items: DeckDisplayItem<T>[] = filed.map((card, filedIndex) => ({
-    kind: "filed",
-    card,
-    filedIndex,
-    displayIndex:
-      filedIndex < preview.insertionIndex ? filedIndex : filedIndex + 1,
-  }));
-  items.splice(preview.insertionIndex, 0, {
-    kind: "preview",
-    preview,
-    displayIndex: preview.insertionIndex,
-    key: filingPreviewKey(preview.sourcePath),
-  });
-  return items;
 }
 
 export function filingPlacementMatches<T extends AddressedPath>(

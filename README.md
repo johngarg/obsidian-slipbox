@@ -71,10 +71,9 @@ change its address, Slipbox filing order, bookmark, or Canvas membership.
 
 Right-click a pile for `Return filed cards in this pile`, or right-click empty
 workspace for `Return all filed cards`. Both return only manually pulled filed
-cards; unfiled cards remain, and empty piles disappear. Piles are temporarily
-hidden during Filing Mode while the source card remains visible in hand.
-Successful filing removes the newly filed card from its former pile without
-reorganising the rest.
+cards; unfiled cards remain, and empty piles disappear. Inline filing leaves the
+source card in its existing pile and leaves every pile visible. Successful
+filing removes only the newly filed card from its former pile.
 
 ## Canvas integration
 
@@ -114,8 +113,8 @@ longer exist.
   filed file.
 - Card-header and context-menu actions for opening notes, pulling cards out or
   returning them, bookmarking, and deletion.
-- Manual Filing Mode with an address input and exact ghost-card placement
-  preview, plus ordinary-note conversion workflows.
+- Inline manual filing in the existing working card, with optional real-Deck
+  placement inspection, plus ordinary-note conversion workflows.
 - Filename- or frontmatter-derived centred titles, configurable new-card folder
   and timestamp naming, and Obsidian Templates integration.
 - Visible malformed-address errors and non-blocking duplicate-address warnings.
@@ -187,34 +186,28 @@ Desk shortcut is removed rather than repurposed.
 
 ## Manual filing and address domain
 
-`File current unfiled card` opens Filing Mode with the active filed card's
-address prefilled when one is available. The straightened card in hand becomes
-a temporary filing form: its header contains the address field above the
-resolved title, validation stays directly beneath the field, duplicate paths
-are available through a compact disclosure, and Cancel/File card sit in its
-footer. No bottom-screen filing bar is used. A valid value inserts a
-render-only ghost at the exact address-and-source-path position it would
-receive. The ghost shows the prospective address and current resolved title,
-reserves space among its neighbours, and remains visibly distinct from real
-cards. It has no path identity, actions, focus targets, bookmark or backlink
-state, and never enters the metadata index or history.
-The Deck initially focuses the real card immediately before the ghost (or the
-ghost itself at the beginning), so the insertion point stays prominent. `Tab`
-moves keyboard focus from the address field to the Deck, where the ordinary
-previous, next, centre, first, and last shortcuts navigate a transient display
-sequence containing the ghost. `Shift+Tab` returns to the address field, and
-horizontal Deck scrolling works in either focus mode. None of this changes the
-selected card or navigation history.
-Blank or invalid input removes it. Duplicate input keeps filing enabled and
-shows the matching paths while positioning the ghost within that group by the
-source path. `Enter` confirms a current preview and `Escape` cancels without
-changing Markdown or working-pile membership.
+`File current unfiled card`, the working-card File action, or a double-click on
+an unfiled address starts inline filing. The existing Tray card stays at its
+ordinary size and position, gains a light accent treatment, and replaces its
+`unfiled` label with an address field. The active filed card's address is
+prefilled when one is available. Validation and an expandable duplicate-path
+summary appear compactly on the same card; there is no separate card-in-hand,
+bottom bar, or Deck ghost.
+
+`Enter` confirms the current valid address and `Escape` cancels without changing
+Markdown or working-pile membership. `Tab` moves focus to the Deck and selects
+the real card immediately before the prospective insertion point. At the
+beginning it selects the first filed card for context. The ordinary Deck
+shortcuts and horizontal scrolling then work normally, including normal active
+card styling and history. `Shift+Tab` returns directly to the inline address
+field. Editing an address alone never moves the Deck.
 
 Before writing, Slipbox refreshes metadata and revalidates the exact source
 file, its unfiled state, the ordering mode, and the complete placement signature.
 The same checks run again inside the frontmatter mutation. If concurrent
 metadata, address, path, or ordering changes move the destination, no write is
-made; the ghost moves and requires another confirmation.
+made; the calculated destination is refreshed and requires another
+confirmation.
 
 The pure TypeScript domain in `src/address-order.ts` exports
 `compareAddressesNatural`, `compareAddressesLexicographic`,
@@ -227,7 +220,9 @@ Obsidian.
 
 This experiment removes the former structured-address parser and automatic
 address-generation public API. That is a breaking package API change. It also
-removes direct-child creation, next-section creation, `Add card from here`, the
+removes the short-lived ghost/display-sequence preview exports in favour of
+inline filing-editor helpers and a real-card focus-path helper, along with
+direct-child creation, next-section creation, `Add card from here`, the
 card-header `+`, and `New section`, including their commands, settings, and
 shortcuts. Persisted keys from older versions are ignored at runtime and
 preserved opaquely when settings are saved; the former `a` shortcut is not

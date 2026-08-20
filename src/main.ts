@@ -777,9 +777,7 @@ export default class SlipboxPlugin extends Plugin {
       name: "Add current card as entry point",
       checkCallback: (checking) => {
         const deckView = this.app.workspace.getActiveViewOfType(DeckView);
-        const deckAddress = deckView?.isFiling === true
-          ? undefined
-          : deckView?.activeCard?.address;
+        const deckAddress = deckView?.activeCard?.address;
         const activeFile = this.app.workspace.getActiveFile();
         const fileAddress = activeFile === null
           ? undefined
@@ -1213,9 +1211,6 @@ export default class SlipboxPlugin extends Plugin {
 
   private currentFiledPath(): string | null {
     const deck = this.app.workspace.getActiveViewOfType(DeckView);
-    if (deck?.isFiling === true) {
-      return null;
-    }
     const deckPath = deck?.activeCard?.path;
     if (deckPath !== undefined) {
       return deckPath;
@@ -1228,9 +1223,6 @@ export default class SlipboxPlugin extends Plugin {
 
   private currentCardFile(): TFile | null {
     const deck = this.app.workspace.getActiveViewOfType(DeckView);
-    if (deck?.isFiling === true) {
-      return null;
-    }
     const deckFile = deck?.activeCard?.file;
     if (deckFile !== undefined) {
       return deckFile;

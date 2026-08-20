@@ -5,13 +5,11 @@ import { Window } from "happy-dom";
 import {
   cardComparatorFor,
   createFilingPreview,
-  defaultFilingFocusIndex,
-  deckDisplayItems,
   filingPlacementMatches,
-  filingPreviewKey,
+  filingPreviewFocusPath,
   initialFilingAddress,
-  removeFilingGhost,
-  renderOrUpdateFilingGhost,
+  renderInlineFilingEditor,
+  updateInlineFilingEditor,
 } from "../src/index.js";
 
 const filed = [
@@ -80,14 +78,14 @@ describe("filing placement preview", () => {
     assert.equal(preview.nextPath, "z.md");
   });
 
-  test("focuses the card before the ghost by default", () => {
+  test("focuses the real card immediately before the candidate", () => {
     const middle = createFilingPreview(
       filed,
       { address: "A/12", path: "source.md" },
       "Source",
       "natural",
     );
-    assert.equal(defaultFilingFocusIndex(middle), 2);
+    assert.equal(filingPreviewFocusPath(middle), "z.md");
     assert.equal(middle.insertionIndex, 3);
 
     const beginning = createFilingPreview(
@@ -96,8 +94,16 @@ describe("filing placement preview", () => {
       "Source",
       "natural",
     );
-    assert.equal(defaultFilingFocusIndex(beginning), 0);
+    assert.equal(filingPreviewFocusPath(beginning), "one.md");
     assert.equal(beginning.insertionIndex, 0);
+
+    const end = createFilingPreview(
+      filed,
+      { address: "Z", path: "source.md" },
+      "Source",
+      "natural",
+    );
+    assert.equal(filingPreviewFocusPath(end), "last.md");
 
     const empty = createFilingPreview(
       [],
@@ -105,27 +111,7 @@ describe("filing placement preview", () => {
       "Source",
       "natural",
     );
-    assert.equal(defaultFilingFocusIndex(empty), 0);
-  });
-
-  test("derives one transient display item and reserves its gap", () => {
-    const preview = createFilingPreview(
-      filed,
-      { address: "A/10", path: "m.md" },
-      "Duplicate",
-      "natural",
-    );
-    const display = deckDisplayItems(filed, preview);
-    assert.equal(display.length, filed.length + 1);
-    assert.equal(display.filter((item) => item.kind === "preview").length, 1);
-    assert.equal(display[2]?.kind, "preview");
-    assert.equal(display[1]?.displayIndex, 1);
-    assert.equal(display[3]?.displayIndex, 3);
-    assert.equal(filingPreviewKey(preview.sourcePath), "filing-preview:m.md");
-    assert.deepEqual(
-      deckDisplayItems(filed, null).map((item) => item.kind),
-      ["filed", "filed", "filed", "filed"],
-    );
+    assert.equal(filingPreviewFocusPath(empty), null);
   });
 
   test("the eventual card sort index equals the preview index", () => {
@@ -196,70 +182,76 @@ describe("filing placement preview", () => {
   });
 });
 
-describe("filing ghost DOM", () => {
-  test("renders and updates one non-interactive keyed ghost", () => {
+describe("inline tray filing editor DOM", () => {
+  test("renders inline, updates feedback, and dispatches filing controls", () => {
     const window = new Window();
-    const elementPrototype = window.HTMLElement.prototype as unknown as {
-      createDiv(options?: { cls?: string }): HTMLElement;
-      createSpan(options?: { cls?: string }): HTMLElement;
-    };
-    elementPrototype.createDiv = function createDiv(
-      this: HTMLElement,
-      options = {},
-    ): HTMLElement {
-      const child = this.ownerDocument.createElementNS(
-        "http://www.w3.org/1999/xhtml",
-        "div",
-      );
-      child.className = options.cls ?? "";
-      this.append(child);
-      return child;
-    };
-    elementPrototype.createSpan = function createSpan(
-      this: HTMLElement,
-      options = {},
-    ): HTMLElement {
-      const child = this.ownerDocument.createElementNS(
-        "http://www.w3.org/1999/xhtml",
-        "span",
-      );
-      child.className = options.cls ?? "";
-      this.append(child);
-      return child;
-    };
-    const parent = (window.document.body as unknown as HTMLElement).createDiv();
-    const first = createFilingPreview(
-      filed,
-      { address: " A/12 ".trim(), path: "source.md" },
-      "Current resolved title",
-      "natural",
+    const happyCard = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
     );
-    const ghost = renderOrUpdateFilingGhost(parent, first, null);
-    assert.equal(parent.querySelectorAll(".slipbox-filing-ghost").length, 1);
-    assert.equal(
-      ghost.querySelector(".slipbox-filing-ghost-address")?.textContent,
-      "A/12",
+    const happyAddress = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "span",
     );
-    assert.equal(
-      ghost.querySelector(".slipbox-filing-ghost-title")?.textContent,
-      "Current resolved title",
+    happyCard.append(happyAddress);
+    window.document.body.append(happyCard);
+    const card = happyCard as unknown as HTMLElement;
+    const address = happyAddress as unknown as HTMLElement;
+    const events: string[] = [];
+    let changedValue = "";
+    const editor = renderInlineFilingEditor(
+      address,
+      card,
+      {
+        value: "A/12",
+        address: "A/12",
+        message: "",
+        invalid: false,
+        confirmationInProgress: false,
+        duplicatePaths: ["a.md", "z.md"],
+      },
+      {
+        onInput: (value) => {
+          changedValue = value;
+        },
+        onConfirm: () => events.push("confirm"),
+        onCancel: () => events.push("cancel"),
+        onPreview: () => events.push("preview"),
+      },
     );
-    assert.equal(ghost.dataset.path, undefined);
-    assert.equal(ghost.querySelector("button, a, input, [tabindex]"), null);
-    assert.equal(ghost.querySelector(".slipbox-card-actions"), null);
-    assert.equal(ghost.querySelector(".slipbox-card-footer"), null);
+    assert.equal(address.querySelector("input"), editor.input);
+    assert.equal(editor.input.value, "A/12");
+    assert.equal(card.querySelectorAll(".slipbox-tray-filing-input").length, 1);
+    assert.match(editor.feedback.textContent ?? "", /a\.md/);
+    assert.match(editor.feedback.textContent ?? "", /z\.md/);
 
-    const moved = createFilingPreview(
-      filed,
-      { address: "A/1", path: "source.md" },
-      "Current resolved title",
-      "natural",
+    editor.input.value = "Project-17";
+    editor.input.dispatchEvent(new window.Event("input") as unknown as Event);
+    assert.equal(changedValue, "Project-17");
+    editor.input.dispatchEvent(
+      new window.KeyboardEvent("keydown", { key: "Tab" }) as unknown as Event,
     );
-    const sameGhost = renderOrUpdateFilingGhost(parent, moved, ghost);
-    assert.equal(sameGhost, ghost);
-    assert.equal(sameGhost.dataset.index, "0");
-    assert.equal(parent.querySelectorAll(".slipbox-filing-ghost").length, 1);
-    assert.equal(removeFilingGhost(sameGhost), null);
-    assert.equal(parent.querySelectorAll(".slipbox-filing-ghost").length, 0);
+    editor.input.dispatchEvent(
+      new window.KeyboardEvent("keydown", { key: "Enter" }) as unknown as Event,
+    );
+    editor.input.dispatchEvent(
+      new window.KeyboardEvent("keydown", { key: "Escape" }) as unknown as Event,
+    );
+    assert.deepEqual(events, ["preview", "confirm", "cancel"]);
+
+    updateInlineFilingEditor(
+      editor,
+      {
+        value: "bad\naddress",
+        address: null,
+        message: "Address must be a single line.",
+        invalid: true,
+        confirmationInProgress: false,
+        duplicatePaths: [],
+      },
+    );
+    assert.equal(editor.input.getAttribute("aria-invalid"), "true");
+    assert.equal(editor.feedback.querySelector("details"), null);
+    assert.equal(editor.feedback.textContent, "Address must be a single line.");
   });
 });

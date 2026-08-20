@@ -10,6 +10,12 @@ import {
 
 import type SlipboxPlugin from "./main.js";
 import {
+  renderInlineFilingEditor,
+  updateInlineFilingEditor,
+  type InlineFilingEditorElements,
+  type InlineFilingEditorState,
+} from "./filing-editor.js";
+import {
   cardPosition,
   insertionIndexForPoint,
   mergePiles,
@@ -34,11 +40,21 @@ const PILE_CARD_HALF_HEIGHT_PX = 58;
 export interface TrayViewActions {
   jumpToFiledCard(path: string): Promise<void>;
   moveCardBy(cardRef: string, delta: -1 | 1): Promise<void>;
+  beginFiling(file: TFile): Promise<void>;
+  updateFilingInput(value: string): void;
+  confirmFiling(): void;
+  cancelFiling(): void;
+  previewFilingPlacement(): void;
+}
+
+export interface TrayFilingState extends InlineFilingEditorState {
+  readonly sourcePath: string;
 }
 
 export class TrayRenderer {
   private components: Component[] = [];
   private rootEl: HTMLElement | null = null;
+  private filingEditor: InlineFilingEditorElements | null = null;
   private suppressClickUntil = 0;
 
   constructor(
@@ -53,12 +69,41 @@ export class TrayRenderer {
     }
     this.components = [];
     this.rootEl = null;
+    this.filingEditor = null;
+  }
+
+  get isFilingInputFocused(): boolean {
+    const input = this.filingEditor?.input;
+    return input !== undefined && input.ownerDocument.activeElement === input;
+  }
+
+  get filingInput(): HTMLInputElement | null {
+    return this.filingEditor?.input ?? null;
+  }
+
+  focusFilingInput(): void {
+    window.requestAnimationFrame(() => this.focusFilingInputNow());
+  }
+
+  focusFilingInputNow(): void {
+    const input = this.filingEditor?.input;
+    if (input === undefined) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  updateFilingState(state: TrayFilingState): void {
+    if (this.filingEditor !== null) {
+      updateInlineFilingEditor(this.filingEditor, state);
+    }
   }
 
   async render(
     stage: HTMLElement,
     space: HTMLElement,
-    filing: boolean,
+    filing: TrayFilingState | null,
     isCurrent: () => boolean,
   ): Promise<void> {
     const state = this.plugin.tray;
@@ -66,7 +111,7 @@ export class TrayRenderer {
       (total, pile) => total + pile.cards.length,
       0,
     );
-    if (cardCount === 0 || filing) {
+    if (cardCount === 0) {
       return;
     }
 
@@ -89,6 +134,7 @@ export class TrayRenderer {
         pileIndex,
         pile.position ?? defaultPilePosition(pileIndex),
         state.expandedPileIds.includes(pile.id),
+        filing,
         isCurrent,
       ));
     });
@@ -119,6 +165,7 @@ export class TrayRenderer {
     pileIndex: number,
     position: TrayPilePosition,
     expanded: boolean,
+    filing: TrayFilingState | null,
     isCurrent: () => boolean,
   ): Promise<void>[] {
     const pileEl = parent.createDiv({
@@ -179,6 +226,7 @@ export class TrayRenderer {
       expanded ? cardIndex : 0,
       pileIndex,
       expanded,
+      filing,
       isCurrent,
     ));
 
@@ -190,7 +238,7 @@ export class TrayRenderer {
       }
       if (
         event.target instanceof Element &&
-        event.target.closest("button, a") !== null
+        event.target.closest("button, a, input, textarea, select") !== null
       ) {
         return;
       }
@@ -218,7 +266,7 @@ export class TrayRenderer {
     pileEl.addEventListener("contextmenu", (event) => {
       if (
         event.target instanceof Element &&
-        event.target.closest("button, a") !== null
+        event.target.closest("button, a, input, textarea, select") !== null
       ) {
         return;
       }
@@ -237,6 +285,7 @@ export class TrayRenderer {
     cardIndex: number,
     pileIndex: number,
     expanded: boolean,
+    filing: TrayFilingState | null,
     isCurrent: () => boolean,
   ): Promise<void> {
     const file = this.plugin.index.fileAtPath(card.cardRef);
@@ -264,40 +313,72 @@ export class TrayRenderer {
     miniature.tabIndex = expanded ? 0 : -1;
     miniature.toggleClass("is-filed", filed !== undefined);
     miniature.toggleClass("is-unfiled", filed === undefined);
+    const isFilingSource = filing?.sourcePath === card.cardRef;
+    miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
       "is-bookmarked",
       filed !== undefined && this.plugin.bookmarkAtPath(filed.path) !== undefined,
     );
 
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
-    identity.createSpan({ cls: "slipbox-tray-card-address", text: address });
-    identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
-    const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
-    if (filed === undefined) {
-      const fileButton = trayIconButton(controls, "archive-restore", "File");
-      fileButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.plugin.beginFiling(file);
-      });
-    } else {
-      const returnButton = trayIconButton(
-        controls,
-        "undo-2",
-        "Return",
+    const addressEl = identity.createSpan({
+      cls: "slipbox-tray-card-address",
+      text: address,
+    });
+    if (isFilingSource && filing !== null) {
+      this.filingEditor = renderInlineFilingEditor(
+        addressEl,
+        miniature,
+        filing,
+        {
+          onInput: (value) => this.actions.updateFilingInput(value),
+          onConfirm: () => this.actions.confirmFiling(),
+          onCancel: () => this.actions.cancelFiling(),
+          onPreview: () => this.actions.previewFilingPlacement(),
+        },
       );
-      returnButton.addEventListener("click", (event) => {
+    } else if (filed === undefined) {
+      addressEl.setAttr("aria-label", "Unfiled card address; double-click to file");
+      setTooltip(addressEl, "Double-click to file", {
+        placement: "bottom",
+        delay: 350,
+      });
+      addressEl.addEventListener("click", (event) => event.stopPropagation());
+      addressEl.addEventListener("dblclick", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.toggleFileInTray(file);
+        void this.actions.beginFiling(file);
       });
     }
-    const open = trayIconButton(controls, "file-pen-line", "Open");
-    open.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void this.plugin.openMarkdownFile(file);
-    });
+    identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
+    const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
+    if (!isFilingSource) {
+      if (filed === undefined) {
+        const fileButton = trayIconButton(controls, "archive-restore", "File");
+        fileButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.actions.beginFiling(file);
+        });
+      } else {
+        const returnButton = trayIconButton(
+          controls,
+          "undo-2",
+          "Return",
+        );
+        returnButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.plugin.toggleFileInTray(file);
+        });
+      }
+      const open = trayIconButton(controls, "file-pen-line", "Open");
+      open.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.plugin.openMarkdownFile(file);
+      });
+    }
 
     const preview = miniature.createDiv({
       cls: "slipbox-tray-card-preview markdown-rendered",
@@ -326,7 +407,10 @@ export class TrayRenderer {
         event.stopPropagation();
         return;
       }
-      if (event.target instanceof Element && event.target.closest("button, a") !== null) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("button, a, input, textarea, select") !== null
+      ) {
         return;
       }
       if (!expanded) {
@@ -359,7 +443,10 @@ export class TrayRenderer {
       }
     });
     miniature.addEventListener("contextmenu", (event) => {
-      if (event.target instanceof Element && event.target.closest("button, a") !== null) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("button, a, input, textarea, select") !== null
+      ) {
         return;
       }
       event.preventDefault();
@@ -493,7 +580,10 @@ export class TrayRenderer {
     element.addEventListener("pointerdown", (event) => {
       if (
         event.button !== 0 ||
-        (event.target instanceof Element && event.target.closest("button, a") !== null)
+        (
+          event.target instanceof Element &&
+          event.target.closest("button, a, input, textarea, select") !== null
+        )
       ) {
         return;
       }
@@ -562,7 +652,7 @@ export class TrayRenderer {
         (
           dragSurface === element &&
           event.target instanceof Element &&
-          event.target.closest("button, a") !== null
+          event.target.closest("button, a, input, textarea, select") !== null
         )
       ) {
         return;

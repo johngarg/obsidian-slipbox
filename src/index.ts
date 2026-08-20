@@ -20,16 +20,14 @@ export {
 } from "./card-metadata.js";
 export {
   createFilingPreview,
-  defaultFilingFocusIndex,
-  deckDisplayItems,
   filingPlacementMatches,
-  filingPreviewKey,
+  filingPreviewFocusPath,
   initialFilingAddress,
 } from "./filing-preview.js";
 export {
-  removeFilingGhost,
-  renderOrUpdateFilingGhost,
-} from "./filing-ghost.js";
+  renderInlineFilingEditor,
+  updateInlineFilingEditor,
+} from "./filing-editor.js";
 export { generateFiledCardLink } from "./card-links.js";
 export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
@@ -74,11 +72,13 @@ export type {
   InvalidCardIssue,
 } from "./card-metadata.js";
 export type {
-  DeckDisplayItem,
-  FiledDisplayItem,
   FilingPreview,
-  PreviewDisplayItem,
 } from "./filing-preview.js";
+export type {
+  InlineFilingEditorActions,
+  InlineFilingEditorElements,
+  InlineFilingEditorState,
+} from "./filing-editor.js";
 
 export type {
   DeckBookmark,

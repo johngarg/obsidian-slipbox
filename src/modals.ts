@@ -145,6 +145,49 @@ export function promptForTemplate(
   });
 }
 
+class CanvasPromptModal extends FuzzySuggestModal<TFile> {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly files: readonly TFile[],
+    private readonly resolveFile: (file: TFile | null) => void,
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a Canvas (Esc to cancel)");
+  }
+
+  getItems(): TFile[] {
+    return [...this.files];
+  }
+
+  getItemText(file: TFile): string {
+    return file.path.slice(0, -".canvas".length);
+  }
+
+  onChooseItem(file: TFile): void {
+    this.settled = true;
+    this.resolveFile(file);
+  }
+
+  onClose(): void {
+    super.onClose();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveFile(null);
+    }
+  }
+}
+
+export function promptForCanvas(
+  app: App,
+  files: readonly TFile[],
+): Promise<TFile | null> {
+  return new Promise((resolve) => {
+    new CanvasPromptModal(app, files, resolve).open();
+  });
+}
+
 export function promptForText(
   app: App,
   heading: string,

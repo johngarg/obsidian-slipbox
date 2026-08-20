@@ -329,6 +329,26 @@ export class TrayRenderer {
     const menu = Menu.forEvent(event);
     menu.addItem((item) => {
       item
+        .setTitle("Lay out pile on active Canvas")
+        .setIcon("layout-dashboard")
+        .setDisabled(!this.plugin.hasActiveCanvas())
+        .onClick(() => void this.plugin.layOutTrayPileOnActiveCanvas(pile.id));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Lay out pile on Canvas…")
+        .setIcon("layout-template")
+        .onClick(() => void this.plugin.layOutTrayPileOnCanvas(pile.id));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Create Canvas from pile…")
+        .setIcon("file-plus-2")
+        .onClick(() => void this.plugin.createCanvasFromTrayPile(pile.id));
+    });
+    menu.addSeparator();
+    menu.addItem((item) => {
+      item
         .setTitle("Clear pile")
         .setIcon("eraser")
         .setDisabled(!pile.cards.some((card) => card.kind === "filed"))

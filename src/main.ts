@@ -32,6 +32,7 @@ import {
   BookmarksModal,
   EntryPointsModal,
   IssuesModal,
+  promptForCanvas,
   promptForNewCardTitle,
   promptForTemplate,
   promptForText,
@@ -73,6 +74,8 @@ import {
   type TrayCardCandidate,
   type TrayState,
 } from "./tray-state.js";
+import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
+import { normalizeCanvasPath } from "./canvas-layout.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -92,6 +95,7 @@ export default class SlipboxPlugin extends Plugin {
   settings: SlipboxSettings = DEFAULT_SETTINGS;
   tray: TrayState = EMPTY_TRAY;
   index!: ZettelIndex;
+  canvas!: CanvasBridge;
 
   private indexRefreshTimer: number | null = null;
   private spreadSaveTimer: number | null = null;
@@ -105,6 +109,7 @@ export default class SlipboxPlugin extends Plugin {
     this.settings = data.settings;
     this.state = data.state;
     this.index = new ZettelIndex(this.app, this.settings.addressProperty);
+    this.canvas = new CanvasBridge(this.app);
     this.index.refresh();
     this.reconcileSessionTray();
     await this.persistState();
@@ -481,6 +486,68 @@ export default class SlipboxPlugin extends Plugin {
   async clearTray(): Promise<void> {
     this.tray = clearFiledCardsFromTray(this.tray);
     await this.refreshDeckViews();
+  }
+
+  hasActiveCanvas(): boolean {
+    return this.canvas.hasActiveCanvas();
+  }
+
+  async layOutTrayPileOnActiveCanvas(pileId: string): Promise<void> {
+    const paths = this.trayPilePaths(pileId);
+    if (paths.length === 0) {
+      return;
+    }
+    try {
+      this.reportCanvasWrite(await this.canvas.layoutFilesOnActiveCanvas(paths));
+    } catch (error) {
+      new Notice(`Could not lay out the pile: ${errorMessage(error)}`);
+    }
+  }
+
+  async layOutTrayPileOnCanvas(pileId: string): Promise<void> {
+    const paths = this.trayPilePaths(pileId);
+    if (paths.length === 0) {
+      return;
+    }
+    const canvases = this.canvas.canvasFiles();
+    if (canvases.length === 0) {
+      new Notice("There are no Canvas files in this vault. Create one from the pile instead.");
+      return;
+    }
+    const file = await promptForCanvas(this.app, canvases);
+    if (file === null) {
+      return;
+    }
+    try {
+      this.reportCanvasWrite(await this.canvas.layoutFilesOnCanvas(file, paths));
+    } catch (error) {
+      new Notice(`Could not lay out the pile: ${errorMessage(error)}`);
+    }
+  }
+
+  async createCanvasFromTrayPile(pileId: string): Promise<void> {
+    const paths = this.trayPilePaths(pileId);
+    if (paths.length === 0) {
+      return;
+    }
+    const entered = await promptForText(
+      this.app,
+      "Create Canvas from pile",
+      "Canvas filename or vault path",
+    );
+    if (entered === null) {
+      return;
+    }
+    const path = normalizeCanvasPath(entered);
+    if (path === null) {
+      new Notice("Enter a valid Canvas filename or vault-relative path.");
+      return;
+    }
+    try {
+      this.reportCanvasWrite(await this.canvas.createCanvas(path, paths));
+    } catch (error) {
+      new Notice(`Could not create the Canvas: ${errorMessage(error)}`);
+    }
   }
 
   async putFileOnDesk(file: TFile, revealDesk = true): Promise<void> {
@@ -1391,6 +1458,24 @@ export default class SlipboxPlugin extends Plugin {
       })),
     ];
     this.tray = reconcileTray(this.tray, candidates, this.createTrayPileId());
+  }
+
+  private trayPilePaths(pileId: string): string[] {
+    return this.tray.piles
+      .find((pile) => pile.id === pileId)
+      ?.cards.map((card) => card.cardRef) ?? [];
+  }
+
+  private reportCanvasWrite(result: CanvasWriteResult): void {
+    const added = result.addedPaths.length;
+    const skipped = result.skippedPaths.length;
+    const summary = added === 0
+      ? `No cards added to ${result.file.basename}.`
+      : `Added ${added} card${added === 1 ? "" : "s"} to ${result.file.basename}.`;
+    const existing = skipped === 0
+      ? ""
+      : ` Skipped ${skipped} existing node${skipped === 1 ? "" : "s"}.`;
+    new Notice(`${summary}${existing}`);
   }
 }
 

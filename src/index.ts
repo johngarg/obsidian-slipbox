@@ -87,6 +87,22 @@ export {
   toggleFiledCard,
   trayContains,
 } from "./tray-state.js";
+export {
+  isFileNode,
+  layoutFilesOnCanvas,
+  layoutLegacyDeskOnCanvas,
+  normalizeCanvasPath,
+  parseCanvasDocument,
+  serializeCanvasDocument,
+} from "./canvas-layout.js";
+export type {
+  CanvasDocument,
+  CanvasFileNode,
+  CanvasLayoutOptions,
+  CanvasLayoutResult,
+  CanvasNode,
+  LegacyDeskCanvasCard,
+} from "./canvas-layout.js";
 export type {
   TrayCard,
   TrayCardCandidate,

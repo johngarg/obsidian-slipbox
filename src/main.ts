@@ -184,7 +184,7 @@ export default class ZettelkastenPlugin extends Plugin {
       isAvailable: (id) => this.index.filedById(id) !== undefined,
       visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addBookmarkToCurrent(),
-      remove: (zettelId) => this.removeBookmark(zettelId),
+      remove: (zettelId) => view.removeBookmark(zettelId),
     }).open();
   }
 
@@ -641,7 +641,7 @@ export default class ZettelkastenPlugin extends Plugin {
     return state === "filed" || state === "unfiled" ? activeFile : null;
   }
 
-  private async removeBookmark(zettelId: string): Promise<void> {
+  async removeBookmark(zettelId: string): Promise<void> {
     if (this.bookmarkAt(zettelId) === undefined) {
       return;
     }

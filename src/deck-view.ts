@@ -45,6 +45,7 @@ export class DeckView extends ItemView {
   private readonly history = new NavigationHistory<string>();
   private backButtonEl: HTMLButtonElement | null = null;
   private forwardButtonEl: HTMLButtonElement | null = null;
+  private bookmarksButtonEl: HTMLButtonElement | null = null;
   private addBookmarkButtonEl: HTMLButtonElement | null = null;
   private putOnDeskButtonEl: HTMLButtonElement | null = null;
 
@@ -104,6 +105,7 @@ export class DeckView extends ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
     this.putOnDeskButtonEl = null;
     this.history.reset();
@@ -204,7 +206,17 @@ export class DeckView extends ItemView {
       new Notice("There is no active filed card.");
       return;
     }
+    const bookmarkedIds = this.bookmarkedIds();
+    bookmarkedIds.add(this.activeId);
+    this.updateBookmarkUi(bookmarkedIds);
     await this.plugin.addBookmark(this.activeId);
+  }
+
+  async removeBookmark(zettelId: string): Promise<void> {
+    const bookmarkedIds = this.bookmarkedIds();
+    bookmarkedIds.delete(zettelId);
+    this.updateBookmarkUi(bookmarkedIds);
+    await this.plugin.removeBookmark(zettelId);
   }
 
   private async navigateToId(id: string): Promise<boolean> {
@@ -251,6 +263,7 @@ export class DeckView extends ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
     this.putOnDeskButtonEl = null;
 
@@ -330,6 +343,7 @@ export class DeckView extends ItemView {
       bookmarks.createSpan({ cls: "zk-count", text: String(this.plugin.state.bookmarks.length) });
     }
     bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
+    this.bookmarksButtonEl = bookmarks;
 
     const addBookmark = iconButton(
       controls,
@@ -440,6 +454,7 @@ export class DeckView extends ItemView {
       const cardEl = stage.createDiv({ cls: "zk-card" });
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
+      cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
       const cardLabel = `${card.id} · ${card.file.basename}`;
@@ -477,7 +492,7 @@ export class DeckView extends ItemView {
       bookmarkToggle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.toggleBookmark(card.id);
+        void this.toggleCardBookmark(card.id);
       });
 
       const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
@@ -535,6 +550,17 @@ export class DeckView extends ItemView {
         text: `Could not render this card: ${errorMessage(error)}`,
       });
     }
+  }
+
+  private async toggleCardBookmark(zettelId: string): Promise<void> {
+    const bookmarkedIds = this.bookmarkedIds();
+    if (bookmarkedIds.has(zettelId)) {
+      bookmarkedIds.delete(zettelId);
+    } else {
+      bookmarkedIds.add(zettelId);
+    }
+    this.updateBookmarkUi(bookmarkedIds);
+    await this.plugin.toggleBookmark(zettelId);
   }
 
   private interceptFiledLinks(target: HTMLElement, sourcePath: string): void {
@@ -645,10 +671,13 @@ export class DeckView extends ItemView {
     );
   }
 
-  private renderBookmarkEdgeTabs(stage: HTMLElement): void {
+  private renderBookmarkEdgeTabs(
+    stage: HTMLElement,
+    bookmarkedIds = this.bookmarkedIds(),
+  ): void {
     stage.querySelectorAll<HTMLElement>(".zk-bookmark-edge-tab")
       .forEach((tab) => tab.remove());
-    if (this.activeId === null || this.plugin.state.bookmarks.length === 0) {
+    if (this.activeId === null || bookmarkedIds.size === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
@@ -657,8 +686,8 @@ export class DeckView extends ItemView {
     if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
-    const bookmarkIndices = this.plugin.state.bookmarks.flatMap((bookmark) => {
-      const index = filed.findIndex((card) => card.id === bookmark.zettelId);
+    const bookmarkIndices = [...bookmarkedIds].flatMap((zettelId) => {
+      const index = filed.findIndex((card) => card.id === zettelId);
       return index < 0 ? [] : [index];
     });
     const targets = bookmarkEdgeTargets(
@@ -916,12 +945,16 @@ export class DeckView extends ItemView {
     this.updateHistoryControls();
   }
 
-  private updateActiveActionControls(): void {
+  private updateActiveActionControls(
+    bookmarkedIds: readonly string[] = this.plugin.state.bookmarks.map(
+      (bookmark) => bookmark.zettelId,
+    ),
+  ): void {
     const activeCard = this.activeCard;
     const availability = activeCardActionAvailability(
       activeCard?.id ?? null,
       activeCard?.path ?? null,
-      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
+      bookmarkedIds,
       this.plugin.state.deskCards.map((card) => card.cardRef),
     );
     if (this.addBookmarkButtonEl !== null) {
@@ -930,6 +963,55 @@ export class DeckView extends ItemView {
     if (this.putOnDeskButtonEl !== null) {
       this.putOnDeskButtonEl.disabled = !availability.canPutOnDesk;
     }
+  }
+
+  private bookmarkedIds(): Set<string> {
+    return new Set(
+      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
+    );
+  }
+
+  private updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()): void {
+    const bookmarkCount = bookmarkedIds.size;
+    if (this.bookmarksButtonEl !== null) {
+      const countEl = this.bookmarksButtonEl.querySelector<HTMLElement>(".zk-count");
+      if (bookmarkCount === 0) {
+        countEl?.remove();
+      } else if (countEl === null) {
+        this.bookmarksButtonEl.createSpan({
+          cls: "zk-count",
+          text: String(bookmarkCount),
+        });
+      } else {
+        countEl.setText(String(bookmarkCount));
+      }
+    }
+
+    for (const cardEl of this.renderedCards) {
+      const zettelId = cardEl.dataset.zettelId;
+      const toggle = cardEl.querySelector<HTMLButtonElement>(
+        ".zk-card-bookmark-toggle",
+      );
+      if (zettelId === undefined || toggle === null) {
+        continue;
+      }
+      const isBookmarked = bookmarkedIds.has(zettelId);
+      const action = isBookmarked
+        ? `Remove bookmark from ${zettelId}`
+        : `Add bookmark to ${zettelId}`;
+      toggle.toggleClass("is-bookmarked", isBookmarked);
+      toggle.setAttr("aria-label", action);
+      toggle.setAttr("aria-pressed", String(isBookmarked));
+      setTooltip(toggle, action, {
+        placement: "bottom",
+        delay: 250,
+      });
+    }
+
+    if (this.stageEl !== null) {
+      this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
+    }
+    this.updateActiveActionControls([...bookmarkedIds]);
   }
 
   private viewportPosition(activeIndex: number): number {

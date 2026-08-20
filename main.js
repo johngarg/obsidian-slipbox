@@ -506,6 +506,7 @@ var DeckView = class extends import_obsidian.ItemView {
   history = new NavigationHistory();
   backButtonEl = null;
   forwardButtonEl = null;
+  bookmarksButtonEl = null;
   addBookmarkButtonEl = null;
   putOnDeskButtonEl = null;
   getViewType() {
@@ -531,6 +532,7 @@ var DeckView = class extends import_obsidian.ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
     this.putOnDeskButtonEl = null;
     this.history.reset();
@@ -619,7 +621,16 @@ var DeckView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice("There is no active filed card.");
       return;
     }
+    const bookmarkedIds = this.bookmarkedIds();
+    bookmarkedIds.add(this.activeId);
+    this.updateBookmarkUi(bookmarkedIds);
     await this.plugin.addBookmark(this.activeId);
+  }
+  async removeBookmark(zettelId) {
+    const bookmarkedIds = this.bookmarkedIds();
+    bookmarkedIds.delete(zettelId);
+    this.updateBookmarkUi(bookmarkedIds);
+    await this.plugin.removeBookmark(zettelId);
   }
   async navigateToId(id) {
     const filed = this.plugin.index.snapshot.filed;
@@ -660,6 +671,7 @@ var DeckView = class extends import_obsidian.ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.bookmarksButtonEl = null;
     this.addBookmarkButtonEl = null;
     this.putOnDeskButtonEl = null;
     const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
@@ -729,6 +741,7 @@ var DeckView = class extends import_obsidian.ItemView {
       bookmarks.createSpan({ cls: "zk-count", text: String(this.plugin.state.bookmarks.length) });
     }
     bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
+    this.bookmarksButtonEl = bookmarks;
     const addBookmark = iconButton(
       controls,
       "bookmark-plus",
@@ -821,6 +834,7 @@ var DeckView = class extends import_obsidian.ItemView {
       const cardEl = stage.createDiv({ cls: "zk-card" });
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
+      cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== void 0;
       const cardLabel = `${card.id} \xB7 ${card.file.basename}`;
@@ -855,7 +869,7 @@ var DeckView = class extends import_obsidian.ItemView {
       bookmarkToggle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.toggleBookmark(card.id);
+        void this.toggleCardBookmark(card.id);
       });
       const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
@@ -904,6 +918,16 @@ var DeckView = class extends import_obsidian.ItemView {
         text: `Could not render this card: ${errorMessage(error)}`
       });
     }
+  }
+  async toggleCardBookmark(zettelId) {
+    const bookmarkedIds = this.bookmarkedIds();
+    if (bookmarkedIds.has(zettelId)) {
+      bookmarkedIds.delete(zettelId);
+    } else {
+      bookmarkedIds.add(zettelId);
+    }
+    this.updateBookmarkUi(bookmarkedIds);
+    await this.plugin.toggleBookmark(zettelId);
   }
   interceptFiledLinks(target, sourcePath) {
     target.addEventListener(
@@ -1001,9 +1025,9 @@ var DeckView = class extends import_obsidian.ItemView {
       (resolve) => window.setTimeout(resolve, FILING_ANIMATION_DURATION_MS + 40)
     );
   }
-  renderBookmarkEdgeTabs(stage) {
+  renderBookmarkEdgeTabs(stage, bookmarkedIds = this.bookmarkedIds()) {
     stage.querySelectorAll(".zk-bookmark-edge-tab").forEach((tab) => tab.remove());
-    if (this.activeId === null || this.plugin.state.bookmarks.length === 0) {
+    if (this.activeId === null || bookmarkedIds.size === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
@@ -1012,8 +1036,8 @@ var DeckView = class extends import_obsidian.ItemView {
     if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
-    const bookmarkIndices = this.plugin.state.bookmarks.flatMap((bookmark) => {
-      const index = filed.findIndex((card) => card.id === bookmark.zettelId);
+    const bookmarkIndices = [...bookmarkedIds].flatMap((zettelId) => {
+      const index = filed.findIndex((card) => card.id === zettelId);
       return index < 0 ? [] : [index];
     });
     const targets = bookmarkEdgeTargets(
@@ -1236,12 +1260,14 @@ var DeckView = class extends import_obsidian.ItemView {
     this.updateActiveActionControls();
     this.updateHistoryControls();
   }
-  updateActiveActionControls() {
+  updateActiveActionControls(bookmarkedIds = this.plugin.state.bookmarks.map(
+    (bookmark) => bookmark.zettelId
+  )) {
     const activeCard = this.activeCard;
     const availability = activeCardActionAvailability(
       activeCard?.id ?? null,
       activeCard?.path ?? null,
-      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
+      bookmarkedIds,
       this.plugin.state.deskCards.map((card) => card.cardRef)
     );
     if (this.addBookmarkButtonEl !== null) {
@@ -1250,6 +1276,49 @@ var DeckView = class extends import_obsidian.ItemView {
     if (this.putOnDeskButtonEl !== null) {
       this.putOnDeskButtonEl.disabled = !availability.canPutOnDesk;
     }
+  }
+  bookmarkedIds() {
+    return new Set(
+      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId)
+    );
+  }
+  updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()) {
+    const bookmarkCount = bookmarkedIds.size;
+    if (this.bookmarksButtonEl !== null) {
+      const countEl = this.bookmarksButtonEl.querySelector(".zk-count");
+      if (bookmarkCount === 0) {
+        countEl?.remove();
+      } else if (countEl === null) {
+        this.bookmarksButtonEl.createSpan({
+          cls: "zk-count",
+          text: String(bookmarkCount)
+        });
+      } else {
+        countEl.setText(String(bookmarkCount));
+      }
+    }
+    for (const cardEl of this.renderedCards) {
+      const zettelId = cardEl.dataset.zettelId;
+      const toggle = cardEl.querySelector(
+        ".zk-card-bookmark-toggle"
+      );
+      if (zettelId === void 0 || toggle === null) {
+        continue;
+      }
+      const isBookmarked = bookmarkedIds.has(zettelId);
+      const action = isBookmarked ? `Remove bookmark from ${zettelId}` : `Add bookmark to ${zettelId}`;
+      toggle.toggleClass("is-bookmarked", isBookmarked);
+      toggle.setAttr("aria-label", action);
+      toggle.setAttr("aria-pressed", String(isBookmarked));
+      (0, import_obsidian.setTooltip)(toggle, action, {
+        placement: "bottom",
+        delay: 250
+      });
+    }
+    if (this.stageEl !== null) {
+      this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
+    }
+    this.updateActiveActionControls([...bookmarkedIds]);
   }
   viewportPosition(activeIndex) {
     return activeIndex + this.viewportOffset;
@@ -2189,7 +2258,7 @@ var ZettelkastenPlugin = class extends import_obsidian5.Plugin {
       isAvailable: (id) => this.index.filedById(id) !== void 0,
       visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addBookmarkToCurrent(),
-      remove: (zettelId) => this.removeBookmark(zettelId)
+      remove: (zettelId) => view.removeBookmark(zettelId)
     }).open();
   }
   bookmarkAt(zettelId) {

@@ -20,7 +20,7 @@ import {
   renameTrayPath,
   reorderPiles,
   setPilePosition,
-  setExpandedPile,
+  setPileExpanded,
   splitCardIntoNewPile,
   toggleFiledCard,
   trayHasFiledCards,
@@ -40,7 +40,7 @@ const filed = (cardRef: string): TrayCard => ({ cardRef, kind: "filed" });
 function tray(...piles: readonly TrayCard[][]): TrayState {
   return {
     piles: piles.map((cards, index) => ({ id: `pile-${index + 1}`, cards })),
-    expandedPileId: null,
+    expandedPileIds: [],
     unfiledPileId: piles.length > 0 ? "pile-1" : null,
   };
 }
@@ -59,7 +59,7 @@ describe("working piles", () => {
           ({ cardRef, kind }) => ({ cardRef, kind }),
         ),
       }],
-      expandedPileId: null,
+      expandedPileIds: [],
       unfiledPileId: "startup",
     });
   });
@@ -76,11 +76,26 @@ describe("working piles", () => {
 
   test("pulls into a singleton or the expanded pile and toggles back to Deck", () => {
     let state = toggleFiledCard(EMPTY_TRAY, filed("A.md"), "one");
-    state = setExpandedPile(state, "one");
+    state = setPileExpanded(state, "one", true);
     state = toggleFiledCard(state, filed("B.md"), "unused");
     assert.deepEqual(state.piles[0]?.cards.map((card) => card.cardRef), ["A.md", "B.md"]);
     state = toggleFiledCard(state, filed("A.md"), "unused");
     assert.deepEqual(state.piles[0]?.cards.map((card) => card.cardRef), ["B.md"]);
+  });
+
+  test("expands piles independently and pulls into the most recently expanded pile", () => {
+    let state = tray([filed("A.md")], [filed("B.md")]);
+    state = setPileExpanded(state, "pile-1", true);
+    state = setPileExpanded(state, "pile-2", true);
+    assert.deepEqual(state.expandedPileIds, ["pile-1", "pile-2"]);
+
+    state = toggleFiledCard(state, filed("C.md"), "unused");
+    assert.deepEqual(state.piles[1]?.cards.map((card) => card.cardRef), ["B.md", "C.md"]);
+
+    state = setPileExpanded(state, "pile-1", false);
+    assert.deepEqual(state.expandedPileIds, ["pile-2"]);
+    state = setPileExpanded(state, "pile-2", false);
+    assert.deepEqual(state.expandedPileIds, []);
   });
 
   test("moves cards in both directions within a pile", () => {
@@ -121,15 +136,17 @@ describe("working piles", () => {
   });
 
   test("merges piles by appending the source order and reorders piles", () => {
-    const state = setExpandedPile(
+    let state = setPileExpanded(
       tray([filed("A.md")], [filed("B.md"), filed("C.md")], [filed("D.md")]),
       "pile-2",
+      true,
     );
+    state = setPileExpanded(state, "pile-3", true);
     const merged = mergePiles(state, "pile-2", "pile-1");
     assert.deepEqual(merged.piles[0]?.cards.map((card) => card.cardRef), [
       "A.md", "B.md", "C.md",
     ]);
-    assert.equal(merged.expandedPileId, "pile-1");
+    assert.deepEqual(merged.expandedPileIds, ["pile-1", "pile-3"]);
     const reordered = reorderPiles(merged, 1, 0);
     assert.deepEqual(reordered.piles.map((pile) => pile.id), ["pile-3", "pile-1"]);
   });
@@ -188,12 +205,12 @@ describe("working piles", () => {
         { id: "one", cards: [unfiled("U.md"), filed("A.md"), filed("Gone.md")] },
         { id: "two", cards: [filed("A.md")] },
       ],
-      expandedPileId: "two",
+      expandedPileIds: ["two"],
       unfiledPileId: "one",
     };
     const next = pruneTrayCards(state, [filed("U.md"), filed("A.md")]);
     assert.deepEqual(next.piles, [{ id: "one", cards: [filed("A.md")] }]);
-    assert.equal(next.expandedPileId, null);
+    assert.deepEqual(next.expandedPileIds, []);
   });
 
   test("adds newly discovered unfiled cards to the home pile without reordering it", () => {

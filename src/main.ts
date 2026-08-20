@@ -74,7 +74,7 @@ import {
   reconcileTray,
   removeTrayPath,
   renameTrayPath,
-  setExpandedPile,
+  setPileExpanded,
   toggleFiledCard,
   trayContains,
   trayHasFiledCards,
@@ -426,8 +426,8 @@ export default class SlipboxPlugin extends Plugin {
     return trayContains(this.tray, file.path);
   }
 
-  async expandTrayPile(pileId: string | null): Promise<void> {
-    this.tray = setExpandedPile(this.tray, pileId);
+  async setTrayPileExpanded(pileId: string, expanded: boolean): Promise<void> {
+    this.tray = setPileExpanded(this.tray, pileId, expanded);
     await this.refreshDeckViews();
   }
 

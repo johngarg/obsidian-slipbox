@@ -91,7 +91,7 @@ export {
   renameTrayPath,
   reorderPiles,
   setPilePosition,
-  setExpandedPile,
+  setPileExpanded,
   splitCardIntoNewPile,
   toggleFiledCard,
   trayContains,

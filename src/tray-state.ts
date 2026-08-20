@@ -24,7 +24,8 @@ export interface TrayPilePosition {
 
 export interface TrayState {
   readonly piles: readonly TrayPile[];
-  readonly expandedPileId: string | null;
+  /** Expanded piles in activation order; the last is the active pull-out target. */
+  readonly expandedPileIds: readonly string[];
   /** The startup pile that receives newly discovered unfiled cards while it exists. */
   readonly unfiledPileId: string | null;
 }
@@ -37,7 +38,7 @@ export interface TrayStackJitter {
 
 export const EMPTY_TRAY: TrayState = {
   piles: [],
-  expandedPileId: null,
+  expandedPileIds: [],
   unfiledPileId: null,
 };
 
@@ -224,9 +225,8 @@ export function mergePiles(
   return cleanTray({
     ...state,
     piles,
-    expandedPileId: state.expandedPileId === sourcePileId
-      ? targetPileId
-      : state.expandedPileId,
+    expandedPileIds: state.expandedPileIds.map((pileId) =>
+      pileId === sourcePileId ? targetPileId : pileId),
     unfiledPileId: state.unfiledPileId === sourcePileId
       ? null
       : state.unfiledPileId,
@@ -408,23 +408,30 @@ export function toggleFiledCard(
   if (trayContains(state, card.cardRef)) {
     return removeCard(state, card.cardRef);
   }
-  const expanded = state.expandedPileId === null
+  const activePileId = state.expandedPileIds[state.expandedPileIds.length - 1];
+  const expanded = activePileId === undefined
     ? undefined
-    : state.piles.find((pile) => pile.id === state.expandedPileId);
+    : state.piles.find((pile) => pile.id === activePileId);
   return expanded === undefined
     ? createPile(state, newPileId, [card])
     : addUniqueCardToPile(state, expanded.id, card);
 }
 
-export function setExpandedPile(
+export function setPileExpanded(
   state: TrayState,
-  pileId: string | null,
+  pileId: string,
+  expanded: boolean,
 ): TrayState {
+  if (!state.piles.some((pile) => pile.id === pileId)) {
+    return state;
+  }
+  const withoutPile = state.expandedPileIds.filter((id) => id !== pileId);
+  if (!expanded && withoutPile.length === state.expandedPileIds.length) {
+    return state;
+  }
   return {
     ...state,
-    expandedPileId: pileId !== null && state.piles.some((pile) => pile.id === pileId)
-      ? pileId
-      : null,
+    expandedPileIds: expanded ? [...withoutPile, pileId] : withoutPile,
   };
 }
 
@@ -485,9 +492,10 @@ function cleanTray(state: TrayState): TrayState {
   const ids = new Set(piles.map((pile) => pile.id));
   return {
     piles,
-    expandedPileId: state.expandedPileId !== null && ids.has(state.expandedPileId)
-      ? state.expandedPileId
-      : null,
+    expandedPileIds: state.expandedPileIds.filter(
+      (pileId, index, expandedPileIds) =>
+        ids.has(pileId) && expandedPileIds.indexOf(pileId) === index,
+    ),
     unfiledPileId: state.unfiledPileId !== null && ids.has(state.unfiledPileId)
       ? state.unfiledPileId
       : null,

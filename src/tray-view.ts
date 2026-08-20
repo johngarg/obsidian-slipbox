@@ -88,7 +88,7 @@ export class TrayRenderer {
         pile,
         pileIndex,
         pile.position ?? defaultPilePosition(pileIndex),
-        state.expandedPileId === pile.id,
+        state.expandedPileIds.includes(pile.id),
         isCurrent,
       ));
     });
@@ -166,7 +166,7 @@ export class TrayRenderer {
         if (performance.now() < this.suppressClickUntil) {
           return;
         }
-        void this.plugin.expandTrayPile(null);
+        void this.plugin.setTrayPileExpanded(pile.id, false);
       });
       dragSurface = handle;
     }
@@ -203,7 +203,7 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
     });
     pileEl.addEventListener("keydown", (event) => {
       if (
@@ -213,7 +213,7 @@ export class TrayRenderer {
         return;
       }
       event.preventDefault();
-      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
     });
     pileEl.addEventListener("contextmenu", (event) => {
       if (
@@ -332,7 +332,7 @@ export class TrayRenderer {
       if (!expanded) {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.expandTrayPile(pile.id);
+        void this.plugin.setTrayPileExpanded(pile.id, true);
         return;
       }
       if (filed === undefined) {

@@ -1352,7 +1352,7 @@ function fnv1a(value) {
 // src/tray-state.ts
 var EMPTY_TRAY = {
   piles: [],
-  expandedPileId: null,
+  expandedPileIds: [],
   unfiledPileId: null
 };
 function createPile(state, pileId, cards, pileIndex = state.piles.length) {
@@ -1477,7 +1477,7 @@ function mergePiles(state, sourcePileId, targetPileId) {
   return cleanTray({
     ...state,
     piles,
-    expandedPileId: state.expandedPileId === sourcePileId ? targetPileId : state.expandedPileId,
+    expandedPileIds: state.expandedPileIds.map((pileId) => pileId === sourcePileId ? targetPileId : pileId),
     unfiledPileId: state.unfiledPileId === sourcePileId ? null : state.unfiledPileId
   });
 }
@@ -1585,13 +1585,21 @@ function toggleFiledCard(state, card, newPileId) {
   if (trayContains(state, card.cardRef)) {
     return removeCard(state, card.cardRef);
   }
-  const expanded = state.expandedPileId === null ? void 0 : state.piles.find((pile) => pile.id === state.expandedPileId);
+  const activePileId = state.expandedPileIds[state.expandedPileIds.length - 1];
+  const expanded = activePileId === void 0 ? void 0 : state.piles.find((pile) => pile.id === activePileId);
   return expanded === void 0 ? createPile(state, newPileId, [card]) : addUniqueCardToPile(state, expanded.id, card);
 }
-function setExpandedPile(state, pileId) {
+function setPileExpanded(state, pileId, expanded) {
+  if (!state.piles.some((pile) => pile.id === pileId)) {
+    return state;
+  }
+  const withoutPile = state.expandedPileIds.filter((id) => id !== pileId);
+  if (!expanded && withoutPile.length === state.expandedPileIds.length) {
+    return state;
+  }
   return {
     ...state,
-    expandedPileId: pileId !== null && state.piles.some((pile) => pile.id === pileId) ? pileId : null
+    expandedPileIds: expanded ? [...withoutPile, pileId] : withoutPile
   };
 }
 function trayContains(state, cardRef) {
@@ -1632,7 +1640,9 @@ function cleanTray(state) {
   const ids = new Set(piles.map((pile) => pile.id));
   return {
     piles,
-    expandedPileId: state.expandedPileId !== null && ids.has(state.expandedPileId) ? state.expandedPileId : null,
+    expandedPileIds: state.expandedPileIds.filter(
+      (pileId, index, expandedPileIds) => ids.has(pileId) && expandedPileIds.indexOf(pileId) === index
+    ),
     unfiledPileId: state.unfiledPileId !== null && ids.has(state.unfiledPileId) ? state.unfiledPileId : null
   };
 }
@@ -1708,7 +1718,7 @@ var TrayRenderer = class {
         pile,
         pileIndex,
         pile.position ?? defaultPilePosition(pileIndex),
-        state.expandedPileId === pile.id,
+        state.expandedPileIds.includes(pile.id),
         isCurrent
       ));
     });
@@ -1770,7 +1780,7 @@ var TrayRenderer = class {
         if (performance.now() < this.suppressClickUntil) {
           return;
         }
-        void this.plugin.expandTrayPile(null);
+        void this.plugin.setTrayPileExpanded(pile.id, false);
       });
       dragSurface = handle;
     }
@@ -1799,14 +1809,14 @@ var TrayRenderer = class {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
     });
     pileEl.addEventListener("keydown", (event) => {
       if (event.target !== pileEl || event.key !== "Enter" && event.key !== " ") {
         return;
       }
       event.preventDefault();
-      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
     });
     pileEl.addEventListener("contextmenu", (event) => {
       if (event.target instanceof Element && event.target.closest("button, a") !== null) {
@@ -1908,7 +1918,7 @@ var TrayRenderer = class {
       if (!expanded) {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.expandTrayPile(pile.id);
+        void this.plugin.setTrayPileExpanded(pile.id, true);
         return;
       }
       if (filed === void 0) {
@@ -5084,8 +5094,8 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   isFileInTray(file) {
     return trayContains(this.tray, file.path);
   }
-  async expandTrayPile(pileId) {
-    this.tray = setExpandedPile(this.tray, pileId);
+  async setTrayPileExpanded(pileId, expanded) {
+    this.tray = setPileExpanded(this.tray, pileId, expanded);
     await this.refreshDeckViews();
   }
   async clearTrayPile(pileId) {

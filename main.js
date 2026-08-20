@@ -299,14 +299,8 @@ var import_obsidian2 = require("obsidian");
 
 // src/deck-motion.ts
 var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
-function cardStackOrder(cardIndex, viewportPosition, activeIndex) {
-  return cardIndex === activeIndex ? 220 : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
-}
-function activeCardActionAvailability(activeId, activePath, bookmarkedIds, deskCardRefs) {
-  return {
-    canAddBookmark: activeId !== null && !bookmarkedIds.includes(activeId),
-    canPutOnDesk: activePath !== null && !deskCardRefs.includes(activePath)
-  };
+function cardStackOrder(cardIndex, activeIndex) {
+  return cardIndex === activeIndex ? 220 : 100 - Math.abs(cardIndex - activeIndex);
 }
 function bookmarkEdgeTargets(bookmarkIndices, viewportPosition, cardStep, stageWidth, cardWidth) {
   if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
@@ -877,9 +871,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   backButtonEl = null;
   forwardButtonEl = null;
   bookmarksButtonEl = null;
-  addBookmarkButtonEl = null;
   deskButtonEl = null;
-  putOnDeskButtonEl = null;
   resizeObserver = null;
   positioningFrame = null;
   positioningRetriesRemaining = 0;
@@ -917,9 +909,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.addBookmarkButtonEl = null;
     this.deskButtonEl = null;
-    this.putOnDeskButtonEl = null;
     this.history.reset();
   }
   onResize() {
@@ -1062,9 +1052,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.addBookmarkButtonEl = null;
     this.deskButtonEl = null;
-    this.putOnDeskButtonEl = null;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
       shell.addClass("is-filing");
@@ -1100,11 +1088,6 @@ var DeckView = class extends import_obsidian2.ItemView {
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     (0, import_obsidian2.setIcon)(icon, "archive");
     identity.createSpan({ text: "Deck" });
-    const navigation = toolbar.createDiv({ cls: "slipbox-toolbar-group" });
-    const previous = iconButton(navigation, "arrow-left", "Previous card");
-    previous.addEventListener("click", () => void this.moveBy(-1));
-    const next = iconButton(navigation, "arrow-right", "Next card");
-    next.addEventListener("click", () => void this.moveBy(1));
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
       text: "\u2190 Back",
@@ -1135,13 +1118,6 @@ var DeckView = class extends import_obsidian2.ItemView {
     }
     bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
     this.bookmarksButtonEl = bookmarks;
-    const addBookmark = iconButton(
-      controls,
-      "bookmark-plus",
-      "Add bookmark to current card"
-    );
-    this.addBookmarkButtonEl = addBookmark;
-    addBookmark.addEventListener("click", () => void this.addBookmarkToCurrent());
     const desk = controls.createEl("button", {
       attr: { type: "button" },
       cls: "slipbox-desk-button"
@@ -1153,15 +1129,6 @@ var DeckView = class extends import_obsidian2.ItemView {
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
     this.deskButtonEl = desk;
-    const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
-    this.putOnDeskButtonEl = putOnDesk;
-    putOnDesk.addEventListener("click", () => {
-      const file = this.activeCard?.file;
-      if (file !== void 0) {
-        void this.plugin.putFileOnDesk(file);
-      }
-    });
-    this.updateActiveActionControls();
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
         cls: "slipbox-problem-button",
@@ -1240,7 +1207,7 @@ var DeckView = class extends import_obsidian2.ItemView {
         placement: "bottom",
         delay: 350
       });
-      cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
+      cardEl.style.zIndex = String(cardStackOrder(index, activeIndex));
       this.renderedCards.push(cardEl);
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
@@ -1348,6 +1315,19 @@ var DeckView = class extends import_obsidian2.ItemView {
         activate: (backlink) => this.jumpToId(backlink.id)
       });
       jobs.push(this.renderMarkdownCard(card, scroll, version));
+      cardEl.addEventListener("contextmenu", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element) || target.closest("a, button, input, textarea, select") !== null) {
+          return;
+        }
+        this.plugin.showCardContextMenu(
+          event,
+          card.file,
+          card.id,
+          DECK_VIEW_TYPE,
+          this.leaf
+        );
+      });
       cardEl.addEventListener("click", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
@@ -1788,38 +1768,17 @@ var DeckView = class extends import_obsidian2.ItemView {
     if (activeIndex < 0) {
       return;
     }
-    const viewportPosition = this.viewportPosition(activeIndex);
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       card.toggleClass("is-active", index === activeIndex);
-      card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
+      card.style.zIndex = String(cardStackOrder(index, activeIndex));
       this.cardFooters.setInteractive(card, index === activeIndex);
     }
     this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
-    this.updateActiveActionControls();
     this.updateHistoryControls();
-  }
-  updateActiveActionControls(bookmarkedIds = this.plugin.state.bookmarks.map(
-    (bookmark) => bookmark.zettelId
-  ), deskCardRefs = this.plugin.state.deskCards.map(
-    (card) => card.cardRef
-  )) {
-    const activeCard = this.activeCard;
-    const availability = activeCardActionAvailability(
-      activeCard?.id ?? null,
-      activeCard?.path ?? null,
-      bookmarkedIds,
-      deskCardRefs
-    );
-    if (this.addBookmarkButtonEl !== null) {
-      this.addBookmarkButtonEl.disabled = !availability.canAddBookmark;
-    }
-    if (this.putOnDeskButtonEl !== null) {
-      this.putOnDeskButtonEl.disabled = !availability.canPutOnDesk;
-    }
   }
   bookmarkedIds() {
     return new Set(
@@ -1865,7 +1824,6 @@ var DeckView = class extends import_obsidian2.ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
     }
-    this.updateActiveActionControls([...bookmarkedIds]);
   }
   updateDeskUi(deskCardRefs = this.deskCardRefs()) {
     const deskCount = deskCardRefs.size;
@@ -1901,7 +1859,6 @@ var DeckView = class extends import_obsidian2.ItemView {
         delay: 250
       });
     }
-    this.updateActiveActionControls(void 0, [...deskCardRefs]);
   }
   viewportPosition(activeIndex) {
     return activeIndex + this.viewportOffset;
@@ -1973,14 +1930,6 @@ var DeckView = class extends import_obsidian2.ItemView {
     this.renderComponents = [];
   }
 };
-function iconButton(parent, icon, label) {
-  const button = parent.createEl("button", {
-    cls: "clickable-icon slipbox-icon-button",
-    attr: { type: "button", "aria-label": label }
-  });
-  (0, import_obsidian2.setIcon)(button, icon);
-  return button;
-}
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -2183,9 +2132,9 @@ var DeskView = class extends import_obsidian3.ItemView {
       });
       (0, import_obsidian3.setTooltip)(name, file.path);
       name.addEventListener("click", () => this.plugin.openMarkdownFile(file));
-      const place = iconButton2(item, "plus", `Place ${file.basename} on Desk`);
+      const place = iconButton(item, "plus", `Place ${file.basename} on Desk`);
       place.addEventListener("click", () => void this.plugin.putFileOnDesk(file));
-      const fileButton = iconButton2(item, "archive-restore", `File ${file.basename}`);
+      const fileButton = iconButton(item, "archive-restore", `File ${file.basename}`);
       fileButton.addEventListener("click", () => void this.plugin.beginFiling(file));
     }
   }
@@ -2218,14 +2167,14 @@ var DeskView = class extends import_obsidian3.ItemView {
     identity.createSpan({ cls: "slipbox-desk-card-title", text: file.basename });
     const actions = header.createDiv({ cls: "slipbox-desk-card-actions" });
     if (isUnfiled) {
-      const fileButton = iconButton2(actions, "archive-restore", `File ${file.basename}`);
+      const fileButton = iconButton(actions, "archive-restore", `File ${file.basename}`);
       fileButton.addEventListener("pointerdown", (event) => event.stopPropagation());
       fileButton.addEventListener("click", () => void this.plugin.beginFiling(file));
     }
-    const open = iconButton2(actions, "file-pen-line", `Open ${file.basename}`);
+    const open = iconButton(actions, "file-pen-line", `Open ${file.basename}`);
     open.addEventListener("pointerdown", (event) => event.stopPropagation());
     open.addEventListener("click", () => this.plugin.openMarkdownFile(file));
-    const remove = iconButton2(actions, "x", `Remove ${file.basename} from Desk`);
+    const remove = iconButton(actions, "x", `Remove ${file.basename} from Desk`);
     remove.addEventListener("pointerdown", (event) => event.stopPropagation());
     remove.addEventListener("click", () => void this.plugin.removeFromDesk(file.path));
     this.attachDragging(card, header, state);
@@ -2240,6 +2189,19 @@ var DeskView = class extends import_obsidian3.ItemView {
       if (event.target.closest("button, a") === null) {
         this.plugin.openMarkdownFile(file);
       }
+    });
+    card.addEventListener("contextmenu", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest("a, button, input, textarea, select") !== null) {
+        return;
+      }
+      this.plugin.showCardContextMenu(
+        event,
+        file,
+        filed?.id ?? null,
+        DESK_VIEW_TYPE,
+        this.leaf
+      );
     });
     const scroll = card.createDiv({ cls: "slipbox-desk-card-scroll markdown-rendered" });
     this.cardFooters.render(card, {
@@ -2266,7 +2228,7 @@ var DeskView = class extends import_obsidian3.ItemView {
   renderMissingCard(card, state) {
     const header = card.createDiv({ cls: "slipbox-desk-card-header" });
     header.createSpan({ cls: "slipbox-desk-card-address", text: "missing card" });
-    const remove = iconButton2(header, "x", "Remove missing card from Desk");
+    const remove = iconButton(header, "x", "Remove missing card from Desk");
     remove.addEventListener("click", () => void this.plugin.removeFromDesk(state.cardRef));
     card.createDiv({
       cls: "slipbox-desk-missing-copy",
@@ -2333,7 +2295,7 @@ var DeskView = class extends import_obsidian3.ItemView {
     this.renderComponents = [];
   }
 };
-function iconButton2(parent, icon, label) {
+function iconButton(parent, icon, label) {
   const button = parent.createEl("button", {
     cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label }
@@ -2451,7 +2413,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
         this.actions.visit(bookmark.zettelId);
         this.close();
       });
-      const remove = iconButton3(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
+      const remove = iconButton2(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
       remove.addEventListener("click", () => {
         void this.actions.remove(bookmark.zettelId).then(() => this.close());
       });
@@ -2507,11 +2469,11 @@ var EntryPointsModal = class extends import_obsidian4.Modal {
         this.actions.visit(entry.id);
         this.close();
       });
-      const rename = iconButton3(row, "pencil", `Rename ${entry.name}`);
+      const rename = iconButton2(row, "pencil", `Rename ${entry.name}`);
       rename.addEventListener("click", () => {
         void this.actions.rename(index).then(() => this.close());
       });
-      const remove = iconButton3(row, "trash-2", `Delete ${entry.name}`);
+      const remove = iconButton2(row, "trash-2", `Delete ${entry.name}`);
       remove.addEventListener("click", () => {
         void this.actions.remove(index).then(() => this.close());
       });
@@ -2565,7 +2527,7 @@ var IssuesModal = class extends import_obsidian4.Modal {
     this.contentEl.empty();
   }
 };
-function iconButton3(parent, icon, label) {
+function iconButton2(parent, icon, label) {
   const button = parent.createEl("button", {
     cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label }
@@ -2852,6 +2814,50 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
   }
   openMarkdownFile(file) {
     return this.app.workspace.getLeaf("tab").openFile(file);
+  }
+  showCardContextMenu(event, file, zettelId, source, leaf) {
+    event.preventDefault();
+    event.stopPropagation();
+    const isBookmarked = zettelId !== null && this.bookmarkAt(zettelId) !== void 0;
+    const isOnDesk = this.state.deskCards.some(
+      (card) => card.cardRef === file.path
+    );
+    const menu = import_obsidian6.Menu.forEvent(event);
+    menu.addItem((item) => {
+      item.setTitle("Open Markdown note").setIcon("file-pen-line").setSection("slipbox-card").onClick(() => void this.openMarkdownFile(file));
+    });
+    menu.addItem((item) => {
+      item.setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark").setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
+        if (zettelId !== null) {
+          void this.toggleBookmark(zettelId);
+        }
+      });
+    });
+    menu.addItem((item) => {
+      item.setTitle(isOnDesk ? "Remove from Desk" : "Add to Desk").setIcon("panels-top-left").setSection("slipbox-card").onClick(() => void this.toggleFileOnDesk(file));
+    });
+    menu.addItem((item) => {
+      item.setTitle("Add card from here").setIcon("plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
+        if (zettelId !== null) {
+          void this.createCardFrom(zettelId);
+        }
+      });
+    });
+    menu.addItem((item) => {
+      item.setTitle("Delete card").setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => void this.deleteCard(file));
+    });
+    this.app.workspace.trigger("file-menu", menu, file, source, leaf);
+    menu.showAtMouseEvent(event);
+  }
+  async deleteCard(file) {
+    if (!await this.app.fileManager.promptForDeletion(file)) {
+      return;
+    }
+    try {
+      await this.app.fileManager.trashFile(file);
+    } catch (error) {
+      new import_obsidian6.Notice(`Could not delete ${file.basename}: ${errorMessage3(error)}`);
+    }
   }
   showDesk() {
     void this.openDesk();

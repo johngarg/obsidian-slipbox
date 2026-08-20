@@ -12,7 +12,6 @@ import {
 
 import type SlipboxPlugin from "./main.js";
 import {
-  activeCardActionAvailability,
   activeIndexForViewport,
   bookmarkEdgeTargets,
   cardMotionStyle,
@@ -48,9 +47,7 @@ export class DeckView extends ItemView {
   private backButtonEl: HTMLButtonElement | null = null;
   private forwardButtonEl: HTMLButtonElement | null = null;
   private bookmarksButtonEl: HTMLButtonElement | null = null;
-  private addBookmarkButtonEl: HTMLButtonElement | null = null;
   private deskButtonEl: HTMLButtonElement | null = null;
-  private putOnDeskButtonEl: HTMLButtonElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
@@ -134,9 +131,7 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.addBookmarkButtonEl = null;
     this.deskButtonEl = null;
-    this.putOnDeskButtonEl = null;
     this.history.reset();
   }
 
@@ -299,9 +294,7 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
-    this.addBookmarkButtonEl = null;
     this.deskButtonEl = null;
-    this.putOnDeskButtonEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
@@ -344,12 +337,6 @@ export class DeckView extends ItemView {
     setIcon(icon, "archive");
     identity.createSpan({ text: "Deck" });
 
-    const navigation = toolbar.createDiv({ cls: "slipbox-toolbar-group" });
-    const previous = iconButton(navigation, "arrow-left", "Previous card");
-    previous.addEventListener("click", () => void this.moveBy(-1));
-    const next = iconButton(navigation, "arrow-right", "Next card");
-    next.addEventListener("click", () => void this.moveBy(1));
-
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
       text: "← Back",
@@ -383,14 +370,6 @@ export class DeckView extends ItemView {
     bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
     this.bookmarksButtonEl = bookmarks;
 
-    const addBookmark = iconButton(
-      controls,
-      "bookmark-plus",
-      "Add bookmark to current card",
-    );
-    this.addBookmarkButtonEl = addBookmark;
-    addBookmark.addEventListener("click", () => void this.addBookmarkToCurrent());
-
     const desk = controls.createEl("button", {
       attr: { type: "button" },
       cls: "slipbox-desk-button",
@@ -402,16 +381,6 @@ export class DeckView extends ItemView {
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
     this.deskButtonEl = desk;
-
-    const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
-    this.putOnDeskButtonEl = putOnDesk;
-    putOnDesk.addEventListener("click", () => {
-      const file = this.activeCard?.file;
-      if (file !== undefined) {
-        void this.plugin.putFileOnDesk(file);
-      }
-    });
-    this.updateActiveActionControls();
 
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
@@ -505,7 +474,7 @@ export class DeckView extends ItemView {
         placement: "bottom",
         delay: 350,
       });
-      cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
+      cardEl.style.zIndex = String(cardStackOrder(index, activeIndex));
       this.renderedCards.push(cardEl);
 
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
@@ -622,6 +591,23 @@ export class DeckView extends ItemView {
         activate: (backlink) => this.jumpToId(backlink.id),
       });
       jobs.push(this.renderMarkdownCard(card, scroll, version));
+
+      cardEl.addEventListener("contextmenu", (event) => {
+        const target = event.target;
+        if (
+          !(target instanceof Element) ||
+          target.closest("a, button, input, textarea, select") !== null
+        ) {
+          return;
+        }
+        this.plugin.showCardContextMenu(
+          event,
+          card.file,
+          card.id,
+          DECK_VIEW_TYPE,
+          this.leaf,
+        );
+      });
 
       cardEl.addEventListener("click", (event) => {
         const target = event.target;
@@ -1135,11 +1121,10 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const viewportPosition = this.viewportPosition(activeIndex);
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       card.toggleClass("is-active", index === activeIndex);
-      card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
+      card.style.zIndex = String(cardStackOrder(index, activeIndex));
       this.cardFooters.setInteractive(card, index === activeIndex);
     }
 
@@ -1147,31 +1132,7 @@ export class DeckView extends ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
-    this.updateActiveActionControls();
     this.updateHistoryControls();
-  }
-
-  private updateActiveActionControls(
-    bookmarkedIds: readonly string[] = this.plugin.state.bookmarks.map(
-      (bookmark) => bookmark.zettelId,
-    ),
-    deskCardRefs: readonly string[] = this.plugin.state.deskCards.map(
-      (card) => card.cardRef,
-    ),
-  ): void {
-    const activeCard = this.activeCard;
-    const availability = activeCardActionAvailability(
-      activeCard?.id ?? null,
-      activeCard?.path ?? null,
-      bookmarkedIds,
-      deskCardRefs,
-    );
-    if (this.addBookmarkButtonEl !== null) {
-      this.addBookmarkButtonEl.disabled = !availability.canAddBookmark;
-    }
-    if (this.putOnDeskButtonEl !== null) {
-      this.putOnDeskButtonEl.disabled = !availability.canPutOnDesk;
-    }
   }
 
   private bookmarkedIds(): Set<string> {
@@ -1224,7 +1185,6 @@ export class DeckView extends ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
     }
-    this.updateActiveActionControls([...bookmarkedIds]);
   }
 
   private updateDeskUi(deskCardRefs = this.deskCardRefs()): void {
@@ -1264,8 +1224,6 @@ export class DeckView extends ItemView {
         delay: 250,
       });
     }
-
-    this.updateActiveActionControls(undefined, [...deskCardRefs]);
   }
 
   private viewportPosition(activeIndex: number): number {

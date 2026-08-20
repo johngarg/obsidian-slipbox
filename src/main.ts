@@ -1,4 +1,5 @@
 import {
+  Menu,
   Notice,
   Plugin,
   TAbstractFile,
@@ -158,6 +159,87 @@ export default class SlipboxPlugin extends Plugin {
 
   openMarkdownFile(file: TFile): Promise<void> {
     return this.app.workspace.getLeaf("tab").openFile(file);
+  }
+
+  showCardContextMenu(
+    event: MouseEvent,
+    file: TFile,
+    zettelId: string | null,
+    source: string,
+    leaf: WorkspaceLeaf,
+  ): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const isBookmarked =
+      zettelId !== null && this.bookmarkAt(zettelId) !== undefined;
+    const isOnDesk = this.state.deskCards.some(
+      (card) => card.cardRef === file.path,
+    );
+    const menu = Menu.forEvent(event);
+
+    menu.addItem((item) => {
+      item
+        .setTitle("Open Markdown note")
+        .setIcon("file-pen-line")
+        .setSection("slipbox-card")
+        .onClick(() => void this.openMarkdownFile(file));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark")
+        .setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus")
+        .setSection("slipbox-card")
+        .setDisabled(zettelId === null)
+        .onClick(() => {
+          if (zettelId !== null) {
+            void this.toggleBookmark(zettelId);
+          }
+        });
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle(isOnDesk ? "Remove from Desk" : "Add to Desk")
+        .setIcon("panels-top-left")
+        .setSection("slipbox-card")
+        .onClick(() => void this.toggleFileOnDesk(file));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Add card from here")
+        .setIcon("plus")
+        .setSection("slipbox-card")
+        .setDisabled(zettelId === null)
+        .onClick(() => {
+          if (zettelId !== null) {
+            void this.createCardFrom(zettelId);
+          }
+        });
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Delete card")
+        .setIcon("trash-2")
+        .setWarning(true)
+        .setSection("slipbox-card-danger")
+        .onClick(() => void this.deleteCard(file));
+    });
+
+    // Obsidian supplies its canonical Reveal file in navigation action along
+    // with the remaining ordinary file actions and third-party contributions.
+    this.app.workspace.trigger("file-menu", menu, file, source, leaf);
+    menu.showAtMouseEvent(event);
+  }
+
+  private async deleteCard(file: TFile): Promise<void> {
+    if (!(await this.app.fileManager.promptForDeletion(file))) {
+      return;
+    }
+    try {
+      await this.app.fileManager.trashFile(file);
+    } catch (error) {
+      new Notice(`Could not delete ${file.basename}: ${errorMessage(error)}`);
+    }
   }
 
   showDesk(): void {

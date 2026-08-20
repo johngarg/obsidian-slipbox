@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  activeCardActionAvailability,
   activeIndexForViewport,
   bookmarkEdgeTargets,
   cardMotionStyle,
@@ -12,35 +11,18 @@ import {
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
-  test("updates active-card actions as navigation changes cards", () => {
-    assert.deepEqual(
-      activeCardActionAvailability(
-        "1/1",
-        "Systems.md",
-        ["1/1"],
-        ["Communication.md"],
-      ),
-      { canAddBookmark: false, canPutOnDesk: true },
-    );
-    assert.deepEqual(
-      activeCardActionAvailability(
-        "1/1a",
-        "Communication.md",
-        ["1/1"],
-        ["Communication.md"],
-      ),
-      { canAddBookmark: true, canPutOnDesk: false },
-    );
-    assert.deepEqual(
-      activeCardActionAvailability(null, null, ["1/1"], []),
-      { canAddBookmark: false, canPutOnDesk: false },
-    );
+  test("fans card surfaces around the active card", () => {
+    assert.equal(cardStackOrder(4, 4), 220);
+    assert.equal(cardStackOrder(3, 4), 99);
+    assert.equal(cardStackOrder(0, 4), 96);
   });
 
-  test("keeps card surfaces in one physical stack", () => {
-    assert.equal(cardStackOrder(4, 3.75, 4), 220);
-    assert.equal(cardStackOrder(3, 3.75, 4), 100);
-    assert.equal(cardStackOrder(0, 3.75, 4), 97);
+  test("keeps intervening cards visible when selection does not move the viewport", () => {
+    assert.ok(cardStackOrder(0, 0) > cardStackOrder(1, 0));
+    assert.ok(cardStackOrder(1, 0) > cardStackOrder(2, 0));
+
+    assert.ok(cardStackOrder(2, 2) > cardStackOrder(1, 2));
+    assert.ok(cardStackOrder(1, 2) > cardStackOrder(0, 2));
   });
 
   test("chooses the nearest off-screen bookmark on each side", () => {

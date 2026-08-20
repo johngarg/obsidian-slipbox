@@ -17,6 +17,7 @@ export type {
 } from "./zettel-id.js";
 
 export { indexZettelMetadata } from "./zettel-metadata.js";
+export { generateFiledCardLink } from "./zettel-links.js";
 export {
   fitBacklinkPrefix,
   indexFiledBacklinks,

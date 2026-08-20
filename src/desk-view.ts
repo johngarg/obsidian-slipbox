@@ -214,6 +214,22 @@ export class DeskView extends ItemView {
         this.plugin.openMarkdownFile(file);
       }
     });
+    card.addEventListener("contextmenu", (event) => {
+      const target = event.target;
+      if (
+        !(target instanceof Element) ||
+        target.closest("a, button, input, textarea, select") !== null
+      ) {
+        return;
+      }
+      this.plugin.showCardContextMenu(
+        event,
+        file,
+        filed?.id ?? null,
+        DESK_VIEW_TYPE,
+        this.leaf,
+      );
+    });
 
     const scroll = card.createDiv({ cls: "slipbox-desk-card-scroll markdown-rendered" });
     this.cardFooters.render(card, {

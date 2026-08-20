@@ -8,37 +8,16 @@ export const DEFAULT_ACTIVE_HYSTERESIS = 0.06;
 /** Keep card surfaces in one physical stack ordered around the active card. */
 export function cardStackOrder(
   cardIndex: number,
-  viewportPosition: number,
   activeIndex: number,
 ): number {
   return cardIndex === activeIndex
     ? 220
-    : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
+    : 100 - Math.abs(cardIndex - activeIndex);
 }
 
 export interface BookmarkEdgeTargets {
   readonly left: number | null;
   readonly right: number | null;
-}
-
-export interface ActiveCardActionAvailability {
-  readonly canAddBookmark: boolean;
-  readonly canPutOnDesk: boolean;
-}
-
-/** Derive toolbar actions from the card that is active right now. */
-export function activeCardActionAvailability(
-  activeId: string | null,
-  activePath: string | null,
-  bookmarkedIds: readonly string[],
-  deskCardRefs: readonly string[],
-): ActiveCardActionAvailability {
-  return {
-    canAddBookmark:
-      activeId !== null && !bookmarkedIds.includes(activeId),
-    canPutOnDesk:
-      activePath !== null && !deskCardRefs.includes(activePath),
-  };
 }
 
 /** Select the nearest off-screen bookmark on each side of the Deck. */

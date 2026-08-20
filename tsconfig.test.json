@@ -15,6 +15,7 @@
     "src/navigation-history.ts",
     "src/plugin-state.ts",
     "src/zettel-id.ts",
+    "src/zettel-links.ts",
     "src/zettel-metadata.ts",
     "test/**/*.ts"
   ]

@@ -33,6 +33,10 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
   toggle persistent zettel-id bookmarks, plus edge-return arrows when the
   nearest bookmark on either side is out of view. Card-surface clicks only
   select the card.
+- Card right-click menus on Deck and Desk provide Markdown opening, bookmark
+  and Desk toggles, `Add card from here`, confirmation-backed deletion using
+  the configured trash behavior, and Obsidian's native file actions including
+  `Reveal file in navigation`.
 - Browser-style session history for filed links, entry points, and bookmarks;
   ordinary physical Deck browsing does not create history entries.
 - A bounded spatial Desk with fixed-size rendered cards, persistent positions
@@ -72,8 +76,22 @@ generates canonical addresses. Numeric components compare numerically;
 alphabetic components follow the unbounded sequence `a … z, aa, ab …`; and a
 prefix card precedes all of its extensions.
 
-The public domain API is exported from `src/index.ts` and has no dependency on
-Obsidian. Metadata classification is likewise pure and tested independently.
+The address and metadata domain APIs are exported from `src/index.ts`, remain
+independent of Obsidian, and are tested separately from plugin integration.
+
+## Filed-card links
+
+`generateFiledCardLink(app, file, sourcePath, zettelId)` delegates to Obsidian's
+`app.fileManager.generateMarkdownLink` and uses the card's `zettel-id` as the
+display text. For example, with Wikilinks enabled it may produce
+`[[Systems|1/1]]`; with Markdown links enabled it returns the equivalent format
+and lets Obsidian choose an appropriate target relative to `sourcePath`.
+
+The `zettel-id` frontmatter property remains the sole canonical address.
+Although copying it into `aliases` would enable native ID-based autocomplete,
+Slipbox does not do so: that would duplicate address metadata and could become
+stale or ambiguous. Bare ID links such as `[[1/1]]` are not generated, because
+`/` may be interpreted as a path separator.
 
 ## Development
 

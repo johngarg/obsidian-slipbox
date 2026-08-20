@@ -27,6 +27,7 @@ export const DECK_VIEW_TYPE = "slipbox-deck";
 
 const FILING_ANIMATION_DURATION_MS = 280;
 const RENDER_EDGE_BUFFER = 2;
+const LAYOUT_MEASUREMENT_RETRIES = 2;
 
 export class DeckView extends ItemView {
   private activeId: string | null = null;
@@ -49,6 +50,9 @@ export class DeckView extends ItemView {
   private addBookmarkButtonEl: HTMLButtonElement | null = null;
   private deskButtonEl: HTMLButtonElement | null = null;
   private putOnDeskButtonEl: HTMLButtonElement | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private positioningFrame: number | null = null;
+  private positioningRetriesRemaining = 0;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -94,10 +98,18 @@ export class DeckView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.observeDeckSize();
     await this.refresh();
   }
 
   async onClose(): Promise<void> {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (this.positioningFrame !== null) {
+      window.cancelAnimationFrame(this.positioningFrame);
+      this.positioningFrame = null;
+    }
+    this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.filingFile = null;
@@ -111,6 +123,10 @@ export class DeckView extends ItemView {
     this.deskButtonEl = null;
     this.putOnDeskButtonEl = null;
     this.history.reset();
+  }
+
+  onResize(): void {
+    this.scheduleCardPositioning();
   }
 
   get activeCard(): FiledZettel | null {
@@ -300,6 +316,7 @@ export class DeckView extends ItemView {
     }
     this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
+    this.scheduleCardPositioning();
   }
 
   private renderToolbar(shell: HTMLElement): void {
@@ -944,14 +961,17 @@ export class DeckView extends ItemView {
     }
   }
 
-  private positionCards(): void {
+  private positionCards(): boolean {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
-    if (activeIndex < 0) {
-      return;
+    if (activeIndex < 0 || this.renderedCards.length === 0) {
+      return true;
     }
 
     const step = this.cardStep();
+    if (step <= 0) {
+      return false;
+    }
     const viewportPosition = this.viewportPosition(activeIndex);
 
     for (const card of this.renderedCards) {
@@ -966,6 +986,54 @@ export class DeckView extends ItemView {
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
+    return true;
+  }
+
+  private observeDeckSize(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => {
+      this.scheduleCardPositioning();
+    });
+    this.resizeObserver.observe(this.contentEl);
+  }
+
+  private scheduleCardPositioning(
+    retries = LAYOUT_MEASUREMENT_RETRIES,
+  ): void {
+    this.positioningRetriesRemaining = Math.max(
+      this.positioningRetriesRemaining,
+      retries,
+    );
+    if (this.positioningFrame !== null) {
+      return;
+    }
+    this.positioningFrame = window.requestAnimationFrame(() => {
+      this.flushScheduledCardPositioning();
+    });
+  }
+
+  private flushScheduledCardPositioning(): void {
+    this.positioningFrame = null;
+    const positioned = this.positionCards();
+    if (positioned) {
+      this.positioningRetriesRemaining = 0;
+      if (this.stageEl !== null) {
+        this.renderBookmarkEdgeTabs(this.stageEl);
+      }
+      return;
+    }
+
+    if (
+      this.contentEl.offsetWidth > 0 &&
+      this.positioningRetriesRemaining > 0
+    ) {
+      this.positioningRetriesRemaining -= 1;
+      this.positioningFrame = window.requestAnimationFrame(() => {
+        this.flushScheduledCardPositioning();
+      });
+      return;
+    }
+    this.positioningRetriesRemaining = 0;
   }
 
   private updateActiveUi(): void {

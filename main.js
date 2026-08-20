@@ -449,6 +449,7 @@ var NavigationHistory = class {
 var DECK_VIEW_TYPE = "slipbox-deck";
 var FILING_ANIMATION_DURATION_MS = 280;
 var RENDER_EDGE_BUFFER = 2;
+var LAYOUT_MEASUREMENT_RETRIES = 2;
 var DeckView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -510,6 +511,9 @@ var DeckView = class extends import_obsidian.ItemView {
   addBookmarkButtonEl = null;
   deskButtonEl = null;
   putOnDeskButtonEl = null;
+  resizeObserver = null;
+  positioningFrame = null;
+  positioningRetriesRemaining = 0;
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -522,9 +526,17 @@ var DeckView = class extends import_obsidian.ItemView {
   async onOpen() {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.observeDeckSize();
     await this.refresh();
   }
   async onClose() {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (this.positioningFrame !== null) {
+      window.cancelAnimationFrame(this.positioningFrame);
+      this.positioningFrame = null;
+    }
+    this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.filingFile = null;
@@ -538,6 +550,9 @@ var DeckView = class extends import_obsidian.ItemView {
     this.deskButtonEl = null;
     this.putOnDeskButtonEl = null;
     this.history.reset();
+  }
+  onResize() {
+    this.scheduleCardPositioning();
   }
   get activeCard() {
     if (this.activeId === null) {
@@ -703,6 +718,7 @@ var DeckView = class extends import_obsidian.ItemView {
     }
     this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
+    this.scheduleCardPositioning();
   }
   renderToolbar(shell) {
     const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
@@ -1265,10 +1281,13 @@ var DeckView = class extends import_obsidian.ItemView {
   positionCards() {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
-    if (activeIndex < 0) {
-      return;
+    if (activeIndex < 0 || this.renderedCards.length === 0) {
+      return true;
     }
     const step = this.cardStep();
+    if (step <= 0) {
+      return false;
+    }
     const viewportPosition = this.viewportPosition(activeIndex);
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
@@ -1281,6 +1300,45 @@ var DeckView = class extends import_obsidian.ItemView {
       card.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
+    return true;
+  }
+  observeDeckSize() {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => {
+      this.scheduleCardPositioning();
+    });
+    this.resizeObserver.observe(this.contentEl);
+  }
+  scheduleCardPositioning(retries = LAYOUT_MEASUREMENT_RETRIES) {
+    this.positioningRetriesRemaining = Math.max(
+      this.positioningRetriesRemaining,
+      retries
+    );
+    if (this.positioningFrame !== null) {
+      return;
+    }
+    this.positioningFrame = window.requestAnimationFrame(() => {
+      this.flushScheduledCardPositioning();
+    });
+  }
+  flushScheduledCardPositioning() {
+    this.positioningFrame = null;
+    const positioned = this.positionCards();
+    if (positioned) {
+      this.positioningRetriesRemaining = 0;
+      if (this.stageEl !== null) {
+        this.renderBookmarkEdgeTabs(this.stageEl);
+      }
+      return;
+    }
+    if (this.contentEl.offsetWidth > 0 && this.positioningRetriesRemaining > 0) {
+      this.positioningRetriesRemaining -= 1;
+      this.positioningFrame = window.requestAnimationFrame(() => {
+        this.flushScheduledCardPositioning();
+      });
+      return;
+    }
+    this.positioningRetriesRemaining = 0;
   }
   updateActiveUi() {
     const filed = this.plugin.index.snapshot.filed;

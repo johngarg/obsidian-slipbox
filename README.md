@@ -28,9 +28,10 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
   backlink addresses. Deck backlink clicks use browser history; Desk clicks
   open the referring note, and the backlink context menu can put it on Desk.
 - Persistent named entry points with add, rename, delete, and jump actions.
-- Persistent zettel-id bookmarks and Desk membership with paired card-corner
-  toggles, plus edge-return arrows when the nearest bookmark on either side is
-  out of view.
+- Card-header controls that add and immediately file a new card from their
+  source, toggle Desk membership, and toggle persistent zettel-id bookmarks,
+  plus edge-return arrows when the nearest bookmark on either side is out of
+  view.
 - Browser-style session history for filed links, entry points, and bookmarks;
   ordinary physical Deck browsing does not create history entries.
 - A bounded spatial Desk with fixed-size rendered cards, persistent positions

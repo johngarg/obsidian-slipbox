@@ -1246,6 +1246,32 @@ var DeckView = class extends import_obsidian2.ItemView {
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      const addCardAction = `Add a card from ${card.id}`;
+      const addCard = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-add",
+        attr: {
+          type: "button",
+          "aria-label": addCardAction
+        }
+      });
+      (0, import_obsidian2.setIcon)(addCard, "plus");
+      (0, import_obsidian2.setTooltip)(addCard, addCardAction, {
+        placement: "bottom",
+        delay: 250
+      });
+      addCard.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      addCard.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        addCard.disabled = true;
+        void this.plugin.createCardFrom(card.id).finally(() => {
+          if (addCard.isConnected) {
+            addCard.disabled = false;
+          }
+        });
+      });
       const deskAction = isOnDesk ? `Remove ${card.id} from Desk` : `Add ${card.id} to Desk`;
       const deskToggle = cardActions.createEl("button", {
         cls: "clickable-icon slipbox-card-toggle slipbox-card-desk-toggle",
@@ -2707,6 +2733,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
   indexRefreshTimer = null;
   spreadSaveTimer = null;
   filingWriteInProgress = false;
+  cardCreationInProgress = false;
   async onload() {
     this.state = normalizePluginState(await this.loadData());
     this.index = new ZettelIndex(this.app);
@@ -2807,7 +2834,7 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
     }, 160);
   }
   openMarkdownFile(file) {
-    void this.app.workspace.getLeaf("tab").openFile(file);
+    return this.app.workspace.getLeaf("tab").openFile(file);
   }
   showDesk() {
     void this.openDesk();
@@ -2973,6 +3000,34 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       this.queueIndexRefresh();
     } catch (error) {
       new import_obsidian6.Notice(`Could not create a section: ${errorMessage3(error)}`);
+    }
+  }
+  async createCardFrom(attachmentId) {
+    if (this.cardCreationInProgress) {
+      return;
+    }
+    this.cardCreationInProgress = true;
+    try {
+      this.index.refresh();
+      const attachment = this.index.filedById(attachmentId);
+      if (attachment === void 0) {
+        throw new Error(
+          `Attachment ${attachmentId} is missing, invalid, or duplicated`
+        );
+      }
+      const id = generateFiledId(
+        attachmentId,
+        this.index.snapshot.allValidIds
+      );
+      const file = await this.createCardFile(id, attachment.path);
+      await this.openMarkdownFile(file);
+      this.queueIndexRefresh();
+    } catch (error) {
+      new import_obsidian6.Notice(
+        `Could not add a card from ${attachmentId}: ${errorMessage3(error)}`
+      );
+    } finally {
+      this.cardCreationInProgress = false;
     }
   }
   async fileCard(file, attachmentId) {
@@ -3181,11 +3236,10 @@ var SlipboxPlugin = class extends import_obsidian6.Plugin {
       new import_obsidian6.Notice(`Could not make this note a card: ${errorMessage3(error)}`);
     }
   }
-  async createCardFile(id) {
-    const activePath = this.app.workspace.getActiveFile()?.path ?? "";
+  async createCardFile(id, sourcePath = this.app.workspace.getActiveFile()?.path ?? "") {
     const basename = this.timestampBasename();
     const parent = this.app.fileManager.getNewFileParent(
-      activePath,
+      sourcePath,
       `${basename}.md`
     );
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;

@@ -512,6 +512,33 @@ export class DeckView extends ItemView {
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      const addCardAction = `Add a card from ${card.id}`;
+      const addCard = cardActions.createEl("button", {
+        cls: "clickable-icon slipbox-card-toggle slipbox-card-add",
+        attr: {
+          type: "button",
+          "aria-label": addCardAction,
+        },
+      });
+      setIcon(addCard, "plus");
+      setTooltip(addCard, addCardAction, {
+        placement: "bottom",
+        delay: 250,
+      });
+      addCard.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      addCard.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        addCard.disabled = true;
+        void this.plugin.createCardFrom(card.id).finally(() => {
+          if (addCard.isConnected) {
+            addCard.disabled = false;
+          }
+        });
+      });
+
       const deskAction = isOnDesk
         ? `Remove ${card.id} from Desk`
         : `Add ${card.id} to Desk`;

@@ -46,6 +46,7 @@ export default class SlipboxPlugin extends Plugin {
   private indexRefreshTimer: number | null = null;
   private spreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
+  private cardCreationInProgress = false;
 
   async onload(): Promise<void> {
     this.state = normalizePluginState(await this.loadData());
@@ -155,8 +156,8 @@ export default class SlipboxPlugin extends Plugin {
     }, 160);
   }
 
-  openMarkdownFile(file: TFile): void {
-    void this.app.workspace.getLeaf("tab").openFile(file);
+  openMarkdownFile(file: TFile): Promise<void> {
+    return this.app.workspace.getLeaf("tab").openFile(file);
   }
 
   showDesk(): void {
@@ -345,6 +346,35 @@ export default class SlipboxPlugin extends Plugin {
       this.queueIndexRefresh();
     } catch (error) {
       new Notice(`Could not create a section: ${errorMessage(error)}`);
+    }
+  }
+
+  async createCardFrom(attachmentId: string): Promise<void> {
+    if (this.cardCreationInProgress) {
+      return;
+    }
+    this.cardCreationInProgress = true;
+    try {
+      this.index.refresh();
+      const attachment = this.index.filedById(attachmentId);
+      if (attachment === undefined) {
+        throw new Error(
+          `Attachment ${attachmentId} is missing, invalid, or duplicated`,
+        );
+      }
+      const id = generateFiledId(
+        attachmentId,
+        this.index.snapshot.allValidIds,
+      );
+      const file = await this.createCardFile(id, attachment.path);
+      await this.openMarkdownFile(file);
+      this.queueIndexRefresh();
+    } catch (error) {
+      new Notice(
+        `Could not add a card from ${attachmentId}: ${errorMessage(error)}`,
+      );
+    } finally {
+      this.cardCreationInProgress = false;
     }
   }
 
@@ -576,11 +606,13 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  private async createCardFile(id: string | null): Promise<TFile> {
-    const activePath = this.app.workspace.getActiveFile()?.path ?? "";
+  private async createCardFile(
+    id: string | null,
+    sourcePath = this.app.workspace.getActiveFile()?.path ?? "",
+  ): Promise<TFile> {
     const basename = this.timestampBasename();
     const parent = this.app.fileManager.getNewFileParent(
-      activePath,
+      sourcePath,
       `${basename}.md`,
     );
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;

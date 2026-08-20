@@ -193,6 +193,12 @@ position it would receive. The ghost shows the prospective address and current
 resolved title, reserves space among its neighbours, and remains visibly
 distinct from real cards. It has no path identity, actions, focus targets,
 bookmark or backlink state, and never enters the metadata index or history.
+The Deck initially focuses the real card immediately before the ghost (or the
+ghost itself at the beginning), so the insertion point stays prominent. After
+moving focus out of the address field, the ordinary previous, next, centre,
+first, and last shortcuts and horizontal Deck scrolling navigate a transient
+display sequence that includes the ghost without changing the selected card or
+navigation history.
 Blank or invalid input removes it. Duplicate input keeps filing enabled and
 shows the matching paths while positioning the ghost within that group by the
 source path. `Enter` confirms a current preview and `Escape` cancels without

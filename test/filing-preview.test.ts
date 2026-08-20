@@ -5,6 +5,7 @@ import { Window } from "happy-dom";
 import {
   cardComparatorFor,
   createFilingPreview,
+  defaultFilingFocusIndex,
   deckDisplayItems,
   filingPlacementMatches,
   filingPreviewKey,
@@ -71,6 +72,34 @@ describe("filing placement preview", () => {
     assert.equal(preview.insertionIndex, 2);
     assert.equal(preview.previousPath, "a.md");
     assert.equal(preview.nextPath, "z.md");
+  });
+
+  test("focuses the card before the ghost by default", () => {
+    const middle = createFilingPreview(
+      filed,
+      { address: "A/12", path: "source.md" },
+      "Source",
+      "natural",
+    );
+    assert.equal(defaultFilingFocusIndex(middle), 2);
+    assert.equal(middle.insertionIndex, 3);
+
+    const beginning = createFilingPreview(
+      filed,
+      { address: "A/1", path: "source.md" },
+      "Source",
+      "natural",
+    );
+    assert.equal(defaultFilingFocusIndex(beginning), 0);
+    assert.equal(beginning.insertionIndex, 0);
+
+    const empty = createFilingPreview(
+      [],
+      { address: "A/1", path: "source.md" },
+      "Source",
+      "natural",
+    );
+    assert.equal(defaultFilingFocusIndex(empty), 0);
   });
 
   test("derives one transient display item and reserves its gap", () => {

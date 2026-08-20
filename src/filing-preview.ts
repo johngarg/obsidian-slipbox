@@ -37,6 +37,15 @@ export function filingPreviewKey(sourcePath: string): string {
   return `filing-preview:${sourcePath}`;
 }
 
+/**
+ * Focus the real card immediately before the candidate so the insertion gap
+ * and ghost remain prominent. At the beginning (and in an empty Deck), the
+ * ghost itself is the only useful focus target.
+ */
+export function defaultFilingFocusIndex(preview: FilingPreview): number {
+  return Math.max(0, preview.insertionIndex - 1);
+}
+
 export function createFilingPreview<T extends AddressedPath>(
   filed: readonly T[],
   candidate: AddressedPath,

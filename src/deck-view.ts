@@ -38,6 +38,7 @@ import {
 } from "./path-reference.js";
 import { normalizeAddressInput } from "./address-order.js";
 import {
+  defaultFilingFocusIndex,
   deckDisplayItems,
   type FilingPreview,
 } from "./filing-preview.js";
@@ -53,6 +54,7 @@ const RENDER_EDGE_BUFFER = 2;
 const LAYOUT_MEASUREMENT_RETRIES = 2;
 const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
+const FILING_GHOST_STACK_ORDER = 230;
 
 export class DeckView extends ItemView {
   private activePath: string | null = null;
@@ -60,6 +62,8 @@ export class DeckView extends ItemView {
   private filingSourcePath: string | null = null;
   private filingInputValue = "";
   private filingPreview: FilingPreview | null = null;
+  private filingFocusDisplayIndex: number | null = null;
+  private filingViewportPosition: number | null = null;
   private filingMessage = "Enter an address.";
   private filingOriginViewportOffset = 0;
   private filingInputEl: HTMLInputElement | null = null;
@@ -155,6 +159,8 @@ export class DeckView extends ItemView {
     this.filingFile = null;
     this.filingSourcePath = null;
     this.filingPreview = null;
+    this.filingFocusDisplayIndex = null;
+    this.filingViewportPosition = null;
     this.filingGhostEl = null;
     this.filingConfirmationInProgress = false;
     this.stageEl = null;
@@ -239,7 +245,7 @@ export class DeckView extends ItemView {
       this.filingSourcePath !== null &&
       pathIsAtOrBelow(this.filingSourcePath, deletedPath)
     ) {
-      this.filingPreview = null;
+      this.clearFilingPlacement();
       this.filingMessage = "The source card no longer exists.";
     }
   }
@@ -271,10 +277,29 @@ export class DeckView extends ItemView {
 
   canRunAction(action: DeckAction, target?: FiledCard): boolean {
     if (this.filingFile !== null) {
-      if (action === "confirm-filing") {
-        return this.filingPreview !== null && !this.filingConfirmationInProgress;
+      if (this.filingConfirmationInProgress) {
+        return false;
       }
-      return action === "cancel-filing" && !this.filingConfirmationInProgress;
+      if (action === "confirm-filing") {
+        return this.filingPreview !== null;
+      }
+      if (action === "cancel-filing") {
+        return true;
+      }
+      const focusIndex = this.currentFilingFocusIndex();
+      const displayCount = this.filingDisplayCount();
+      switch (action) {
+        case "previous-card":
+          return focusIndex > 0;
+        case "next-card":
+          return focusIndex >= 0 && focusIndex < displayCount - 1;
+        case "centre-card":
+        case "first-card":
+        case "last-card":
+          return focusIndex >= 0;
+        default:
+          return false;
+      }
     }
     const filed = this.plugin.index.snapshot.filed;
     const active = target ?? this.activeCard;
@@ -354,6 +379,9 @@ export class DeckView extends ItemView {
   }
 
   async refresh(): Promise<void> {
+    const restoreFilingInputFocus =
+      this.filingInputEl !== null &&
+      this.filingInputEl.ownerDocument.activeElement === this.filingInputEl;
     this.cancelViewportCentering();
     this.recalculateFilingPreview();
     const previousActivePath = this.activePath;
@@ -370,7 +398,7 @@ export class DeckView extends ItemView {
       this.history.replaceCurrent(this.activePath);
     }
     this.clampViewportOffset();
-    await this.renderDeck();
+    await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
   }
 
   async startFiling(file: TFile): Promise<void> {
@@ -379,6 +407,8 @@ export class DeckView extends ItemView {
     this.filingSourcePath = file.path;
     this.filingInputValue = "";
     this.filingPreview = null;
+    this.filingFocusDisplayIndex = null;
+    this.filingViewportPosition = null;
     this.filingMessage = "Enter an address.";
     this.filingConfirmationInProgress = false;
     this.filingOriginViewportOffset = this.viewportOffset;
@@ -394,6 +424,8 @@ export class DeckView extends ItemView {
     this.filingFile = null;
     this.filingSourcePath = null;
     this.filingPreview = null;
+    this.filingFocusDisplayIndex = null;
+    this.filingViewportPosition = null;
     this.filingInputValue = "";
     this.filingConfirmationInProgress = false;
     this.viewportOffset = this.filingOriginViewportOffset;
@@ -515,7 +547,7 @@ export class DeckView extends ItemView {
     this.activePath = firstEntryPoint?.path ?? filed[0]?.path ?? null;
   }
 
-  private async renderDeck(): Promise<void> {
+  private async renderDeck(focusFilingInput = true): Promise<void> {
     const version = ++this.renderVersion;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
@@ -578,7 +610,9 @@ export class DeckView extends ItemView {
     this.positionCards();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
-    this.focusFilingInput();
+    if (focusFilingInput) {
+      this.focusFilingInput();
+    }
   }
 
   private renderToolbar(shell: HTMLElement): void {
@@ -679,8 +713,7 @@ export class DeckView extends ItemView {
     version: number,
   ): Promise<void> {
     const displayItems = deckDisplayItems(filed, this.filingPreview);
-    const viewportPosition = this.filingPreview?.insertionIndex ??
-      this.viewportPosition(activeIndex);
+    const viewportPosition = this.displayViewportPosition(activeIndex);
     const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
       8,
@@ -692,14 +725,7 @@ export class DeckView extends ItemView {
     this.renderWindowEnd = end;
     const jobs: Promise<void>[] = [];
 
-    const activeDisplayIndex = activeIndex < 0
-      ? -1
-      : activeIndex + (
-        this.filingPreview !== null &&
-        activeIndex >= this.filingPreview.insertionIndex
-          ? 1
-          : 0
-      );
+    const focusDisplayIndex = this.visualFocusDisplayIndex(activeIndex);
     const interactive = this.filingFile === null;
 
     for (let displayIndex = start; displayIndex <= end; displayIndex += 1) {
@@ -714,8 +740,12 @@ export class DeckView extends ItemView {
           this.filingGhostEl,
         );
         this.filingGhostEl.dataset.index = String(item.displayIndex);
+        this.filingGhostEl.toggleClass(
+          "is-filing-focus",
+          item.displayIndex === focusDisplayIndex,
+        );
         this.filingGhostEl.style.zIndex = String(
-          cardStackOrder(item.displayIndex, activeDisplayIndex),
+          this.displayStackOrder(item.displayIndex, focusDisplayIndex),
         );
         this.renderedCards.push(this.filingGhostEl);
         continue;
@@ -726,7 +756,11 @@ export class DeckView extends ItemView {
       cardEl.dataset.index = String(item.displayIndex);
       cardEl.dataset.filedIndex = String(filedIndex);
       cardEl.dataset.path = card.path;
-      cardEl.toggleClass("is-active", filedIndex === activeIndex);
+      cardEl.toggleClass("is-active", interactive && filedIndex === activeIndex);
+      cardEl.toggleClass(
+        "is-filing-focus",
+        !interactive && item.displayIndex === focusDisplayIndex,
+      );
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
@@ -738,7 +772,7 @@ export class DeckView extends ItemView {
         delay: 350,
       });
       cardEl.style.zIndex = String(
-        cardStackOrder(item.displayIndex, activeDisplayIndex),
+        this.displayStackOrder(item.displayIndex, focusDisplayIndex),
       );
       this.renderedCards.push(cardEl);
 
@@ -1042,39 +1076,65 @@ export class DeckView extends ItemView {
     const file = this.filingFile;
     const sourcePath = this.filingSourcePath;
     if (file === null || sourcePath === null) {
-      this.filingPreview = null;
+      this.clearFilingPlacement();
       return;
     }
     if (
       file.path !== sourcePath ||
       this.plugin.index.fileAtPath(sourcePath) !== file
     ) {
-      this.filingPreview = null;
+      this.clearFilingPlacement();
       this.filingMessage = "The source card no longer exists.";
       return;
     }
     if (!this.plugin.isUnfiledCard(file)) {
-      this.filingPreview = null;
+      this.clearFilingPlacement();
       this.filingMessage = "The source card is no longer unfiled.";
       return;
     }
     const validation = normalizeAddressInput(this.filingInputValue);
     if (!validation.valid) {
-      this.filingPreview = null;
+      this.clearFilingPlacement();
       this.filingMessage = validation.message;
       return;
     }
-    this.filingPreview = this.plugin.filingPreviewFor(file, validation.address);
-    if (this.filingPreview.insertionIndex === 0) {
+    const previousSignature = this.filingPreview?.placementSignature;
+    const preview = this.plugin.filingPreviewFor(file, validation.address);
+    this.filingPreview = preview;
+    if (
+      previousSignature !== preview.placementSignature ||
+      this.filingFocusDisplayIndex === null ||
+      this.filingViewportPosition === null
+    ) {
+      const focusIndex = defaultFilingFocusIndex(preview);
+      this.filingFocusDisplayIndex = focusIndex;
+      this.filingViewportPosition = focusIndex;
+    } else {
+      const displayCount = this.filingDisplayCount();
+      this.filingFocusDisplayIndex = Math.round(clampViewportPosition(
+        this.filingFocusDisplayIndex,
+        displayCount,
+      ));
+      this.filingViewportPosition = clampViewportPosition(
+        this.filingViewportPosition,
+        displayCount,
+      );
+    }
+    if (preview.insertionIndex === 0) {
       this.filingMessage = "Will be filed at the beginning of the Deck.";
     } else if (
-      this.filingPreview.insertionIndex ===
-      this.plugin.index.snapshot.filed.length
+      preview.insertionIndex === this.plugin.index.snapshot.filed.length
     ) {
       this.filingMessage = "Will be filed at the end of the Deck.";
     } else {
       this.filingMessage = "Previewing the exact Deck position.";
     }
+  }
+
+  private clearFilingPlacement(): void {
+    this.filingPreview = null;
+    this.filingFocusDisplayIndex = null;
+    this.filingViewportPosition = null;
   }
 
   private async updateFilingInput(value: string): Promise<void> {
@@ -1217,6 +1277,8 @@ export class DeckView extends ItemView {
       this.filingFile = null;
       this.filingSourcePath = null;
       this.filingPreview = null;
+      this.filingFocusDisplayIndex = null;
+      this.filingViewportPosition = null;
       this.filingInputValue = "";
       this.activePath = file.path;
       this.viewportOffset = 0;
@@ -1294,10 +1356,6 @@ export class DeckView extends ItemView {
     stage.addEventListener(
       "wheel",
       (event) => {
-        if (this.filingFile !== null) {
-          event.preventDefault();
-          return;
-        }
         if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
           return;
         }
@@ -1387,6 +1445,10 @@ export class DeckView extends ItemView {
 
   private moveViewportByPixels(deltaPixels: number): void {
     this.cancelViewportCentering();
+    if (this.filingFile !== null) {
+      this.moveFilingViewportByPixels(deltaPixels);
+      return;
+    }
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
@@ -1400,7 +1462,38 @@ export class DeckView extends ItemView {
     this.applyViewportPosition(nextPosition);
   }
 
+  private moveFilingViewportByPixels(deltaPixels: number): void {
+    if (this.filingPreview === null) {
+      return;
+    }
+    const step = this.cardStep();
+    if (step <= 0) {
+      return;
+    }
+    const displayCount = this.filingDisplayCount();
+    const previousFocusIndex = this.currentFilingFocusIndex();
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const viewportPosition = clampViewportPosition(
+      this.displayViewportPosition(activeIndex) + deltaPixels / step,
+      displayCount,
+    );
+    this.filingViewportPosition = viewportPosition;
+    this.filingFocusDisplayIndex = activeIndexForViewport(
+      viewportPosition,
+      previousFocusIndex,
+      displayCount,
+    );
+    this.positionCards();
+    if (this.pointerLastX === null) {
+      this.queueRenderWindowRefresh();
+    }
+  }
+
   private moveBy(delta: number): void {
+    if (this.filingFile !== null) {
+      this.moveFilingFocusBy(delta);
+      return;
+    }
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
@@ -1422,7 +1515,38 @@ export class DeckView extends ItemView {
     this.centerViewportOnActive(targetIndex, true);
   }
 
+  private moveFilingFocusBy(delta: number): void {
+    const focusIndex = this.currentFilingFocusIndex();
+    if (focusIndex < 0) {
+      return;
+    }
+    this.setFilingFocusIndex(focusIndex + delta);
+  }
+
+  private setFilingFocusIndex(index: number): void {
+    if (this.filingPreview === null) {
+      return;
+    }
+    const focusIndex = Math.round(clampViewportPosition(
+      index,
+      this.filingDisplayCount(),
+    ));
+    this.filingFocusDisplayIndex = focusIndex;
+    this.filingViewportPosition = focusIndex;
+    this.positionCards();
+    this.queueRenderWindowRefresh();
+  }
+
   private centerActiveCard(): void {
+    if (this.filingFile !== null) {
+      const focusIndex = this.currentFilingFocusIndex();
+      if (focusIndex < 0) {
+        return;
+      }
+      this.recenterSpace();
+      this.setFilingFocusIndex(focusIndex);
+      return;
+    }
     if (this.activePath === null) {
       new Notice("There is no active filed card to centre.");
       return;
@@ -1532,6 +1656,14 @@ export class DeckView extends ItemView {
   }
 
   private goToDeckBoundary(boundary: "start" | "end"): void {
+    if (this.filingFile !== null) {
+      const displayCount = this.filingDisplayCount();
+      if (this.filingPreview === null || displayCount === 0) {
+        return;
+      }
+      this.setFilingFocusIndex(boundary === "start" ? 0 : displayCount - 1);
+      return;
+    }
     const filed = this.plugin.index.snapshot.filed;
     const target = boundary === "start" ? filed[0] : filed[filed.length - 1];
     if (target === undefined) {
@@ -1626,26 +1758,26 @@ export class DeckView extends ItemView {
     if (step <= 0) {
       return false;
     }
-    const activeDisplayIndex = activeIndex < 0
-      ? -1
-      : activeIndex + (
-        this.filingPreview !== null &&
-        activeIndex >= this.filingPreview.insertionIndex
-          ? 1
-          : 0
-      );
-    const viewportPosition = this.filingPreview?.insertionIndex ??
-      this.viewportPosition(activeIndex);
+    const focusDisplayIndex = this.visualFocusDisplayIndex(activeIndex);
+    const viewportPosition = this.displayViewportPosition(activeIndex);
+    const filingMode = this.filingFile !== null;
+    const previewing = this.filingPreview !== null;
 
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
-      const isActive = card.dataset.path === this.activePath;
+      const isActive = !filingMode && card.dataset.path === this.activePath;
+      const isFilingFocus = previewing && index === focusDisplayIndex;
+      card.toggleClass("is-active", isActive);
+      card.toggleClass("is-filing-focus", isFilingFocus);
+      card.style.zIndex = String(
+        this.displayStackOrder(index, focusDisplayIndex),
+      );
       const motion = cardMotionStyle(
         index,
         viewportPosition,
         step,
-        isActive,
-        activeDisplayIndex,
+        isActive || isFilingFocus,
+        focusDisplayIndex,
       );
       card.style.transform =
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
@@ -1780,6 +1912,57 @@ export class DeckView extends ItemView {
     return activeIndex + this.viewportOffset;
   }
 
+  private filingDisplayCount(): number {
+    return this.plugin.index.snapshot.filed.length +
+      (this.filingPreview === null ? 0 : 1);
+  }
+
+  private currentFilingFocusIndex(): number {
+    const preview = this.filingPreview;
+    if (preview === null) {
+      return -1;
+    }
+    const displayCount = this.filingDisplayCount();
+    const focusIndex = this.filingFocusDisplayIndex ??
+      defaultFilingFocusIndex(preview);
+    return Math.round(clampViewportPosition(focusIndex, displayCount));
+  }
+
+  private activeDisplayIndex(activeIndex: number): number {
+    if (activeIndex < 0) {
+      return -1;
+    }
+    return activeIndex + (
+      this.filingPreview !== null &&
+      activeIndex >= this.filingPreview.insertionIndex
+        ? 1
+        : 0
+    );
+  }
+
+  private visualFocusDisplayIndex(activeIndex: number): number {
+    return this.filingPreview === null
+      ? this.activeDisplayIndex(activeIndex)
+      : this.currentFilingFocusIndex();
+  }
+
+  private displayStackOrder(index: number, focusDisplayIndex: number): number {
+    return this.filingPreview !== null &&
+        index === this.filingPreview.insertionIndex
+      ? FILING_GHOST_STACK_ORDER
+      : cardStackOrder(index, focusDisplayIndex);
+  }
+
+  private displayViewportPosition(activeIndex: number): number {
+    if (this.filingPreview === null) {
+      return this.viewportPosition(activeIndex);
+    }
+    return clampViewportPosition(
+      this.filingViewportPosition ?? this.currentFilingFocusIndex(),
+      this.filingDisplayCount(),
+    );
+  }
+
   private clampViewportOffset(): void {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
@@ -1796,7 +1979,6 @@ export class DeckView extends ItemView {
 
   private queueRenderWindowRefresh(): void {
     if (
-      this.filingFile !== null ||
       this.renderRefreshPending ||
       this.pointerLastX !== null
     ) {
@@ -1804,25 +1986,31 @@ export class DeckView extends ItemView {
     }
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (activeIndex < 0) {
+    if (activeIndex < 0 && this.filingPreview === null) {
       return;
     }
-    const viewportIndex = Math.round(this.viewportPosition(activeIndex));
+    const displayCount = filed.length + (this.filingPreview === null ? 0 : 1);
+    const viewportIndex = Math.round(this.displayViewportPosition(activeIndex));
     const needsEarlierCards =
       this.renderWindowStart > 0 &&
       viewportIndex <= this.renderWindowStart + RENDER_EDGE_BUFFER;
     const needsLaterCards =
-      this.renderWindowEnd < filed.length - 1 &&
+      this.renderWindowEnd < displayCount - 1 &&
       viewportIndex >= this.renderWindowEnd - RENDER_EDGE_BUFFER;
     if (!needsEarlierCards && !needsLaterCards) {
       return;
     }
 
+    const restoreFilingInputFocus =
+      this.filingInputEl !== null &&
+      this.filingInputEl.ownerDocument.activeElement === this.filingInputEl;
     this.renderRefreshPending = true;
     window.requestAnimationFrame(() => {
       this.renderRefreshPending = false;
       if (this.stageEl !== null) {
-        void this.renderDeck();
+        void this.renderDeck(
+          this.filingFile === null || restoreFilingInputFocus,
+        );
       }
     });
   }

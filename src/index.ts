@@ -20,6 +20,7 @@ export {
 } from "./card-metadata.js";
 export {
   createFilingPreview,
+  defaultFilingFocusIndex,
   deckDisplayItems,
   filingPlacementMatches,
   filingPreviewKey,

@@ -536,6 +536,18 @@ button.slipbox-tray-pile-handle svg {
   cursor: default;
 }
 
+.is-filing .slipbox-card.is-filing-focus {
+  border-color: color-mix(
+    in srgb,
+    var(--interactive-accent) 72%,
+    var(--background-modifier-border)
+  );
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--interactive-accent) 22%, transparent),
+    0 2px 7px rgb(0 0 0 / 0.14),
+    0 18px 52px rgb(0 0 0 / 0.18);
+}
+
 .slipbox-card-address-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
@@ -966,9 +978,17 @@ button.slipbox-card-backlink-overflow:disabled {
 
 .slipbox-filing-ghost {
   border: 2px dashed var(--interactive-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--interactive-accent) 12%, transparent), var(--shadow-s);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--interactive-accent) 18%, transparent),
+    var(--shadow-s);
   background: color-mix(in srgb, var(--background-primary) 90%, var(--interactive-accent));
   filter: saturate(0.78);
+}
+
+.slipbox-filing-ghost.is-filing-focus {
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--interactive-accent) 26%, transparent),
+    0 18px 52px rgb(0 0 0 / 0.18);
 }
 
 .slipbox-filing-ghost .slipbox-card-frame {

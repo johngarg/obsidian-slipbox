@@ -12,6 +12,7 @@ import {
 
 import type ZettelkastenPlugin from "./main.js";
 import {
+  activeCardActionAvailability,
   activeIndexForViewport,
   bookmarkEdgeTargets,
   cardMotionStyle,
@@ -44,6 +45,8 @@ export class DeckView extends ItemView {
   private readonly history = new NavigationHistory<string>();
   private backButtonEl: HTMLButtonElement | null = null;
   private forwardButtonEl: HTMLButtonElement | null = null;
+  private addBookmarkButtonEl: HTMLButtonElement | null = null;
+  private putOnDeskButtonEl: HTMLButtonElement | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -101,6 +104,8 @@ export class DeckView extends ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.addBookmarkButtonEl = null;
+    this.putOnDeskButtonEl = null;
     this.history.reset();
   }
 
@@ -246,6 +251,8 @@ export class DeckView extends ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.addBookmarkButtonEl = null;
+    this.putOnDeskButtonEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
     if (this.filingFile !== null) {
@@ -329,9 +336,7 @@ export class DeckView extends ItemView {
       "bookmark-plus",
       "Add bookmark to current card",
     );
-    addBookmark.disabled = this.activeId === null || (
-      this.activeId !== null && this.plugin.bookmarkAt(this.activeId) !== undefined
-    );
+    this.addBookmarkButtonEl = addBookmark;
     addBookmark.addEventListener("click", () => void this.addBookmarkToCurrent());
 
     const desk = controls.createEl("button", {
@@ -346,15 +351,14 @@ export class DeckView extends ItemView {
     desk.addEventListener("click", () => this.plugin.showDesk());
 
     const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
-    putOnDesk.disabled = this.activeCard === null || this.plugin.state.deskCards.some(
-      (card) => card.cardRef === this.activeCard?.path,
-    );
+    this.putOnDeskButtonEl = putOnDesk;
     putOnDesk.addEventListener("click", () => {
       const file = this.activeCard?.file;
       if (file !== undefined) {
         void this.plugin.putFileOnDesk(file);
       }
     });
+    this.updateActiveActionControls();
 
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
@@ -900,7 +904,24 @@ export class DeckView extends ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
+    this.updateActiveActionControls();
     this.updateHistoryControls();
+  }
+
+  private updateActiveActionControls(): void {
+    const activeCard = this.activeCard;
+    const availability = activeCardActionAvailability(
+      activeCard?.id ?? null,
+      activeCard?.path ?? null,
+      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
+      this.plugin.state.deskCards.map((card) => card.cardRef),
+    );
+    if (this.addBookmarkButtonEl !== null) {
+      this.addBookmarkButtonEl.disabled = !availability.canAddBookmark;
+    }
+    if (this.putOnDeskButtonEl !== null) {
+      this.putOnDeskButtonEl.disabled = !availability.canPutOnDesk;
+    }
   }
 
   private viewportPosition(activeIndex: number): number {

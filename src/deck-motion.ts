@@ -21,6 +21,26 @@ export interface BookmarkEdgeTargets {
   readonly right: number | null;
 }
 
+export interface ActiveCardActionAvailability {
+  readonly canAddBookmark: boolean;
+  readonly canPutOnDesk: boolean;
+}
+
+/** Derive toolbar actions from the card that is active right now. */
+export function activeCardActionAvailability(
+  activeId: string | null,
+  activePath: string | null,
+  bookmarkedIds: readonly string[],
+  deskCardRefs: readonly string[],
+): ActiveCardActionAvailability {
+  return {
+    canAddBookmark:
+      activeId !== null && !bookmarkedIds.includes(activeId),
+    canPutOnDesk:
+      activePath !== null && !deskCardRefs.includes(activePath),
+  };
+}
+
 /** Select the nearest off-screen bookmark on each side of the Deck. */
 export function bookmarkEdgeTargets(
   bookmarkIndices: readonly number[],

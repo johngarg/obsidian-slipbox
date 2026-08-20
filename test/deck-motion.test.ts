@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  activeCardActionAvailability,
   activeIndexForViewport,
   bookmarkEdgeTargets,
   cardMotionStyle,
@@ -11,6 +12,31 @@ import {
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
+  test("updates active-card actions as navigation changes cards", () => {
+    assert.deepEqual(
+      activeCardActionAvailability(
+        "1/1",
+        "Systems.md",
+        ["1/1"],
+        ["Communication.md"],
+      ),
+      { canAddBookmark: false, canPutOnDesk: true },
+    );
+    assert.deepEqual(
+      activeCardActionAvailability(
+        "1/1a",
+        "Communication.md",
+        ["1/1"],
+        ["Communication.md"],
+      ),
+      { canAddBookmark: true, canPutOnDesk: false },
+    );
+    assert.deepEqual(
+      activeCardActionAvailability(null, null, ["1/1"], []),
+      { canAddBookmark: false, canPutOnDesk: false },
+    );
+  });
+
   test("keeps card surfaces in one physical stack", () => {
     assert.equal(cardStackOrder(4, 3.75, 4), 220);
     assert.equal(cardStackOrder(3, 3.75, 4), 100);

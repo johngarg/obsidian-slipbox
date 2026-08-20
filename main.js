@@ -324,6 +324,12 @@ var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
 function cardStackOrder(cardIndex, viewportPosition, activeIndex) {
   return cardIndex === activeIndex ? 220 : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
 }
+function activeCardActionAvailability(activeId, activePath, bookmarkedIds, deskCardRefs) {
+  return {
+    canAddBookmark: activeId !== null && !bookmarkedIds.includes(activeId),
+    canPutOnDesk: activePath !== null && !deskCardRefs.includes(activePath)
+  };
+}
 function bookmarkEdgeTargets(bookmarkIndices, viewportPosition, cardStep, stageWidth, cardWidth) {
   if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
     return { left: null, right: null };
@@ -522,6 +528,8 @@ var DeckView = class extends import_obsidian.ItemView {
   history = new NavigationHistory();
   backButtonEl = null;
   forwardButtonEl = null;
+  addBookmarkButtonEl = null;
+  putOnDeskButtonEl = null;
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -545,6 +553,8 @@ var DeckView = class extends import_obsidian.ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.addBookmarkButtonEl = null;
+    this.putOnDeskButtonEl = null;
     this.history.reset();
   }
   get activeCard() {
@@ -672,6 +682,8 @@ var DeckView = class extends import_obsidian.ItemView {
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
+    this.addBookmarkButtonEl = null;
+    this.putOnDeskButtonEl = null;
     const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
     if (this.filingFile !== null) {
       shell.addClass("is-filing");
@@ -744,7 +756,7 @@ var DeckView = class extends import_obsidian.ItemView {
       "bookmark-plus",
       "Add bookmark to current card"
     );
-    addBookmark.disabled = this.activeId === null || this.activeId !== null && this.plugin.bookmarkAt(this.activeId) !== void 0;
+    this.addBookmarkButtonEl = addBookmark;
     addBookmark.addEventListener("click", () => void this.addBookmarkToCurrent());
     const desk = controls.createEl("button", {
       attr: { type: "button" },
@@ -757,15 +769,14 @@ var DeckView = class extends import_obsidian.ItemView {
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
     const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
-    putOnDesk.disabled = this.activeCard === null || this.plugin.state.deskCards.some(
-      (card) => card.cardRef === this.activeCard?.path
-    );
+    this.putOnDeskButtonEl = putOnDesk;
     putOnDesk.addEventListener("click", () => {
       const file = this.activeCard?.file;
       if (file !== void 0) {
         void this.plugin.putFileOnDesk(file);
       }
     });
+    this.updateActiveActionControls();
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
         cls: "zk-problem-button",
@@ -1238,7 +1249,23 @@ var DeckView = class extends import_obsidian.ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
+    this.updateActiveActionControls();
     this.updateHistoryControls();
+  }
+  updateActiveActionControls() {
+    const activeCard = this.activeCard;
+    const availability = activeCardActionAvailability(
+      activeCard?.id ?? null,
+      activeCard?.path ?? null,
+      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
+      this.plugin.state.deskCards.map((card) => card.cardRef)
+    );
+    if (this.addBookmarkButtonEl !== null) {
+      this.addBookmarkButtonEl.disabled = !availability.canAddBookmark;
+    }
+    if (this.putOnDeskButtonEl !== null) {
+      this.putOnDeskButtonEl.disabled = !availability.canPutOnDesk;
+    }
   }
   viewportPosition(activeIndex) {
     return activeIndex + this.viewportOffset;

@@ -15,17 +15,21 @@ import {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
-  reorderPiles,
+  setPilePosition,
   splitCardIntoNewPile,
   trayHasFiledCards,
   trayStackJitter,
   type TrayCard,
   type TrayPile,
+  type TrayPilePosition,
+  type TrayState,
 } from "./tray-state.js";
 
 const DRAG_THRESHOLD_PX = 5;
-const AUTO_SCROLL_EDGE_PX = 44;
-const AUTO_SCROLL_STEP_PX = 18;
+const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
+const PILE_BASE_Y_RATIO = 0.31;
+const PILE_BASE_Y_OFFSET_PX = 126;
+const PILE_CARD_HALF_HEIGHT_PX = 58;
 
 export interface TrayViewActions {
   jumpToFiledCard(id: string): Promise<void>;
@@ -53,6 +57,7 @@ export class TrayRenderer {
 
   async render(
     stage: HTMLElement,
+    space: HTMLElement,
     filing: boolean,
     isCurrent: () => boolean,
   ): Promise<void> {
@@ -61,44 +66,17 @@ export class TrayRenderer {
       (total, pile) => total + pile.cards.length,
       0,
     );
-    if (cardCount === 0) {
+    if (cardCount === 0 || filing) {
       return;
     }
 
     stage.addClass("has-tray");
-    stage.toggleClass("has-compact-tray", filing);
-    stage.toggleClass("has-expanded-tray", state.expandedPileId !== null && !filing);
-    const tray = stage.createDiv({
+    const tray = space.createDiv({
       cls: "slipbox-tray",
       attr: { "aria-label": `Tray, ${cardCount} card${cardCount === 1 ? "" : "s"}` },
     });
     this.rootEl = tray;
-    tray.toggleClass("is-compact", filing);
-    tray.addEventListener("wheel", (event) => event.stopPropagation());
-    const controls = tray.createDiv({ cls: "slipbox-tray-controls" });
-    controls.createSpan({ cls: "slipbox-tray-title", text: "Tray" });
-    controls.createSpan({
-      cls: "slipbox-tray-total",
-      text: `${state.piles.length} pile${state.piles.length === 1 ? "" : "s"} · ${cardCount} card${cardCount === 1 ? "" : "s"}`,
-    });
-
-    if (filing) {
-      controls.createSpan({
-        cls: "slipbox-tray-filing-note",
-        text: "preserved while filing",
-      });
-      return;
-    }
-
-    const clear = controls.createEl("button", {
-      text: "Clear",
-      attr: { type: "button" },
-    });
-    clear.disabled = !trayHasFiledCards(state);
-    clear.addEventListener("click", (event) => {
-      event.stopPropagation();
-      void this.plugin.clearTray();
-    });
+    this.attachBackgroundMenu(stage);
 
     const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
     const jobs: Promise<void>[] = [];
@@ -107,6 +85,7 @@ export class TrayRenderer {
         piles,
         pile,
         pileIndex,
+        pile.position ?? defaultPilePosition(pileIndex),
         state.expandedPileId === pile.id,
         isCurrent,
       ));
@@ -114,10 +93,29 @@ export class TrayRenderer {
     await Promise.all(jobs);
   }
 
+  private attachBackgroundMenu(stage: HTMLElement): void {
+    stage.addEventListener("contextmenu", (event) => {
+      if (event.target !== stage) {
+        return;
+      }
+      event.preventDefault();
+      const menu = Menu.forEvent(event);
+      menu.addItem((item) => {
+        item
+          .setTitle("Clear Tray")
+          .setIcon("eraser")
+          .setDisabled(!trayHasFiledCards(this.plugin.tray))
+          .onClick(() => void this.plugin.clearTray());
+      });
+      menu.showAtMouseEvent(event);
+    });
+  }
+
   private renderPile(
     parent: HTMLElement,
     pile: TrayPile,
     pileIndex: number,
+    position: TrayPilePosition,
     expanded: boolean,
     isCurrent: () => boolean,
   ): Promise<void>[] {
@@ -131,6 +129,8 @@ export class TrayRenderer {
       },
     });
     pileEl.tabIndex = 0;
+    pileEl.style.setProperty("--slipbox-pile-x", `${position.x}px`);
+    pileEl.style.setProperty("--slipbox-pile-y", `${position.y}px`);
 
     pileEl.setAttr("role", "button");
     pileEl.setAttr("aria-expanded", String(expanded));
@@ -200,7 +200,7 @@ export class TrayRenderer {
       event.stopPropagation();
       this.showPileMenu(event, pile);
     });
-    this.attachPileDragging(pileEl, pile, expanded);
+    this.attachPileDragging(pileEl, pile, position, expanded);
     return jobs;
   }
 
@@ -254,7 +254,7 @@ export class TrayRenderer {
       const returnButton = trayIconButton(
         controls,
         "undo-2",
-        `Return ${filed.id} · ${title} to Deck`,
+        `Return ${filed.id} · ${title} to Slipbox`,
       );
       returnButton.addEventListener("click", (event) => {
         event.preventDefault();
@@ -438,11 +438,15 @@ export class TrayRenderer {
         .setTitle("Split into new pile")
         .setIcon("split")
         .setDisabled(pile.cards.length <= 1)
-        .onClick(() => void this.moveAndFocus(splitCardIntoNewPile(
-          state,
-          card.cardRef,
-          this.plugin.createTrayPileId(),
-        ), card.cardRef));
+        .onClick(() => {
+          const newPileId = this.plugin.createTrayPileId();
+          const origin = pile.position ?? defaultPilePosition(position.pileIndex);
+          const split = splitCardIntoNewPile(state, card.cardRef, newPileId);
+          void this.moveAndFocus(setPilePosition(split, newPileId, {
+            x: origin.x + 38,
+            y: origin.y + 38,
+          }), card.cardRef);
+        });
     });
     menu.showAtMouseEvent(event);
   }
@@ -481,7 +485,6 @@ export class TrayRenderer {
         element.style.translate = `${dx}px ${dy}px`;
         this.rootEl?.addClass("is-dragging-card");
         this.updateCardDropCues(moveEvent, pile.id, element);
-        this.autoScroll(moveEvent.clientX, moveEvent.clientY);
       };
       const finish = (upEvent: PointerEvent): void => {
         element.removeEventListener("pointermove", move);
@@ -520,16 +523,17 @@ export class TrayRenderer {
   private attachPileDragging(
     element: HTMLElement,
     pile: TrayPile,
+    position: TrayPilePosition,
     expanded: boolean,
   ): void {
-    if (expanded) {
-      return;
-    }
     element.addEventListener("pointerdown", (event) => {
       if (
         event.button !== 0 ||
         (event.target instanceof Element &&
-          event.target.closest("button, a") !== null)
+          (
+            event.target.closest("button, a") !== null ||
+            (expanded && event.target.closest(".slipbox-tray-card") !== null)
+          ))
       ) {
         return;
       }
@@ -549,7 +553,6 @@ export class TrayRenderer {
         element.addClass("is-dragging");
         element.style.translate = `${dx}px ${dy}px`;
         this.updatePileDropCues(moveEvent, pile.id, element);
-        this.autoScroll(moveEvent.clientX, moveEvent.clientY);
       };
       const finish = (upEvent: PointerEvent): void => {
         element.removeEventListener("pointermove", move);
@@ -569,6 +572,10 @@ export class TrayRenderer {
           upEvent.clientX,
           upEvent.clientY,
           element,
+          {
+            x: position.x + upEvent.clientX - startX,
+            y: position.y + upEvent.clientY - startY,
+          },
         );
         this.clearDropCues();
         void this.plugin.updateTray(next);
@@ -608,30 +615,11 @@ export class TrayRenderer {
       );
       return moveCardBetweenPiles(state, cardRef, targetPileId, insertionIndex);
     }
-    const trayEl = this.rootEl?.querySelector<HTMLElement>(".slipbox-tray-piles");
-    const trayRect = trayEl?.getBoundingClientRect();
-    if (
-      trayEl !== null && trayEl !== undefined &&
-      trayRect !== undefined &&
-      x >= trayRect.left && x <= trayRect.right &&
-      y >= trayRect.top && y <= trayRect.bottom
-    ) {
-      const pileElements = Array.from(trayEl.querySelectorAll<HTMLElement>(
-        ".slipbox-tray-pile:not(.is-dragging)",
-      ));
-      const pileIndex = insertionIndexForPoint(
-        y,
-        pileElements.map((element) => {
-          const rect = element.getBoundingClientRect();
-          return rect.top + rect.height / 2;
-        }),
-      );
-      return splitCardIntoNewPile(
-        state,
-        cardRef,
-        this.plugin.createTrayPileId(),
-        pileIndex,
-      );
+    const newPosition = this.positionAtPoint(x, y);
+    if (newPosition !== null) {
+      const newPileId = this.plugin.createTrayPileId();
+      const split = splitCardIntoNewPile(state, cardRef, newPileId);
+      return setPilePosition(split, newPileId, newPosition);
     }
     return state;
   }
@@ -641,6 +629,7 @@ export class TrayRenderer {
     x: number,
     y: number,
     dragged: HTMLElement,
+    newPosition: TrayPilePosition,
   ) {
     const state = this.plugin.tray;
     const target = this.elementsBelowPoint(x, y, dragged)
@@ -660,22 +649,7 @@ export class TrayRenderer {
         return mergePiles(state, sourcePileId, targetId);
       }
     }
-    const sourceIndex = state.piles.findIndex((pile) => pile.id === sourcePileId);
-    const container = this.rootEl?.querySelector<HTMLElement>(".slipbox-tray-piles");
-    if (sourceIndex < 0 || container === null || container === undefined) {
-      return state;
-    }
-    const pileElements = Array.from(container.querySelectorAll<HTMLElement>(
-      ".slipbox-tray-pile:not(.is-dragging)",
-    ));
-    const insertionIndex = insertionIndexForPoint(
-      y,
-      pileElements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.top + rect.height / 2;
-      }),
-    );
-    return reorderPiles(state, sourceIndex, insertionIndex);
+    return setPilePosition(state, sourcePileId, newPosition);
   }
 
   private updateCardDropCues(
@@ -725,12 +699,12 @@ export class TrayRenderer {
     const rect = target.getBoundingClientRect();
     const relativeX = (event.clientX - rect.left) / Math.max(1, rect.width);
     const relativeY = (event.clientY - rect.top) / Math.max(1, rect.height);
-    target.addClass(
+    if (
       relativeX > 0.2 && relativeX < 0.8 &&
       relativeY > 0.2 && relativeY < 0.8
-      ? "is-merge-target"
-      : "is-reorder-target",
-    );
+    ) {
+      target.addClass("is-merge-target");
+    }
   }
 
   private elementsBelowPoint(
@@ -745,34 +719,21 @@ export class TrayRenderer {
     return elements;
   }
 
-  private autoScroll(clientX: number, clientY: number): void {
-    const container = this.rootEl?.querySelector<HTMLElement>(".slipbox-tray-piles");
-    if (container === null || container === undefined) {
-      return;
+  private positionAtPoint(x: number, y: number): TrayPilePosition | null {
+    const rect = this.rootEl?.getBoundingClientRect();
+    if (
+      rect === undefined ||
+      x < rect.left || x > rect.right ||
+      y < rect.top || y > rect.bottom
+    ) {
+      return null;
     }
-    const rect = container.getBoundingClientRect();
-    if (clientY < rect.top + AUTO_SCROLL_EDGE_PX) {
-      container.scrollTop -= AUTO_SCROLL_STEP_PX;
-    } else if (clientY > rect.bottom - AUTO_SCROLL_EDGE_PX) {
-      container.scrollTop += AUTO_SCROLL_STEP_PX;
-    }
-
-    const sequence = Array.from(container.querySelectorAll<HTMLElement>(
-      ".slipbox-tray-pile.is-expanded .slipbox-tray-sequence",
-    )).find((element) => {
-      const bounds = element.getBoundingClientRect();
-      return clientX >= bounds.left && clientX <= bounds.right &&
-        clientY >= bounds.top && clientY <= bounds.bottom;
-    });
-    if (sequence === undefined) {
-      return;
-    }
-    const sequenceRect = sequence.getBoundingClientRect();
-    if (clientX < sequenceRect.left + AUTO_SCROLL_EDGE_PX) {
-      sequence.scrollLeft -= AUTO_SCROLL_STEP_PX;
-    } else if (clientX > sequenceRect.right - AUTO_SCROLL_EDGE_PX) {
-      sequence.scrollLeft += AUTO_SCROLL_STEP_PX;
-    }
+    return {
+      x: x - (rect.left + rect.width / 2),
+      y: y - (
+        rect.top + rect.height * PILE_BASE_Y_RATIO - PILE_BASE_Y_OFFSET_PX
+      ) - PILE_CARD_HALF_HEIGHT_PX,
+    };
   }
 
   private clearDropCues(except?: HTMLElement): void {
@@ -795,7 +756,7 @@ export class TrayRenderer {
     this.rootEl?.removeClass("is-dragging-card");
   }
 
-  private async moveAndFocus(nextState: ReturnType<typeof reorderPiles>, cardRef: string) {
+  private async moveAndFocus(nextState: TrayState, cardRef: string) {
     await this.plugin.updateTray(nextState);
     window.requestAnimationFrame(() => {
       const escaped = CSS.escape(cardRef);
@@ -804,6 +765,13 @@ export class TrayRenderer {
         ?.focus({ preventScroll: true });
     });
   }
+}
+
+function defaultPilePosition(pileIndex: number): TrayPilePosition {
+  return {
+    x: 0,
+    y: pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX,
+  };
 }
 
 function trayIconButton(

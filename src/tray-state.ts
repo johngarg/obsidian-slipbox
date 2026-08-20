@@ -12,6 +12,12 @@ export interface TrayCardCandidate extends TrayCard {
 export interface TrayPile {
   readonly id: string;
   readonly cards: readonly TrayCard[];
+  readonly position?: TrayPilePosition;
+}
+
+export interface TrayPilePosition {
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface TrayState {
@@ -244,6 +250,27 @@ export function reorderPiles(
   }
   piles.splice(clampIndex(toIndex, piles.length + 1), 0, pile);
   return cleanTray({ ...state, piles });
+}
+
+export function setPilePosition(
+  state: TrayState,
+  pileId: string,
+  position: TrayPilePosition,
+): TrayState {
+  if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+    return state;
+  }
+  const pileIndex = state.piles.findIndex((pile) => pile.id === pileId);
+  const pile = state.piles[pileIndex];
+  if (pile === undefined) {
+    return state;
+  }
+  const piles = [...state.piles];
+  piles[pileIndex] = {
+    ...pile,
+    position: { x: position.x, y: position.y },
+  };
+  return { ...state, piles };
 }
 
 export function clearFiledCardsFromPile(

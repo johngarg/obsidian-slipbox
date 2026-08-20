@@ -14,43 +14,51 @@ An empty value is an unfiled card. A canonical nonempty value such as `1/2b1`
 is a permanently filed card. The address is the sole source of filing order;
 Slipbox stores no hidden sequence and imposes no folder.
 
-## Deck, Tray, and Canvas
+## Slipbox workspace, Tray, and Canvas
 
-- **Deck** is the permanent canonical order of filed cards.
-- **Tray** is a transient, session-only workspace above the Deck. It contains
-  all unfiled cards and any filed cards pulled out for current work.
+- **Slipbox** is the shared, pannable workspace containing the permanent
+  canonical sequence of filed cards and the current working piles.
+- **Tray** is the transient, session-only set of piles. It contains all unfiled
+  cards and any filed cards pulled out for current work, without appearing as a
+  separate panel.
 - **Canvas** is Obsidian's ordinary persistent spatial workspace. A Tray pile
   can be laid out there when the arrangement should survive a restart.
 
 The Tray is deliberately not saved. On startup, Slipbox reconstructs one pile
 from all unfiled cards, newest-modified first. Filed cards pulled into the Tray,
-pile order, expansion, and manual ordering last only for the current Obsidian
+pile position, expansion, and manual ordering last only for the current Obsidian
 session. No Tray state is written to Markdown or plugin data.
 
-Piles are anonymous and float directly in the Deck stage above the main cards.
-They are arranged vertically so an expanded row does not collide with its
-neighbours. A collapsed pile shows its readable top card and count, with the
-slightly varied corners of the cards beneath it exposed. Click the pile itself
-to expand it into ordered, gently tilted card miniatures with addresses, centred
-titles, previews, and actions; there is no separate disclosure control. Only one
-pile is expanded at a time.
+Piles are anonymous and float directly beside the filed cards in the same
+workspace. Their initial positions form a compact vertical stack immediately
+above the filed cards, and collapsed piles can be dragged anywhere. A collapsed
+pile shows its readable top card and count, with the slightly varied corners of
+the cards beneath it exposed. Click the pile itself to expand its ordered,
+gently tilted card miniatures directly onto the workspace—there is no panel,
+expanded-pile box, or disclosure control. Only one pile is expanded at a time.
+
+Drag empty background to pan the whole workspace, including both filed cards
+and piles. This makes overlapped or off-centre piles reachable without changing
+their positions relative to the filed cards. Horizontal trackpad gestures still
+browse the canonical filed sequence.
 
 Use drag and drop to:
 
 - reorder cards within an expanded pile;
 - move cards between expanded piles;
-- drop a card in empty Tray space to split it into a new pile;
-- reorder collapsed piles; or
+- drop a card in empty workspace to create a new pile at that point;
+- move a collapsed pile freely; or
 - drop a collapsed pile onto another to merge them.
 
 Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu can
 move them to adjacent piles or split them. Pulling a filed card into the Tray
-does not change its address, Deck order, bookmark, or Canvas membership.
+does not change its address, Slipbox filing order, bookmark, or Canvas
+membership.
 
-`Clear pile` and the Tray's `Clear` control remove only manually pulled filed
-cards. Unfiled cards remain, and empty piles disappear. During Filing Mode, the
-Tray compresses to a summary so the Deck keeps enough vertical space. Successful
-filing removes the newly filed card from its former Tray pile without
+Right-click a pile for `Clear pile`, or right-click empty workspace for `Clear
+Tray`. Both remove only manually pulled filed cards; unfiled cards remain, and
+empty piles disappear. Piles are temporarily hidden during Filing Mode.
+Successful filing removes the newly filed card from its former pile without
 reorganising the rest.
 
 ## Canvas integration
@@ -84,7 +92,7 @@ longer exist.
 
 - Read-only rendered Markdown cards with internal scrolling and fixed backlink
   footers.
-- Free horizontal trackpad and background-drag browsing, minimal-reveal arrow
+- Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
 - Browser-style session history for filed links, entry points, and bookmarks.
 - Persistent named entry points and one persistent bookmark per filed address.
@@ -95,7 +103,7 @@ longer exist.
 - Filename- or frontmatter-derived centred titles, configurable new-card folder
   and timestamp naming, and Obsidian Templates integration.
 - Visible malformed-address and duplicate-address diagnostics.
-- Windowed Deck rendering around the active card rather than the whole vault.
+- Windowed Slipbox rendering around the active card rather than the whole vault.
 - `Return` activates the affirmative action in Slipbox prompt and confirmation
   dialogs, including card creation and bookmark or entry-point edits.
 
@@ -111,11 +119,11 @@ created, converted, and filed cards always use the configured property.
 
 Titles use the filename by default. They may instead use `title`, or another
 configured top-level frontmatter property, with a filename fallback for missing,
-blank, or non-text values. Deck titles are hidden by default. Visible titles are
+blank, or non-text values. Slipbox card titles are hidden by default. Visible titles are
 centred between the left-aligned address and right-aligned actions.
 
 Header-button settings affect presentation only. Hidden actions remain
-available through commands, Deck shortcuts, and card context menus.
+available through commands, Slipbox shortcuts, and card context menus.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
 The empty default inherits the source note's folder, or uses the vault root when
@@ -128,7 +136,7 @@ the configured Moment timestamp filename and write the entered title property.
 A blank title uses the timestamp. Templates support is optional and uses
 Obsidian's Templates core plugin.
 
-## Default Deck keys
+## Default Slipbox keys
 
 | Key | Action |
 | --- | --- |
@@ -142,8 +150,8 @@ Obsidian's Templates core plugin.
 | `p` | Pull the active card into, or return it from, the Tray |
 | `b` | Toggle the active-card bookmark |
 
-Every stable Deck action can have multiple scoped shortcuts. Changes apply to
-open Deck views immediately, and duplicate bindings are rejected. The previous
+Every stable Slipbox action can have multiple scoped shortcuts. Changes apply to
+open Slipbox views immediately, and duplicate bindings are rejected. The previous
 Desk shortcut is removed rather than repurposed.
 
 ## Address domain

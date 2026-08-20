@@ -118,11 +118,11 @@ export default class SlipboxPlugin extends Plugin {
       (leaf) => new DeckView(leaf, this),
     );
     this.registerHoverLinkSource(DECK_VIEW_TYPE, {
-      display: "Slipbox Deck",
+      display: "Slipbox",
       defaultMod: false,
     });
 
-    this.addRibbonIcon("archive", "Open Slipbox Deck", () => {
+    this.addRibbonIcon("archive", "Open Slipbox", () => {
       void this.openDeck();
     });
 
@@ -169,7 +169,7 @@ export default class SlipboxPlugin extends Plugin {
 
     await this.app.workspace.revealLeaf(leaf);
     if (!(leaf.view instanceof DeckView)) {
-      throw new Error("Obsidian did not create the Slipbox Deck view");
+      throw new Error("Obsidian did not create the Slipbox view");
     }
     if (filingFile !== undefined) {
       await leaf.view.startFiling(filingFile);
@@ -579,7 +579,7 @@ export default class SlipboxPlugin extends Plugin {
 
   async addEntryPoint(id: string): Promise<void> {
     if (this.index.filedById(id) === undefined) {
-      new Notice(`Card ${id} is not available in Deck.`);
+      new Notice(`Card ${id} is not available in Slipbox.`);
       return;
     }
     if (this.state.entryPoints.some((entry) => entry.id === id)) {
@@ -695,7 +695,7 @@ export default class SlipboxPlugin extends Plugin {
   private registerCommands(): void {
     this.addCommand({
       id: "open-deck",
-      name: "Open Deck",
+      name: "Open Slipbox",
       callback: () => void this.openDeck(),
     });
 

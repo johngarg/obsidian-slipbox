@@ -71,7 +71,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
 
     new Setting(containerEl)
-      .setName("Show title in Deck headers")
+      .setName("Show title in Slipbox card headers")
       .setDesc("Centre the title between the address and card buttons.")
       .addToggle((toggle) => {
         toggle
@@ -88,15 +88,15 @@ export class SlipboxSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Card-header buttons").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Hidden buttons remain available through commands, Deck shortcuts, and card context menus.",
+      text: "Hidden buttons remain available through commands, Slipbox shortcuts, and card context menus.",
     });
     this.renderDeckHeaderButtons(containerEl);
 
-    new Setting(containerEl).setName("Deck shortcuts").setHeading();
+    new Setting(containerEl).setName("Slipbox shortcuts").setHeading();
     const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
     shortcutIntro.createEl("p", {
       cls: "setting-item-description",
-      text: "These shortcuts work only while Deck is active and never fire in text or form controls.",
+      text: "These shortcuts work only while Slipbox is active and never fire in text or form controls.",
     });
     const resetAll = shortcutIntro.createEl("button", {
       text: "Reset all shortcuts",
@@ -260,7 +260,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     } as const;
     for (const [id, label] of Object.entries(labels)) {
       new Setting(container)
-        .setName(`Deck: ${label}`)
+        .setName(`Slipbox: ${label}`)
         .addToggle((toggle) => {
           const key = id as keyof typeof labels;
           toggle

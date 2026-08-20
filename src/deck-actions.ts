@@ -10,8 +10,10 @@ export interface DeckActionContext {
   readonly filing: boolean;
 }
 
-export function trayToggleLabel(inTray: boolean): "Return to Deck" | "Pull into Tray" {
-  return inTray ? "Return to Deck" : "Pull into Tray";
+export function trayToggleLabel(
+  inTray: boolean,
+): "Return to Slipbox" | "Pull into Tray" {
+  return inTray ? "Return to Slipbox" : "Pull into Tray";
 }
 
 export function canRunDeckAction(

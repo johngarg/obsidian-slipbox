@@ -78,6 +78,7 @@ export {
   removeTrayPath,
   renameTrayPath,
   reorderPiles,
+  setPilePosition,
   setExpandedPile,
   splitCardIntoNewPile,
   toggleFiledCard,
@@ -106,6 +107,7 @@ export type {
   TrayCardCandidate,
   TrayCardKind,
   TrayPile,
+  TrayPilePosition,
   TrayStackJitter,
   TrayState,
 } from "./tray-state.js";

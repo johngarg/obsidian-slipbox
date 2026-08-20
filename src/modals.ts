@@ -436,7 +436,7 @@ export class IssuesModal extends Modal {
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Zettel address problems" });
     contentEl.createEl("p", {
-      text: "Deck never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes.",
+      text: "Slipbox never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes.",
     });
 
     const list = contentEl.createDiv({ cls: "slipbox-modal-list" });

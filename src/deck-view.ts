@@ -43,11 +43,16 @@ export class DeckView extends ItemView {
   private activeId: string | null = null;
   private filingFile: TFile | null = null;
   private stageEl: HTMLElement | null = null;
+  private spaceEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
   private renderComponents: Component[] = [];
   private cardScrollPositions = new Map<string, number>();
   private viewportOffset = 0;
   private pointerLastX: number | null = null;
+  private pointerLastY: number | null = null;
+  private pointerMoved = false;
+  private spaceOffsetX = 0;
+  private spaceOffsetY = 0;
   private filingPromptEl: HTMLElement | null = null;
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
@@ -92,7 +97,7 @@ export class DeckView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Slipbox Deck";
+    return "Slipbox";
   }
 
   getIcon(): string {
@@ -120,6 +125,9 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.filingFile = null;
     this.stageEl = null;
+    this.spaceEl = null;
+    this.spaceOffsetX = 0;
+    this.spaceOffsetY = 0;
     this.renderedCards = [];
     this.filingPromptEl = null;
     this.backButtonEl = null;
@@ -409,19 +417,23 @@ export class DeckView extends ItemView {
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
+    const space = stage.createDiv({ cls: "slipbox-space" });
+    this.spaceEl = space;
+    this.applySpaceOffset();
     const trayJob = this.trayRenderer.render(
       stage,
+      space,
       this.filingFile !== null,
       () => version === this.renderVersion,
     );
 
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0 || this.activeId === null) {
-      this.renderEmptyDeck(stage);
+      this.renderEmptyDeck(space);
     } else {
       const activeIndex = filed.findIndex((card) => card.id === this.activeId);
       if (activeIndex >= 0) {
-        await this.renderCardWindow(stage, filed, activeIndex, version);
+        await this.renderCardWindow(space, filed, activeIndex, version);
       }
     }
 
@@ -449,7 +461,7 @@ export class DeckView extends ItemView {
     const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     setIcon(icon, "archive");
-    identity.createSpan({ text: "Deck" });
+    identity.createSpan({ text: "Slipbox" });
 
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
@@ -606,7 +618,7 @@ export class DeckView extends ItemView {
       }
       if (this.plugin.settings.deckHeaderButtons.tray) {
         const trayAction = isInTray
-          ? `Return ${card.id} · ${title} to Deck`
+          ? `Return ${card.id} · ${title} to Slipbox`
           : `Pull ${card.id} · ${title} into Tray`;
         const trayToggle = this.renderCardAction(
           cardActions,
@@ -896,7 +908,7 @@ export class DeckView extends ItemView {
     });
     const targets = bookmarkEdgeTargets(
       bookmarkIndices,
-      this.viewportPosition(activeIndex),
+      this.viewportPosition(activeIndex) - this.spaceOffsetX / this.cardStep(),
       this.cardStep(),
       stage.clientWidth,
       cardWidth,
@@ -939,31 +951,55 @@ export class DeckView extends ItemView {
         return;
       }
       this.pointerLastX = event.clientX;
+      this.pointerLastY = event.clientY;
+      this.pointerMoved = false;
       stage.setPointerCapture(event.pointerId);
       stage.addClass("is-dragging");
       this.contentEl.focus({ preventScroll: true });
     });
     stage.addEventListener("pointermove", (event) => {
-      if (this.pointerLastX === null) {
+      if (this.pointerLastX === null || this.pointerLastY === null) {
         return;
       }
-      const movement = event.clientX - this.pointerLastX;
+      const movementX = event.clientX - this.pointerLastX;
+      const movementY = event.clientY - this.pointerLastY;
       this.pointerLastX = event.clientX;
-      this.moveViewportByPixels(-movement);
+      this.pointerLastY = event.clientY;
+      if (Math.hypot(movementX, movementY) > 0) {
+        this.pointerMoved = true;
+      }
+      this.spaceOffsetX += movementX;
+      this.spaceOffsetY += movementY;
+      this.applySpaceOffset();
     });
-    const finishPointer = (event: PointerEvent): void => {
+    const finishPointer = (event: PointerEvent, cancelled = false): void => {
       if (this.pointerLastX === null) {
         return;
       }
+      const wasClick = !cancelled && !this.pointerMoved;
       this.pointerLastX = null;
+      this.pointerLastY = null;
+      this.pointerMoved = false;
       stage.removeClass("is-dragging");
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
       }
+      if (wasClick && this.plugin.tray.expandedPileId !== null) {
+        void this.plugin.expandTrayPile(null);
+      }
+      this.renderBookmarkEdgeTabs(stage);
       this.queueRenderWindowRefresh();
     };
     stage.addEventListener("pointerup", finishPointer);
-    stage.addEventListener("pointercancel", finishPointer);
+    stage.addEventListener("pointercancel", (event) => finishPointer(event, true));
+  }
+
+  private applySpaceOffset(): void {
+    if (this.spaceEl === null) {
+      return;
+    }
+    this.spaceEl.style.transform =
+      `translate(${this.spaceOffsetX}px, ${this.spaceOffsetY}px)`;
   }
 
   private moveViewportByPixels(deltaPixels: number): void {

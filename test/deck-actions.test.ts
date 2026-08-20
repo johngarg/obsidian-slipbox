@@ -51,6 +51,6 @@ describe("Deck action availability", () => {
 
   test("uses state-dependent Tray wording in shared card actions", () => {
     assert.equal(trayToggleLabel(false), "Pull into Tray");
-    assert.equal(trayToggleLabel(true), "Return to Deck");
+    assert.equal(trayToggleLabel(true), "Return to Slipbox");
   });
 });

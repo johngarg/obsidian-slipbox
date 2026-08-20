@@ -19,6 +19,7 @@ import {
   removeTrayPath,
   renameTrayPath,
   reorderPiles,
+  setPilePosition,
   setExpandedPile,
   splitCardIntoNewPile,
   toggleFiledCard,
@@ -131,6 +132,21 @@ describe("session Tray piles", () => {
     assert.equal(merged.expandedPileId, "pile-1");
     const reordered = reorderPiles(merged, 1, 0);
     assert.deepEqual(reordered.piles.map((pile) => pile.id), ["pile-3", "pile-1"]);
+  });
+
+  test("moves a pile within the session workspace without disturbing its cards", () => {
+    const state = tray([filed("A.md")], [filed("B.md"), filed("C.md")]);
+    const next = setPilePosition(state, "pile-2", { x: 42.5, y: -18 });
+    assert.deepEqual(next.piles[1], {
+      id: "pile-2",
+      cards: [filed("B.md"), filed("C.md")],
+      position: { x: 42.5, y: -18 },
+    });
+    assert.deepEqual(next.piles[0], state.piles[0]);
+    assert.equal(
+      setPilePosition(next, "pile-2", { x: Number.NaN, y: 0 }),
+      next,
+    );
   });
 
   test("clears only filed cards from a pile or the complete Tray", () => {

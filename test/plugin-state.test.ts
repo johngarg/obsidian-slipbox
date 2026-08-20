@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   DEFAULT_DATA,
   DEFAULT_SPREAD,
+  MIN_SPREAD,
   normalizePluginData,
   normalizePluginState,
 } from "../src/plugin-state.js";
@@ -56,6 +57,11 @@ describe("normalizePluginState", () => {
         spread: 1.12,
       },
     );
+  });
+
+  test("allows a tighter spread and clamps values below it", () => {
+    assert.equal(normalizePluginState({ spread: 0.2 }).spread, 0.2);
+    assert.equal(normalizePluginState({ spread: 0 }).spread, MIN_SPREAD);
   });
 
   test("uses defaults for unknown data", () => {

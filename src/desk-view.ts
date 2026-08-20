@@ -186,11 +186,6 @@ export class DeskView extends ItemView {
       text: filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel"),
     });
     if (this.plugin.settings.showTitleInDesk) {
-      identity.createSpan({
-        cls: "slipbox-card-header-separator",
-        text: "·",
-        attr: { "aria-hidden": "true" },
-      });
       identity.createSpan({ cls: "slipbox-desk-card-title", text: title });
     }
     card.setAttr(

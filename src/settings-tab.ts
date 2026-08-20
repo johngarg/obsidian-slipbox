@@ -72,7 +72,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Show title in Deck headers")
-      .setDesc("Display address · title, truncating the title before the card buttons.")
+      .setDesc("Centre the title between the address and card buttons.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.showTitleInDeck)
@@ -84,7 +84,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Show title in Desk headers")
-      .setDesc("Display address · title, truncating the title before the card buttons.")
+      .setDesc("Centre the title between the address and card buttons.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.showTitleInDesk)

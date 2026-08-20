@@ -25,6 +25,7 @@ import { NavigationHistory } from "./navigation-history.js";
 import type { FiledZettel } from "./zettel-index.js";
 import { CardFooterManager } from "./card-footer.js";
 import { canRunDeckAction } from "./deck-actions.js";
+import { MAX_SPREAD, MIN_SPREAD } from "./plugin-state.js";
 import {
   DECK_ACTION_DEFINITIONS,
   type DeckAction,
@@ -504,8 +505,8 @@ export class DeckView extends ItemView {
     const slider = spreadControl.createEl("input", {
       type: "range",
       attr: {
-        min: "0.28",
-        max: "1.12",
+        min: String(MIN_SPREAD),
+        max: String(MAX_SPREAD),
         step: "0.01",
         value: String(this.plugin.state.spread),
         "aria-label": "Card spread",
@@ -585,11 +586,6 @@ export class DeckView extends ItemView {
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
       identity.createSpan({ cls: "slipbox-card-address", text: card.id });
       if (this.plugin.settings.showTitleInDeck) {
-        identity.createSpan({
-          cls: "slipbox-card-header-separator",
-          text: "·",
-          attr: { "aria-hidden": "true" },
-        });
         identity.createSpan({ cls: "slipbox-card-header-title", text: title });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });

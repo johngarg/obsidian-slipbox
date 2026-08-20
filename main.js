@@ -830,6 +830,95 @@ function canRunDeckAction(action, context) {
   }
 }
 
+// src/desk-state.ts
+var DESK_WIDTH = 2400;
+var DESK_HEIGHT = 1600;
+var DESK_CARD_WIDTH = 520;
+var DESK_CARD_HEIGHT = 346;
+function isRecord2(value) {
+  return typeof value === "object" && value !== null;
+}
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+function clampDeskPosition(x, y) {
+  return {
+    x: Math.round(Math.max(0, Math.min(DESK_WIDTH - DESK_CARD_WIDTH, x))),
+    y: Math.round(Math.max(0, Math.min(DESK_HEIGHT - DESK_CARD_HEIGHT, y)))
+  };
+}
+function normalizeDeskCards(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const cards = [];
+  for (const candidate of value) {
+    if (!isRecord2(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
+      continue;
+    }
+    const cardRef = candidate.cardRef.trim();
+    if (seen.has(cardRef)) {
+      continue;
+    }
+    seen.add(cardRef);
+    const position = clampDeskPosition(candidate.x, candidate.y);
+    cards.push({
+      cardRef,
+      ...position,
+      z: Math.max(0, Math.round(candidate.z))
+    });
+  }
+  return cards;
+}
+function nextZ(cards) {
+  return cards.reduce((maximum, card) => Math.max(maximum, card.z), 0) + 1;
+}
+function addDeskCard(cards, cardRef, position) {
+  if (cards.some((card) => card.cardRef === cardRef)) {
+    return cards;
+  }
+  return [
+    ...cards,
+    { cardRef, ...clampDeskPosition(position.x, position.y), z: nextZ(cards) }
+  ];
+}
+function moveDeskCard(cards, cardRef, position) {
+  const nextPosition = clampDeskPosition(position.x, position.y);
+  return cards.map(
+    (card) => card.cardRef === cardRef ? { ...card, ...nextPosition } : card
+  );
+}
+function bringDeskCardToFront(cards, cardRef) {
+  const frontZ = nextZ(cards);
+  return cards.map(
+    (card) => card.cardRef === cardRef ? { ...card, z: frontZ } : card
+  );
+}
+function removeDeskCard(cards, cardRef) {
+  return cards.filter((card) => card.cardRef !== cardRef);
+}
+function removeDeskPath(cards, deletedPath) {
+  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
+  return cards.filter(
+    (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix)
+  );
+}
+function renameDeskCard(cards, oldRef, newRef) {
+  const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
+  const newPrefix = `${newRef.replace(/\/$/, "")}/`;
+  const renamed = cards.map((card) => {
+    if (card.cardRef === oldRef) {
+      return { ...card, cardRef: newRef };
+    }
+    if (card.cardRef.startsWith(oldPrefix)) {
+      return { ...card, cardRef: `${newPrefix}${card.cardRef.slice(oldPrefix.length)}` };
+    }
+    return card;
+  });
+  return normalizeDeskCards(renamed);
+}
+
 // src/settings.ts
 var SLIPBOX_DATA_SCHEMA_VERSION = 1;
 var binding = (key, modifiers = []) => ({ key, modifiers });
@@ -963,7 +1052,7 @@ var DEFAULT_SETTINGS = {
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS
 };
 var MODIFIER_ORDER = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
-function isRecord2(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null;
 }
 function normalizePropertyName(value, fallback) {
@@ -980,7 +1069,7 @@ function normalizeFolderPath(value) {
   return segments.join("/");
 }
 function normalizeKeyBinding(value) {
-  if (!isRecord2(value) || typeof value.key !== "string" || value.key === "") {
+  if (!isRecord3(value) || typeof value.key !== "string" || value.key === "") {
     return null;
   }
   const key = value.key.length === 1 ? value.key.toLowerCase() : value.key;
@@ -996,7 +1085,7 @@ function formatKeyBinding(bindingValue) {
   return [...bindingValue.modifiers, key].join("+");
 }
 function normalizeDeckKeybindings(value) {
-  const source = isRecord2(value) ? value : {};
+  const source = isRecord3(value) ? value : {};
   const claimed = /* @__PURE__ */ new Set();
   const result = {};
   for (const definition of DECK_ACTION_DEFINITIONS) {
@@ -1020,7 +1109,7 @@ function normalizeDeckKeybindings(value) {
   return result;
 }
 function normalizeBooleanRecord(value, defaults) {
-  const source = isRecord2(value) ? value : {};
+  const source = isRecord3(value) ? value : {};
   return Object.fromEntries(
     Object.entries(defaults).map(([key, fallback]) => [
       key,
@@ -1029,7 +1118,7 @@ function normalizeBooleanRecord(value, defaults) {
   );
 }
 function normalizeSettings(value) {
-  const source = isRecord2(value) ? value : {};
+  const source = isRecord3(value) ? value : {};
   return {
     addressProperty: normalizePropertyName(
       source.addressProperty,
@@ -1070,6 +1159,54 @@ function keyBindingConflict(keybindings, action, bindingValue) {
     }
   }
   return null;
+}
+
+// src/plugin-state.ts
+var DEFAULT_SPREAD = 0.58;
+var MIN_SPREAD = 0.18;
+var MAX_SPREAD = 1.12;
+var DEFAULT_STATE = {
+  entryPoints: [],
+  bookmarks: [],
+  deskCards: [],
+  spread: DEFAULT_SPREAD
+};
+var DEFAULT_DATA = {
+  schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+  settings: DEFAULT_SETTINGS,
+  state: DEFAULT_STATE
+};
+function isRecord4(value) {
+  return typeof value === "object" && value !== null;
+}
+function normalizePluginState(value) {
+  if (!isRecord4(value)) {
+    return DEFAULT_STATE;
+  }
+  const entryPoints = Array.isArray(value.entryPoints) ? value.entryPoints.flatMap((entry) => {
+    if (!isRecord4(entry) || typeof entry.name !== "string" || entry.name.trim() === "" || typeof entry.id !== "string" || !isValidZettelId(entry.id)) {
+      return [];
+    }
+    return [{ name: entry.name.trim(), id: entry.id }];
+  }) : [];
+  const rawSpread = typeof value.spread === "number" && Number.isFinite(value.spread) ? value.spread : DEFAULT_SPREAD;
+  return {
+    entryPoints,
+    bookmarks: normalizeBookmarks(value.bookmarks),
+    deskCards: normalizeDeskCards(value.deskCards),
+    spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread))
+  };
+}
+function normalizePluginData(value) {
+  if (!isRecord4(value)) {
+    return DEFAULT_DATA;
+  }
+  const versioned = isRecord4(value.state) || isRecord4(value.settings);
+  return {
+    schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+    settings: normalizeSettings(versioned ? value.settings : void 0),
+    state: normalizePluginState(versioned ? value.state : value)
+  };
 }
 
 // src/deck-view.ts
@@ -1498,8 +1635,8 @@ var DeckView = class extends import_obsidian2.ItemView {
     const slider = spreadControl.createEl("input", {
       type: "range",
       attr: {
-        min: "0.28",
-        max: "1.12",
+        min: String(MIN_SPREAD),
+        max: String(MAX_SPREAD),
         step: "0.01",
         value: String(this.plugin.state.spread),
         "aria-label": "Card spread"
@@ -1567,11 +1704,6 @@ var DeckView = class extends import_obsidian2.ItemView {
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
       identity.createSpan({ cls: "slipbox-card-address", text: card.id });
       if (this.plugin.settings.showTitleInDeck) {
-        identity.createSpan({
-          cls: "slipbox-card-header-separator",
-          text: "\xB7",
-          attr: { "aria-hidden": "true" }
-        });
         identity.createSpan({ cls: "slipbox-card-header-title", text: title });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
@@ -2268,97 +2400,6 @@ function errorMessage(error) {
 
 // src/desk-view.ts
 var import_obsidian3 = require("obsidian");
-
-// src/desk-state.ts
-var DESK_WIDTH = 2400;
-var DESK_HEIGHT = 1600;
-var DESK_CARD_WIDTH = 520;
-var DESK_CARD_HEIGHT = 346;
-function isRecord3(value) {
-  return typeof value === "object" && value !== null;
-}
-function finiteNumber(value) {
-  return typeof value === "number" && Number.isFinite(value);
-}
-function clampDeskPosition(x, y) {
-  return {
-    x: Math.round(Math.max(0, Math.min(DESK_WIDTH - DESK_CARD_WIDTH, x))),
-    y: Math.round(Math.max(0, Math.min(DESK_HEIGHT - DESK_CARD_HEIGHT, y)))
-  };
-}
-function normalizeDeskCards(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const seen = /* @__PURE__ */ new Set();
-  const cards = [];
-  for (const candidate of value) {
-    if (!isRecord3(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
-      continue;
-    }
-    const cardRef = candidate.cardRef.trim();
-    if (seen.has(cardRef)) {
-      continue;
-    }
-    seen.add(cardRef);
-    const position = clampDeskPosition(candidate.x, candidate.y);
-    cards.push({
-      cardRef,
-      ...position,
-      z: Math.max(0, Math.round(candidate.z))
-    });
-  }
-  return cards;
-}
-function nextZ(cards) {
-  return cards.reduce((maximum, card) => Math.max(maximum, card.z), 0) + 1;
-}
-function addDeskCard(cards, cardRef, position) {
-  if (cards.some((card) => card.cardRef === cardRef)) {
-    return cards;
-  }
-  return [
-    ...cards,
-    { cardRef, ...clampDeskPosition(position.x, position.y), z: nextZ(cards) }
-  ];
-}
-function moveDeskCard(cards, cardRef, position) {
-  const nextPosition = clampDeskPosition(position.x, position.y);
-  return cards.map(
-    (card) => card.cardRef === cardRef ? { ...card, ...nextPosition } : card
-  );
-}
-function bringDeskCardToFront(cards, cardRef) {
-  const frontZ = nextZ(cards);
-  return cards.map(
-    (card) => card.cardRef === cardRef ? { ...card, z: frontZ } : card
-  );
-}
-function removeDeskCard(cards, cardRef) {
-  return cards.filter((card) => card.cardRef !== cardRef);
-}
-function removeDeskPath(cards, deletedPath) {
-  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
-  return cards.filter(
-    (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix)
-  );
-}
-function renameDeskCard(cards, oldRef, newRef) {
-  const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
-  const newPrefix = `${newRef.replace(/\/$/, "")}/`;
-  const renamed = cards.map((card) => {
-    if (card.cardRef === oldRef) {
-      return { ...card, cardRef: newRef };
-    }
-    if (card.cardRef.startsWith(oldPrefix)) {
-      return { ...card, cardRef: `${newPrefix}${card.cardRef.slice(oldPrefix.length)}` };
-    }
-    return card;
-  });
-  return normalizeDeskCards(renamed);
-}
-
-// src/desk-view.ts
 var DESK_VIEW_TYPE = "slipbox-desk";
 var DeskView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
@@ -2499,11 +2540,6 @@ var DeskView = class extends import_obsidian3.ItemView {
       text: filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel")
     });
     if (this.plugin.settings.showTitleInDesk) {
-      identity.createSpan({
-        cls: "slipbox-card-header-separator",
-        text: "\xB7",
-        attr: { "aria-hidden": "true" }
-      });
       identity.createSpan({ cls: "slipbox-desk-card-title", text: title });
     }
     card.setAttr(
@@ -2697,6 +2733,7 @@ var TextPromptModal = class extends import_obsidian4.Modal {
       }
       this.finish(value);
     });
+    activateDefaultButtonOnEnter(contentEl, submit);
     window.setTimeout(() => {
       input.focus();
       input.select();
@@ -2828,6 +2865,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
     add.addEventListener("click", () => {
       void this.actions.addCurrent().then(() => this.close());
     });
+    activateDefaultButtonOnEnter(contentEl, add);
   }
   onClose() {
     this.contentEl.empty();
@@ -2886,6 +2924,7 @@ var EntryPointsModal = class extends import_obsidian4.Modal {
     add.addEventListener("click", () => {
       void this.actions.addCurrent().then(() => this.close());
     });
+    activateDefaultButtonOnEnter(contentEl, add);
   }
   onClose() {
     this.contentEl.empty();
@@ -2933,6 +2972,20 @@ function iconButton2(parent, icon, label) {
   (0, import_obsidian4.setIcon)(button, icon);
   return button;
 }
+function activateDefaultButtonOnEnter(container, button) {
+  container.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.repeat || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || button.disabled) {
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, a, textarea, select, [contenteditable='true']") !== null) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    button.click();
+  });
+}
 
 // src/new-note.ts
 var UNSAFE_FILENAME_CHARACTERS = /[\\/:*?"<>|\u0000-\u001f]/g;
@@ -2956,52 +3009,6 @@ function newCardFrontmatterTitle(title, titleSource) {
 }
 function newCardTitlePlaceholder(timestamp, titleSource) {
   return titleSource === "frontmatter" ? "Leave blank for an empty title" : `Leave blank to use ${timestamp} as the filename`;
-}
-
-// src/plugin-state.ts
-var DEFAULT_SPREAD = 0.58;
-var DEFAULT_STATE = {
-  entryPoints: [],
-  bookmarks: [],
-  deskCards: [],
-  spread: DEFAULT_SPREAD
-};
-var DEFAULT_DATA = {
-  schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
-  settings: DEFAULT_SETTINGS,
-  state: DEFAULT_STATE
-};
-function isRecord4(value) {
-  return typeof value === "object" && value !== null;
-}
-function normalizePluginState(value) {
-  if (!isRecord4(value)) {
-    return DEFAULT_STATE;
-  }
-  const entryPoints = Array.isArray(value.entryPoints) ? value.entryPoints.flatMap((entry) => {
-    if (!isRecord4(entry) || typeof entry.name !== "string" || entry.name.trim() === "" || typeof entry.id !== "string" || !isValidZettelId(entry.id)) {
-      return [];
-    }
-    return [{ name: entry.name.trim(), id: entry.id }];
-  }) : [];
-  const rawSpread = typeof value.spread === "number" && Number.isFinite(value.spread) ? value.spread : DEFAULT_SPREAD;
-  return {
-    entryPoints,
-    bookmarks: normalizeBookmarks(value.bookmarks),
-    deskCards: normalizeDeskCards(value.deskCards),
-    spread: Math.min(1.12, Math.max(0.28, rawSpread))
-  };
-}
-function normalizePluginData(value) {
-  if (!isRecord4(value)) {
-    return DEFAULT_DATA;
-  }
-  const versioned = isRecord4(value.state) || isRecord4(value.settings);
-  return {
-    schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
-    settings: normalizeSettings(versioned ? value.settings : void 0),
-    state: normalizePluginState(versioned ? value.state : value)
-  };
 }
 
 // src/card-title.ts
@@ -3043,13 +3050,13 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         }
       });
     });
-    new import_obsidian5.Setting(containerEl).setName("Show title in Deck headers").setDesc("Display address \xB7 title, truncating the title before the card buttons.").addToggle((toggle) => {
+    new import_obsidian5.Setting(containerEl).setName("Show title in Deck headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDeck: value
       }));
     });
-    new import_obsidian5.Setting(containerEl).setName("Show title in Desk headers").setDesc("Display address \xB7 title, truncating the title before the card buttons.").addToggle((toggle) => {
+    new import_obsidian5.Setting(containerEl).setName("Show title in Desk headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDesk).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDesk: value
@@ -3635,7 +3642,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     return leaf.view;
   }
   setSpread(value) {
-    const spread = Math.min(1.12, Math.max(0.28, value));
+    const spread = Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, value));
     this.state = { ...this.state, spread };
     if (this.spreadSaveTimer !== null) {
       window.clearTimeout(this.spreadSaveTimer);

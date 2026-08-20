@@ -50,6 +50,7 @@ export class TextPromptModal extends Modal {
       }
       this.finish(value);
     });
+    activateDefaultButtonOnEnter(contentEl, submit);
 
     window.setTimeout(() => {
       input.focus();
@@ -229,6 +230,7 @@ export class BookmarksModal extends Modal {
     add.addEventListener("click", () => {
       void this.actions.addCurrent().then(() => this.close());
     });
+    activateDefaultButtonOnEnter(contentEl, add);
   }
 
   onClose(): void {
@@ -305,6 +307,7 @@ export class EntryPointsModal extends Modal {
     add.addEventListener("click", () => {
       void this.actions.addCurrent().then(() => this.close());
     });
+    activateDefaultButtonOnEnter(contentEl, add);
   }
 
   onClose(): void {
@@ -367,4 +370,34 @@ function iconButton(
   });
   setIcon(button, icon);
   return button;
+}
+
+function activateDefaultButtonOnEnter(
+  container: HTMLElement,
+  button: HTMLButtonElement,
+): void {
+  container.addEventListener("keydown", (event) => {
+    if (
+      event.key !== "Enter" ||
+      event.repeat ||
+      event.isComposing ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      button.disabled
+    ) {
+      return;
+    }
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest("button, a, textarea, select, [contenteditable='true']") !== null
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    button.click();
+  });
 }

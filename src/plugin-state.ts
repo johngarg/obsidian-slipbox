@@ -27,6 +27,8 @@ export interface SlipboxPluginData {
 }
 
 export const DEFAULT_SPREAD = 0.58;
+export const MIN_SPREAD = 0.18;
+export const MAX_SPREAD = 1.12;
 
 export const DEFAULT_STATE: SlipboxPluginState = {
   entryPoints: [],
@@ -75,7 +77,7 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
     entryPoints,
     bookmarks: normalizeBookmarks(value.bookmarks),
     deskCards: normalizeDeskCards(value.deskCards),
-    spread: Math.min(1.12, Math.max(0.28, rawSpread)),
+    spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread)),
   };
 }
 

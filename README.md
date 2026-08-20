@@ -77,8 +77,8 @@ always use the configured property.
 Card titles use the filename by default. They may instead use `title`, or any
 other configured top-level frontmatter property, with a filename fallback for
 missing, empty, or non-text values. Deck titles are hidden by default; Desk
-titles are shown. Visible headers use `address · title` and truncate the title
-before the configured action buttons.
+titles are shown. Visible titles are centred between the left-aligned address
+and right-aligned action buttons, and truncate when space is limited.
 
 Header-button settings affect presentation only. Hidden actions remain
 available through commands, Deck shortcuts, and card right-click menus.

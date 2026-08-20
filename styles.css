@@ -187,7 +187,8 @@
 }
 
 .slipbox-card-address-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   align-items: center;
   min-height: 39px;
   padding: 8px 15px 7px;
@@ -196,13 +197,12 @@
 }
 
 .slipbox-card-header-identity {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: baseline;
+  display: contents;
 }
 
 .slipbox-card-address {
+  grid-column: 1;
+  justify-self: start;
   flex: 0 0 auto;
   color: var(--text-muted);
   font-family: var(--font-monospace);
@@ -212,25 +212,24 @@
   font-variant-numeric: tabular-nums;
 }
 
-.slipbox-card-header-separator {
-  flex: 0 0 auto;
-  padding: 0 6px;
-  color: var(--text-faint);
-}
-
 .slipbox-card-header-title {
-  flex: 1;
+  grid-column: 2;
+  justify-self: center;
   min-width: 0;
+  width: 100%;
   overflow: hidden;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .slipbox-card-actions {
   display: flex;
+  grid-column: 3;
   flex: 0 0 auto;
+  justify-self: end;
   align-items: center;
   gap: 2px;
   margin: -4px -4px -4px 0;
@@ -620,7 +619,7 @@ button.slipbox-card-backlink-overflow:disabled {
   padding: 6px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 7px;
-  background: var(--background-primary-alt);
+  background: transparent;
 }
 
 .slipbox-entry-visit,
@@ -628,13 +627,23 @@ button.slipbox-card-backlink-overflow:disabled {
   display: flex;
   flex: 1;
   min-width: 0;
-  align-items: baseline;
+  align-self: stretch;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   border: 0;
   box-shadow: none;
-  background: transparent;
+  color: var(--text-normal);
+  background: transparent !important;
   text-align: left;
+}
+
+.slipbox-entry-visit:hover,
+.slipbox-entry-visit:focus-visible,
+.slipbox-file-visit:hover,
+.slipbox-file-visit:focus-visible {
+  color: var(--text-normal);
+  background: transparent !important;
 }
 
 .slipbox-entry-name {
@@ -821,7 +830,8 @@ button.slipbox-card-backlink-overflow:disabled {
 }
 
 .slipbox-desk-card-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 43px;
@@ -833,14 +843,12 @@ button.slipbox-card-backlink-overflow:disabled {
 }
 
 .slipbox-desk-card-identity {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: baseline;
-  gap: 0;
+  display: contents;
 }
 
 .slipbox-desk-card-address {
+  grid-column: 1;
+  justify-self: start;
   flex: 0 0 auto;
   color: var(--text-muted);
   font-family: var(--font-monospace);
@@ -850,11 +858,14 @@ button.slipbox-card-backlink-overflow:disabled {
 }
 
 .slipbox-desk-card-title {
-  flex: 1;
+  grid-column: 2;
+  justify-self: center;
   min-width: 0;
+  width: 100%;
   overflow: hidden;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -911,7 +922,9 @@ button.slipbox-card-backlink-overflow:disabled {
 
 .slipbox-desk-card-actions {
   display: flex;
+  grid-column: 3;
   flex: 0 0 auto;
+  justify-self: end;
   gap: 2px;
 }
 

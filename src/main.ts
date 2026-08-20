@@ -44,6 +44,8 @@ import {
 } from "./new-note.js";
 import {
   DEFAULT_STATE,
+  MAX_SPREAD,
+  MIN_SPREAD,
   normalizePluginData,
   type EntryPoint,
   type SlipboxPluginState,
@@ -183,7 +185,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   setSpread(value: number): void {
-    const spread = Math.min(1.12, Math.max(0.28, value));
+    const spread = Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, value));
     this.state = { ...this.state, spread };
     if (this.spreadSaveTimer !== null) {
       window.clearTimeout(this.spreadSaveTimer);

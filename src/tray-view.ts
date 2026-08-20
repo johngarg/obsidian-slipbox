@@ -128,11 +128,11 @@ export class TrayRenderer {
         }`,
       },
     });
-    pileEl.tabIndex = 0;
+    pileEl.tabIndex = expanded ? -1 : 0;
     pileEl.style.setProperty("--slipbox-pile-x", `${position.x}px`);
     pileEl.style.setProperty("--slipbox-pile-y", `${position.y}px`);
 
-    pileEl.setAttr("role", "button");
+    pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
     if (!expanded) {
       this.renderStackLayers(pileEl, pile);
@@ -144,6 +144,30 @@ export class TrayRenderer {
         "aria-label": `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`,
       },
     });
+    let dragSurface: HTMLElement = pileEl;
+    if (expanded) {
+      const handle = pileEl.createEl("button", {
+        cls: "slipbox-tray-pile-handle",
+        attr: {
+          type: "button",
+          "aria-label": `Move or collapse pile ${pileIndex + 1}`,
+        },
+      });
+      setIcon(handle, "grip-vertical");
+      setTooltip(handle, "Drag to move · Click to collapse", {
+        placement: "left",
+        delay: 250,
+      });
+      handle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (performance.now() < this.suppressClickUntil) {
+          return;
+        }
+        void this.plugin.expandTrayPile(null);
+      });
+      dragSurface = handle;
+    }
     const sequence = pileEl.createDiv({ cls: "slipbox-tray-sequence" });
     const visibleCards = expanded ? pile.cards : pile.cards.slice(0, 1);
     const jobs = visibleCards.map((card, cardIndex) => this.renderCard(
@@ -200,7 +224,7 @@ export class TrayRenderer {
       event.stopPropagation();
       this.showPileMenu(event, pile);
     });
-    this.attachPileDragging(pileEl, pile, position, expanded);
+    this.attachPileDragging(pileEl, dragSurface, pile, position);
     return jobs;
   }
 
@@ -522,18 +546,18 @@ export class TrayRenderer {
 
   private attachPileDragging(
     element: HTMLElement,
+    dragSurface: HTMLElement,
     pile: TrayPile,
     position: TrayPilePosition,
-    expanded: boolean,
   ): void {
-    element.addEventListener("pointerdown", (event) => {
+    dragSurface.addEventListener("pointerdown", (event) => {
       if (
         event.button !== 0 ||
-        (event.target instanceof Element &&
-          (
-            event.target.closest("button, a") !== null ||
-            (expanded && event.target.closest(".slipbox-tray-card") !== null)
-          ))
+        (
+          dragSurface === element &&
+          event.target instanceof Element &&
+          event.target.closest("button, a") !== null
+        )
       ) {
         return;
       }
@@ -541,7 +565,7 @@ export class TrayRenderer {
       const startY = event.clientY;
       let dragging = false;
       const pointerId = event.pointerId;
-      element.setPointerCapture(pointerId);
+      dragSurface.setPointerCapture(pointerId);
       const move = (moveEvent: PointerEvent): void => {
         const dx = moveEvent.clientX - startX;
         const dy = moveEvent.clientY - startY;
@@ -555,11 +579,11 @@ export class TrayRenderer {
         this.updatePileDropCues(moveEvent, pile.id, element);
       };
       const finish = (upEvent: PointerEvent): void => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
-        if (element.hasPointerCapture(pointerId)) {
-          element.releasePointerCapture(pointerId);
+        dragSurface.removeEventListener("pointermove", move);
+        dragSurface.removeEventListener("pointerup", finish);
+        dragSurface.removeEventListener("pointercancel", cancel);
+        if (dragSurface.hasPointerCapture(pointerId)) {
+          dragSurface.releasePointerCapture(pointerId);
         }
         if (!dragging) {
           return;
@@ -581,14 +605,15 @@ export class TrayRenderer {
         void this.plugin.updateTray(next);
       };
       const cancel = (): void => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
+        dragSurface.removeEventListener("pointermove", move);
+        dragSurface.removeEventListener("pointerup", finish);
+        dragSurface.removeEventListener("pointercancel", cancel);
+        element.style.translate = "";
         this.clearDropCues();
       };
-      element.addEventListener("pointermove", move);
-      element.addEventListener("pointerup", finish);
-      element.addEventListener("pointercancel", cancel);
+      dragSurface.addEventListener("pointermove", move);
+      dragSurface.addEventListener("pointerup", finish);
+      dragSurface.addEventListener("pointercancel", cancel);
     });
   }
 

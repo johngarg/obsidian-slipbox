@@ -1562,10 +1562,10 @@ var TrayRenderer = class {
         "aria-label": `Pile ${pileIndex + 1}, ${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`
       }
     });
-    pileEl.tabIndex = 0;
+    pileEl.tabIndex = expanded ? -1 : 0;
     pileEl.style.setProperty("--slipbox-pile-x", `${position.x}px`);
     pileEl.style.setProperty("--slipbox-pile-y", `${position.y}px`);
-    pileEl.setAttr("role", "button");
+    pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
     if (!expanded) {
       this.renderStackLayers(pileEl, pile);
@@ -1577,6 +1577,30 @@ var TrayRenderer = class {
         "aria-label": `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`
       }
     });
+    let dragSurface = pileEl;
+    if (expanded) {
+      const handle = pileEl.createEl("button", {
+        cls: "slipbox-tray-pile-handle",
+        attr: {
+          type: "button",
+          "aria-label": `Move or collapse pile ${pileIndex + 1}`
+        }
+      });
+      (0, import_obsidian2.setIcon)(handle, "grip-vertical");
+      (0, import_obsidian2.setTooltip)(handle, "Drag to move \xB7 Click to collapse", {
+        placement: "left",
+        delay: 250
+      });
+      handle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (performance.now() < this.suppressClickUntil) {
+          return;
+        }
+        void this.plugin.expandTrayPile(null);
+      });
+      dragSurface = handle;
+    }
     const sequence = pileEl.createDiv({ cls: "slipbox-tray-sequence" });
     const visibleCards = expanded ? pile.cards : pile.cards.slice(0, 1);
     const jobs = visibleCards.map((card, cardIndex) => this.renderCard(
@@ -1619,7 +1643,7 @@ var TrayRenderer = class {
       event.stopPropagation();
       this.showPileMenu(event, pile);
     });
-    this.attachPileDragging(pileEl, pile, position, expanded);
+    this.attachPileDragging(pileEl, dragSurface, pile, position);
     return jobs;
   }
   async renderCard(parent, pile, card, cardIndex, pileIndex, expanded, isCurrent) {
@@ -1885,16 +1909,16 @@ var TrayRenderer = class {
       element.addEventListener("pointercancel", cancel);
     });
   }
-  attachPileDragging(element, pile, position, expanded) {
-    element.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || event.target instanceof Element && (event.target.closest("button, a") !== null || expanded && event.target.closest(".slipbox-tray-card") !== null)) {
+  attachPileDragging(element, dragSurface, pile, position) {
+    dragSurface.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || dragSurface === element && event.target instanceof Element && event.target.closest("button, a") !== null) {
         return;
       }
       const startX = event.clientX;
       const startY = event.clientY;
       let dragging = false;
       const pointerId = event.pointerId;
-      element.setPointerCapture(pointerId);
+      dragSurface.setPointerCapture(pointerId);
       const move = (moveEvent) => {
         const dx = moveEvent.clientX - startX;
         const dy = moveEvent.clientY - startY;
@@ -1908,11 +1932,11 @@ var TrayRenderer = class {
         this.updatePileDropCues(moveEvent, pile.id, element);
       };
       const finish = (upEvent) => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
-        if (element.hasPointerCapture(pointerId)) {
-          element.releasePointerCapture(pointerId);
+        dragSurface.removeEventListener("pointermove", move);
+        dragSurface.removeEventListener("pointerup", finish);
+        dragSurface.removeEventListener("pointercancel", cancel);
+        if (dragSurface.hasPointerCapture(pointerId)) {
+          dragSurface.releasePointerCapture(pointerId);
         }
         if (!dragging) {
           return;
@@ -1934,14 +1958,15 @@ var TrayRenderer = class {
         void this.plugin.updateTray(next);
       };
       const cancel = () => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
+        dragSurface.removeEventListener("pointermove", move);
+        dragSurface.removeEventListener("pointerup", finish);
+        dragSurface.removeEventListener("pointercancel", cancel);
+        element.style.translate = "";
         this.clearDropCues();
       };
-      element.addEventListener("pointermove", move);
-      element.addEventListener("pointerup", finish);
-      element.addEventListener("pointercancel", cancel);
+      dragSurface.addEventListener("pointermove", move);
+      dragSurface.addEventListener("pointerup", finish);
+      dragSurface.addEventListener("pointercancel", cancel);
     });
   }
   cardDropState(cardRef, x, y, dragged) {

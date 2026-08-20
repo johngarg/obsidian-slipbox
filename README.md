@@ -35,7 +35,9 @@ above the filed cards, and collapsed piles can be dragged anywhere. A collapsed
 pile shows its readable top card and count, with the slightly varied corners of
 the cards beneath it exposed. Click the pile itself to expand its ordered,
 gently tilted card miniatures directly onto the workspace—there is no panel,
-expanded-pile box, or disclosure control. Only one pile is expanded at a time.
+expanded-pile box, or disclosure control. An expanded pile has a small handle
+to its upper left: click it to collapse the pile, or drag it to move the complete
+expanded row. Only one pile is expanded at a time.
 
 Drag empty background to pan the whole workspace, including both filed cards
 and piles. This makes overlapped or off-centre piles reachable without changing

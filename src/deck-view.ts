@@ -12,8 +12,10 @@ import {
 
 import type ZettelkastenPlugin from "./main.js";
 import {
+  BOOKMARK_TAB_STACK_ORDER,
   activeIndexForViewport,
   cardMotionStyle,
+  cardStackOrder,
   clampViewportPosition,
   viewportPositionToRevealCard,
 } from "./deck-motion.js";
@@ -31,6 +33,7 @@ export class DeckView extends ItemView {
   private filingFile: TFile | null = null;
   private stageEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
+  private renderedBookmarkAnchors: HTMLElement[] = [];
   private renderComponents: Component[] = [];
   private cardScrollPositions = new Map<string, number>();
   private viewportOffset = 0;
@@ -104,6 +107,8 @@ export class DeckView extends ItemView {
     this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
+    this.renderedCards = [];
+    this.renderedBookmarkAnchors = [];
     this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
@@ -259,6 +264,7 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.contentEl.empty();
     this.renderedCards = [];
+    this.renderedBookmarkAnchors = [];
     this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
@@ -464,24 +470,21 @@ export class DeckView extends ItemView {
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", index === activeIndex);
       const bookmark = this.plugin.bookmarkAt(card.id);
-      cardEl.toggleClass("has-bookmark", bookmark !== undefined);
       const cardLabel = `${card.id} · ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
         placement: "bottom",
         delay: 350,
       });
-      cardEl.style.zIndex = String(
-        index === activeIndex
-          ? 220
-          : bookmark !== undefined
-            ? 180 - Math.floor(Math.abs(index - viewportPosition))
-            : 100 - Math.floor(Math.abs(index - viewportPosition)),
-      );
+      cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
       this.renderedCards.push(cardEl);
 
       if (bookmark !== undefined) {
-        const tab = cardEl.createEl("button", {
+        const anchor = stage.createDiv({ cls: "zk-bookmark-anchor" });
+        anchor.dataset.index = String(index);
+        anchor.style.zIndex = String(BOOKMARK_TAB_STACK_ORDER);
+        this.renderedBookmarkAnchors.push(anchor);
+        const tab = anchor.createEl("button", {
           cls: "zk-bookmark-tab",
           text: bookmark.label === "" ? card.id : bookmark.label,
           attr: {
@@ -925,6 +928,18 @@ export class DeckView extends ItemView {
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
+    for (const anchor of this.renderedBookmarkAnchors) {
+      const index = Number(anchor.dataset.index ?? "-1");
+      const motion = cardMotionStyle(
+        index,
+        viewportPosition,
+        step,
+        index === activeIndex,
+      );
+      anchor.style.transform =
+        `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
+      anchor.style.opacity = String(motion.opacity);
+    }
   }
 
   private updateActiveUi(): void {
@@ -938,14 +953,7 @@ export class DeckView extends ItemView {
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       card.toggleClass("is-active", index === activeIndex);
-      const bookmarked = card.classList.contains("has-bookmark");
-      card.style.zIndex = String(
-        index === activeIndex
-          ? 220
-          : bookmarked
-            ? 180 - Math.floor(Math.abs(index - viewportPosition))
-            : 100 - Math.floor(Math.abs(index - viewportPosition)),
-      );
+      card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
     }
 
     this.holdButtonEl?.setText(

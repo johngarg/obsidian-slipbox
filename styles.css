@@ -140,15 +140,22 @@
   cursor: grabbing;
 }
 
-.zk-card {
+.zk-card,
+.zk-bookmark-anchor {
   position: absolute;
   top: 50%;
   left: 50%;
-  display: flex;
-  flex-direction: column;
   width: min(62%, 900px);
   max-height: calc(100% - 54px);
   aspect-ratio: 3 / 2;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.zk-card {
+  display: flex;
+  flex-direction: column;
   overflow: visible;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--zk-card-radius);
@@ -156,10 +163,11 @@
     0 2px 4px rgb(0 0 0 / 0.12),
     0 12px 36px rgb(0 0 0 / 0.12);
   background: var(--background-primary);
-  transform: translate(-50%, -50%);
-  transform-origin: center;
-  will-change: transform, opacity;
   cursor: pointer;
+}
+
+.zk-bookmark-anchor {
+  pointer-events: none;
 }
 
 .zk-bookmark-tab {
@@ -181,6 +189,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .zk-bookmark-tab:hover {
@@ -357,7 +366,8 @@
   }
 }
 
-.is-filing .zk-card {
+.is-filing .zk-card,
+.is-filing .zk-bookmark-anchor {
   top: 62%;
   width: min(56%, 800px);
   max-height: 58%;

@@ -5,6 +5,18 @@ export interface CardMotionStyle {
 }
 
 export const DEFAULT_ACTIVE_HYSTERESIS = 0.06;
+export const BOOKMARK_TAB_STACK_ORDER = 230;
+
+/** Keep card surfaces in one physical stack; bookmarks use a separate overlay. */
+export function cardStackOrder(
+  cardIndex: number,
+  viewportPosition: number,
+  activeIndex: number,
+): number {
+  return cardIndex === activeIndex
+    ? 220
+    : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
+}
 
 /** Keep the continuous Deck position between its first and last cards. */
 export function clampViewportPosition(

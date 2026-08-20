@@ -321,6 +321,10 @@ var import_obsidian = require("obsidian");
 
 // src/deck-motion.ts
 var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
+var BOOKMARK_TAB_STACK_ORDER = 230;
+function cardStackOrder(cardIndex, viewportPosition, activeIndex) {
+  return cardIndex === activeIndex ? 220 : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
+}
 function clampViewportPosition(viewportPosition, cardCount) {
   if (cardCount <= 0 || !Number.isFinite(viewportPosition)) {
     return 0;
@@ -497,6 +501,7 @@ var DeckView = class extends import_obsidian.ItemView {
   filingFile = null;
   stageEl = null;
   renderedCards = [];
+  renderedBookmarkAnchors = [];
   renderComponents = [];
   cardScrollPositions = /* @__PURE__ */ new Map();
   viewportOffset = 0;
@@ -530,6 +535,8 @@ var DeckView = class extends import_obsidian.ItemView {
     this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
+    this.renderedCards = [];
+    this.renderedBookmarkAnchors = [];
     this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
@@ -666,6 +673,7 @@ var DeckView = class extends import_obsidian.ItemView {
     this.unloadRenderComponents();
     this.contentEl.empty();
     this.renderedCards = [];
+    this.renderedBookmarkAnchors = [];
     this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
@@ -838,19 +846,20 @@ var DeckView = class extends import_obsidian.ItemView {
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", index === activeIndex);
       const bookmark = this.plugin.bookmarkAt(card.id);
-      cardEl.toggleClass("has-bookmark", bookmark !== void 0);
       const cardLabel = `${card.id} \xB7 ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       (0, import_obsidian.setTooltip)(cardEl, cardLabel, {
         placement: "bottom",
         delay: 350
       });
-      cardEl.style.zIndex = String(
-        index === activeIndex ? 220 : bookmark !== void 0 ? 180 - Math.floor(Math.abs(index - viewportPosition)) : 100 - Math.floor(Math.abs(index - viewportPosition))
-      );
+      cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
       this.renderedCards.push(cardEl);
       if (bookmark !== void 0) {
-        const tab = cardEl.createEl("button", {
+        const anchor = stage.createDiv({ cls: "zk-bookmark-anchor" });
+        anchor.dataset.index = String(index);
+        anchor.style.zIndex = String(BOOKMARK_TAB_STACK_ORDER);
+        this.renderedBookmarkAnchors.push(anchor);
+        const tab = anchor.createEl("button", {
           cls: "zk-bookmark-tab",
           text: bookmark.label === "" ? card.id : bookmark.label,
           attr: {
@@ -1236,6 +1245,17 @@ var DeckView = class extends import_obsidian.ItemView {
       card.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
+    for (const anchor of this.renderedBookmarkAnchors) {
+      const index = Number(anchor.dataset.index ?? "-1");
+      const motion = cardMotionStyle(
+        index,
+        viewportPosition,
+        step,
+        index === activeIndex
+      );
+      anchor.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
+      anchor.style.opacity = String(motion.opacity);
+    }
   }
   updateActiveUi() {
     const filed = this.plugin.index.snapshot.filed;
@@ -1247,10 +1267,7 @@ var DeckView = class extends import_obsidian.ItemView {
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       card.toggleClass("is-active", index === activeIndex);
-      const bookmarked = card.classList.contains("has-bookmark");
-      card.style.zIndex = String(
-        index === activeIndex ? 220 : bookmarked ? 180 - Math.floor(Math.abs(index - viewportPosition)) : 100 - Math.floor(Math.abs(index - viewportPosition))
-      );
+      card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
     }
     this.holdButtonEl?.setText(
       this.thumbId === this.activeId ? "Release hold" : "Hold place"

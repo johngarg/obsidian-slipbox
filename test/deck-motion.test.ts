@@ -2,13 +2,22 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  BOOKMARK_TAB_STACK_ORDER,
   activeIndexForViewport,
   cardMotionStyle,
+  cardStackOrder,
   clampViewportPosition,
   viewportPositionToRevealCard,
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
+  test("keeps card surfaces in one stack beneath the bookmark overlay", () => {
+    assert.equal(cardStackOrder(4, 3.75, 4), 220);
+    assert.equal(cardStackOrder(3, 3.75, 4), 100);
+    assert.equal(cardStackOrder(0, 3.75, 4), 97);
+    assert.ok(BOOKMARK_TAB_STACK_ORDER > cardStackOrder(4, 3.75, 4));
+  });
+
   test("keeps the previous active card through the midpoint dead band", () => {
     assert.equal(activeIndexForViewport(0.5, 0, 4), 0);
     assert.equal(activeIndexForViewport(0.55, 0, 4), 0);

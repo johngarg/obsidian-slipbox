@@ -1,8 +1,8 @@
 # Slipbox
 
-Slipbox is a desktop Obsidian plugin for browsing, arranging, and filing
-ordinary Markdown notes as a tactile, sequential Luhmann-style card index. By
-default, a note participates only when its frontmatter contains `zettel-id`:
+Slipbox is a desktop Obsidian plugin for browsing and filing ordinary Markdown
+notes as a tactile, sequential Luhmann-style card index. By default, a note
+participates when its frontmatter contains `zettel-id`:
 
 ```yaml
 ---
@@ -10,100 +10,118 @@ zettel-id: ""
 ---
 ```
 
-An empty value is an unfiled card on the Desk. A canonical nonempty value such
-as `1/2b1` is a permanently filed card. The address is the sole source of Deck
-order; the plugin stores no hidden filing sequence and imposes no folder. The
-address property can be changed in Slipbox settings without rewriting notes.
+An empty value is an unfiled card. A canonical nonempty value such as `1/2b1`
+is a permanently filed card. The address is the sole source of filing order;
+Slipbox stores no hidden sequence and imposes no folder.
 
-## v0.4 features
+## Deck, Tray, and Canvas
 
-- A custom, read-only Deck view with rendered Obsidian Markdown.
-- Free horizontal trackpad and background-drag browsing with no snap or settle,
-  hysteretic centre-based card highlighting, non-repositioning card selection,
-  minimal-reveal arrow navigation, and internal vertical scrolling.
-- A persistent Spread control that changes spacing without resizing cards.
-- Fixed card footers on Deck and Desk show the canonically ordered addresses
-  of unique filed Zettels that link to each card. Large sets use a measured
-  `+N` overflow menu, and cards with no backlinks retain a blank footer.
-- Native Obsidian page previews when hovering rendered internal links or
-  backlink addresses. Deck backlink clicks use browser history; Desk clicks
-  open the referring note, and the backlink context menu can put it on Desk.
-- Persistent named entry points with add, rename, delete, and jump actions.
-- Card-header controls that add and immediately file a new card from their
-  source, explicitly open the Markdown file, toggle Desk membership, and
-  toggle persistent address bookmarks, plus edge-return arrows when the
-  nearest bookmark on either side is out of view. Card-surface clicks only
-  select the card.
-- Card right-click menus on Deck and Desk provide Markdown opening, bookmark
-  and Desk toggles, `Add card from here`, confirmation-backed deletion using
-  the configured trash behavior, and Obsidian's native file actions including
-  `Reveal file in navigation`.
-- Browser-style session history for filed links, entry points, and bookmarks;
-  ordinary physical Deck browsing does not create history entries.
-- A bounded spatial Desk with fixed-size rendered cards, persistent positions
-  and stacking order, overlap, and one Desk representation per Markdown note.
-- An unfiled-card tray and Filing Mode integration that keeps a newly filed
-  card at the same Desk position.
-- Deliberate filing from the active attachment point, with immutable addresses.
-- Global commands for Deck, Desk, bookmarks, Back/Forward, new cards,
-  conversion, filing, sections, entry points, Desk placement, all stable Deck
-  actions, and active-card header actions.
-- Native settings for the address property, filename or frontmatter-derived
-  display titles, independent Deck and Desk title display, card-header button
-  visibility, new-card folder and naming, Templates integration, and live
-  configurable Deck-scoped shortcuts.
-- Deterministic Deck startup at the first available entry point or first card;
-  browsing position is deliberately not persisted.
+- **Deck** is the permanent canonical order of filed cards.
+- **Tray** is a transient, session-only workspace above the Deck. It contains
+  all unfiled cards and any filed cards pulled out for current work.
+- **Canvas** is Obsidian's ordinary persistent spatial workspace. A Tray pile
+  can be laid out there when the arrangement should survive a restart.
+
+The Tray is deliberately not saved. On startup, Slipbox reconstructs one pile
+from all unfiled cards, newest-modified first. Filed cards pulled into the Tray,
+pile order, expansion, and manual ordering last only for the current Obsidian
+session. No Tray state is written to Markdown or plugin data.
+
+Piles are anonymous. A collapsed pile is represented by its top card and card
+count; expand it to see ordered card miniatures with addresses, centred titles,
+previews, and actions. Only one pile is expanded at a time.
+
+Use drag and drop to:
+
+- reorder cards within an expanded pile;
+- move cards between expanded piles;
+- drop a card in empty Tray space to split it into a new pile;
+- reorder collapsed piles; or
+- drop a collapsed pile onto another to merge them.
+
+Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu can
+move them to adjacent piles or split them. Pulling a filed card into the Tray
+does not change its address, Deck order, bookmark, or Canvas membership.
+
+`Clear pile` and `Clear Tray` remove only manually pulled filed cards. Unfiled
+cards remain, and empty piles disappear. During Filing Mode, the Tray compresses
+to a summary so the Deck keeps enough vertical space. Successful filing removes
+the newly filed card from its former Tray pile without reorganising the rest.
+
+## Canvas integration
+
+Right-click a pile to choose:
+
+- `Lay out pile on active Canvas`;
+- `Lay out pile on Canvas…`;
+- `Create Canvas from pile…`; or
+- `Clear pile`.
+
+Canvas layout includes filed and unfiled cards in pile order, places file nodes
+left-to-right, and wraps longer piles into rows. Existing nodes and edges are
+preserved, existing file nodes are not duplicated, and the Tray pile remains
+unchanged. Creating a Canvas prompts for a filename or vault-relative path and
+opens the new file after creation.
+
+The installed public Obsidian API does not expose the active Canvas viewport,
+so nodes currently begin at a deterministic origin instead of the visible
+viewport. Open Canvases are saved through their public text-view contract;
+closed Canvases are updated atomically through the vault API.
+
+Versions before 0.5 used a custom persistent Desk. If saved Desk data is found,
+the command `Export legacy Desk to Canvas…` becomes available for one-way
+recovery. It creates a Canvas using the old relative positions, omits and reports
+missing cards, and clears the legacy state only after the Canvas succeeds and
+you explicitly confirm. The old Desk view, controls, shortcuts, and settings no
+longer exist.
+
+## Other features
+
+- Read-only rendered Markdown cards with internal scrolling and fixed backlink
+  footers.
+- Free horizontal trackpad and background-drag browsing, minimal-reveal arrow
+  navigation, and a persistent Spread control.
+- Browser-style session history for filed links, entry points, and bookmarks.
+- Persistent named entry points and one persistent bookmark per filed address.
+- Card-header and context-menu actions for opening notes, adding from a card,
+  pulling into or returning from the Tray, bookmarking, and deletion.
+- Deliberate Filing Mode from the active attachment point, plus new-section and
+  ordinary-note conversion workflows.
+- Filename- or frontmatter-derived centred titles, configurable new-card folder
+  and timestamp naming, and Obsidian Templates integration.
 - Visible malformed-address and duplicate-address diagnostics.
-- Windowed rendering around the active card rather than rendering the vault.
+- Windowed Deck rendering around the active card rather than the whole vault.
+- `Return` activates the affirmative action in Slipbox prompt and confirmation
+  dialogs, including card creation and bookmark or entry-point edits.
 
-Settings and workspace state are versioned separately in plugin data. Bookmark
-and Desk layout state is never written to Markdown frontmatter. Back/Forward
-history is session-local. Existing flat v0.1-v0.3 data migrates automatically;
-existing v0.1
-`lastActiveId` data is ignored and removed when v0.2 normalizes state.
-Backlinks are derived from Obsidian's resolved file graph and are never written
-to card frontmatter or plugin state. Only unique, valid filed source cards are
-shown; ordinary notes, unfiled cards, self-links, and unresolved links are
-excluded.
+Backlinks come from Obsidian's resolved-link graph and are never written to card
+frontmatter or plugin state. Only unique, valid filed sources are shown;
+ordinary notes, unfiled cards, self-links, and unresolved links are excluded.
 
 ## Settings
 
 `Address property` is an exact top-level YAML key and defaults to `zettel-id`.
-Changing it immediately re-indexes the vault; it deliberately does not migrate
-frontmatter using the previous key. Newly created, converted, and filed cards
-always use the configured property.
+Changing it immediately re-indexes the vault without rewriting notes. Newly
+created, converted, and filed cards always use the configured property.
 
-Card titles use the filename by default. They may instead use `title`, or any
-other configured top-level frontmatter property, with a filename fallback for
-missing, empty, or non-text values. Deck titles are hidden by default; Desk
-titles are shown. Visible titles are centred between the left-aligned address
-and right-aligned action buttons, and truncate when space is limited.
+Titles use the filename by default. They may instead use `title`, or another
+configured top-level frontmatter property, with a filename fallback for missing,
+blank, or non-text values. Deck titles are hidden by default. Visible titles are
+centred between the left-aligned address and right-aligned actions.
 
 Header-button settings affect presentation only. Hidden actions remain
-available through commands, Deck shortcuts, and card right-click menus.
+available through commands, Deck shortcuts, and card context menus.
 
-Every note created through Slipbox is placed in the configured `New card
-folder`, including new cards, new sections, and cards added from an existing
-Deck card. The setting is empty by default, which delegates placement to
-the source note's folder. Add-from-card uses that Deck card as the source; new
-cards and sections use the active Markdown note. When no source note is
-available, Slipbox uses the vault root. An explicit Slipbox folder overrides
-this inherited location. If the configured folder is later removed, Slipbox
-reports the missing folder rather than creating the note elsewhere.
+Every note created through Slipbox is placed in the configured `New card folder`.
+The empty default inherits the source note's folder, or uses the vault root when
+there is no source note. A missing configured folder is reported rather than
+silently recreated elsewhere.
 
-Every Slipbox card-creation action asks for a title. With filename-derived
-titles, a non-empty title becomes the note filename and filename-unsafe
-characters are replaced with hyphens. With frontmatter-derived titles, the
-filename always uses the configured Moment timestamp format and the entered
-title is written to the configured title property. A blank title uses the
-timestamp in either mode and leaves the frontmatter title empty when applicable.
-The default timestamp format is `YYYYMMDDTHHmmss`.
-
-Template use is off by default. When enabled, choose one fixed template in
-Slipbox settings or leave `New card template` on `Ask each time`. Slipbox keeps
-its address frontmatter in place while Obsidian's Templates core plugin expands
-template variables and merges any template properties.
+Every card-creation action asks for a title. Filename-derived titles use a
+sanitised nonblank title as the filename; frontmatter-derived titles always use
+the configured Moment timestamp filename and write the entered title property.
+A blank title uses the timestamp. Templates support is optional and uses
+Obsidian's Templates core plugin.
 
 ## Default Deck keys
 
@@ -116,35 +134,28 @@ template variables and merges any template properties.
 | `G` | Jump to the last card |
 | `o` | Open the active Markdown note |
 | `a` | Add a card from the active card |
-| `d` | Toggle active-card Desk membership |
+| `p` | Pull the active card into, or return it from, the Tray |
 | `b` | Toggle the active-card bookmark |
 
 Every stable Deck action can have multiple scoped shortcuts. Changes apply to
-open Deck views immediately. Duplicate bindings across actions are rejected.
+open Deck views immediately, and duplicate bindings are rejected. The previous
+Desk shortcut is removed rather than repurposed.
 
 ## Address domain
 
 The pure TypeScript domain in `src/zettel-id.ts` parses, formats, compares, and
 generates canonical addresses. Numeric components compare numerically;
-alphabetic components follow the unbounded sequence `a … z, aa, ab …`; and a
-prefix card precedes all of its extensions.
-
-The address and metadata domain APIs are exported from `src/index.ts`, remain
-independent of Obsidian, and are tested separately from plugin integration.
+alphabetic components follow `a … z, aa, ab …`; and a prefix card precedes its
+extensions. Pure address, Tray, and Canvas layout APIs are exported from
+`src/index.ts` and tested independently of Obsidian.
 
 ## Filed-card links
 
 `generateFiledCardLink(app, file, sourcePath, zettelId)` delegates to Obsidian's
-`app.fileManager.generateMarkdownLink` and uses the card's address as the
-display text. For example, with Wikilinks enabled it may produce
-`[[Systems|1/1]]`; with Markdown links enabled it returns the equivalent format
-and lets Obsidian choose an appropriate target relative to `sourcePath`.
-
-The configured address property remains the sole canonical address.
-Although copying it into `aliases` would enable native ID-based autocomplete,
-Slipbox does not do so: that would duplicate address metadata and could become
-stale or ambiguous. Bare ID links such as `[[1/1]]` are not generated, because
-`/` may be interpreted as a path separator.
+preferred Markdown-link generator and uses the address as display text. Slipbox
+does not copy addresses into `aliases`, where they could become stale or
+ambiguous, and does not generate bare ID links because `/` may be interpreted as
+a path separator.
 
 ## Development
 
@@ -153,6 +164,6 @@ npm install
 npm run check
 ```
 
-`npm run build` produces the Obsidian bundle `main.js`. The installable plugin
-consists of `manifest.json`, `main.js`, and `styles.css`. The test suite uses
-Node's built-in test runner, while strict TypeScript checks the complete plugin.
+`npm run build` produces `main.js`. The installable plugin consists of
+`manifest.json`, `main.js`, and `styles.css`. Tests use Node's built-in runner,
+and strict TypeScript checks the complete plugin.

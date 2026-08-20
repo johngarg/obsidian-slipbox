@@ -30,6 +30,8 @@ import {
   DECK_ACTION_DEFINITIONS,
   type DeckAction,
 } from "./settings.js";
+import { TrayRenderer } from "./tray-view.js";
+import { cardPosition, moveCardWithinPile } from "./tray-state.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -60,6 +62,7 @@ export class DeckView extends ItemView {
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
   private readonly cardFooters: CardFooterManager;
+  private readonly trayRenderer: TrayRenderer;
   private keymapHandlers: KeymapEventHandler[] = [];
 
   constructor(
@@ -75,6 +78,10 @@ export class DeckView extends ItemView {
         (card) => card.cardRef === file.path,
       ),
       putOnDesk: (file) => this.plugin.putFileOnDesk(file, false),
+    });
+    this.trayRenderer = new TrayRenderer(this.app, this.plugin, this.leaf, {
+      jumpToFiledCard: (id) => this.jumpToId(id),
+      moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta),
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
@@ -104,6 +111,7 @@ export class DeckView extends ItemView {
 
   async onClose(): Promise<void> {
     this.cardFooters.clear();
+    this.trayRenderer.clear();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -219,6 +227,11 @@ export class DeckView extends ItemView {
       case "add-card":
         if (card !== null) {
           void this.plugin.createCardFrom(card.id);
+        }
+        break;
+      case "toggle-tray":
+        if (card !== null) {
+          void this.plugin.toggleFileInTray(card.file);
         }
         break;
       case "toggle-desk":
@@ -391,6 +404,7 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.cardFooters.clear();
+    this.trayRenderer.clear();
     this.contentEl.empty();
     this.renderedCards = [];
     this.filingPromptEl = null;
@@ -404,6 +418,13 @@ export class DeckView extends ItemView {
       shell.addClass("is-filing");
     }
     this.renderToolbar(shell);
+
+    const trayJob = this.trayRenderer.render(
+      shell,
+      this.filingFile !== null,
+      version,
+      () => version === this.renderVersion,
+    );
 
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
@@ -419,6 +440,11 @@ export class DeckView extends ItemView {
       }
     }
 
+    if (version !== this.renderVersion) {
+      return;
+    }
+
+    await trayJob;
     if (version !== this.renderVersion) {
       return;
     }
@@ -568,6 +594,7 @@ export class DeckView extends ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
+      const isInTray = this.plugin.isFileInTray(card.file);
       const isOnDesk = this.plugin.state.deskCards.some(
         (deskCard) => deskCard.cardRef === card.path,
       );
@@ -606,6 +633,20 @@ export class DeckView extends ItemView {
           `Open ${card.id} · ${title} in Markdown`,
           () => this.runAction("open-note", card),
         );
+      }
+      if (this.plugin.settings.deckHeaderButtons.tray) {
+        const trayAction = isInTray
+          ? `Return ${card.id} · ${title} to Deck`
+          : `Pull ${card.id} · ${title} into Tray`;
+        const trayToggle = this.renderCardAction(
+          cardActions,
+          isInTray ? "undo-2" : "inbox",
+          "slipbox-card-tray-toggle",
+          trayAction,
+          () => this.runAction("toggle-tray", card),
+        );
+        trayToggle.setAttr("aria-pressed", String(isInTray));
+        trayToggle.toggleClass("is-in-tray", isInTray);
       }
       if (this.plugin.settings.deckHeaderButtons.desk) {
         const deskAction = isOnDesk
@@ -1037,6 +1078,29 @@ export class DeckView extends ItemView {
     this.positionCards();
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
+  }
+
+  private async moveTrayCardBy(
+    cardRef: string,
+    delta: -1 | 1,
+  ): Promise<void> {
+    const position = cardPosition(this.plugin.tray, cardRef);
+    if (position === null) {
+      return;
+    }
+    const target = Math.max(
+      0,
+      Math.min(position.pileSize - 1, position.cardIndex + delta),
+    );
+    if (target === position.cardIndex) {
+      return;
+    }
+    await this.plugin.updateTray(moveCardWithinPile(
+      this.plugin.tray,
+      position.pileId,
+      position.cardIndex,
+      target,
+    ));
   }
 
   private goToDeckBoundary(boundary: "start" | "end"): void {

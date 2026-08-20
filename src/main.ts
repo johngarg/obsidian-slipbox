@@ -60,6 +60,19 @@ import {
 } from "./settings.js";
 import { SlipboxSettingTab } from "./settings-tab.js";
 import { ZettelIndex } from "./zettel-index.js";
+import {
+  EMPTY_TRAY,
+  clearFiledCardsFromPile,
+  clearFiledCardsFromTray,
+  reconcileTray,
+  removeTrayPath,
+  renameTrayPath,
+  setExpandedPile,
+  toggleFiledCard,
+  trayContains,
+  type TrayCardCandidate,
+  type TrayState,
+} from "./tray-state.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -77,6 +90,7 @@ export interface TemplatesInfo {
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
   settings: SlipboxSettings = DEFAULT_SETTINGS;
+  tray: TrayState = EMPTY_TRAY;
   index!: ZettelIndex;
 
   private indexRefreshTimer: number | null = null;
@@ -84,6 +98,7 @@ export default class SlipboxPlugin extends Plugin {
   private filingWriteInProgress = false;
   private cardCreationInProgress = false;
   private persistQueue: Promise<void> = Promise.resolve();
+  private trayPileSequence = 0;
 
   async onload(): Promise<void> {
     const data = normalizePluginData(await this.loadData());
@@ -91,6 +106,7 @@ export default class SlipboxPlugin extends Plugin {
     this.state = data.state;
     this.index = new ZettelIndex(this.app, this.settings.addressProperty);
     this.index.refresh();
+    this.reconcileSessionTray();
     await this.persistState();
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
@@ -258,6 +274,7 @@ export default class SlipboxPlugin extends Plugin {
     const isOnDesk = this.state.deskCards.some(
       (card) => card.cardRef === file.path,
     );
+    const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
 
@@ -277,6 +294,18 @@ export default class SlipboxPlugin extends Plugin {
         .onClick(() => {
           if (zettelId !== null) {
             void this.toggleBookmark(zettelId);
+          }
+        });
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle(isInTray ? "Return to Deck" : "Pull into Tray")
+        .setIcon(isInTray ? "undo-2" : "inbox")
+        .setSection("slipbox-card")
+        .setDisabled(zettelId === null)
+        .onClick(() => {
+          if (zettelId !== null) {
+            void this.toggleFileInTray(file);
           }
         });
     });
@@ -408,6 +437,50 @@ export default class SlipboxPlugin extends Plugin {
     } else {
       await this.removeBookmark(zettelId);
     }
+  }
+
+  createTrayPileId(): string {
+    this.trayPileSequence += 1;
+    return `tray-pile-${this.trayPileSequence}`;
+  }
+
+  async updateTray(next: TrayState): Promise<void> {
+    this.tray = next;
+    await this.refreshDeckViews();
+  }
+
+  async toggleFileInTray(file: TFile): Promise<void> {
+    this.index.refresh();
+    const filed = this.index.filedByFile(file);
+    if (filed === undefined) {
+      new Notice("Only a uniquely filed card can be pulled into the Tray.");
+      return;
+    }
+    this.tray = toggleFiledCard(
+      this.tray,
+      { cardRef: file.path, kind: "filed" },
+      this.createTrayPileId(),
+    );
+    await this.refreshDeckViews();
+  }
+
+  isFileInTray(file: TFile): boolean {
+    return trayContains(this.tray, file.path);
+  }
+
+  async expandTrayPile(pileId: string | null): Promise<void> {
+    this.tray = setExpandedPile(this.tray, pileId);
+    await this.refreshDeckViews();
+  }
+
+  async clearTrayPile(pileId: string): Promise<void> {
+    this.tray = clearFiledCardsFromPile(this.tray, pileId);
+    await this.refreshDeckViews();
+  }
+
+  async clearTray(): Promise<void> {
+    this.tray = clearFiledCardsFromTray(this.tray);
+    await this.refreshDeckViews();
   }
 
   async putFileOnDesk(file: TFile, revealDesk = true): Promise<void> {
@@ -590,6 +663,7 @@ export default class SlipboxPlugin extends Plugin {
 
       await this.waitForCachedId(file, newId);
       this.index.refresh();
+      this.reconcileSessionTray();
       await this.refreshViews();
       new Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
       return newId;
@@ -713,6 +787,27 @@ export default class SlipboxPlugin extends Plugin {
             deck.runAction("toggle-desk");
           } else {
             void this.toggleFileOnDesk(file);
+          }
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
+      id: "toggle-tray",
+      name: "Pull current card into or return it from Tray",
+      checkCallback: (checking) => {
+        const file = this.currentCardFile();
+        const available = file !== null && this.index.filedByFile(file) !== undefined;
+        if (checking) {
+          return available;
+        }
+        if (available && file !== null) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("toggle-tray");
+          } else {
+            void this.toggleFileInTray(file);
           }
         }
         return available;
@@ -1180,7 +1275,18 @@ export default class SlipboxPlugin extends Plugin {
 
   private async refreshIndex(): Promise<void> {
     this.index.refresh();
+    this.reconcileSessionTray();
     await this.refreshViews();
+  }
+
+  private async refreshDeckViews(): Promise<void> {
+    await Promise.all(
+      this.app.workspace
+        .getLeavesOfType(DECK_VIEW_TYPE)
+        .flatMap((leaf) =>
+          leaf.view instanceof DeckView ? [leaf.view.refresh()] : [],
+        ),
+    );
   }
 
   private async refreshViews(): Promise<void> {
@@ -1240,6 +1346,8 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private handleDeletedFile(file: TAbstractFile): void {
+    this.tray = removeTrayPath(this.tray, file.path);
+    void this.refreshDeckViews();
     const prefix = `${file.path.replace(/\/$/, "")}/`;
     if (this.state.deskCards.some(
       (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix),
@@ -1254,6 +1362,8 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
+    this.tray = renameTrayPath(this.tray, oldPath, file.path);
+    void this.refreshDeckViews();
     const prefix = `${oldPath.replace(/\/$/, "")}/`;
     if (this.state.deskCards.some(
       (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix),
@@ -1265,6 +1375,22 @@ export default class SlipboxPlugin extends Plugin {
       void this.persistState();
     }
     this.queueIndexRefresh();
+  }
+
+  private reconcileSessionTray(): void {
+    const candidates: TrayCardCandidate[] = [
+      ...this.index.snapshot.unfiled.map((file) => ({
+        cardRef: file.path,
+        kind: "unfiled" as const,
+        modifiedTime: file.stat.mtime,
+      })),
+      ...this.index.snapshot.filed.map((card) => ({
+        cardRef: card.path,
+        kind: "filed" as const,
+        modifiedTime: card.file.stat.mtime,
+      })),
+    ];
+    this.tray = reconcileTray(this.tray, candidates, this.createTrayPileId());
   }
 }
 

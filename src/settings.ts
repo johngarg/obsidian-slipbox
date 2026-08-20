@@ -2,7 +2,7 @@ export const SLIPBOX_DATA_SCHEMA_VERSION = 1;
 
 export type TitleSource = "filename" | "frontmatter";
 
-export type DeckHeaderButton = "add-card" | "open-note" | "desk" | "bookmark";
+export type DeckHeaderButton = "add-card" | "open-note" | "tray" | "desk" | "bookmark";
 export type DeskHeaderButton = "file-card" | "open-note" | "remove";
 
 export type DeckAction =
@@ -13,6 +13,7 @@ export type DeckAction =
   | "last-card"
   | "open-note"
   | "add-card"
+  | "toggle-tray"
   | "toggle-desk"
   | "toggle-bookmark"
   | "back"
@@ -86,6 +87,12 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     label: "Add card from here",
     repeatable: false,
     defaultBindings: [binding("a")],
+  },
+  {
+    id: "toggle-tray",
+    label: "Pull into or return from Tray",
+    repeatable: false,
+    defaultBindings: [binding("p")],
   },
   {
     id: "toggle-desk",
@@ -162,6 +169,7 @@ export interface SlipboxSettings {
 export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, boolean>> = {
   "add-card": true,
   "open-note": true,
+  tray: true,
   desk: true,
   bookmark: true,
 };

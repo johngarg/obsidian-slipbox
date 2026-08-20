@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => SlipboxPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 
 // src/zettel-id.ts
 var ZettelIdError = class extends Error {
@@ -295,7 +295,7 @@ function deleteBookmark(bookmarks, zettelId) {
 }
 
 // src/deck-view.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/deck-motion.ts
 var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
@@ -806,6 +806,7 @@ function canRunDeckAction(action, context) {
     case "centre-card":
     case "open-note":
     case "add-card":
+    case "toggle-tray":
     case "toggle-desk":
     case "toggle-bookmark":
       return context.hasActiveCard;
@@ -966,6 +967,12 @@ var DECK_ACTION_DEFINITIONS = [
     defaultBindings: [binding("a")]
   },
   {
+    id: "toggle-tray",
+    label: "Pull into or return from Tray",
+    repeatable: false,
+    defaultBindings: [binding("p")]
+  },
+  {
     id: "toggle-desk",
     label: "Toggle Desk membership",
     repeatable: false,
@@ -1023,6 +1030,7 @@ var DECK_ACTION_IDS = DECK_ACTION_DEFINITIONS.map(
 var DEFAULT_DECK_HEADER_BUTTONS = {
   "add-card": true,
   "open-note": true,
+  tray: true,
   desk: true,
   bookmark: true
 };
@@ -1209,12 +1217,881 @@ function normalizePluginData(value) {
   };
 }
 
+// src/tray-view.ts
+var import_obsidian2 = require("obsidian");
+
+// src/tray-state.ts
+var EMPTY_TRAY = {
+  piles: [],
+  expandedPileId: null,
+  unfiledPileId: null
+};
+function createPile(state, pileId, cards, pileIndex = state.piles.length) {
+  if (pileId === "" || state.piles.some((pile) => pile.id === pileId)) {
+    return state;
+  }
+  const occupied = new Set(allTrayCardRefs(state));
+  const unique = [];
+  for (const card of cards) {
+    if (card.cardRef !== "" && !occupied.has(card.cardRef)) {
+      occupied.add(card.cardRef);
+      unique.push(card);
+    }
+  }
+  if (unique.length === 0) {
+    return state;
+  }
+  const piles = [...state.piles];
+  piles.splice(clampIndex(pileIndex, piles.length + 1), 0, {
+    id: pileId,
+    cards: unique
+  });
+  return cleanTray({ ...state, piles });
+}
+function addUniqueCardToPile(state, pileId, card, cardIndex = Number.POSITIVE_INFINITY) {
+  if (card.cardRef === "" || trayContains(state, card.cardRef)) {
+    return state;
+  }
+  const pileIndex = state.piles.findIndex((pile) => pile.id === pileId);
+  if (pileIndex < 0) {
+    return state;
+  }
+  const piles = [...state.piles];
+  const cards = [...piles[pileIndex].cards];
+  cards.splice(clampIndex(cardIndex, cards.length + 1), 0, card);
+  piles[pileIndex] = { ...piles[pileIndex], cards };
+  return cleanTray({ ...state, piles });
+}
+function removeCard(state, cardRef) {
+  return cleanTray({
+    ...state,
+    piles: state.piles.map((pile) => ({
+      ...pile,
+      cards: pile.cards.filter((card) => card.cardRef !== cardRef)
+    }))
+  });
+}
+function moveCardWithinPile(state, pileId, fromIndex, toIndex) {
+  const pileIndex = state.piles.findIndex((pile2) => pile2.id === pileId);
+  const pile = state.piles[pileIndex];
+  if (pile === void 0 || fromIndex < 0 || fromIndex >= pile.cards.length || pile.cards.length < 2) {
+    return state;
+  }
+  const cards = [...pile.cards];
+  const [card] = cards.splice(fromIndex, 1);
+  if (card === void 0) {
+    return state;
+  }
+  cards.splice(clampIndex(toIndex, cards.length + 1), 0, card);
+  const piles = [...state.piles];
+  piles[pileIndex] = { ...pile, cards };
+  return cleanTray({ ...state, piles });
+}
+function moveCardBetweenPiles(state, cardRef, targetPileId, targetIndex = Number.POSITIVE_INFINITY) {
+  const source = cardPosition(state, cardRef);
+  const targetPile = state.piles.find((pile) => pile.id === targetPileId);
+  if (source === null || targetPile === void 0) {
+    return state;
+  }
+  if (source.pileId === targetPileId) {
+    return moveCardWithinPile(
+      state,
+      source.pileId,
+      source.cardIndex,
+      targetIndex
+    );
+  }
+  const card = state.piles[source.pileIndex].cards[source.cardIndex];
+  if (card === void 0) {
+    return state;
+  }
+  let next = removeCard(state, cardRef);
+  next = addUniqueCardToPile(next, targetPileId, card, targetIndex);
+  return next;
+}
+function splitCardIntoNewPile(state, cardRef, newPileId, pileIndex) {
+  const source = cardPosition(state, cardRef);
+  if (source === null || newPileId === "" || state.piles.some((pile) => pile.id === newPileId)) {
+    return state;
+  }
+  const card = state.piles[source.pileIndex].cards[source.cardIndex];
+  if (card === void 0) {
+    return state;
+  }
+  const sourcePileId = source.pileId;
+  const insertAt = pileIndex ?? source.pileIndex + 1;
+  const withoutCard = removeCard(state, cardRef);
+  const adjustedIndex = state.piles[source.pileIndex].cards.length === 1 && insertAt > source.pileIndex ? insertAt - 1 : insertAt;
+  const next = createPile(withoutCard, newPileId, [card], adjustedIndex);
+  return sourcePileId === state.unfiledPileId && !next.piles.some((pile) => pile.id === sourcePileId) ? { ...next, unfiledPileId: null } : next;
+}
+function mergePiles(state, sourcePileId, targetPileId) {
+  if (sourcePileId === targetPileId) {
+    return state;
+  }
+  const sourceIndex = state.piles.findIndex((pile) => pile.id === sourcePileId);
+  const targetIndex = state.piles.findIndex((pile) => pile.id === targetPileId);
+  const source = state.piles[sourceIndex];
+  const target = state.piles[targetIndex];
+  if (source === void 0 || target === void 0) {
+    return state;
+  }
+  const piles = state.piles.flatMap((pile) => {
+    if (pile.id === sourcePileId) {
+      return [];
+    }
+    if (pile.id === targetPileId) {
+      return [{ ...pile, cards: [...pile.cards, ...source.cards] }];
+    }
+    return [pile];
+  });
+  return cleanTray({
+    ...state,
+    piles,
+    expandedPileId: state.expandedPileId === sourcePileId ? targetPileId : state.expandedPileId,
+    unfiledPileId: state.unfiledPileId === sourcePileId ? null : state.unfiledPileId
+  });
+}
+function reorderPiles(state, fromIndex, toIndex) {
+  if (fromIndex < 0 || fromIndex >= state.piles.length || state.piles.length < 2) {
+    return state;
+  }
+  const piles = [...state.piles];
+  const [pile] = piles.splice(fromIndex, 1);
+  if (pile === void 0) {
+    return state;
+  }
+  piles.splice(clampIndex(toIndex, piles.length + 1), 0, pile);
+  return cleanTray({ ...state, piles });
+}
+function clearFiledCardsFromPile(state, pileId) {
+  return cleanTray({
+    ...state,
+    piles: state.piles.map((pile) => pile.id === pileId ? { ...pile, cards: pile.cards.filter((card) => card.kind === "unfiled") } : pile)
+  });
+}
+function clearFiledCardsFromTray(state) {
+  return cleanTray({
+    ...state,
+    piles: state.piles.map((pile) => ({
+      ...pile,
+      cards: pile.cards.filter((card) => card.kind === "unfiled")
+    }))
+  });
+}
+function renameTrayPath(state, oldPath, newPath) {
+  const prefix = `${oldPath.replace(/\/$/, "")}/`;
+  const seen = /* @__PURE__ */ new Set();
+  return cleanTray({
+    ...state,
+    piles: state.piles.map((pile) => ({
+      ...pile,
+      cards: pile.cards.flatMap((card) => {
+        const cardRef = card.cardRef === oldPath ? newPath : card.cardRef.startsWith(prefix) ? `${newPath.replace(/\/$/, "")}/${card.cardRef.slice(prefix.length)}` : card.cardRef;
+        if (cardRef === "" || seen.has(cardRef)) {
+          return [];
+        }
+        seen.add(cardRef);
+        return [{ ...card, cardRef }];
+      })
+    }))
+  });
+}
+function removeTrayPath(state, path) {
+  const prefix = `${path.replace(/\/$/, "")}/`;
+  return cleanTray({
+    ...state,
+    piles: state.piles.map((pile) => ({
+      ...pile,
+      cards: pile.cards.filter(
+        (card) => card.cardRef !== path && !card.cardRef.startsWith(prefix)
+      )
+    }))
+  });
+}
+function pruneTrayCards(state, eligibleCards) {
+  const eligible = new Map(
+    eligibleCards.filter((card) => card.cardRef !== "").map((card) => [card.cardRef, card.kind])
+  );
+  const seen = /* @__PURE__ */ new Set();
+  return cleanTray({
+    ...state,
+    piles: state.piles.map((pile) => ({
+      ...pile,
+      cards: pile.cards.flatMap((card) => {
+        const kind = eligible.get(card.cardRef);
+        if (kind === void 0 || seen.has(card.cardRef) || card.kind === "unfiled" && kind === "filed") {
+          return [];
+        }
+        seen.add(card.cardRef);
+        return [{ cardRef: card.cardRef, kind }];
+      })
+    }))
+  });
+}
+function reconcileTray(state, candidates, newUnfiledPileId) {
+  const eligible = uniqueCandidates(candidates);
+  let next = pruneTrayCards(state, eligible);
+  const present = new Set(allTrayCardRefs(next));
+  const missing = eligible.filter((card) => card.kind === "unfiled" && !present.has(card.cardRef)).sort(compareInitialCards).map(({ cardRef, kind }) => ({ cardRef, kind }));
+  if (missing.length === 0) {
+    return next;
+  }
+  const home = next.unfiledPileId === null ? void 0 : next.piles.find((pile) => pile.id === next.unfiledPileId);
+  if (home !== void 0) {
+    const piles = next.piles.map((pile) => pile.id === home.id ? { ...pile, cards: [...missing, ...pile.cards] } : pile);
+    return cleanTray({ ...next, piles });
+  }
+  next = createPile(next, newUnfiledPileId, missing);
+  return next.piles.some((pile) => pile.id === newUnfiledPileId) ? { ...next, unfiledPileId: newUnfiledPileId } : next;
+}
+function toggleFiledCard(state, card, newPileId) {
+  if (card.kind !== "filed") {
+    return state;
+  }
+  if (trayContains(state, card.cardRef)) {
+    return removeCard(state, card.cardRef);
+  }
+  const expanded = state.expandedPileId === null ? void 0 : state.piles.find((pile) => pile.id === state.expandedPileId);
+  return expanded === void 0 ? createPile(state, newPileId, [card]) : addUniqueCardToPile(state, expanded.id, card);
+}
+function setExpandedPile(state, pileId) {
+  return {
+    ...state,
+    expandedPileId: pileId !== null && state.piles.some((pile) => pile.id === pileId) ? pileId : null
+  };
+}
+function trayContains(state, cardRef) {
+  return state.piles.some((pile) => pile.cards.some((card) => card.cardRef === cardRef));
+}
+function cardPosition(state, cardRef) {
+  for (let pileIndex = 0; pileIndex < state.piles.length; pileIndex += 1) {
+    const pile = state.piles[pileIndex];
+    if (pile === void 0) {
+      continue;
+    }
+    const cardIndex = pile.cards.findIndex((card) => card.cardRef === cardRef);
+    if (cardIndex >= 0) {
+      return { pileId: pile.id, pileIndex, cardIndex, pileSize: pile.cards.length };
+    }
+  }
+  return null;
+}
+function insertionIndexForPoint(point, itemCentres) {
+  return itemCentres.findIndex((centre) => point < centre) < 0 ? itemCentres.length : itemCentres.findIndex((centre) => point < centre);
+}
+function cleanTray(state) {
+  const piles = state.piles.filter((pile) => pile.cards.length > 0);
+  const ids = new Set(piles.map((pile) => pile.id));
+  return {
+    piles,
+    expandedPileId: state.expandedPileId !== null && ids.has(state.expandedPileId) ? state.expandedPileId : null,
+    unfiledPileId: state.unfiledPileId !== null && ids.has(state.unfiledPileId) ? state.unfiledPileId : null
+  };
+}
+function allTrayCardRefs(state) {
+  return state.piles.flatMap((pile) => pile.cards.map((card) => card.cardRef));
+}
+function clampIndex(index, length) {
+  if (!Number.isFinite(index)) {
+    return index < 0 ? 0 : Math.max(0, length - 1);
+  }
+  return Math.max(0, Math.min(Math.max(0, length - 1), Math.trunc(index)));
+}
+function uniqueCandidates(candidates) {
+  const seen = /* @__PURE__ */ new Set();
+  return candidates.filter((card) => {
+    if (card.cardRef === "" || seen.has(card.cardRef)) {
+      return false;
+    }
+    seen.add(card.cardRef);
+    return true;
+  });
+}
+function compareInitialCards(left, right) {
+  return right.modifiedTime - left.modifiedTime || left.cardRef.localeCompare(right.cardRef);
+}
+
+// src/tray-view.ts
+var DRAG_THRESHOLD_PX = 5;
+var AUTO_SCROLL_EDGE_PX = 44;
+var AUTO_SCROLL_STEP_PX = 18;
+var TrayRenderer = class {
+  constructor(app, plugin, leaf, actions) {
+    this.app = app;
+    this.plugin = plugin;
+    this.leaf = leaf;
+    this.actions = actions;
+  }
+  components = [];
+  rootEl = null;
+  suppressClickUntil = 0;
+  clear() {
+    for (const component of this.components) {
+      component.unload();
+    }
+    this.components = [];
+    this.rootEl = null;
+  }
+  async render(shell, filing, version, isCurrent) {
+    const state = this.plugin.tray;
+    const cardCount = state.piles.reduce(
+      (total, pile) => total + pile.cards.length,
+      0
+    );
+    if (cardCount === 0) {
+      return;
+    }
+    const tray = shell.createDiv({ cls: "slipbox-tray" });
+    this.rootEl = tray;
+    tray.toggleClass("is-compact", filing);
+    const header = tray.createDiv({ cls: "slipbox-tray-header" });
+    const title = header.createDiv({ cls: "slipbox-tray-title" });
+    const icon = title.createSpan({ cls: "slipbox-tray-icon" });
+    (0, import_obsidian2.setIcon)(icon, "inbox");
+    title.createSpan({ text: "Tray" });
+    title.createSpan({
+      cls: "slipbox-tray-total",
+      text: `${cardCount} card${cardCount === 1 ? "" : "s"}`
+    });
+    if (filing) {
+      header.createSpan({
+        cls: "slipbox-tray-filing-note",
+        text: "Piles preserved while filing"
+      });
+      return;
+    }
+    const clear = header.createEl("button", {
+      text: "Clear Tray",
+      attr: { type: "button" }
+    });
+    clear.disabled = !state.piles.some((pile) => pile.cards.some((card) => card.kind === "filed"));
+    clear.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.plugin.clearTray();
+    });
+    const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
+    const jobs = [];
+    state.piles.forEach((pile, pileIndex) => {
+      jobs.push(...this.renderPile(
+        piles,
+        pile,
+        pileIndex,
+        state.expandedPileId === pile.id,
+        version,
+        isCurrent
+      ));
+    });
+    await Promise.all(jobs);
+  }
+  renderPile(parent, pile, pileIndex, expanded, version, isCurrent) {
+    const pileEl = parent.createDiv({
+      cls: `slipbox-tray-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
+      attr: {
+        "data-pile-id": pile.id,
+        "aria-label": `Pile ${pileIndex + 1}, ${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`
+      }
+    });
+    pileEl.tabIndex = 0;
+    const pileHeader = pileEl.createDiv({ cls: "slipbox-tray-pile-header" });
+    pileHeader.createSpan({
+      cls: "slipbox-tray-pile-count",
+      text: String(pile.cards.length),
+      attr: {
+        "aria-label": `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`
+      }
+    });
+    const disclosure = pileHeader.createEl("button", {
+      cls: "clickable-icon slipbox-tray-disclosure",
+      attr: {
+        type: "button",
+        "aria-label": expanded ? "Collapse pile" : "Expand pile",
+        "aria-expanded": String(expanded)
+      }
+    });
+    (0, import_obsidian2.setIcon)(disclosure, expanded ? "chevron-up" : "chevron-down");
+    disclosure.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+    });
+    const sequence = pileEl.createDiv({ cls: "slipbox-tray-sequence" });
+    const visibleCards = expanded ? pile.cards : pile.cards.slice(0, 1);
+    const jobs = visibleCards.map((card, cardIndex) => this.renderCard(
+      sequence,
+      pile,
+      card,
+      expanded ? cardIndex : 0,
+      pileIndex,
+      expanded,
+      version,
+      isCurrent
+    ));
+    pileEl.addEventListener("click", (event) => {
+      if (event.target instanceof Element && event.target.closest("button, a, .slipbox-tray-card") !== null) {
+        return;
+      }
+      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+    });
+    pileEl.addEventListener("keydown", (event) => {
+      if (event.target !== pileEl || event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      void this.plugin.expandTrayPile(expanded ? null : pile.id);
+    });
+    pileEl.addEventListener("contextmenu", (event) => {
+      if (event.target instanceof Element && event.target.closest("button, a") !== null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.showPileMenu(event, pile);
+    });
+    this.attachPileDragging(pileEl, pile, expanded);
+    return jobs;
+  }
+  async renderCard(parent, pile, card, cardIndex, pileIndex, expanded, version, isCurrent) {
+    const file = this.plugin.index.fileAtPath(card.cardRef);
+    if (!(file instanceof import_obsidian2.TFile)) {
+      return;
+    }
+    const filed = this.plugin.index.filedByFile(file);
+    const address = filed?.id ?? "unfiled";
+    const title = this.plugin.cardTitle(file);
+    const miniature = parent.createDiv({
+      cls: "slipbox-tray-card",
+      attr: {
+        "data-card-ref": card.cardRef,
+        role: filed === void 0 ? "group" : "button",
+        "aria-label": `${address}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
+      }
+    });
+    miniature.tabIndex = expanded ? 0 : -1;
+    miniature.toggleClass("is-filed", filed !== void 0);
+    miniature.toggleClass("is-unfiled", filed === void 0);
+    const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
+    identity.createSpan({ cls: "slipbox-tray-card-address", text: address });
+    identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
+    const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
+    if (filed === void 0) {
+      const fileButton = trayIconButton(controls, "archive-restore", `File ${title}`);
+      fileButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.plugin.beginFiling(file);
+      });
+    } else {
+      const returnButton = trayIconButton(
+        controls,
+        "undo-2",
+        `Return ${filed.id} \xB7 ${title} to Deck`
+      );
+      returnButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.plugin.toggleFileInTray(file);
+      });
+    }
+    const open = trayIconButton(controls, "file-pen-line", `Open ${title} in Markdown`);
+    open.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.plugin.openMarkdownFile(file);
+    });
+    const preview = miniature.createDiv({
+      cls: "slipbox-tray-card-preview markdown-rendered"
+    });
+    const component = new import_obsidian2.Component();
+    component.load();
+    this.components.push(component);
+    try {
+      const body = await this.plugin.index.readBody(file);
+      if (isCurrent() && version >= 0) {
+        await import_obsidian2.MarkdownRenderer.render(
+          this.app,
+          body,
+          preview,
+          file.path,
+          component
+        );
+      }
+    } catch {
+      preview.setText("Preview unavailable");
+    }
+    miniature.addEventListener("click", (event) => {
+      if (performance.now() < this.suppressClickUntil) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (!expanded || filed === void 0 || event.target instanceof Element && event.target.closest("button, a") !== null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void this.actions.jumpToFiledCard(filed.id);
+    });
+    miniature.addEventListener("keydown", (event) => {
+      if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.actions.moveCardBy(
+          card.cardRef,
+          event.key === "ArrowLeft" ? -1 : 1
+        );
+        return;
+      }
+      if (event.key === "Enter" && filed !== void 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.actions.jumpToFiledCard(filed.id);
+      }
+    });
+    miniature.addEventListener("contextmenu", (event) => {
+      if (event.target instanceof Element && event.target.closest("button, a") !== null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.showCardMenu(event, pile, card);
+    });
+    this.attachCardDragging(miniature, pile, card, expanded);
+  }
+  showPileMenu(event, pile) {
+    const menu = import_obsidian2.Menu.forEvent(event);
+    menu.addItem((item) => {
+      item.setTitle("Clear pile").setIcon("eraser").setDisabled(!pile.cards.some((card) => card.kind === "filed")).onClick(() => void this.plugin.clearTrayPile(pile.id));
+    });
+    menu.showAtMouseEvent(event);
+  }
+  showCardMenu(event, pile, card) {
+    const state = this.plugin.tray;
+    const position = cardPosition(state, card.cardRef);
+    if (position === null) {
+      return;
+    }
+    const menu = import_obsidian2.Menu.forEvent(event);
+    menu.addItem((item) => {
+      item.setTitle("Move to previous pile").setIcon("arrow-left").setDisabled(position.pileIndex <= 0).onClick(() => {
+        const target = state.piles[position.pileIndex - 1];
+        if (target !== void 0) {
+          void this.moveAndFocus(moveCardBetweenPiles(
+            state,
+            card.cardRef,
+            target.id
+          ), card.cardRef);
+        }
+      });
+    });
+    menu.addItem((item) => {
+      item.setTitle("Move to next pile").setIcon("arrow-right").setDisabled(position.pileIndex >= state.piles.length - 1).onClick(() => {
+        const target = state.piles[position.pileIndex + 1];
+        if (target !== void 0) {
+          void this.moveAndFocus(moveCardBetweenPiles(
+            state,
+            card.cardRef,
+            target.id
+          ), card.cardRef);
+        }
+      });
+    });
+    menu.addItem((item) => {
+      item.setTitle("Split into new pile").setIcon("split").setDisabled(pile.cards.length <= 1).onClick(() => void this.moveAndFocus(splitCardIntoNewPile(
+        state,
+        card.cardRef,
+        this.plugin.createTrayPileId()
+      ), card.cardRef));
+    });
+    menu.showAtMouseEvent(event);
+  }
+  attachCardDragging(element, pile, card, expanded) {
+    if (!expanded) {
+      return;
+    }
+    element.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target instanceof Element && event.target.closest("button, a") !== null) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let dragging = false;
+      const pointerId = event.pointerId;
+      element.setPointerCapture(pointerId);
+      const move = (moveEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+          return;
+        }
+        dragging = true;
+        moveEvent.preventDefault();
+        element.addClass("is-dragging");
+        element.style.translate = `${dx}px ${dy}px`;
+        this.rootEl?.addClass("is-dragging-card");
+        this.updateCardDropCues(moveEvent, pile.id, element);
+        this.autoScroll(moveEvent.clientX);
+      };
+      const finish = (upEvent) => {
+        element.removeEventListener("pointermove", move);
+        element.removeEventListener("pointerup", finish);
+        element.removeEventListener("pointercancel", cancel);
+        if (element.hasPointerCapture(pointerId)) {
+          element.releasePointerCapture(pointerId);
+        }
+        if (!dragging) {
+          return;
+        }
+        upEvent.preventDefault();
+        upEvent.stopPropagation();
+        this.suppressClickUntil = performance.now() + 400;
+        const next = this.cardDropState(
+          card.cardRef,
+          pile.id,
+          upEvent.clientX,
+          upEvent.clientY,
+          element
+        );
+        this.clearDropCues();
+        void this.moveAndFocus(next, card.cardRef);
+      };
+      const cancel = () => {
+        element.removeEventListener("pointermove", move);
+        element.removeEventListener("pointerup", finish);
+        element.removeEventListener("pointercancel", cancel);
+        this.clearDropCues();
+      };
+      element.addEventListener("pointermove", move);
+      element.addEventListener("pointerup", finish);
+      element.addEventListener("pointercancel", cancel);
+    });
+  }
+  attachPileDragging(element, pile, expanded) {
+    if (expanded) {
+      return;
+    }
+    element.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target instanceof Element && event.target.closest("button, a, .slipbox-tray-card") !== null) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let dragging = false;
+      const pointerId = event.pointerId;
+      element.setPointerCapture(pointerId);
+      const move = (moveEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+          return;
+        }
+        dragging = true;
+        moveEvent.preventDefault();
+        element.addClass("is-dragging");
+        element.style.translate = `${dx}px ${dy}px`;
+        this.updatePileDropCues(moveEvent, pile.id, element);
+        this.autoScroll(moveEvent.clientX);
+      };
+      const finish = (upEvent) => {
+        element.removeEventListener("pointermove", move);
+        element.removeEventListener("pointerup", finish);
+        element.removeEventListener("pointercancel", cancel);
+        if (element.hasPointerCapture(pointerId)) {
+          element.releasePointerCapture(pointerId);
+        }
+        if (!dragging) {
+          return;
+        }
+        upEvent.preventDefault();
+        upEvent.stopPropagation();
+        this.suppressClickUntil = performance.now() + 400;
+        const next = this.pileDropState(
+          pile.id,
+          upEvent.clientX,
+          upEvent.clientY,
+          element
+        );
+        this.clearDropCues();
+        void this.plugin.updateTray(next);
+      };
+      const cancel = () => {
+        element.removeEventListener("pointermove", move);
+        element.removeEventListener("pointerup", finish);
+        element.removeEventListener("pointercancel", cancel);
+        this.clearDropCues();
+      };
+      element.addEventListener("pointermove", move);
+      element.addEventListener("pointerup", finish);
+      element.addEventListener("pointercancel", cancel);
+    });
+  }
+  cardDropState(cardRef, sourcePileId, x, y, dragged) {
+    const state = this.plugin.tray;
+    const targetPileEl = this.elementsBelowPoint(x, y, dragged).find((element) => element.matches(".slipbox-tray-pile"));
+    const targetPileId = targetPileEl?.dataset.pileId;
+    if (targetPileEl !== void 0 && targetPileId !== void 0) {
+      const cards = Array.from(targetPileEl.querySelectorAll(
+        ".slipbox-tray-card:not(.is-dragging)"
+      ));
+      const insertionIndex = insertionIndexForPoint(
+        x,
+        cards.map((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.left + rect.width / 2;
+        })
+      );
+      return moveCardBetweenPiles(state, cardRef, targetPileId, insertionIndex);
+    }
+    const trayEl = this.elementsBelowPoint(x, y, dragged).find((element) => element.matches(".slipbox-tray-piles"));
+    if (trayEl !== void 0) {
+      const pileElements = Array.from(trayEl.querySelectorAll(
+        ".slipbox-tray-pile:not(.is-dragging)"
+      ));
+      const pileIndex = insertionIndexForPoint(
+        x,
+        pileElements.map((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.left + rect.width / 2;
+        })
+      );
+      return splitCardIntoNewPile(
+        state,
+        cardRef,
+        this.plugin.createTrayPileId(),
+        pileIndex
+      );
+    }
+    const source = state.piles.find((candidate) => candidate.id === sourcePileId);
+    return source === void 0 ? state : state;
+  }
+  pileDropState(sourcePileId, x, y, dragged) {
+    const state = this.plugin.tray;
+    const target = this.elementsBelowPoint(x, y, dragged).find(
+      (element) => element.matches(".slipbox-tray-pile") && element.dataset.pileId !== sourcePileId
+    );
+    const targetId = target?.dataset.pileId;
+    if (target !== void 0 && targetId !== void 0) {
+      const rect = target.getBoundingClientRect();
+      const relativeX = (x - rect.left) / Math.max(1, rect.width);
+      if (relativeX > 0.2 && relativeX < 0.8) {
+        return mergePiles(state, sourcePileId, targetId);
+      }
+    }
+    const sourceIndex = state.piles.findIndex((pile) => pile.id === sourcePileId);
+    const container = this.rootEl?.querySelector(".slipbox-tray-piles");
+    if (sourceIndex < 0 || container === null || container === void 0) {
+      return state;
+    }
+    const pileElements = Array.from(container.querySelectorAll(
+      ".slipbox-tray-pile:not(.is-dragging)"
+    ));
+    const insertionIndex = insertionIndexForPoint(
+      x,
+      pileElements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      })
+    );
+    return reorderPiles(state, sourceIndex, insertionIndex);
+  }
+  updateCardDropCues(event, sourcePileId, dragged) {
+    this.clearDropCues(dragged);
+    const targetPile = this.elementsBelowPoint(
+      event.clientX,
+      event.clientY,
+      dragged
+    ).find((element) => element.matches(".slipbox-tray-pile"));
+    if (targetPile === void 0) {
+      return;
+    }
+    targetPile.addClass(
+      targetPile.dataset.pileId === sourcePileId ? "is-reorder-target" : "is-card-drop-target"
+    );
+    const targetCard = this.elementsBelowPoint(
+      event.clientX,
+      event.clientY,
+      dragged
+    ).find((element) => element.matches(".slipbox-tray-card"));
+    targetCard?.addClass("is-insertion-target");
+  }
+  updatePileDropCues(event, sourcePileId, dragged) {
+    this.clearDropCues(dragged);
+    const target = this.elementsBelowPoint(
+      event.clientX,
+      event.clientY,
+      dragged
+    ).find(
+      (element) => element.matches(".slipbox-tray-pile") && element.dataset.pileId !== sourcePileId
+    );
+    if (target === void 0) {
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const relativeX = (event.clientX - rect.left) / Math.max(1, rect.width);
+    target.addClass(relativeX > 0.2 && relativeX < 0.8 ? "is-merge-target" : "is-reorder-target");
+  }
+  elementsBelowPoint(x, y, dragged) {
+    const previous = dragged.style.pointerEvents;
+    dragged.style.pointerEvents = "none";
+    const elements = document.elementsFromPoint(x, y);
+    dragged.style.pointerEvents = previous;
+    return elements;
+  }
+  autoScroll(clientX) {
+    const container = this.rootEl?.querySelector(".slipbox-tray-piles");
+    if (container === null || container === void 0) {
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    if (clientX < rect.left + AUTO_SCROLL_EDGE_PX) {
+      container.scrollLeft -= AUTO_SCROLL_STEP_PX;
+    } else if (clientX > rect.right - AUTO_SCROLL_EDGE_PX) {
+      container.scrollLeft += AUTO_SCROLL_STEP_PX;
+    }
+  }
+  clearDropCues(except) {
+    this.rootEl?.querySelectorAll(
+      ".is-dragging, .is-merge-target, .is-reorder-target, .is-card-drop-target, .is-insertion-target"
+    ).forEach((element) => {
+      if (element === except) {
+        return;
+      }
+      element.removeClasses([
+        "is-dragging",
+        "is-merge-target",
+        "is-reorder-target",
+        "is-card-drop-target",
+        "is-insertion-target"
+      ]);
+      element.style.translate = "";
+    });
+    this.rootEl?.removeClass("is-dragging-card");
+  }
+  async moveAndFocus(nextState, cardRef) {
+    await this.plugin.updateTray(nextState);
+    window.requestAnimationFrame(() => {
+      const escaped = CSS.escape(cardRef);
+      this.rootEl?.querySelector(`.slipbox-tray-card[data-card-ref="${escaped}"]`)?.focus({ preventScroll: true });
+    });
+  }
+};
+function trayIconButton(parent, icon, label) {
+  const button = parent.createEl("button", {
+    cls: "clickable-icon slipbox-tray-card-action",
+    attr: { type: "button", "aria-label": label }
+  });
+  (0, import_obsidian2.setIcon)(button, icon);
+  (0, import_obsidian2.setTooltip)(button, label, { placement: "bottom", delay: 250 });
+  button.addEventListener("pointerdown", (event) => event.stopPropagation());
+  return button;
+}
+
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "slipbox-deck";
 var FILING_ANIMATION_DURATION_MS = 280;
 var RENDER_EDGE_BUFFER = 2;
 var LAYOUT_MEASUREMENT_RETRIES = 2;
-var DeckView = class extends import_obsidian2.ItemView {
+var DeckView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -1227,10 +2104,14 @@ var DeckView = class extends import_obsidian2.ItemView {
       ),
       putOnDesk: (file) => this.plugin.putFileOnDesk(file, false)
     });
+    this.trayRenderer = new TrayRenderer(this.app, this.plugin, this.leaf, {
+      jumpToFiledCard: (id) => this.jumpToId(id),
+      moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta)
+    });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout())
     );
-    this.scope = new import_obsidian2.Scope(this.app.scope);
+    this.scope = new import_obsidian3.Scope(this.app.scope);
     this.updateKeybindings();
   }
   activeId = null;
@@ -1255,6 +2136,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   positioningFrame = null;
   positioningRetriesRemaining = 0;
   cardFooters;
+  trayRenderer;
   keymapHandlers = [];
   getViewType() {
     return DECK_VIEW_TYPE;
@@ -1273,6 +2155,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   }
   async onClose() {
     this.cardFooters.clear();
+    this.trayRenderer.clear();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -1380,6 +2263,11 @@ var DeckView = class extends import_obsidian2.ItemView {
           void this.plugin.createCardFrom(card.id);
         }
         break;
+      case "toggle-tray":
+        if (card !== null) {
+          void this.plugin.toggleFileInTray(card.file);
+        }
+        break;
       case "toggle-desk":
         if (card !== null) {
           void this.toggleCardDesk(card.file);
@@ -1443,7 +2331,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   async cancelFiling() {
     this.filingFile = null;
     await this.renderDeck();
-    new import_obsidian2.Notice("Filing cancelled. The card remains on the Desk.");
+    new import_obsidian3.Notice("Filing cancelled. The card remains on the Desk.");
   }
   async goToId(id) {
     const moved = await this.navigateToId(id);
@@ -1457,7 +2345,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       this.history.replaceCurrent(this.activeId);
     }
     if (this.plugin.index.filedById(id) === void 0) {
-      new import_obsidian2.Notice(`Card ${id} is missing, invalid, or duplicated.`);
+      new import_obsidian3.Notice(`Card ${id} is missing, invalid, or duplicated.`);
       return;
     }
     this.history.jump(id);
@@ -1470,7 +2358,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       return;
     }
     if (!await this.navigateToId(id)) {
-      new import_obsidian2.Notice(`The Back destination ${id} is no longer available.`);
+      new import_obsidian3.Notice(`The Back destination ${id} is no longer available.`);
     }
     this.updateHistoryControls();
   }
@@ -1480,13 +2368,13 @@ var DeckView = class extends import_obsidian2.ItemView {
       return;
     }
     if (!await this.navigateToId(id)) {
-      new import_obsidian2.Notice(`The Forward destination ${id} is no longer available.`);
+      new import_obsidian3.Notice(`The Forward destination ${id} is no longer available.`);
     }
     this.updateHistoryControls();
   }
   async addBookmarkToCurrent() {
     if (this.activeId === null) {
-      new import_obsidian2.Notice("There is no active filed card.");
+      new import_obsidian3.Notice("There is no active filed card.");
       return;
     }
     const bookmarkedIds = this.bookmarkedIds();
@@ -1504,7 +2392,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     const filed = this.plugin.index.snapshot.filed;
     const targetIndex = filed.findIndex((card) => card.id === id);
     if (targetIndex < 0) {
-      new import_obsidian2.Notice(`Card ${id} is missing, invalid, or duplicated.`);
+      new import_obsidian3.Notice(`Card ${id} is missing, invalid, or duplicated.`);
       return false;
     }
     this.activeId = id;
@@ -1514,7 +2402,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   }
   async addCurrentAsEntryPoint() {
     if (this.activeId === null) {
-      new import_obsidian2.Notice("There is no active filed card.");
+      new import_obsidian3.Notice("There is no active filed card.");
       return;
     }
     await this.plugin.addEntryPoint(this.activeId);
@@ -1535,6 +2423,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.cardFooters.clear();
+    this.trayRenderer.clear();
     this.contentEl.empty();
     this.renderedCards = [];
     this.filingPromptEl = null;
@@ -1547,6 +2436,12 @@ var DeckView = class extends import_obsidian2.ItemView {
       shell.addClass("is-filing");
     }
     this.renderToolbar(shell);
+    const trayJob = this.trayRenderer.render(
+      shell,
+      this.filingFile !== null,
+      version,
+      () => version === this.renderVersion
+    );
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
@@ -1559,6 +2454,10 @@ var DeckView = class extends import_obsidian2.ItemView {
         await this.renderCardWindow(stage, filed, activeIndex, version);
       }
     }
+    if (version !== this.renderVersion) {
+      return;
+    }
+    await trayJob;
     if (version !== this.renderVersion) {
       return;
     }
@@ -1575,7 +2474,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
     const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
-    (0, import_obsidian2.setIcon)(icon, "archive");
+    (0, import_obsidian3.setIcon)(icon, "archive");
     identity.createSpan({ text: "Deck" });
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
@@ -1624,7 +2523,7 @@ var DeckView = class extends import_obsidian2.ItemView {
         attr: { type: "button" }
       });
       const warning = problems.createSpan();
-      (0, import_obsidian2.setIcon)(warning, "triangle-alert");
+      (0, import_obsidian3.setIcon)(warning, "triangle-alert");
       problems.createSpan({
         text: `${this.plugin.index.snapshot.issues.length} problem${this.plugin.index.snapshot.issues.length === 1 ? "" : "s"}`
       });
@@ -1687,13 +2586,14 @@ var DeckView = class extends import_obsidian2.ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== void 0;
+      const isInTray = this.plugin.isFileInTray(card.file);
       const isOnDesk = this.plugin.state.deskCards.some(
         (deskCard) => deskCard.cardRef === card.path
       );
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.id} \xB7 ${title}`;
       cardEl.setAttr("aria-label", cardLabel);
-      (0, import_obsidian2.setTooltip)(cardEl, cardLabel, {
+      (0, import_obsidian3.setTooltip)(cardEl, cardLabel, {
         placement: "bottom",
         delay: 350
       });
@@ -1724,6 +2624,18 @@ var DeckView = class extends import_obsidian2.ItemView {
           `Open ${card.id} \xB7 ${title} in Markdown`,
           () => this.runAction("open-note", card)
         );
+      }
+      if (this.plugin.settings.deckHeaderButtons.tray) {
+        const trayAction = isInTray ? `Return ${card.id} \xB7 ${title} to Deck` : `Pull ${card.id} \xB7 ${title} into Tray`;
+        const trayToggle = this.renderCardAction(
+          cardActions,
+          isInTray ? "undo-2" : "inbox",
+          "slipbox-card-tray-toggle",
+          trayAction,
+          () => this.runAction("toggle-tray", card)
+        );
+        trayToggle.setAttr("aria-pressed", String(isInTray));
+        trayToggle.toggleClass("is-in-tray", isInTray);
       }
       if (this.plugin.settings.deckHeaderButtons.desk) {
         const deskAction = isOnDesk ? `Remove ${card.id} \xB7 ${title} from Desk` : `Add ${card.id} \xB7 ${title} to Desk`;
@@ -1792,8 +2704,8 @@ var DeckView = class extends import_obsidian2.ItemView {
       cls: `clickable-icon slipbox-card-toggle ${className}`,
       attr: { type: "button", "aria-label": label }
     });
-    (0, import_obsidian2.setIcon)(button, icon);
-    (0, import_obsidian2.setTooltip)(button, label, { placement: "bottom", delay: 250 });
+    (0, import_obsidian3.setIcon)(button, icon);
+    (0, import_obsidian3.setTooltip)(button, label, { placement: "bottom", delay: 250 });
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -1803,7 +2715,7 @@ var DeckView = class extends import_obsidian2.ItemView {
     return button;
   }
   async renderMarkdownCard(card, target, version) {
-    const component = new import_obsidian2.Component();
+    const component = new import_obsidian3.Component();
     component.load();
     this.renderComponents.push(component);
     try {
@@ -1811,7 +2723,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       if (version !== this.renderVersion) {
         return;
       }
-      await import_obsidian2.MarkdownRenderer.render(
+      await import_obsidian3.MarkdownRenderer.render(
         this.app,
         body,
         target,
@@ -1903,13 +2815,13 @@ var DeckView = class extends import_obsidian2.ItemView {
       text: this.plugin.cardTitle(file)
     });
     const preview = inHand.createDiv({ cls: "slipbox-in-hand-preview markdown-rendered" });
-    const component = new import_obsidian2.Component();
+    const component = new import_obsidian3.Component();
     component.load();
     this.renderComponents.push(component);
     try {
       const body = await this.plugin.index.readBody(file);
       if (version === this.renderVersion) {
-        await import_obsidian2.MarkdownRenderer.render(this.app, body, preview, file.path, component);
+        await import_obsidian3.MarkdownRenderer.render(this.app, body, preview, file.path, component);
       }
     } catch (error) {
       preview.setText(`Could not render this card: ${errorMessage(error)}`);
@@ -2093,7 +3005,7 @@ var DeckView = class extends import_obsidian2.ItemView {
   }
   centerActiveCard() {
     if (this.activeId === null) {
-      new import_obsidian2.Notice("There is no active filed card to centre.");
+      new import_obsidian3.Notice("There is no active filed card to centre.");
       return;
     }
     this.viewportOffset = 0;
@@ -2101,11 +3013,30 @@ var DeckView = class extends import_obsidian2.ItemView {
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
   }
+  async moveTrayCardBy(cardRef, delta) {
+    const position = cardPosition(this.plugin.tray, cardRef);
+    if (position === null) {
+      return;
+    }
+    const target = Math.max(
+      0,
+      Math.min(position.pileSize - 1, position.cardIndex + delta)
+    );
+    if (target === position.cardIndex) {
+      return;
+    }
+    await this.plugin.updateTray(moveCardWithinPile(
+      this.plugin.tray,
+      position.pileId,
+      position.cardIndex,
+      target
+    ));
+  }
   goToDeckBoundary(boundary) {
     const filed = this.plugin.index.snapshot.filed;
     const target = boundary === "start" ? filed[0] : filed[filed.length - 1];
     if (target === void 0) {
-      new import_obsidian2.Notice("There are no filed cards.");
+      new import_obsidian3.Notice("There are no filed cards.");
       return;
     }
     void this.goToId(target.id);
@@ -2280,7 +3211,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       toggle.toggleClass("is-bookmarked", isBookmarked);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));
-      (0, import_obsidian2.setTooltip)(toggle, action, {
+      (0, import_obsidian3.setTooltip)(toggle, action, {
         placement: "bottom",
         delay: 250
       });
@@ -2318,7 +3249,7 @@ var DeckView = class extends import_obsidian2.ItemView {
       toggle.toggleClass("is-on-desk", isOnDesk);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isOnDesk));
-      (0, import_obsidian2.setTooltip)(toggle, action, {
+      (0, import_obsidian3.setTooltip)(toggle, action, {
         placement: "bottom",
         delay: 250
       });
@@ -2399,9 +3330,9 @@ function errorMessage(error) {
 }
 
 // src/desk-view.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var DESK_VIEW_TYPE = "slipbox-desk";
-var DeskView = class extends import_obsidian3.ItemView {
+var DeskView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2467,7 +3398,7 @@ var DeskView = class extends import_obsidian3.ItemView {
     const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar slipbox-desk-toolbar" });
     const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
-    (0, import_obsidian3.setIcon)(icon, "panels-top-left");
+    (0, import_obsidian4.setIcon)(icon, "panels-top-left");
     identity.createSpan({ text: "Desk" });
     toolbar.createSpan({
       cls: "slipbox-desk-description",
@@ -2504,7 +3435,7 @@ var DeskView = class extends import_obsidian3.ItemView {
         cls: "slipbox-unfiled-open",
         attr: { type: "button" }
       });
-      (0, import_obsidian3.setTooltip)(name, file.path);
+      (0, import_obsidian4.setTooltip)(name, file.path);
       name.addEventListener("click", () => this.plugin.openMarkdownFile(file));
       const place = iconButton(item, "plus", `Place ${title} on Desk`);
       place.addEventListener("click", () => void this.plugin.putFileOnDesk(file));
@@ -2595,13 +3526,13 @@ var DeskView = class extends import_obsidian3.ItemView {
       interactive: filed !== void 0,
       activate: (backlink) => this.plugin.openMarkdownFile(backlink.file)
     });
-    const component = new import_obsidian3.Component();
+    const component = new import_obsidian4.Component();
     component.load();
     this.renderComponents.push(component);
     try {
       const body = await this.plugin.index.readBody(file);
       if (version === this.renderVersion) {
-        await import_obsidian3.MarkdownRenderer.render(this.app, body, scroll, file.path, component);
+        await import_obsidian4.MarkdownRenderer.render(this.app, body, scroll, file.path, component);
       }
     } catch (error) {
       scroll.createEl("p", {
@@ -2685,7 +3616,7 @@ function iconButton(parent, icon, label) {
     cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label }
   });
-  (0, import_obsidian3.setIcon)(button, icon);
+  (0, import_obsidian4.setIcon)(button, icon);
   return button;
 }
 function errorMessage2(error) {
@@ -2693,8 +3624,8 @@ function errorMessage2(error) {
 }
 
 // src/modals.ts
-var import_obsidian4 = require("obsidian");
-var TextPromptModal = class extends import_obsidian4.Modal {
+var import_obsidian5 = require("obsidian");
+var TextPromptModal = class extends import_obsidian5.Modal {
   constructor(app, heading, placeholder, initialValue, resolveValue, allowBlank = false, submitLabel = "Save") {
     super(app);
     this.heading = heading;
@@ -2728,7 +3659,7 @@ var TextPromptModal = class extends import_obsidian4.Modal {
       event.preventDefault();
       const value = input.value.trim();
       if (value === "" && !this.allowBlank) {
-        new import_obsidian4.Notice("A name is required.");
+        new import_obsidian5.Notice("A name is required.");
         return;
       }
       this.finish(value);
@@ -2770,7 +3701,7 @@ function promptForNewCardTitle(app, placeholder) {
     window.setTimeout(() => modal.open());
   });
 }
-var TemplatePromptModal = class extends import_obsidian4.FuzzySuggestModal {
+var TemplatePromptModal = class extends import_obsidian5.FuzzySuggestModal {
   constructor(app, files, folder, resolveFile) {
     super(app);
     this.files = files;
@@ -2814,7 +3745,7 @@ function promptForText(app, heading, placeholder, initialValue = "") {
     ).open();
   });
 }
-var BookmarksModal = class extends import_obsidian4.Modal {
+var BookmarksModal = class extends import_obsidian5.Modal {
   constructor(app, bookmarks, actions) {
     super(app);
     this.bookmarks = bookmarks;
@@ -2871,7 +3802,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
     this.contentEl.empty();
   }
 };
-var EntryPointsModal = class extends import_obsidian4.Modal {
+var EntryPointsModal = class extends import_obsidian5.Modal {
   constructor(app, entryPoints, actions) {
     super(app);
     this.entryPoints = entryPoints;
@@ -2930,7 +3861,7 @@ var EntryPointsModal = class extends import_obsidian4.Modal {
     this.contentEl.empty();
   }
 };
-var IssuesModal = class extends import_obsidian4.Modal {
+var IssuesModal = class extends import_obsidian5.Modal {
   constructor(app, index, actions) {
     super(app);
     this.index = index;
@@ -2969,7 +3900,7 @@ function iconButton2(parent, icon, label) {
     cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label }
   });
-  (0, import_obsidian4.setIcon)(button, icon);
+  (0, import_obsidian5.setIcon)(button, icon);
   return button;
 }
 function activateDefaultButtonOnEnter(container, button) {
@@ -3021,8 +3952,8 @@ function resolveCardTitle(basename, frontmatter, settings) {
 }
 
 // src/settings-tab.ts
-var import_obsidian5 = require("obsidian");
-var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
+var import_obsidian6 = require("obsidian");
+var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
   constructor(app, slipbox) {
     super(app, slipbox);
     this.slipbox = slipbox;
@@ -3030,9 +3961,9 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian5.Setting(containerEl).setName("Cards and metadata").setHeading();
+    new import_obsidian6.Setting(containerEl).setName("Cards and metadata").setHeading();
     this.renderAddressProperty(containerEl);
-    new import_obsidian5.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.").addDropdown((dropdown) => {
+    new import_obsidian6.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.").addDropdown((dropdown) => {
       dropdown.addOption("filename", "Filename").addOption("frontmatter", "Frontmatter property").setValue(this.slipbox.settings.titleSource).onChange((value) => {
         void this.save({
           ...this.slipbox.settings,
@@ -3040,7 +3971,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         }).then(() => this.display());
       });
     });
-    const titleProperty = new import_obsidian5.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
+    const titleProperty = new import_obsidian6.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
     titleProperty.addText((text) => {
       text.setValue(this.slipbox.settings.titleProperty).setDisabled(this.slipbox.settings.titleSource !== "frontmatter").onChange((value) => {
         const property = value.trim();
@@ -3050,28 +3981,28 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         }
       });
     });
-    new import_obsidian5.Setting(containerEl).setName("Show title in Deck headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
+    new import_obsidian6.Setting(containerEl).setName("Show title in Deck headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDeck: value
       }));
     });
-    new import_obsidian5.Setting(containerEl).setName("Show title in Desk headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
+    new import_obsidian6.Setting(containerEl).setName("Show title in Desk headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDesk).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDesk: value
       }));
     });
-    new import_obsidian5.Setting(containerEl).setName("New cards").setHeading();
+    new import_obsidian6.Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
-    new import_obsidian5.Setting(containerEl).setName("Card-header buttons").setHeading();
+    new import_obsidian6.Setting(containerEl).setName("Card-header buttons").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text: "Hidden buttons remain available through commands, Deck shortcuts, and card context menus."
     });
     this.renderDeckHeaderButtons(containerEl);
     this.renderDeskHeaderButtons(containerEl);
-    new import_obsidian5.Setting(containerEl).setName("Deck shortcuts").setHeading();
+    new import_obsidian6.Setting(containerEl).setName("Deck shortcuts").setHeading();
     const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
     shortcutIntro.createEl("p", {
       cls: "setting-item-description",
@@ -3092,11 +4023,11 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     }
   }
   renderNewCardSettings(container) {
-    const folderSetting = new import_obsidian5.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note\u2019s folder, or the vault root when no source note is active.");
+    const folderSetting = new import_obsidian6.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note\u2019s folder, or the vault root when no source note is active.");
     folderSetting.addDropdown((dropdown) => {
       dropdown.addOption("", "Source note\u2019s folder");
       const folders = this.app.vault.getAllLoadedFiles().filter(
-        (file) => file instanceof import_obsidian5.TFolder && !file.isRoot()
+        (file) => file instanceof import_obsidian6.TFolder && !file.isRoot()
       ).sort((left, right) => left.path.localeCompare(right.path));
       for (const folder of folders) {
         dropdown.addOption(folder.path, folder.path);
@@ -3110,7 +4041,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         newCardFolder: value
       }));
     });
-    const timestamp = new import_obsidian5.Setting(container).setName("Timestamp filename format").setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
+    const timestamp = new import_obsidian6.Setting(container).setName("Timestamp filename format").setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
     const sample = timestamp.descEl.createEl("code");
     timestamp.addMomentFormat((component) => {
       component.setSampleEl(sample).setDefaultFormat(DEFAULT_SETTINGS.newNoteTimestampFormat).setValue(this.slipbox.settings.newNoteTimestampFormat).onChange((value) => {
@@ -3130,7 +4061,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     });
     const info = this.slipbox.templatesInfo();
     let templateSetting = null;
-    new import_obsidian5.Setting(container).setName("Apply a template to new cards").setDesc("Use Obsidian\u2019s Templates core plugin after Slipbox creates and opens the note.").addToggle((toggle) => {
+    new import_obsidian6.Setting(container).setName("Apply a template to new cards").setDesc("Use Obsidian\u2019s Templates core plugin after Slipbox creates and opens the note.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.useTemplatesForNewNotes).onChange((value) => void this.save({
         ...this.slipbox.settings,
         useTemplatesForNewNotes: value
@@ -3149,7 +4080,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       description = `No Markdown templates were found in ${info.folder}.`;
     }
     const templateDisabled = !this.slipbox.settings.useTemplatesForNewNotes || !info.enabled || info.files.length === 0;
-    const template = new import_obsidian5.Setting(container).setName("New card template").setDesc(description).setDisabled(templateDisabled);
+    const template = new import_obsidian6.Setting(container).setName("New card template").setDesc(description).setDisabled(templateDisabled);
     templateSetting = template;
     template.addDropdown((dropdown) => {
       dropdown.addOption("", "Ask each time");
@@ -3169,7 +4100,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     });
   }
   renderAddressProperty(container) {
-    const setting = new import_obsidian5.Setting(container).setName("Address property").setDesc(
+    const setting = new import_obsidian6.Setting(container).setName("Address property").setDesc(
       "Exact top-level YAML key used to identify and order cards. Changing it re-indexes immediately but does not rewrite existing notes."
     );
     setting.addText((text) => {
@@ -3186,11 +4117,12 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     const labels = {
       "add-card": "Add card from here",
       "open-note": "Open Markdown note",
+      tray: "Pull into or return from Tray",
       desk: "Toggle Desk membership",
       bookmark: "Toggle bookmark"
     };
     for (const [id, label] of Object.entries(labels)) {
-      new import_obsidian5.Setting(container).setName(`Deck: ${label}`).addToggle((toggle) => {
+      new import_obsidian6.Setting(container).setName(`Deck: ${label}`).addToggle((toggle) => {
         const key = id;
         toggle.setValue(this.slipbox.settings.deckHeaderButtons[key]).onChange((value) => void this.save({
           ...this.slipbox.settings,
@@ -3209,7 +4141,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       remove: "Remove from Desk"
     };
     for (const [id, label] of Object.entries(labels)) {
-      new import_obsidian5.Setting(container).setName(`Desk: ${label}`).addToggle((toggle) => {
+      new import_obsidian6.Setting(container).setName(`Desk: ${label}`).addToggle((toggle) => {
         const key = id;
         toggle.setValue(this.slipbox.settings.deskHeaderButtons[key]).onChange((value) => void this.save({
           ...this.slipbox.settings,
@@ -3222,7 +4154,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     }
   }
   renderShortcutSetting(container, action, label) {
-    const setting = new import_obsidian5.Setting(container).setName(label);
+    const setting = new import_obsidian6.Setting(container).setName(label);
     setting.settingEl.addClass("slipbox-shortcut-setting");
     const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
     for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
@@ -3345,14 +4277,14 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
   }
   bindingFromEvent(event) {
     const modifiers = [];
-    const primary = import_obsidian5.Platform.isMacOS ? event.metaKey : event.ctrlKey;
+    const primary = import_obsidian6.Platform.isMacOS ? event.metaKey : event.ctrlKey;
     if (primary) {
       modifiers.push("Mod");
     }
-    if (event.ctrlKey && import_obsidian5.Platform.isMacOS) {
+    if (event.ctrlKey && import_obsidian6.Platform.isMacOS) {
       modifiers.push("Ctrl");
     }
-    if (event.metaKey && !import_obsidian5.Platform.isMacOS) {
+    if (event.metaKey && !import_obsidian6.Platform.isMacOS) {
       modifiers.push("Meta");
     }
     if (event.altKey) {
@@ -3385,7 +4317,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     try {
       await this.slipbox.updateSettings(settings);
     } catch (error) {
-      new import_obsidian5.Notice(`Could not save Slipbox settings: ${errorMessage3(error)}`);
+      new import_obsidian6.Notice(`Could not save Slipbox settings: ${errorMessage3(error)}`);
     }
   }
 };
@@ -3394,7 +4326,7 @@ function errorMessage3(error) {
 }
 
 // src/zettel-index.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/zettel-metadata.ts
 function zettelMetadataRecord(path, frontmatter, addressProperty) {
@@ -3527,7 +4459,7 @@ var ZettelIndex = class {
   }
   fileAtPath(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian6.TFile ? file : void 0;
+    return file instanceof import_obsidian7.TFile ? file : void 0;
   }
   backlinksForPath(path) {
     return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
@@ -3541,21 +4473,24 @@ var ZettelIndex = class {
 };
 
 // src/main.ts
-var SlipboxPlugin = class extends import_obsidian7.Plugin {
+var SlipboxPlugin = class extends import_obsidian8.Plugin {
   state = DEFAULT_STATE;
   settings = DEFAULT_SETTINGS;
+  tray = EMPTY_TRAY;
   index;
   indexRefreshTimer = null;
   spreadSaveTimer = null;
   filingWriteInProgress = false;
   cardCreationInProgress = false;
   persistQueue = Promise.resolve();
+  trayPileSequence = 0;
   async onload() {
     const data = normalizePluginData(await this.loadData());
     this.settings = data.settings;
     this.state = data.state;
     this.index = new ZettelIndex(this.app, this.settings.addressProperty);
     this.index.refresh();
+    this.reconcileSessionTray();
     await this.persistState();
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
     this.registerView(
@@ -3668,7 +4603,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     if (plugin === null || typeof configuredFolder !== "string") {
       return { enabled: plugin !== null, folder: "", files: [] };
     }
-    const folder = (0, import_obsidian7.normalizePath)(configuredFolder);
+    const folder = (0, import_obsidian8.normalizePath)(configuredFolder);
     if (folder === "") {
       return { enabled: true, folder, files: [] };
     }
@@ -3699,8 +4634,9 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     const isOnDesk = this.state.deskCards.some(
       (card) => card.cardRef === file.path
     );
+    const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
-    const menu = import_obsidian7.Menu.forEvent(event);
+    const menu = import_obsidian8.Menu.forEvent(event);
     menu.addItem((item) => {
       item.setTitle(`Open ${title}`).setIcon("file-pen-line").setSection("slipbox-card").onClick(() => void this.openMarkdownFile(file));
     });
@@ -3708,6 +4644,13 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       item.setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark").setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
         if (zettelId !== null) {
           void this.toggleBookmark(zettelId);
+        }
+      });
+    });
+    menu.addItem((item) => {
+      item.setTitle(isInTray ? "Return to Deck" : "Pull into Tray").setIcon(isInTray ? "undo-2" : "inbox").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
+        if (zettelId !== null) {
+          void this.toggleFileInTray(file);
         }
       });
     });
@@ -3734,7 +4677,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     try {
       await this.app.fileManager.trashFile(file);
     } catch (error) {
-      new import_obsidian7.Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage4(error)}`);
     }
   }
   showDesk() {
@@ -3746,7 +4689,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       open: (path) => {
         const file = this.index.fileAtPath(path);
         if (file === void 0) {
-          new import_obsidian7.Notice(`Could not find ${path}.`);
+          new import_obsidian8.Notice(`Could not find ${path}.`);
         } else {
           this.openMarkdownFile(file);
         }
@@ -3782,13 +4725,13 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
   }
   async addBookmark(zettelId) {
     if (this.index.filedById(zettelId) === void 0) {
-      new import_obsidian7.Notice("Only an available filed card can be bookmarked.");
+      new import_obsidian8.Notice("Only an available filed card can be bookmarked.");
       return;
     }
     if (this.bookmarkAt(zettelId) !== void 0) {
       const card = this.index.filedById(zettelId);
       const label = card === void 0 ? zettelId : `${zettelId} \xB7 ${this.cardTitle(card.file)}`;
-      new import_obsidian7.Notice(`${label} already has a bookmark.`);
+      new import_obsidian8.Notice(`${label} already has a bookmark.`);
       return;
     }
     try {
@@ -3799,9 +4742,9 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       await this.persistStateAndRefreshViews();
       const card = this.index.filedById(zettelId);
       const label = card === void 0 ? zettelId : `${zettelId} \xB7 ${this.cardTitle(card.file)}`;
-      new import_obsidian7.Notice(`Bookmarked ${label}.`);
+      new import_obsidian8.Notice(`Bookmarked ${label}.`);
     } catch (error) {
-      new import_obsidian7.Notice(`Could not add bookmark: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not add bookmark: ${errorMessage4(error)}`);
     }
   }
   async toggleBookmark(zettelId) {
@@ -3811,15 +4754,52 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       await this.removeBookmark(zettelId);
     }
   }
+  createTrayPileId() {
+    this.trayPileSequence += 1;
+    return `tray-pile-${this.trayPileSequence}`;
+  }
+  async updateTray(next) {
+    this.tray = next;
+    await this.refreshDeckViews();
+  }
+  async toggleFileInTray(file) {
+    this.index.refresh();
+    const filed = this.index.filedByFile(file);
+    if (filed === void 0) {
+      new import_obsidian8.Notice("Only a uniquely filed card can be pulled into the Tray.");
+      return;
+    }
+    this.tray = toggleFiledCard(
+      this.tray,
+      { cardRef: file.path, kind: "filed" },
+      this.createTrayPileId()
+    );
+    await this.refreshDeckViews();
+  }
+  isFileInTray(file) {
+    return trayContains(this.tray, file.path);
+  }
+  async expandTrayPile(pileId) {
+    this.tray = setExpandedPile(this.tray, pileId);
+    await this.refreshDeckViews();
+  }
+  async clearTrayPile(pileId) {
+    this.tray = clearFiledCardsFromPile(this.tray, pileId);
+    await this.refreshDeckViews();
+  }
+  async clearTray() {
+    this.tray = clearFiledCardsFromTray(this.tray);
+    await this.refreshDeckViews();
+  }
   async putFileOnDesk(file, revealDesk = true) {
     this.index.refresh();
     const metadataState = this.cardMetadataState(file);
     if (metadataState !== "filed" && metadataState !== "unfiled") {
-      new import_obsidian7.Notice("Only a filed or unfiled Slipbox card can be placed on Desk.");
+      new import_obsidian8.Notice("Only a filed or unfiled Slipbox card can be placed on Desk.");
       return;
     }
     if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
-      new import_obsidian7.Notice(`${this.cardTitle(file)} is already on Desk.`);
+      new import_obsidian8.Notice(`${this.cardTitle(file)} is already on Desk.`);
       if (revealDesk) {
         await this.openDesk();
       }
@@ -3871,18 +4851,18 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
   async beginFiling(file) {
     this.index.refresh();
     if (this.cardMetadataState(file) !== "unfiled") {
-      new import_obsidian7.Notice("Only an unfiled card can enter Filing Mode.");
+      new import_obsidian8.Notice("Only an unfiled card can enter Filing Mode.");
       return;
     }
     await this.openDeck(file);
   }
   async addEntryPoint(id) {
     if (this.index.filedById(id) === void 0) {
-      new import_obsidian7.Notice(`Card ${id} is not available in Deck.`);
+      new import_obsidian8.Notice(`Card ${id} is not available in Deck.`);
       return;
     }
     if (this.state.entryPoints.some((entry) => entry.id === id)) {
-      new import_obsidian7.Notice(`${id} is already an entry point.`);
+      new import_obsidian8.Notice(`${id} is already an entry point.`);
       return;
     }
     const name = await promptForText(
@@ -3898,7 +4878,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       entryPoints: [...this.state.entryPoints, { name, id }]
     };
     await this.persistState();
-    new import_obsidian7.Notice(`Added entry point \u201C${name}\u201D.`);
+    new import_obsidian8.Notice(`Added entry point \u201C${name}\u201D.`);
   }
   async createNewSection() {
     try {
@@ -3910,7 +4890,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       }
       this.queueIndexRefresh();
     } catch (error) {
-      new import_obsidian7.Notice(`Could not create a section: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not create a section: ${errorMessage4(error)}`);
     }
   }
   async createCardFrom(attachmentId) {
@@ -3936,7 +4916,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       }
       this.queueIndexRefresh();
     } catch (error) {
-      new import_obsidian7.Notice(
+      new import_obsidian8.Notice(
         `Could not add a card from ${attachmentId}: ${errorMessage4(error)}`
       );
     } finally {
@@ -3972,11 +4952,12 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       });
       await this.waitForCachedId(file, newId);
       this.index.refresh();
+      this.reconcileSessionTray();
       await this.refreshViews();
-      new import_obsidian7.Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
+      new import_obsidian8.Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
       return newId;
     } catch (error) {
-      new import_obsidian7.Notice(`Could not file the card: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not file the card: ${errorMessage4(error)}`);
       return null;
     } finally {
       this.filingWriteInProgress = false;
@@ -4081,6 +5062,26 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
             deck.runAction("toggle-desk");
           } else {
             void this.toggleFileOnDesk(file);
+          }
+        }
+        return available;
+      }
+    });
+    this.addCommand({
+      id: "toggle-tray",
+      name: "Pull current card into or return it from Tray",
+      checkCallback: (checking) => {
+        const file = this.currentCardFile();
+        const available = file !== null && this.index.filedByFile(file) !== void 0;
+        if (checking) {
+          return available;
+        }
+        if (available && file !== null) {
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck !== null) {
+            deck.runAction("toggle-tray");
+          } else {
+            void this.toggleFileInTray(file);
           }
         }
         return available;
@@ -4253,7 +5254,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       }
       this.queueIndexRefresh();
     } catch (error) {
-      new import_obsidian7.Notice(`Could not create a card: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not create a card: ${errorMessage4(error)}`);
     }
   }
   async makeNoteCard(file) {
@@ -4266,15 +5267,15 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
         frontmatter[property] = "";
       });
       this.queueIndexRefresh();
-      new import_obsidian7.Notice(`${this.cardTitle(file)} is now an unfiled card.`);
+      new import_obsidian8.Notice(`${this.cardTitle(file)} is now an unfiled card.`);
     } catch (error) {
-      new import_obsidian7.Notice(`Could not make this note a card: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not make this note a card: ${errorMessage4(error)}`);
     }
   }
   async createCardFile(id, sourcePath) {
     const timestamp = newNoteBasename(
       "",
-      (0, import_obsidian7.moment)().format(this.settings.newNoteTimestampFormat)
+      (0, import_obsidian8.moment)().format(this.settings.newNoteTimestampFormat)
     );
     const title = await promptForNewCardTitle(
       this.app,
@@ -4297,7 +5298,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     let path;
     do {
       const suffix = sequence === 0 ? "" : ` ${sequence + 1}`;
-      path = (0, import_obsidian7.normalizePath)(`${prefix}${basename}${suffix}.md`);
+      path = (0, import_obsidian8.normalizePath)(`${prefix}${basename}${suffix}.md`);
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);
     const properties = {
@@ -4310,7 +5311,7 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     if (frontmatterTitle !== null && this.settings.titleProperty !== this.settings.addressProperty) {
       properties[this.settings.titleProperty] = frontmatterTitle;
     }
-    const frontmatter = (0, import_obsidian7.stringifyYaml)(properties);
+    const frontmatter = (0, import_obsidian8.stringifyYaml)(properties);
     const file = await this.app.vault.create(
       path,
       `---
@@ -4320,9 +5321,9 @@ ${frontmatter}---
     );
     await this.openMarkdownFile(file);
     if (template !== null) {
-      const view = this.app.workspace.getActiveViewOfType(import_obsidian7.MarkdownView);
+      const view = this.app.workspace.getActiveViewOfType(import_obsidian8.MarkdownView);
       if (view?.file?.path !== file.path) {
-        new import_obsidian7.Notice("Could not apply the new-card template: the note editor is not active.");
+        new import_obsidian8.Notice("Could not apply the new-card template: the note editor is not active.");
       } else {
         const lastLine = view.editor.lastLine();
         view.editor.setCursor({
@@ -4332,7 +5333,7 @@ ${frontmatter}---
         try {
           await template.plugin.insertTemplate(template.file);
         } catch (error) {
-          new import_obsidian7.Notice(`Could not apply the new-card template: ${errorMessage4(error)}`);
+          new import_obsidian8.Notice(`Could not apply the new-card template: ${errorMessage4(error)}`);
         }
       }
     }
@@ -4345,10 +5346,10 @@ ${frontmatter}---
     const path = this.settings.newCardFolder;
     if (path === "") {
       const source = sourcePath === void 0 ? null : this.app.vault.getAbstractFileByPath(sourcePath);
-      return source instanceof import_obsidian7.TFile && source.parent !== null ? source.parent : this.app.vault.getRoot();
+      return source instanceof import_obsidian8.TFile && source.parent !== null ? source.parent : this.app.vault.getRoot();
     }
     const folder = this.app.vault.getAbstractFileByPath(path);
-    if (!(folder instanceof import_obsidian7.TFolder)) {
+    if (!(folder instanceof import_obsidian8.TFolder)) {
       throw new Error(
         `The configured new-card folder \u201C${path}\u201D does not exist`
       );
@@ -4370,11 +5371,11 @@ ${frontmatter}---
     const plugin = this.templatesPlugin();
     const info = this.templatesInfo();
     if (plugin === null) {
-      new import_obsidian7.Notice("Enable Obsidian\u2019s Templates core plugin to apply templates to new cards.");
+      new import_obsidian8.Notice("Enable Obsidian\u2019s Templates core plugin to apply templates to new cards.");
       return null;
     }
     if (info.folder === "" || info.files.length === 0) {
-      new import_obsidian7.Notice("Configure a Templates folder containing at least one template to use it for new cards.");
+      new import_obsidian8.Notice("Configure a Templates folder containing at least one template to use it for new cards.");
       return null;
     }
     let file = null;
@@ -4383,7 +5384,7 @@ ${frontmatter}---
         (candidate) => candidate.path === this.settings.newNoteTemplatePath
       ) ?? null;
       if (file === null) {
-        new import_obsidian7.Notice("The configured new-card template is missing. Choose another template.");
+        new import_obsidian8.Notice("The configured new-card template is missing. Choose another template.");
       }
     }
     if (file === null) {
@@ -4447,7 +5448,7 @@ ${frontmatter}---
       bookmarks: deleteBookmark(this.state.bookmarks, zettelId)
     };
     await this.persistStateAndRefreshViews();
-    new import_obsidian7.Notice(`Deleted bookmark at ${label}.`);
+    new import_obsidian8.Notice(`Deleted bookmark at ${label}.`);
   }
   async renameEntryPoint(index) {
     const entry = this.state.entryPoints[index];
@@ -4476,7 +5477,7 @@ ${frontmatter}---
     }
     this.state = { ...this.state, entryPoints: entries };
     await this.persistState();
-    new import_obsidian7.Notice(`Deleted entry point \u201C${removed.name}\u201D.`);
+    new import_obsidian8.Notice(`Deleted entry point \u201C${removed.name}\u201D.`);
   }
   queueIndexRefresh() {
     if (this.filingWriteInProgress) {
@@ -4492,7 +5493,15 @@ ${frontmatter}---
   }
   async refreshIndex() {
     this.index.refresh();
+    this.reconcileSessionTray();
     await this.refreshViews();
+  }
+  async refreshDeckViews() {
+    await Promise.all(
+      this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE).flatMap(
+        (leaf) => leaf.view instanceof DeckView ? [leaf.view.refresh()] : []
+      )
+    );
   }
   async refreshViews() {
     const refreshes = this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE).flatMap(
@@ -4519,7 +5528,7 @@ ${frontmatter}---
     try {
       await write;
     } catch (error) {
-      new import_obsidian7.Notice(`Could not save Slipbox state: ${errorMessage4(error)}`);
+      new import_obsidian8.Notice(`Could not save Slipbox state: ${errorMessage4(error)}`);
     }
   }
   async waitForCachedId(file, expectedId) {
@@ -4539,6 +5548,8 @@ ${frontmatter}---
     };
   }
   handleDeletedFile(file) {
+    this.tray = removeTrayPath(this.tray, file.path);
+    void this.refreshDeckViews();
     const prefix = `${file.path.replace(/\/$/, "")}/`;
     if (this.state.deskCards.some(
       (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix)
@@ -4552,6 +5563,8 @@ ${frontmatter}---
     this.queueIndexRefresh();
   }
   handleRenamedFile(file, oldPath) {
+    this.tray = renameTrayPath(this.tray, oldPath, file.path);
+    void this.refreshDeckViews();
     const prefix = `${oldPath.replace(/\/$/, "")}/`;
     if (this.state.deskCards.some(
       (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix)
@@ -4563,6 +5576,21 @@ ${frontmatter}---
       void this.persistState();
     }
     this.queueIndexRefresh();
+  }
+  reconcileSessionTray() {
+    const candidates = [
+      ...this.index.snapshot.unfiled.map((file) => ({
+        cardRef: file.path,
+        kind: "unfiled",
+        modifiedTime: file.stat.mtime
+      })),
+      ...this.index.snapshot.filed.map((card) => ({
+        cardRef: card.path,
+        kind: "filed",
+        modifiedTime: card.file.stat.mtime
+      }))
+    ];
+    this.tray = reconcileTray(this.tray, candidates, this.createTrayPileId());
   }
 };
 function errorMessage4(error) {

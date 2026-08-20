@@ -17,6 +17,7 @@ describe("Deck action availability", () => {
   test("enables stable actions when their context is available", () => {
     assert.equal(canRunDeckAction("previous-card", READY), true);
     assert.equal(canRunDeckAction("open-note", READY), true);
+    assert.equal(canRunDeckAction("toggle-tray", READY), true);
     assert.equal(canRunDeckAction("back", READY), true);
     assert.equal(canRunDeckAction("problems", READY), true);
     assert.equal(canRunDeckAction("file-here", READY), true);
@@ -35,6 +36,7 @@ describe("Deck action availability", () => {
     };
     assert.equal(canRunDeckAction("next-card", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
+    assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
     assert.equal(canRunDeckAction("forward", unavailable), false);
     assert.equal(canRunDeckAction("problems", unavailable), false);
     assert.equal(canRunDeckAction("file-here", unavailable), false);

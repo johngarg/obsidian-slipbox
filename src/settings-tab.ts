@@ -268,6 +268,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     const labels = {
       "add-card": "Add card from here",
       "open-note": "Open Markdown note",
+      tray: "Pull into or return from Tray",
       desk: "Toggle Desk membership",
       bookmark: "Toggle bookmark",
     } as const;

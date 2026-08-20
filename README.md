@@ -21,9 +21,9 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
   hysteretic centre-based card highlighting, non-repositioning card selection,
   minimal-reveal arrow navigation, and internal vertical scrolling.
 - A persistent Spread control that changes spacing without resizing cards.
-- A session-only thumb with an edge tab when the held card is out of view.
 - Persistent named entry points with add, rename, delete, and jump actions.
-- Persistent bookmark tabs with optional labels, one per filed card.
+- Persistent bookmarks with optional labels, in-card markers, and edge-return
+  arrows when the nearest bookmark on either side is out of view.
 - Browser-style session history for filed links, entry points, and bookmarks;
   ordinary physical Deck browsing does not create history entries.
 - A bounded spatial Desk with fixed-size rendered cards, persistent positions
@@ -32,15 +32,15 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
   card at the same Desk position.
 - Deliberate filing from the active attachment point, with immutable addresses.
 - Global commands for Deck, Desk, bookmarks, Back/Forward, new cards,
-  conversion, filing, sections, the thumb, entry points, and Desk placement.
+  conversion, filing, sections, entry points, and Desk placement.
 - Deterministic Deck startup at the first available entry point or first card;
   browsing position is deliberately not persisted.
 - Visible malformed-address and duplicate-address diagnostics.
 - Windowed rendering around the active card rather than rendering the vault.
 
 Bookmark and Desk layout state is stored in plugin data, never in Markdown
-frontmatter. Back/Forward history and the thumb are session-local. Existing
-v0.1 `lastActiveId` data is ignored and removed when v0.2 normalizes state.
+frontmatter. Back/Forward history is session-local. Existing v0.1
+`lastActiveId` data is ignored and removed when v0.2 normalizes state.
 
 ## Deck keys
 
@@ -49,8 +49,6 @@ v0.1 `lastActiveId` data is ignored and removed when v0.2 normalizes state.
 | `←` / `k` | Select the previous card |
 | `→` / `j` | Select the next card |
 | `c` | Centre the active card |
-| `h` | Toggle the hold at the active card |
-| `H` | Return to the held card |
 | `g` | Jump to the first card |
 | `G` | Jump to the last card |
 

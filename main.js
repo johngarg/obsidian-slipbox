@@ -321,9 +321,29 @@ var import_obsidian = require("obsidian");
 
 // src/deck-motion.ts
 var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
-var BOOKMARK_TAB_STACK_ORDER = 230;
 function cardStackOrder(cardIndex, viewportPosition, activeIndex) {
   return cardIndex === activeIndex ? 220 : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
+}
+function bookmarkEdgeTargets(bookmarkIndices, viewportPosition, cardStep, stageWidth, cardWidth) {
+  if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
+    return { left: null, right: null };
+  }
+  const visibleLimit = stageWidth / 2 + cardWidth / 2;
+  let left = null;
+  let leftX = Number.NEGATIVE_INFINITY;
+  let right = null;
+  let rightX = Number.POSITIVE_INFINITY;
+  for (const index of bookmarkIndices) {
+    const x = (index - viewportPosition) * cardStep;
+    if (x <= -visibleLimit && x > leftX) {
+      left = index;
+      leftX = x;
+    } else if (x >= visibleLimit && x < rightX) {
+      right = index;
+      rightX = x;
+    }
+  }
+  return { left, right };
 }
 function clampViewportPosition(viewportPosition, cardCount) {
   if (cardCount <= 0 || !Number.isFinite(viewportPosition)) {
@@ -477,16 +497,6 @@ var DeckView = class extends import_obsidian.ItemView {
     );
     this.scope.register(
       [],
-      "h",
-      (event) => this.handleDeckKey(event, () => this.holdPlace())
-    );
-    this.scope.register(
-      ["Shift"],
-      "h",
-      (event) => this.handleDeckKey(event, () => this.returnToHold())
-    );
-    this.scope.register(
-      [],
       "g",
       (event) => this.handleDeckKey(event, () => this.goToDeckBoundary("start"))
     );
@@ -497,16 +507,13 @@ var DeckView = class extends import_obsidian.ItemView {
     );
   }
   activeId = null;
-  thumbId = null;
   filingFile = null;
   stageEl = null;
   renderedCards = [];
-  renderedBookmarkAnchors = [];
   renderComponents = [];
   cardScrollPositions = /* @__PURE__ */ new Map();
   viewportOffset = 0;
   pointerLastX = null;
-  holdButtonEl = null;
   filingPromptEl = null;
   renderWindowStart = 0;
   renderWindowEnd = -1;
@@ -532,12 +539,9 @@ var DeckView = class extends import_obsidian.ItemView {
   async onClose() {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
-    this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
     this.renderedCards = [];
-    this.renderedBookmarkAnchors = [];
-    this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
@@ -582,14 +586,6 @@ var DeckView = class extends import_obsidian.ItemView {
     this.filingFile = null;
     await this.renderDeck();
     new import_obsidian.Notice("Filing cancelled. The card remains on the Desk.");
-  }
-  holdPlace() {
-    if (this.activeId === null) {
-      new import_obsidian.Notice("There is no active filed card to hold.");
-      return;
-    }
-    this.thumbId = this.thumbId === this.activeId ? null : this.activeId;
-    void this.renderDeck();
   }
   async goToId(id) {
     const moved = await this.navigateToId(id);
@@ -673,8 +669,6 @@ var DeckView = class extends import_obsidian.ItemView {
     this.unloadRenderComponents();
     this.contentEl.empty();
     this.renderedCards = [];
-    this.renderedBookmarkAnchors = [];
-    this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
@@ -702,7 +696,7 @@ var DeckView = class extends import_obsidian.ItemView {
       await this.renderFilingCard(shell, this.filingFile, version);
       this.renderFilingActions(shell);
     }
-    this.renderThumbTab(stage);
+    this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
   }
   renderToolbar(shell) {
@@ -772,12 +766,6 @@ var DeckView = class extends import_obsidian.ItemView {
         void this.plugin.putFileOnDesk(file);
       }
     });
-    const hold = controls.createEl("button", {
-      text: this.thumbId === this.activeId && this.activeId !== null ? "Release hold" : "Hold place",
-      attr: { type: "button" }
-    });
-    this.holdButtonEl = hold;
-    hold.addEventListener("click", () => this.holdPlace());
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
         cls: "zk-problem-button",
@@ -806,7 +794,7 @@ var DeckView = class extends import_obsidian.ItemView {
       this.plugin.setSpread(Number(slider.value));
       this.positionCards();
       if (this.stageEl !== null) {
-        this.renderThumbTab(this.stageEl);
+        this.renderBookmarkEdgeTabs(this.stageEl);
       }
     });
     slider.addEventListener("change", () => void this.renderDeck());
@@ -854,35 +842,23 @@ var DeckView = class extends import_obsidian.ItemView {
       });
       cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
       this.renderedCards.push(cardEl);
-      if (bookmark !== void 0) {
-        const anchor = stage.createDiv({ cls: "zk-bookmark-anchor" });
-        anchor.dataset.index = String(index);
-        anchor.style.zIndex = String(BOOKMARK_TAB_STACK_ORDER);
-        this.renderedBookmarkAnchors.push(anchor);
-        const tab = anchor.createEl("button", {
-          cls: "zk-bookmark-tab",
-          text: bookmark.label === "" ? card.id : bookmark.label,
-          attr: {
-            type: "button",
-            "aria-label": `Jump to bookmark ${bookmark.label === "" ? card.id : bookmark.label}`
-          }
-        });
-        tab.style.left = `${18 + index % 4 * 34}px`;
-        tab.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void this.jumpToId(card.id);
-        });
-      }
       const frame = cardEl.createDiv({ cls: "zk-card-frame" });
       const addressRow = frame.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
-      if (this.thumbId === card.id) {
+      if (bookmark !== void 0) {
         const marker = addressRow.createSpan({
-          cls: "zk-thumb-marker",
-          text: "held"
+          cls: "zk-bookmark-marker"
         });
-        marker.setAttr("aria-label", "Held place");
+        const icon = marker.createSpan({ cls: "zk-bookmark-marker-icon" });
+        (0, import_obsidian.setIcon)(icon, "bookmark");
+        marker.createSpan({
+          cls: "zk-bookmark-marker-label",
+          text: bookmark.label === "" ? "bookmark" : bookmark.label
+        });
+        marker.setAttr(
+          "aria-label",
+          `Bookmark ${bookmark.label === "" ? card.id : bookmark.label}`
+        );
       }
       const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
@@ -1028,39 +1004,46 @@ var DeckView = class extends import_obsidian.ItemView {
       (resolve) => window.setTimeout(resolve, FILING_ANIMATION_DURATION_MS + 40)
     );
   }
-  renderThumbTab(stage) {
-    stage.querySelector(".zk-thumb-tab")?.remove();
-    if (this.thumbId === null || this.activeId === null) {
+  renderBookmarkEdgeTabs(stage) {
+    stage.querySelectorAll(".zk-bookmark-edge-tab").forEach((tab) => tab.remove());
+    if (this.activeId === null || this.plugin.state.bookmarks.length === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const thumbIndex = filed.findIndex((card) => card.id === this.thumbId);
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
-    if (thumbIndex < 0 || activeIndex < 0) {
-      this.thumbId = null;
+    const cardWidth = this.renderedCards[0]?.offsetWidth ?? 0;
+    if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
-    const thumbCard = this.renderedCards.find(
-      (card) => Number(card.dataset.index) === thumbIndex
+    const bookmarkIndices = this.plugin.state.bookmarks.flatMap((bookmark) => {
+      const index = filed.findIndex((card) => card.id === bookmark.zettelId);
+      return index < 0 ? [] : [index];
+    });
+    const targets = bookmarkEdgeTargets(
+      bookmarkIndices,
+      this.viewportPosition(activeIndex),
+      this.cardStep(),
+      stage.clientWidth,
+      cardWidth
     );
-    const cardWidth = thumbCard?.offsetWidth ?? this.renderedCards[0]?.offsetWidth ?? 0;
-    const viewportPosition = this.viewportPosition(activeIndex);
-    const thumbX = (thumbIndex - viewportPosition) * this.cardStep();
-    const isVisible = thumbCard !== void 0 && Math.abs(thumbX) < stage.clientWidth / 2 + cardWidth / 2;
-    if (isVisible) {
-      return;
-    }
-    const direction = thumbX < 0 ? "left" : "right";
-    const tab = stage.createEl("button", {
-      cls: `zk-thumb-tab is-${direction}`,
-      text: `${direction === "left" ? "\u25C0" : "\u25B6"} ${this.thumbId}`,
-      attr: { type: "button", "aria-label": `Return to held card ${this.thumbId}` }
-    });
-    tab.addEventListener("click", () => {
-      if (this.thumbId !== null) {
-        void this.goToId(this.thumbId);
+    for (const direction of ["left", "right"]) {
+      const index = targets[direction];
+      const card = index === null ? void 0 : filed[index];
+      const bookmark = card === void 0 ? void 0 : this.plugin.bookmarkAt(card.id);
+      if (card === void 0 || bookmark === void 0) {
+        continue;
       }
-    });
+      const label = bookmark.label === "" ? card.id : bookmark.label;
+      const tab = stage.createEl("button", {
+        cls: `zk-bookmark-edge-tab is-${direction}`,
+        text: `${direction === "left" ? "\u25C0" : "\u25B6"} ${label}`,
+        attr: {
+          type: "button",
+          "aria-label": `Jump to bookmark ${label}`
+        }
+      });
+      tab.addEventListener("click", () => void this.jumpToId(card.id));
+    }
   }
   attachBrowsingEvents(stage) {
     stage.addEventListener(
@@ -1160,13 +1143,6 @@ var DeckView = class extends import_obsidian.ItemView {
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
   }
-  returnToHold() {
-    if (this.thumbId === null) {
-      new import_obsidian.Notice("There is no held place.");
-      return;
-    }
-    void this.goToId(this.thumbId);
-  }
   goToDeckBoundary(boundary) {
     const filed = this.plugin.index.snapshot.filed;
     const target = boundary === "start" ? filed[0] : filed[filed.length - 1];
@@ -1245,17 +1221,6 @@ var DeckView = class extends import_obsidian.ItemView {
       card.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
-    for (const anchor of this.renderedBookmarkAnchors) {
-      const index = Number(anchor.dataset.index ?? "-1");
-      const motion = cardMotionStyle(
-        index,
-        viewportPosition,
-        step,
-        index === activeIndex
-      );
-      anchor.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
-      anchor.style.opacity = String(motion.opacity);
-    }
   }
   updateActiveUi() {
     const filed = this.plugin.index.snapshot.filed;
@@ -1269,12 +1234,9 @@ var DeckView = class extends import_obsidian.ItemView {
       card.toggleClass("is-active", index === activeIndex);
       card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
     }
-    this.holdButtonEl?.setText(
-      this.thumbId === this.activeId ? "Release hold" : "Hold place"
-    );
     this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
     if (this.stageEl !== null) {
-      this.renderThumbTab(this.stageEl);
+      this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateHistoryControls();
   }
@@ -2492,21 +2454,6 @@ var ZettelkastenPlugin = class extends import_obsidian5.Plugin {
       id: "new-section",
       name: "New section",
       callback: () => void this.createNewSection()
-    });
-    this.addCommand({
-      id: "hold-place",
-      name: "Hold place",
-      checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.activeCard !== null && view !== null;
-        if (checking) {
-          return available;
-        }
-        if (available && view !== null) {
-          view.holdPlace();
-        }
-        return available;
-      }
     });
     this.addCommand({
       id: "add-current-card-entry-point",

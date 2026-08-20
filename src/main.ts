@@ -433,22 +433,6 @@ export default class ZettelkastenPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "hold-place",
-      name: "Hold place",
-      checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.activeCard !== null && view !== null;
-        if (checking) {
-          return available;
-        }
-        if (available && view !== null) {
-          view.holdPlace();
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
       id: "add-current-card-entry-point",
       name: "Add current card as entry point",
       checkCallback: (checking) => {

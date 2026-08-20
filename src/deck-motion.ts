@@ -5,9 +5,7 @@ export interface CardMotionStyle {
 }
 
 export const DEFAULT_ACTIVE_HYSTERESIS = 0.06;
-export const BOOKMARK_TAB_STACK_ORDER = 230;
-
-/** Keep card surfaces in one physical stack; bookmarks use a separate overlay. */
+/** Keep card surfaces in one physical stack ordered around the active card. */
 export function cardStackOrder(
   cardIndex: number,
   viewportPosition: number,
@@ -16,6 +14,43 @@ export function cardStackOrder(
   return cardIndex === activeIndex
     ? 220
     : 100 - Math.floor(Math.abs(cardIndex - viewportPosition));
+}
+
+export interface BookmarkEdgeTargets {
+  readonly left: number | null;
+  readonly right: number | null;
+}
+
+/** Select the nearest off-screen bookmark on each side of the Deck. */
+export function bookmarkEdgeTargets(
+  bookmarkIndices: readonly number[],
+  viewportPosition: number,
+  cardStep: number,
+  stageWidth: number,
+  cardWidth: number,
+): BookmarkEdgeTargets {
+  if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
+    return { left: null, right: null };
+  }
+
+  const visibleLimit = stageWidth / 2 + cardWidth / 2;
+  let left: number | null = null;
+  let leftX = Number.NEGATIVE_INFINITY;
+  let right: number | null = null;
+  let rightX = Number.POSITIVE_INFINITY;
+
+  for (const index of bookmarkIndices) {
+    const x = (index - viewportPosition) * cardStep;
+    if (x <= -visibleLimit && x > leftX) {
+      left = index;
+      leftX = x;
+    } else if (x >= visibleLimit && x < rightX) {
+      right = index;
+      rightX = x;
+    }
+  }
+
+  return { left, right };
 }
 
 /** Keep the continuous Deck position between its first and last cards. */

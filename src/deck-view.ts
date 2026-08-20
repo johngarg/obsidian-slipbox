@@ -12,8 +12,8 @@ import {
 
 import type ZettelkastenPlugin from "./main.js";
 import {
-  BOOKMARK_TAB_STACK_ORDER,
   activeIndexForViewport,
+  bookmarkEdgeTargets,
   cardMotionStyle,
   cardStackOrder,
   clampViewportPosition,
@@ -29,16 +29,13 @@ const RENDER_EDGE_BUFFER = 2;
 
 export class DeckView extends ItemView {
   private activeId: string | null = null;
-  private thumbId: string | null = null;
   private filingFile: TFile | null = null;
   private stageEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
-  private renderedBookmarkAnchors: HTMLElement[] = [];
   private renderComponents: Component[] = [];
   private cardScrollPositions = new Map<string, number>();
   private viewportOffset = 0;
   private pointerLastX: number | null = null;
-  private holdButtonEl: HTMLButtonElement | null = null;
   private filingPromptEl: HTMLElement | null = null;
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
@@ -69,12 +66,6 @@ export class DeckView extends ItemView {
     this.scope.register([], "c", (event) =>
       this.handleDeckKey(event, () => this.centerActiveCard()),
     );
-    this.scope.register([], "h", (event) =>
-      this.handleDeckKey(event, () => this.holdPlace()),
-    );
-    this.scope.register(["Shift"], "h", (event) =>
-      this.handleDeckKey(event, () => this.returnToHold()),
-    );
     this.scope.register([], "g", (event) =>
       this.handleDeckKey(event, () => this.goToDeckBoundary("start")),
     );
@@ -104,12 +95,9 @@ export class DeckView extends ItemView {
   async onClose(): Promise<void> {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
-    this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
     this.renderedCards = [];
-    this.renderedBookmarkAnchors = [];
-    this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
@@ -161,15 +149,6 @@ export class DeckView extends ItemView {
     this.filingFile = null;
     await this.renderDeck();
     new Notice("Filing cancelled. The card remains on the Desk.");
-  }
-
-  holdPlace(): void {
-    if (this.activeId === null) {
-      new Notice("There is no active filed card to hold.");
-      return;
-    }
-    this.thumbId = this.thumbId === this.activeId ? null : this.activeId;
-    void this.renderDeck();
   }
 
   async goToId(id: string): Promise<void> {
@@ -264,8 +243,6 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.contentEl.empty();
     this.renderedCards = [];
-    this.renderedBookmarkAnchors = [];
-    this.holdButtonEl = null;
     this.filingPromptEl = null;
     this.backButtonEl = null;
     this.forwardButtonEl = null;
@@ -298,7 +275,7 @@ export class DeckView extends ItemView {
       await this.renderFilingCard(shell, this.filingFile, version);
       this.renderFilingActions(shell);
     }
-    this.renderThumbTab(stage);
+    this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
   }
 
@@ -379,15 +356,6 @@ export class DeckView extends ItemView {
       }
     });
 
-    const hold = controls.createEl("button", {
-      text: this.thumbId === this.activeId && this.activeId !== null
-        ? "Release hold"
-        : "Hold place",
-      attr: { type: "button" },
-    });
-    this.holdButtonEl = hold;
-    hold.addEventListener("click", () => this.holdPlace());
-
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
         cls: "zk-problem-button",
@@ -419,7 +387,7 @@ export class DeckView extends ItemView {
       this.plugin.setSpread(Number(slider.value));
       this.positionCards();
       if (this.stageEl !== null) {
-        this.renderThumbTab(this.stageEl);
+        this.renderBookmarkEdgeTabs(this.stageEl);
       }
     });
     slider.addEventListener("change", () => void this.renderDeck());
@@ -479,36 +447,23 @@ export class DeckView extends ItemView {
       cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
       this.renderedCards.push(cardEl);
 
-      if (bookmark !== undefined) {
-        const anchor = stage.createDiv({ cls: "zk-bookmark-anchor" });
-        anchor.dataset.index = String(index);
-        anchor.style.zIndex = String(BOOKMARK_TAB_STACK_ORDER);
-        this.renderedBookmarkAnchors.push(anchor);
-        const tab = anchor.createEl("button", {
-          cls: "zk-bookmark-tab",
-          text: bookmark.label === "" ? card.id : bookmark.label,
-          attr: {
-            type: "button",
-            "aria-label": `Jump to bookmark ${bookmark.label === "" ? card.id : bookmark.label}`,
-          },
-        });
-        tab.style.left = `${18 + (index % 4) * 34}px`;
-        tab.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void this.jumpToId(card.id);
-        });
-      }
-
       const frame = cardEl.createDiv({ cls: "zk-card-frame" });
       const addressRow = frame.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
-      if (this.thumbId === card.id) {
+      if (bookmark !== undefined) {
         const marker = addressRow.createSpan({
-          cls: "zk-thumb-marker",
-          text: "held",
+          cls: "zk-bookmark-marker",
         });
-        marker.setAttr("aria-label", "Held place");
+        const icon = marker.createSpan({ cls: "zk-bookmark-marker-icon" });
+        setIcon(icon, "bookmark");
+        marker.createSpan({
+          cls: "zk-bookmark-marker-label",
+          text: bookmark.label === "" ? "bookmark" : bookmark.label,
+        });
+        marker.setAttr(
+          "aria-label",
+          `Bookmark ${bookmark.label === "" ? card.id : bookmark.label}`,
+        );
       }
 
       const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
@@ -676,43 +631,48 @@ export class DeckView extends ItemView {
     );
   }
 
-  private renderThumbTab(stage: HTMLElement): void {
-    stage.querySelector<HTMLElement>(".zk-thumb-tab")?.remove();
-    if (this.thumbId === null || this.activeId === null) {
+  private renderBookmarkEdgeTabs(stage: HTMLElement): void {
+    stage.querySelectorAll<HTMLElement>(".zk-bookmark-edge-tab")
+      .forEach((tab) => tab.remove());
+    if (this.activeId === null || this.plugin.state.bookmarks.length === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const thumbIndex = filed.findIndex((card) => card.id === this.thumbId);
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
-    if (thumbIndex < 0 || activeIndex < 0) {
-      this.thumbId = null;
+    const cardWidth = this.renderedCards[0]?.offsetWidth ?? 0;
+    if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
-
-    const thumbCard = this.renderedCards.find(
-      (card) => Number(card.dataset.index) === thumbIndex,
+    const bookmarkIndices = this.plugin.state.bookmarks.flatMap((bookmark) => {
+      const index = filed.findIndex((card) => card.id === bookmark.zettelId);
+      return index < 0 ? [] : [index];
+    });
+    const targets = bookmarkEdgeTargets(
+      bookmarkIndices,
+      this.viewportPosition(activeIndex),
+      this.cardStep(),
+      stage.clientWidth,
+      cardWidth,
     );
-    const cardWidth = thumbCard?.offsetWidth ?? this.renderedCards[0]?.offsetWidth ?? 0;
-    const viewportPosition = this.viewportPosition(activeIndex);
-    const thumbX = (thumbIndex - viewportPosition) * this.cardStep();
-    const isVisible =
-      thumbCard !== undefined &&
-      Math.abs(thumbX) < stage.clientWidth / 2 + cardWidth / 2;
-    if (isVisible) {
-      return;
-    }
 
-    const direction = thumbX < 0 ? "left" : "right";
-    const tab = stage.createEl("button", {
-      cls: `zk-thumb-tab is-${direction}`,
-      text: `${direction === "left" ? "◀" : "▶"} ${this.thumbId}`,
-      attr: { type: "button", "aria-label": `Return to held card ${this.thumbId}` },
-    });
-    tab.addEventListener("click", () => {
-      if (this.thumbId !== null) {
-        void this.goToId(this.thumbId);
+    for (const direction of ["left", "right"] as const) {
+      const index = targets[direction];
+      const card = index === null ? undefined : filed[index];
+      const bookmark = card === undefined ? undefined : this.plugin.bookmarkAt(card.id);
+      if (card === undefined || bookmark === undefined) {
+        continue;
       }
-    });
+      const label = bookmark.label === "" ? card.id : bookmark.label;
+      const tab = stage.createEl("button", {
+        cls: `zk-bookmark-edge-tab is-${direction}`,
+        text: `${direction === "left" ? "◀" : "▶"} ${label}`,
+        attr: {
+          type: "button",
+          "aria-label": `Jump to bookmark ${label}`,
+        },
+      });
+      tab.addEventListener("click", () => void this.jumpToId(card.id));
+    }
   }
 
   private attachBrowsingEvents(stage: HTMLElement): void {
@@ -820,14 +780,6 @@ export class DeckView extends ItemView {
     this.queueRenderWindowRefresh();
   }
 
-  private returnToHold(): void {
-    if (this.thumbId === null) {
-      new Notice("There is no held place.");
-      return;
-    }
-    void this.goToId(this.thumbId);
-  }
-
   private goToDeckBoundary(boundary: "start" | "end"): void {
     const filed = this.plugin.index.snapshot.filed;
     const target = boundary === "start" ? filed[0] : filed[filed.length - 1];
@@ -928,18 +880,6 @@ export class DeckView extends ItemView {
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
-    for (const anchor of this.renderedBookmarkAnchors) {
-      const index = Number(anchor.dataset.index ?? "-1");
-      const motion = cardMotionStyle(
-        index,
-        viewportPosition,
-        step,
-        index === activeIndex,
-      );
-      anchor.style.transform =
-        `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
-      anchor.style.opacity = String(motion.opacity);
-    }
   }
 
   private updateActiveUi(): void {
@@ -956,12 +896,9 @@ export class DeckView extends ItemView {
       card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
     }
 
-    this.holdButtonEl?.setText(
-      this.thumbId === this.activeId ? "Release hold" : "Hold place",
-    );
     this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
     if (this.stageEl !== null) {
-      this.renderThumbTab(this.stageEl);
+      this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateHistoryControls();
   }

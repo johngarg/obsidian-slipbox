@@ -4120,7 +4120,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         void this.save({
           ...this.slipbox.settings,
           titleSource: value === "frontmatter" ? "frontmatter" : "filename"
-        }).then(() => this.display());
+        }).then(() => this.redisplayPreservingScroll());
       });
     });
     const titleProperty = new import_obsidian5.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
@@ -4170,7 +4170,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       void this.save({
         ...this.slipbox.settings,
         deckKeybindings: DEFAULT_DECK_KEYBINDINGS
-      }).then(() => this.display());
+      }).then(() => this.redisplayPreservingScroll());
     });
     for (const definition of DECK_ACTION_DEFINITIONS) {
       this.renderShortcutSetting(containerEl, definition);
@@ -4337,7 +4337,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
               (candidate) => keyBindingSignature(candidate) !== signature
             )
           }
-        }).then(() => this.display());
+        }).then(() => this.redisplayPreservingScroll());
       });
     }
     const add = bindings.createEl("button", {
@@ -4392,7 +4392,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
               candidate
             ]
           }
-        }).then(() => this.display());
+        }).then(() => this.redisplayPreservingScroll());
       };
       const finish = () => {
         add.removeEventListener("keydown", capture);
@@ -4431,7 +4431,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
           ...this.slipbox.settings.deckKeybindings,
           [action]: defaults
         }
-      }).then(() => this.display());
+      }).then(() => this.redisplayPreservingScroll());
     });
   }
   bindingFromEvent(event) {
@@ -4456,6 +4456,29 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       modifiers,
       key: event.key
     };
+  }
+  redisplayPreservingScroll() {
+    const positions = [];
+    let element = this.containerEl;
+    while (element !== null) {
+      if (element.scrollTop !== 0 || element.scrollLeft !== 0 || element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth) {
+        positions.push({
+          element,
+          top: element.scrollTop,
+          left: element.scrollLeft
+        });
+      }
+      element = element.parentElement;
+    }
+    const restore = () => {
+      for (const position of positions) {
+        position.element.scrollTop = position.top;
+        position.element.scrollLeft = position.left;
+      }
+    };
+    this.display();
+    restore();
+    window.requestAnimationFrame(restore);
   }
   debounceTextCommit(input, commit) {
     let timer = null;

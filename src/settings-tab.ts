@@ -50,7 +50,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
             void this.save({
               ...this.slipbox.settings,
               titleSource: value === "frontmatter" ? "frontmatter" : "filename",
-            }).then(() => this.display());
+            }).then(() => this.redisplayPreservingScroll());
           });
       });
 
@@ -120,7 +120,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
       void this.save({
         ...this.slipbox.settings,
         deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
-      }).then(() => this.display());
+      }).then(() => this.redisplayPreservingScroll());
     });
     for (const definition of DECK_ACTION_DEFINITIONS) {
       this.renderShortcutSetting(containerEl, definition);
@@ -367,7 +367,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
               (candidate) => keyBindingSignature(candidate) !== signature,
             ),
           },
-        }).then(() => this.display());
+        }).then(() => this.redisplayPreservingScroll());
       });
     }
 
@@ -426,7 +426,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
               candidate,
             ],
           },
-        }).then(() => this.display());
+        }).then(() => this.redisplayPreservingScroll());
       };
       const finish = (): void => {
         add.removeEventListener("keydown", capture);
@@ -466,7 +466,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ...this.slipbox.settings.deckKeybindings,
           [action]: defaults,
         },
-      }).then(() => this.display());
+      }).then(() => this.redisplayPreservingScroll());
     });
   }
 
@@ -492,6 +492,40 @@ export class SlipboxSettingTab extends PluginSettingTab {
       modifiers,
       key: event.key,
     };
+  }
+
+  private redisplayPreservingScroll(): void {
+    const positions: Array<{
+      readonly element: HTMLElement;
+      readonly top: number;
+      readonly left: number;
+    }> = [];
+    let element: HTMLElement | null = this.containerEl;
+    while (element !== null) {
+      if (
+        element.scrollTop !== 0 ||
+        element.scrollLeft !== 0 ||
+        element.scrollHeight > element.clientHeight ||
+        element.scrollWidth > element.clientWidth
+      ) {
+        positions.push({
+          element,
+          top: element.scrollTop,
+          left: element.scrollLeft,
+        });
+      }
+      element = element.parentElement;
+    }
+
+    const restore = (): void => {
+      for (const position of positions) {
+        position.element.scrollTop = position.top;
+        position.element.scrollLeft = position.left;
+      }
+    };
+    this.display();
+    restore();
+    window.requestAnimationFrame(restore);
   }
 
   private debounceTextCommit(

@@ -952,8 +952,8 @@ var DEFAULT_SETTINGS = {
   addressProperty: "zettel-id",
   titleSource: "filename",
   titleProperty: "title",
-  newNoteTimestampFormat: "YYYY-MM-DD HHmmss",
-  useTemplatesForNewNotes: true,
+  newNoteTimestampFormat: "YYYYMMDDTHHmmss",
+  useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
   showTitleInDesk: true,
@@ -2936,6 +2936,12 @@ function safeNoteBasename(value) {
 function newNoteBasename(title, timestamp) {
   return safeNoteBasename(title) ?? safeNoteBasename(timestamp) ?? "Untitled";
 }
+function newCardBasename(title, timestamp, titleSource) {
+  return newNoteBasename(titleSource === "filename" ? title : "", timestamp);
+}
+function newCardFrontmatterTitle(title, titleSource) {
+  return titleSource === "frontmatter" ? title.trim() : null;
+}
 
 // src/plugin-state.ts
 var DEFAULT_SPREAD = 0.58;
@@ -3004,7 +3010,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     containerEl.empty();
     new import_obsidian5.Setting(containerEl).setName("Cards and metadata").setHeading();
     this.renderAddressProperty(containerEl);
-    new import_obsidian5.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles.").addDropdown((dropdown) => {
+    new import_obsidian5.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.").addDropdown((dropdown) => {
       dropdown.addOption("filename", "Filename").addOption("frontmatter", "Frontmatter property").setValue(this.slipbox.settings.titleSource).onChange((value) => {
         void this.save({
           ...this.slipbox.settings,
@@ -3064,7 +3070,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     }
   }
   renderNewCardSettings(container) {
-    const timestamp = new import_obsidian5.Setting(container).setName("Untitled filename format").setDesc("Moment format used for the filename when the title prompt is left blank. Filename-unsafe characters become hyphens. Example: ");
+    const timestamp = new import_obsidian5.Setting(container).setName("Timestamp filename format").setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
     const sample = timestamp.descEl.createEl("code");
     timestamp.addMomentFormat((component) => {
       component.setSampleEl(sample).setDefaultFormat(DEFAULT_SETTINGS.newNoteTimestampFormat).setValue(this.slipbox.settings.newNoteTimestampFormat).onChange((value) => {
@@ -4228,7 +4234,11 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     if (title === null) {
       return null;
     }
-    const basename = newNoteBasename(title, timestamp);
+    const basename = newCardBasename(
+      title,
+      timestamp,
+      this.settings.titleSource
+    );
     const template = await this.resolveNewNoteTemplate();
     const parent = this.app.fileManager.getNewFileParent(
       sourcePath,
@@ -4245,8 +4255,12 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
     const properties = {
       [this.settings.addressProperty]: id ?? ""
     };
-    if (title !== "" && this.settings.titleSource === "frontmatter" && this.settings.titleProperty !== this.settings.addressProperty) {
-      properties[this.settings.titleProperty] = title;
+    const frontmatterTitle = newCardFrontmatterTitle(
+      title,
+      this.settings.titleSource
+    );
+    if (frontmatterTitle !== null && this.settings.titleProperty !== this.settings.addressProperty) {
+      properties[this.settings.titleProperty] = frontmatterTitle;
     }
     const frontmatter = (0, import_obsidian7.stringifyYaml)(properties);
     const file = await this.app.vault.create(

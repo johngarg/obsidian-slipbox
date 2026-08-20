@@ -83,17 +83,18 @@ before the configured action buttons.
 Header-button settings affect presentation only. Hidden actions remain
 available through commands, Deck shortcuts, and card right-click menus.
 
-Every Slipbox card-creation action asks for a title. A non-empty title becomes
-the note filename; leaving it blank uses the configured Moment timestamp format
-(`YYYY-MM-DD HHmmss` by default). Characters that are unsafe in filenames are
-replaced with hyphens. If frontmatter titles are enabled, a supplied title is
-also written to the configured title property.
+Every Slipbox card-creation action asks for a title. With filename-derived
+titles, a non-empty title becomes the note filename and filename-unsafe
+characters are replaced with hyphens. With frontmatter-derived titles, the
+filename always uses the configured Moment timestamp format and the entered
+title is written to the configured title property. A blank title uses the
+timestamp in either mode and leaves the frontmatter title empty when applicable.
+The default timestamp format is `YYYYMMDDTHHmmss`.
 
-New cards use Obsidian's Templates core plugin by default. Choose one fixed
-template in Slipbox settings or leave `New card template` on `Ask each time`.
-Slipbox keeps its address frontmatter in place while the core plugin expands
-template variables and merges any template properties. Template use can be
-disabled without affecting card creation.
+Template use is off by default. When enabled, choose one fixed template in
+Slipbox settings or leave `New card template` on `Ask each time`. Slipbox keeps
+its address frontmatter in place while Obsidian's Templates core plugin expands
+template variables and merges any template properties.
 
 ## Default Deck keys
 

@@ -38,7 +38,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Title source")
-      .setDesc("Choose the filename or a top-level frontmatter property for note titles.")
+      .setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.")
       .addDropdown((dropdown) => {
         dropdown
           .addOption("filename", "Filename")
@@ -127,8 +127,8 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
   private renderNewCardSettings(container: HTMLElement): void {
     const timestamp = new Setting(container)
-      .setName("Untitled filename format")
-      .setDesc("Moment format used for the filename when the title prompt is left blank. Filename-unsafe characters become hyphens. Example: ");
+      .setName("Timestamp filename format")
+      .setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
     const sample = timestamp.descEl.createEl("code");
     timestamp.addMomentFormat((component) => {
       component

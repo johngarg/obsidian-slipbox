@@ -35,7 +35,11 @@ import {
   promptForTemplate,
   promptForText,
 } from "./modals.js";
-import { newNoteBasename } from "./new-note.js";
+import {
+  newCardBasename,
+  newCardFrontmatterTitle,
+  newNoteBasename,
+} from "./new-note.js";
 import {
   DEFAULT_STATE,
   normalizePluginData,
@@ -921,7 +925,11 @@ export default class SlipboxPlugin extends Plugin {
     if (title === null) {
       return null;
     }
-    const basename = newNoteBasename(title, timestamp);
+    const basename = newCardBasename(
+      title,
+      timestamp,
+      this.settings.titleSource,
+    );
     const template = await this.resolveNewNoteTemplate();
     const parent = this.app.fileManager.getNewFileParent(
       sourcePath,
@@ -940,12 +948,15 @@ export default class SlipboxPlugin extends Plugin {
     const properties: Record<string, string> = {
       [this.settings.addressProperty]: id ?? "",
     };
+    const frontmatterTitle = newCardFrontmatterTitle(
+      title,
+      this.settings.titleSource,
+    );
     if (
-      title !== "" &&
-      this.settings.titleSource === "frontmatter" &&
+      frontmatterTitle !== null &&
       this.settings.titleProperty !== this.settings.addressProperty
     ) {
-      properties[this.settings.titleProperty] = title;
+      properties[this.settings.titleProperty] = frontmatterTitle;
     }
     const frontmatter = stringifyYaml(properties);
     const file = await this.app.vault.create(

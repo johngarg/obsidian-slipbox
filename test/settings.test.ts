@@ -18,8 +18,8 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["open-note"], [
       { key: "o", modifiers: [] },
     ]);
-    assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYY-MM-DD HHmmss");
-    assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, true);
+    assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
+    assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, false);
     assert.equal(DEFAULT_SETTINGS.newNoteTemplatePath, "");
   });
 
@@ -75,8 +75,8 @@ describe("Slipbox settings", () => {
     assert.equal(settings.addressProperty, "zettel-id");
     assert.equal(settings.titleSource, "filename");
     assert.equal(settings.titleProperty, "title");
-    assert.equal(settings.newNoteTimestampFormat, "YYYY-MM-DD HHmmss");
-    assert.equal(settings.useTemplatesForNewNotes, true);
+    assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
+    assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "");
   });
 

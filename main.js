@@ -762,9 +762,9 @@ var DeckView = class extends import_obsidian.ItemView {
       cls: "zk-desk-button"
     });
     desk.createSpan({ text: "Desk" });
-    const unfiledCount = this.plugin.index.snapshot.unfiled.length;
-    if (unfiledCount > 0) {
-      desk.createSpan({ cls: "zk-count", text: String(unfiledCount) });
+    const deskCount = this.plugin.state.deskCards.length;
+    if (deskCount > 0) {
+      desk.createSpan({ cls: "zk-count", text: String(deskCount) });
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
     const putOnDesk = iconButton(controls, "panels-top-left", "Put current card on Desk");
@@ -1426,13 +1426,25 @@ function bringDeskCardToFront(cards, cardRef) {
 function removeDeskCard(cards, cardRef) {
   return cards.filter((card) => card.cardRef !== cardRef);
 }
-function renameDeskCard(cards, oldRef, newRef) {
-  if (cards.some((card) => card.cardRef === newRef)) {
-    return removeDeskCard(cards, oldRef);
-  }
-  return cards.map(
-    (card) => card.cardRef === oldRef ? { ...card, cardRef: newRef } : card
+function removeDeskPath(cards, deletedPath) {
+  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
+  return cards.filter(
+    (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix)
   );
+}
+function renameDeskCard(cards, oldRef, newRef) {
+  const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
+  const newPrefix = `${newRef.replace(/\/$/, "")}/`;
+  const renamed = cards.map((card) => {
+    if (card.cardRef === oldRef) {
+      return { ...card, cardRef: newRef };
+    }
+    if (card.cardRef.startsWith(oldPrefix)) {
+      return { ...card, cardRef: `${newPrefix}${card.cardRef.slice(oldPrefix.length)}` };
+    }
+    return card;
+  });
+  return normalizeDeskCards(renamed);
 }
 
 // src/desk-view.ts
@@ -2835,20 +2847,22 @@ zettel-id: ${yamlValue}
     };
   }
   handleDeletedFile(file) {
-    if (file instanceof import_obsidian5.TFile && this.state.deskCards.some(
-      (card) => card.cardRef === file.path
+    const prefix = `${file.path.replace(/\/$/, "")}/`;
+    if (this.state.deskCards.some(
+      (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix)
     )) {
       this.state = {
         ...this.state,
-        deskCards: removeDeskCard(this.state.deskCards, file.path)
+        deskCards: removeDeskPath(this.state.deskCards, file.path)
       };
       void this.persistState();
     }
     this.queueIndexRefresh();
   }
   handleRenamedFile(file, oldPath) {
-    if (file instanceof import_obsidian5.TFile && this.state.deskCards.some(
-      (card) => card.cardRef === oldPath
+    const prefix = `${oldPath.replace(/\/$/, "")}/`;
+    if (this.state.deskCards.some(
+      (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix)
     )) {
       this.state = {
         ...this.state,

@@ -32,6 +32,7 @@ export {
   moveDeskCard,
   normalizeDeskCards,
   removeDeskCard,
+  removeDeskPath,
   renameDeskCard,
 } from "./desk-state.js";
 

@@ -356,9 +356,9 @@ export class DeckView extends ItemView {
       cls: "zk-desk-button",
     });
     desk.createSpan({ text: "Desk" });
-    const unfiledCount = this.plugin.index.snapshot.unfiled.length;
-    if (unfiledCount > 0) {
-      desk.createSpan({ cls: "zk-count", text: String(unfiledCount) });
+    const deskCount = this.plugin.state.deskCards.length;
+    if (deskCount > 0) {
+      desk.createSpan({ cls: "zk-count", text: String(deskCount) });
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
 

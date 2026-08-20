@@ -7,6 +7,7 @@ import {
   moveDeskCard,
   normalizeDeskCards,
   removeDeskCard,
+  removeDeskPath,
   renameDeskCard,
 } from "../src/desk-state.js";
 
@@ -54,5 +55,21 @@ describe("Desk state", () => {
   test("filing status changes do not affect path-keyed layout", () => {
     const cards = addDeskCard([], "unfiled.md", { x: 55, y: 77 });
     assert.deepEqual(cards[0], { cardRef: "unfiled.md", x: 55, y: 77, z: 1 });
+  });
+
+  test("renames and deletes Desk references beneath moved folders", () => {
+    let cards = addDeskCard([], "Ideas/one.md", { x: 10, y: 20 });
+    cards = addDeskCard(cards, "Ideas/Nested/two.md", { x: 30, y: 40 });
+    cards = addDeskCard(cards, "Elsewhere/three.md", { x: 50, y: 60 });
+    cards = renameDeskCard(cards, "Ideas", "Archive/Ideas");
+    assert.deepEqual(cards.map((card) => card.cardRef), [
+      "Archive/Ideas/one.md",
+      "Archive/Ideas/Nested/two.md",
+      "Elsewhere/three.md",
+    ]);
+    assert.deepEqual(
+      removeDeskPath(cards, "Archive/Ideas").map((card) => card.cardRef),
+      ["Elsewhere/three.md"],
+    );
   });
 });

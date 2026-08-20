@@ -106,15 +106,32 @@ export function removeDeskCard(
   return cards.filter((card) => card.cardRef !== cardRef);
 }
 
+/** Remove a deleted note or every note beneath a deleted folder path. */
+export function removeDeskPath(
+  cards: readonly DeskCardState[],
+  deletedPath: string,
+): readonly DeskCardState[] {
+  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
+  return cards.filter(
+    (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix),
+  );
+}
+
 export function renameDeskCard(
   cards: readonly DeskCardState[],
   oldRef: string,
   newRef: string,
 ): readonly DeskCardState[] {
-  if (cards.some((card) => card.cardRef === newRef)) {
-    return removeDeskCard(cards, oldRef);
-  }
-  return cards.map((card) =>
-    card.cardRef === oldRef ? { ...card, cardRef: newRef } : card,
-  );
+  const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
+  const newPrefix = `${newRef.replace(/\/$/, "")}/`;
+  const renamed = cards.map((card) => {
+    if (card.cardRef === oldRef) {
+      return { ...card, cardRef: newRef };
+    }
+    if (card.cardRef.startsWith(oldPrefix)) {
+      return { ...card, cardRef: `${newPrefix}${card.cardRef.slice(oldPrefix.length)}` };
+    }
+    return card;
+  });
+  return normalizeDeskCards(renamed);
 }

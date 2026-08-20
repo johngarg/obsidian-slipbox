@@ -21,6 +21,7 @@ import {
   bringDeskCardToFront,
   moveDeskCard,
   removeDeskCard,
+  removeDeskPath,
   renameDeskCard,
 } from "./desk-state.js";
 import { generateFiledId, generateNextSectionId } from "./zettel-id.js";
@@ -797,12 +798,13 @@ export default class ZettelkastenPlugin extends Plugin {
   }
 
   private handleDeletedFile(file: TAbstractFile): void {
-    if (file instanceof TFile && this.state.deskCards.some(
-      (card) => card.cardRef === file.path,
+    const prefix = `${file.path.replace(/\/$/, "")}/`;
+    if (this.state.deskCards.some(
+      (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix),
     )) {
       this.state = {
         ...this.state,
-        deskCards: removeDeskCard(this.state.deskCards, file.path),
+        deskCards: removeDeskPath(this.state.deskCards, file.path),
       };
       void this.persistState();
     }
@@ -810,8 +812,9 @@ export default class ZettelkastenPlugin extends Plugin {
   }
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
-    if (file instanceof TFile && this.state.deskCards.some(
-      (card) => card.cardRef === oldPath,
+    const prefix = `${oldPath.replace(/\/$/, "")}/`;
+    if (this.state.deskCards.some(
+      (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix),
     )) {
       this.state = {
         ...this.state,

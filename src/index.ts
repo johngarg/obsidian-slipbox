@@ -63,6 +63,37 @@ export type {
 } from "./zettel-metadata.js";
 
 export type { DeckBookmark } from "./bookmarks.js";
+export {
+  EMPTY_TRAY,
+  addUniqueCardToPile,
+  cardPosition,
+  clearFiledCardsFromPile,
+  clearFiledCardsFromTray,
+  createPile,
+  initialTrayFromUnfiled,
+  insertionIndexForPoint,
+  mergePiles,
+  moveCardBetweenPiles,
+  moveCardWithinPile,
+  pruneTrayCards,
+  reconcileTray,
+  removeCard,
+  removeEmptyPiles,
+  removeTrayPath,
+  renameTrayPath,
+  reorderPiles,
+  setExpandedPile,
+  splitCardIntoNewPile,
+  toggleFiledCard,
+  trayContains,
+} from "./tray-state.js";
+export type {
+  TrayCard,
+  TrayCardCandidate,
+  TrayCardKind,
+  TrayPile,
+  TrayState,
+} from "./tray-state.js";
 export type { DeskCardState } from "./desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
 export type {

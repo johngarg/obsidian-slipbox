@@ -50,10 +50,25 @@ export class DeckView extends ItemView {
     super(leaf);
     this.scope = new Scope(this.app.scope);
     this.scope.register([], "ArrowLeft", (event) =>
-      this.handleArrowNavigation(event, -1),
+      this.handleDeckKey(event, () => this.moveBy(-1), true),
     );
     this.scope.register([], "ArrowRight", (event) =>
-      this.handleArrowNavigation(event, 1),
+      this.handleDeckKey(event, () => this.moveBy(1), true),
+    );
+    this.scope.register([], "j", (event) =>
+      this.handleDeckKey(event, () => this.moveBy(1), true),
+    );
+    this.scope.register([], "k", (event) =>
+      this.handleDeckKey(event, () => this.moveBy(-1), true),
+    );
+    this.scope.register([], "c", (event) =>
+      this.handleDeckKey(event, () => this.centerActiveCard()),
+    );
+    this.scope.register([], "h", (event) =>
+      this.handleDeckKey(event, () => this.holdPlace()),
+    );
+    this.scope.register(["Shift"], "h", (event) =>
+      this.handleDeckKey(event, () => this.returnToHold()),
     );
   }
 
@@ -620,9 +635,29 @@ export class DeckView extends ItemView {
     this.queueRenderWindowRefresh();
   }
 
-  private handleArrowNavigation(
+  private centerActiveCard(): void {
+    if (this.activeId === null) {
+      new Notice("There is no active filed card to centre.");
+      return;
+    }
+    this.viewportOffset = 0;
+    this.positionCards();
+    this.updateActiveUi();
+    this.queueRenderWindowRefresh();
+  }
+
+  private returnToHold(): void {
+    if (this.thumbId === null) {
+      new Notice("There is no held place.");
+      return;
+    }
+    void this.goToId(this.thumbId);
+  }
+
+  private handleDeckKey(
     event: KeyboardEvent,
-    delta: -1 | 1,
+    action: () => void,
+    repeatable = false,
   ): boolean {
     const target = event.target;
     if (
@@ -635,7 +670,9 @@ export class DeckView extends ItemView {
     }
 
     event.preventDefault();
-    this.moveBy(delta);
+    if (!event.repeat || repeatable) {
+      action();
+    }
     return true;
   }
 

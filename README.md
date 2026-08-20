@@ -31,6 +31,16 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
 - Visible malformed-address and duplicate-address diagnostics.
 - Windowed rendering around the active card rather than rendering the vault.
 
+## Deck keys
+
+| Key | Action |
+| --- | --- |
+| `←` / `k` | Select the previous card |
+| `→` / `j` | Select the next card |
+| `c` | Centre the active card |
+| `h` | Toggle the hold at the active card |
+| `H` | Return to the held card |
+
 ## Address domain
 
 The pure TypeScript domain in `src/zettel-id.ts` parses, formats, compares, and

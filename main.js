@@ -92,12 +92,37 @@ var DeckView = class extends import_obsidian.ItemView {
     this.scope.register(
       [],
       "ArrowLeft",
-      (event) => this.handleArrowNavigation(event, -1)
+      (event) => this.handleDeckKey(event, () => this.moveBy(-1), true)
     );
     this.scope.register(
       [],
       "ArrowRight",
-      (event) => this.handleArrowNavigation(event, 1)
+      (event) => this.handleDeckKey(event, () => this.moveBy(1), true)
+    );
+    this.scope.register(
+      [],
+      "j",
+      (event) => this.handleDeckKey(event, () => this.moveBy(1), true)
+    );
+    this.scope.register(
+      [],
+      "k",
+      (event) => this.handleDeckKey(event, () => this.moveBy(-1), true)
+    );
+    this.scope.register(
+      [],
+      "c",
+      (event) => this.handleDeckKey(event, () => this.centerActiveCard())
+    );
+    this.scope.register(
+      [],
+      "h",
+      (event) => this.handleDeckKey(event, () => this.holdPlace())
+    );
+    this.scope.register(
+      ["Shift"],
+      "h",
+      (event) => this.handleDeckKey(event, () => this.returnToHold())
     );
   }
   activeId = null;
@@ -597,13 +622,32 @@ var DeckView = class extends import_obsidian.ItemView {
     this.scheduleActiveCardSave();
     this.queueRenderWindowRefresh();
   }
-  handleArrowNavigation(event, delta) {
+  centerActiveCard() {
+    if (this.activeId === null) {
+      new import_obsidian.Notice("There is no active filed card to centre.");
+      return;
+    }
+    this.viewportOffset = 0;
+    this.positionCards();
+    this.updateActiveUi();
+    this.queueRenderWindowRefresh();
+  }
+  returnToHold() {
+    if (this.thumbId === null) {
+      new import_obsidian.Notice("There is no held place.");
+      return;
+    }
+    void this.goToId(this.thumbId);
+  }
+  handleDeckKey(event, action, repeatable = false) {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable) {
       return false;
     }
     event.preventDefault();
-    this.moveBy(delta);
+    if (!event.repeat || repeatable) {
+      action();
+    }
     return true;
   }
   selectCardWithoutMoving(id) {

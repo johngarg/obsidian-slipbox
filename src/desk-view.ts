@@ -18,18 +18,32 @@ import {
   clampDeskPosition,
   type DeskCardState,
 } from "./desk-state.js";
+import { CardFooterManager } from "./card-footer.js";
 
 export const DESK_VIEW_TYPE = "slipbox-desk";
 
 export class DeskView extends ItemView {
   private renderComponents: Component[] = [];
   private renderVersion = 0;
+  private readonly cardFooters: CardFooterManager;
 
   constructor(
     leaf: WorkspaceLeaf,
     private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
+    this.cardFooters = new CardFooterManager({
+      app: this.app,
+      leaf: this.leaf,
+      hoverSource: DESK_VIEW_TYPE,
+      isOnDesk: (file) => this.plugin.state.deskCards.some(
+        (card) => card.cardRef === file.path,
+      ),
+      putOnDesk: (file) => this.plugin.putFileOnDesk(file, false),
+    });
+    this.registerEvent(
+      this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
+    );
   }
 
   getViewType(): string {
@@ -50,7 +64,12 @@ export class DeskView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.cardFooters.clear();
     this.unloadRenderComponents();
+  }
+
+  onResize(): void {
+    this.cardFooters.scheduleLayout();
   }
 
   async refresh(): Promise<void> {
@@ -60,6 +79,7 @@ export class DeskView extends ItemView {
   private async renderDesk(): Promise<void> {
     const version = ++this.renderVersion;
     this.unloadRenderComponents();
+    this.cardFooters.clear();
     this.contentEl.empty();
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-desk-shell" });
@@ -196,6 +216,14 @@ export class DeskView extends ItemView {
     });
 
     const scroll = card.createDiv({ cls: "slipbox-desk-card-scroll markdown-rendered" });
+    this.cardFooters.render(card, {
+      sourcePath: file.path,
+      backlinks: filed === undefined
+        ? []
+        : this.plugin.index.backlinksForPath(file.path),
+      interactive: filed !== undefined,
+      activate: (backlink) => this.plugin.openMarkdownFile(backlink.file),
+    });
     const component = new Component();
     component.load();
     this.renderComponents.push(component);

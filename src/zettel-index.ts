@@ -6,6 +6,7 @@ import {
   type FiledZettelRecord,
   type ZettelMetadataIndex,
 } from "./zettel-metadata.js";
+import { indexFiledBacklinks } from "./backlinks.js";
 
 export interface FiledZettel extends FiledZettelRecord {
   readonly file: TFile;
@@ -14,6 +15,10 @@ export interface FiledZettel extends FiledZettelRecord {
 export interface VaultZettelIndex extends ZettelMetadataIndex {
   readonly filed: readonly FiledZettel[];
   readonly unfiled: readonly TFile[];
+  readonly backlinksByTargetPath: ReadonlyMap<
+    string,
+    readonly FiledZettel[]
+  >;
 }
 
 const EMPTY_INDEX: VaultZettelIndex = {
@@ -22,7 +27,10 @@ const EMPTY_INDEX: VaultZettelIndex = {
   unfiledPaths: [],
   issues: [],
   allValidIds: [],
+  backlinksByTargetPath: new Map(),
 };
+
+const NO_BACKLINKS: readonly FiledZettel[] = [];
 
 /** A lightweight, cache-backed index over all Markdown files in the vault. */
 export class ZettelIndex {
@@ -63,8 +71,12 @@ export class ZettelIndex {
     const unfiled = indexed.unfiledPaths
       .map((path) => filesByPath.get(path))
       .filter((file): file is TFile => file !== undefined);
+    const backlinksByTargetPath = indexFiledBacklinks(
+      filed,
+      this.app.metadataCache.resolvedLinks,
+    );
 
-    this.current = { ...indexed, filed, unfiled };
+    this.current = { ...indexed, filed, unfiled, backlinksByTargetPath };
     return this.current;
   }
 
@@ -79,6 +91,10 @@ export class ZettelIndex {
   fileAtPath(path: string): TFile | undefined {
     const file = this.app.vault.getAbstractFileByPath(path);
     return file instanceof ObsidianFile ? file : undefined;
+  }
+
+  backlinksForPath(path: string): readonly FiledZettel[] {
+    return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
   }
 
   /** Read only the note body, excluding the YAML frontmatter block. */

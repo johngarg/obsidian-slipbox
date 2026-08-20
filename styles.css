@@ -1,3 +1,8 @@
+.slipbox-deck-view,
+.slipbox-desk-view {
+  --slipbox-card-footer-height: 36px;
+}
+
 .slipbox-deck-view {
   --slipbox-card-radius: 10px;
   height: 100%;
@@ -272,6 +277,131 @@
 .slipbox-card-scroll.markdown-rendered > :last-child,
 .slipbox-in-hand-preview.markdown-rendered > :last-child {
   margin-bottom: 0;
+}
+
+.slipbox-card-footer {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--slipbox-card-footer-height);
+  min-width: 0;
+  min-height: var(--slipbox-card-footer-height);
+  max-height: var(--slipbox-card-footer-height);
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+  overflow: hidden;
+  border-top: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  background: var(--background-primary-alt);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.slipbox-card-footer-icon {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-family: var(--font-interface);
+  font-size: 0.9rem;
+}
+
+.slipbox-card-footer-content,
+.slipbox-card-footer-measure {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.slipbox-card-footer-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.slipbox-card-footer-measure {
+  position: absolute;
+  top: 0;
+  left: -100000px;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.slipbox-card-backlink,
+.slipbox-card-backlink-overflow,
+.slipbox-card-backlink-separator {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.slipbox-card-backlink-separator {
+  padding: 0 6px;
+  color: var(--text-faint);
+}
+
+a.slipbox-card-backlink {
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.slipbox-card-footer.is-interactive a.slipbox-card-backlink:hover,
+.menu-item-title a.slipbox-card-backlink:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+button.slipbox-card-backlink-overflow,
+button.slipbox-card-backlink-overflow:hover,
+button.slipbox-card-backlink-overflow:disabled {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  box-shadow: none;
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+}
+
+.slipbox-card-footer.is-interactive button.slipbox-card-backlink-overflow:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.slipbox-card-footer:not(.is-interactive) .slipbox-card-footer-content {
+  opacity: 0.58;
+}
+
+.slipbox-card-footer:not(.is-interactive) .slipbox-card-backlink,
+.slipbox-card-footer:not(.is-interactive) .slipbox-card-backlink-overflow {
+  pointer-events: none;
+}
+
+.slipbox-card-backlink:focus-visible,
+.slipbox-card-backlink-overflow:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.menu-item-title a.slipbox-card-backlink {
+  display: block;
+  width: 100%;
+  color: var(--text-normal);
+  font-family: var(--font-monospace);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
 }
 
 .slipbox-card:not(.is-active) .slipbox-card-scroll {
@@ -717,6 +847,11 @@
   overscroll-behavior: contain;
   user-select: text;
   scrollbar-gutter: stable;
+}
+
+.slipbox-desk-card > .slipbox-card-footer {
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .slipbox-desk-missing-copy {

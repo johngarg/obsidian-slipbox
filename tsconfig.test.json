@@ -8,6 +8,7 @@
   },
   "include": [
     "src/index.ts",
+    "src/backlinks.ts",
     "src/bookmarks.ts",
     "src/deck-motion.ts",
     "src/desk-state.ts",

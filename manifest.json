@@ -1,7 +1,7 @@
 {
   "id": "slipbox",
   "name": "Slipbox",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "1.5.0",
   "description": "Browse, arrange, and file ordinary Markdown notes as a tactile Luhmann-style card index.",
   "author": "John Gargalionis",

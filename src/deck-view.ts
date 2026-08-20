@@ -22,6 +22,7 @@ import {
 } from "./deck-motion.js";
 import { NavigationHistory } from "./navigation-history.js";
 import type { FiledZettel } from "./zettel-index.js";
+import { CardFooterManager } from "./card-footer.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -53,12 +54,25 @@ export class DeckView extends ItemView {
   private resizeObserver: ResizeObserver | null = null;
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
+  private readonly cardFooters: CardFooterManager;
 
   constructor(
     leaf: WorkspaceLeaf,
     private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
+    this.cardFooters = new CardFooterManager({
+      app: this.app,
+      leaf: this.leaf,
+      hoverSource: DECK_VIEW_TYPE,
+      isOnDesk: (file) => this.plugin.state.deskCards.some(
+        (card) => card.cardRef === file.path,
+      ),
+      putOnDesk: (file) => this.plugin.putFileOnDesk(file, false),
+    });
+    this.registerEvent(
+      this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
+    );
     this.scope = new Scope(this.app.scope);
     this.scope.register([], "ArrowLeft", (event) =>
       this.handleDeckKey(event, () => this.moveBy(-1), true),
@@ -103,6 +117,7 @@ export class DeckView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.cardFooters.clear();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -127,6 +142,7 @@ export class DeckView extends ItemView {
 
   onResize(): void {
     this.scheduleCardPositioning();
+    this.cardFooters.scheduleLayout();
   }
 
   get activeCard(): FiledZettel | null {
@@ -276,6 +292,7 @@ export class DeckView extends ItemView {
     const version = ++this.renderVersion;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
+    this.cardFooters.clear();
     this.contentEl.empty();
     this.renderedCards = [];
     this.filingPromptEl = null;
@@ -317,6 +334,7 @@ export class DeckView extends ItemView {
     this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
     this.scheduleCardPositioning();
+    this.cardFooters.scheduleLayout();
   }
 
   private renderToolbar(shell: HTMLElement): void {
@@ -548,6 +566,12 @@ export class DeckView extends ItemView {
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
+      this.cardFooters.render(frame, {
+        sourcePath: card.path,
+        backlinks: this.plugin.index.backlinksForPath(card.path),
+        interactive: index === activeIndex,
+        activate: (backlink) => this.jumpToId(backlink.id),
+      });
       jobs.push(this.renderMarkdownCard(card, scroll, version));
 
       cardEl.addEventListener("click", (event) => {
@@ -1039,6 +1063,7 @@ export class DeckView extends ItemView {
     const positioned = this.positionCards();
     if (positioned) {
       this.positioningRetriesRemaining = 0;
+      this.cardFooters.scheduleLayout();
       if (this.stageEl !== null) {
         this.renderBookmarkEdgeTabs(this.stageEl);
       }
@@ -1070,6 +1095,7 @@ export class DeckView extends ItemView {
       const index = Number(card.dataset.index ?? "-1");
       card.toggleClass("is-active", index === activeIndex);
       card.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
+      this.cardFooters.setInteractive(card, index === activeIndex);
     }
 
     this.filingPromptEl?.setText(`Attach from ${this.activeId}`);

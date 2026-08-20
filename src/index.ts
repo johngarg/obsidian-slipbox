@@ -17,6 +17,10 @@ export type {
 } from "./zettel-id.js";
 
 export { indexZettelMetadata } from "./zettel-metadata.js";
+export {
+  fitBacklinkPrefix,
+  indexFiledBacklinks,
+} from "./backlinks.js";
 
 export { NavigationHistory } from "./navigation-history.js";
 export {
@@ -45,3 +49,7 @@ export type {
 
 export type { DeckBookmark } from "./bookmarks.js";
 export type { DeskCardState } from "./desk-state.js";
+export type {
+  BacklinkFit,
+  ResolvedLinks,
+} from "./backlinks.js";

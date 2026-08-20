@@ -65,6 +65,10 @@ export default class SlipboxPlugin extends Plugin {
       display: "Slipbox Deck",
       defaultMod: false,
     });
+    this.registerHoverLinkSource(DESK_VIEW_TYPE, {
+      display: "Slipbox Desk",
+      defaultMod: false,
+    });
 
     this.addRibbonIcon("archive", "Open Slipbox Deck", () => {
       void this.openDeck();
@@ -76,6 +80,9 @@ export default class SlipboxPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.metadataCache.on("deleted", () => this.queueIndexRefresh()),
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("resolve", () => this.queueIndexRefresh()),
     );
     this.registerEvent(this.app.vault.on("create", () => this.queueIndexRefresh()));
     this.registerEvent(

@@ -137,10 +137,6 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
   },
 ];
 
-export const DECK_ACTION_IDS = DECK_ACTION_DEFINITIONS.map(
-  (definition) => definition.id,
-);
-
 export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly titleSource: TitleSource;

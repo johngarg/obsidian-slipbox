@@ -7,20 +7,6 @@
     "declaration": true
   },
   "include": [
-    "src/index.ts",
-    "src/backlinks.ts",
-    "src/bookmarks.ts",
-    "src/card-title.ts",
-    "src/deck-actions.ts",
-    "src/deck-motion.ts",
-    "src/desk-state.ts",
-    "src/navigation-history.ts",
-    "src/new-note.ts",
-    "src/plugin-state.ts",
-    "src/settings.ts",
-    "src/zettel-id.ts",
-    "src/zettel-links.ts",
-    "src/zettel-metadata.ts",
     "test/**/*.ts"
   ]
 }

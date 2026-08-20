@@ -1,19 +1,33 @@
-const UNSAFE_FILENAME_CHARACTERS = /[\\/:*?"<>|\u0000-\u001f]/g;
+const UNSAFE_FILENAME_CHARACTERS = new Set('\\/:*?"<>|');
+
+function replaceUnsafeFilenameCharacters(
+  value: string,
+  replacement: string,
+): string {
+  let result = "";
+  for (const character of value) {
+    result += (
+      character.charCodeAt(0) <= 0x1f ||
+      UNSAFE_FILENAME_CHARACTERS.has(character)
+    )
+      ? replacement
+      : character;
+  }
+  return result;
+}
 
 /** Convert a title or formatted timestamp into a portable Markdown basename. */
 export function safeNoteBasename(value: string): string | null {
   const trimmed = value.trim();
-  const safeContent = trimmed
-    .replace(UNSAFE_FILENAME_CHARACTERS, "")
-    .replace(/[. ]+$/g, "")
+  const safeContent = replaceUnsafeFilenameCharacters(trimmed, "")
+    .replace(/[. ]+$/, "")
     .trim();
   if (safeContent === "") {
     return null;
   }
-  const basename = trimmed
-    .replace(UNSAFE_FILENAME_CHARACTERS, "-")
+  const basename = replaceUnsafeFilenameCharacters(trimmed, "-")
     .replace(/-+/g, "-")
-    .replace(/[. ]+$/g, "")
+    .replace(/[. ]+$/, "")
     .trim();
   return basename === "" ? null : basename;
 }

@@ -38,6 +38,7 @@ interface RenderedFooter extends CardFooterRenderOptions {
 /** Shared, view-agnostic renderer for the fixed card backlink footer. */
 export class CardFooterManager {
   private readonly entries = new Set<RenderedFooter>();
+  private readonly entriesByFooter = new Map<HTMLElement, RenderedFooter>();
   private readonly resizeObserver: ResizeObserver;
   private layoutFrame: number | null = null;
   private layoutTimer: number | null = null;
@@ -96,6 +97,7 @@ export class CardFooterManager {
     }
 
     this.entries.add(entry);
+    this.entriesByFooter.set(footer, entry);
     this.applyInteractiveState(entry);
     this.resizeObserver.observe(footer);
     this.scheduleLayout();
@@ -107,7 +109,7 @@ export class CardFooterManager {
     if (footer === null) {
       return;
     }
-    const entry = [...this.entries].find((candidate) => candidate.footer === footer);
+    const entry = this.entriesByFooter.get(footer);
     if (entry === undefined || entry.interactive === interactive) {
       return;
     }
@@ -132,6 +134,7 @@ export class CardFooterManager {
     this.closeOverflowMenu();
     this.resizeObserver.disconnect();
     this.entries.clear();
+    this.entriesByFooter.clear();
     if (this.layoutFrame !== null) {
       window.cancelAnimationFrame(this.layoutFrame);
       this.layoutFrame = null;
@@ -243,15 +246,17 @@ export class CardFooterManager {
       backlink.file,
       entry.sourcePath,
     );
-    const anchor = document.createElement("a");
-    anchor.className = "internal-link slipbox-card-backlink";
-    anchor.textContent = backlink.id;
-    anchor.href = linktext;
+    const anchor = parent.createEl("a", {
+      cls: "internal-link slipbox-card-backlink",
+      text: backlink.id,
+      attr: {
+        href: linktext,
+        "aria-label": `Backlink from Zettel ${backlink.id}`,
+      },
+    });
     anchor.dataset.href = linktext;
     anchor.draggable = false;
-    anchor.setAttribute("aria-label", `Backlink from Zettel ${backlink.id}`);
     anchor.tabIndex = tabbable && entry.interactive ? 0 : -1;
-    parent.append(anchor);
 
     anchor.addEventListener("mouseover", (event) => {
       if (!entry.interactive) {
@@ -318,7 +323,7 @@ export class CardFooterManager {
     const menu = new Menu().setUseNativeMenu(false);
     for (const backlink of entry.backlinks.slice(visibleCount)) {
       menu.addItem((item) => {
-        const title = document.createDocumentFragment();
+        const title = createFragment();
         const anchor = this.createBacklinkAnchor(title, entry, backlink, false);
         anchor.addEventListener("contextmenu", () => menu.hide());
         item.setTitle(title).onClick((event) => {

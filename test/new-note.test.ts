@@ -54,6 +54,7 @@ describe("new-note filenames", () => {
 
   test("replaces filename-unsafe characters without changing display text", () => {
     assert.equal(safeNoteBasename('Fields: UV/IR? "Both"'), "Fields- UV-IR- -Both-");
+    assert.equal(safeNoteBasename("Control\u0000characters\n"), "Control-characters");
   });
 
   test("has a final fallback when a format produces no usable filename", () => {

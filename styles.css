@@ -1106,3 +1106,6 @@ button.slipbox-card-backlink-overflow:disabled {
   }
 
 }
+.slipbox-ignore-pointer-events {
+  pointer-events: none !important;
+}

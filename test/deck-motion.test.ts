@@ -6,8 +6,8 @@ import {
   bookmarkEdgeTargets,
   cardMotionStyle,
   cardStackOrder,
+  centredViewportPosition,
   clampViewportPosition,
-  viewportPositionToRevealCard,
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
@@ -57,7 +57,7 @@ describe("free Deck motion", () => {
     assert.equal(activeIndexForViewport(0.2, 5, 6), 0);
   });
 
-  test("clamps free scrolling at the physical ends of the Deck", () => {
+  test("keeps continuous scrolling fractional at the physical ends", () => {
     assert.equal(clampViewportPosition(-2.4, 6), 0);
     assert.equal(clampViewportPosition(2.4, 6), 2.4);
     assert.equal(clampViewportPosition(9, 6), 5);
@@ -85,21 +85,42 @@ describe("free Deck motion", () => {
     });
   });
 
-  test("arrow navigation does not move an already visible target", () => {
-    assert.equal(
-      viewportPositionToRevealCard(2, 1.5, 6, 300, 1000, 600),
-      1.5,
+  test("sizes cards monotonically around a keyboard-focused card", () => {
+    const viewportPosition = 2.4;
+    const activeIndex = 4;
+    const focused = cardMotionStyle(
+      activeIndex,
+      viewportPosition,
+      300,
+      true,
+      activeIndex,
     );
+    const adjacent = cardMotionStyle(
+      activeIndex - 1,
+      viewportPosition,
+      300,
+      false,
+      activeIndex,
+    );
+    const farther = cardMotionStyle(
+      activeIndex - 2,
+      viewportPosition,
+      300,
+      false,
+      activeIndex,
+    );
+
+    assert.ok(focused.scale > adjacent.scale);
+    assert.ok(adjacent.scale > farther.scale);
+    assert.ok(focused.opacity > adjacent.opacity);
+    assert.ok(adjacent.opacity > farther.opacity);
+    assert.equal(focused.translateX, 480);
   });
 
-  test("arrow navigation scrolls only enough to reveal an obscured target", () => {
-    assert.equal(
-      viewportPositionToRevealCard(2, 1, 6, 400, 1000, 600, 20),
-      1.55,
-    );
-    assert.equal(
-      viewportPositionToRevealCard(1, 2, 6, 400, 1000, 600, 20),
-      1.45,
-    );
+  test("centres discrete navigation targets and clamps Deck boundaries", () => {
+    assert.equal(centredViewportPosition(2, 6), 2);
+    assert.equal(centredViewportPosition(-1, 6), 0);
+    assert.equal(centredViewportPosition(6, 6), 5);
+    assert.equal(centredViewportPosition(0, 0), 0);
   });
 });

@@ -9,6 +9,7 @@ import {
   moment,
   normalizePath,
   stringifyYaml,
+  type EventRef,
   type WorkspaceLeaf,
 } from "obsidian";
 
@@ -23,7 +24,11 @@ import {
   removeDeskPath,
   renameDeskCard,
 } from "./desk-state.js";
-import { generateFiledId, generateNextSectionId } from "./zettel-id.js";
+import {
+  generateFiledId,
+  generateNextSectionId,
+  isValidZettelId,
+} from "./zettel-id.js";
 import {
   BookmarksModal,
   confirmAction,
@@ -74,6 +79,7 @@ import {
 } from "./tray-state.js";
 import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
 import { normalizeCanvasPath } from "./canvas-layout.js";
+import { generateFiledCardLink } from "./zettel-links.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -108,9 +114,6 @@ export default class SlipboxPlugin extends Plugin {
     this.state = data.state;
     this.index = new ZettelIndex(this.app, this.settings.addressProperty);
     this.canvas = new CanvasBridge(this.app);
-    this.index.refresh();
-    this.reconcileSessionTray();
-    await this.persistState();
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
     this.registerView(
@@ -127,23 +130,10 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.registerCommands();
-    this.registerEvent(
-      this.app.metadataCache.on("changed", () => this.queueIndexRefresh()),
-    );
-    this.registerEvent(
-      this.app.metadataCache.on("deleted", () => this.queueIndexRefresh()),
-    );
-    this.registerEvent(
-      this.app.metadataCache.on("resolve", () => this.queueIndexRefresh()),
-    );
-    this.registerEvent(this.app.vault.on("create", () => this.queueIndexRefresh()));
-    this.registerEvent(
-      this.app.vault.on("delete", (file) => this.handleDeletedFile(file)),
-    );
-    this.registerEvent(
-      this.app.vault.on("rename", (file, oldPath) => this.handleRenamedFile(file, oldPath)),
-    );
-    this.app.workspace.onLayoutReady(() => void this.refreshIndex());
+    this.app.workspace.onLayoutReady(() => {
+      this.registerIndexEvents();
+      void this.initializeAfterLayoutReady();
+    });
   }
 
   onunload(): void {
@@ -153,7 +143,6 @@ export default class SlipboxPlugin extends Plugin {
     if (this.spreadSaveTimer !== null) {
       window.clearTimeout(this.spreadSaveTimer);
     }
-    this.app.workspace.detachLeavesOfType(DECK_VIEW_TYPE);
   }
 
   async openDeck(filingFile?: TFile): Promise<DeckView> {
@@ -201,6 +190,13 @@ export default class SlipboxPlugin extends Plugin {
     );
   }
 
+  private filedCardLabel(zettelId: string): string {
+    const card = this.index.filedById(zettelId);
+    return card === undefined
+      ? zettelId
+      : `${zettelId} · ${this.cardTitle(card.file)}`;
+  }
+
   templatesInfo(): TemplatesInfo {
     const plugin = this.templatesPlugin();
     const configuredFolder = plugin?.options?.folder;
@@ -232,7 +228,7 @@ export default class SlipboxPlugin extends Plugin {
     if (this.settings.addressProperty !== previousAddressProperty) {
       await this.refreshIndex();
     } else {
-      await this.refreshViews();
+      await this.refreshDeckViews();
     }
   }
 
@@ -329,7 +325,7 @@ export default class SlipboxPlugin extends Plugin {
         if (file === undefined) {
           new Notice(`Could not find ${path}.`);
         } else {
-          this.openMarkdownFile(file);
+          void this.openMarkdownFile(file);
         }
       },
     }).open();
@@ -351,10 +347,7 @@ export default class SlipboxPlugin extends Plugin {
     new BookmarksModal(this.app, this.state.bookmarks, {
       currentId: view.activeCard?.id ?? null,
       isAvailable: (id) => this.index.filedById(id) !== undefined,
-      label: (id) => {
-        const card = this.index.filedById(id);
-        return card === undefined ? id : `${id} · ${this.cardTitle(card.file)}`;
-      },
+      label: (id) => this.filedCardLabel(id),
       visit: (id) => void view.jumpToId(id),
       addCurrent: () => view.addBookmarkToCurrent(),
       remove: (zettelId) => view.removeBookmark(zettelId),
@@ -370,11 +363,8 @@ export default class SlipboxPlugin extends Plugin {
       new Notice("Only an available filed card can be bookmarked.");
       return;
     }
+    const label = this.filedCardLabel(zettelId);
     if (this.bookmarkAt(zettelId) !== undefined) {
-      const card = this.index.filedById(zettelId);
-      const label = card === undefined
-        ? zettelId
-        : `${zettelId} · ${this.cardTitle(card.file)}`;
       new Notice(`${label} already has a bookmark.`);
       return;
     }
@@ -384,10 +374,6 @@ export default class SlipboxPlugin extends Plugin {
         bookmarks: createBookmark(this.state.bookmarks, zettelId),
       };
       await this.persistStateAndRefreshViews();
-      const card = this.index.filedById(zettelId);
-      const label = card === undefined
-        ? zettelId
-        : `${zettelId} · ${this.cardTitle(card.file)}`;
       new Notice(`Bookmarked ${label}.`);
     } catch (error) {
       new Notice(`Could not add bookmark: ${errorMessage(error)}`);
@@ -571,7 +557,7 @@ export default class SlipboxPlugin extends Plugin {
   async beginFiling(file: TFile): Promise<void> {
     this.index.refresh();
     if (this.cardMetadataState(file) !== "unfiled") {
-      new Notice("Only an unfiled card can enter Filing Mode.");
+      new Notice("Only an unfiled card can enter filing mode.");
       return;
     }
     await this.openDeck(file);
@@ -650,6 +636,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async fileCard(file: TFile, attachmentId: string): Promise<string | null> {
+    let refreshAfterFiling = false;
     this.filingWriteInProgress = true;
     try {
       this.index.refresh();
@@ -663,39 +650,53 @@ export default class SlipboxPlugin extends Plugin {
         this.index.snapshot.allValidIds,
       );
 
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        const property = this.settings.addressProperty;
-        const hasId = Object.prototype.hasOwnProperty.call(
-          frontmatter,
-          property,
-        );
-        const current = frontmatter[property];
-        if (!hasId || !(current === "" || current === null || current === undefined)) {
-          throw new Error(
-            `The card is no longer unfiled; its ${property} was not changed`,
+      await this.app.fileManager.processFrontMatter(
+        file,
+        (frontmatter: Record<string, unknown>) => {
+          const property = this.settings.addressProperty;
+          const hasId = Object.prototype.hasOwnProperty.call(
+            frontmatter,
+            property,
           );
-        }
-        frontmatter[property] = newId;
-      });
+          const current = frontmatter[property];
+          if (
+            !hasId ||
+            !(current === "" || current === null || current === undefined)
+          ) {
+            throw new Error(
+              `The card is no longer unfiled; its ${property} was not changed`,
+            );
+          }
+          frontmatter[property] = newId;
+        },
+      );
 
-      await this.waitForCachedId(file, newId);
+      const cacheReady = await this.waitForCachedId(file, newId);
+      refreshAfterFiling = !cacheReady;
       this.index.refresh();
       this.reconcileSessionTray();
-      await this.refreshViews();
-      new Notice(`Filed ${this.cardTitle(file)} as ${newId}.`);
+      await this.refreshDeckViews();
+      new Notice(
+        cacheReady
+          ? `Filed ${this.cardTitle(file)} as ${newId}.`
+          : `Filed ${this.cardTitle(file)} as ${newId}. Slipbox will refresh when Obsidian finishes indexing it.`,
+      );
       return newId;
     } catch (error) {
       new Notice(`Could not file the card: ${errorMessage(error)}`);
       return null;
     } finally {
       this.filingWriteInProgress = false;
+      if (refreshAfterFiling) {
+        this.queueIndexRefresh();
+      }
     }
   }
 
   private registerCommands(): void {
     this.addCommand({
       id: "open-deck",
-      name: "Open Slipbox",
+      name: "Open",
       callback: () => void this.openDeck(),
     });
 
@@ -901,6 +902,22 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "copy-current-card-link",
+      name: "Copy link to current card",
+      checkCallback: (checking) => {
+        const id = this.currentFiledId();
+        const available = id !== null && this.index.filedById(id) !== undefined;
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          void this.copyCurrentCardLink();
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
       id: "add-card-from-current",
       name: "Add card from current card",
       checkCallback: (checking) => {
@@ -943,7 +960,6 @@ export default class SlipboxPlugin extends Plugin {
       id: "show-card-problems",
       name: "Show card problems",
       checkCallback: (checking) => {
-        this.index.refresh();
         const available = this.index.snapshot.issues.length > 0;
         if (checking) {
           return available;
@@ -999,13 +1015,16 @@ export default class SlipboxPlugin extends Plugin {
 
   private async makeNoteCard(file: TFile): Promise<void> {
     try {
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        const property = this.settings.addressProperty;
-        if (Object.prototype.hasOwnProperty.call(frontmatter, property)) {
-          throw new Error(`This note already has a ${property} property`);
-        }
-        frontmatter[property] = "";
-      });
+      await this.app.fileManager.processFrontMatter(
+        file,
+        (frontmatter: Record<string, unknown>) => {
+          const property = this.settings.addressProperty;
+          if (Object.prototype.hasOwnProperty.call(frontmatter, property)) {
+            throw new Error(`This note already has a ${property} property`);
+          }
+          frontmatter[property] = "";
+        },
+      );
       this.queueIndexRefresh();
       new Notice(`${this.cardTitle(file)} is now an unfiled card.`);
     } catch (error) {
@@ -1139,11 +1158,11 @@ export default class SlipboxPlugin extends Plugin {
     const plugin = this.templatesPlugin();
     const info = this.templatesInfo();
     if (plugin === null) {
-      new Notice("Enable Obsidian’s Templates core plugin to apply templates to new cards.");
+      new Notice("Enable Obsidian’s templates core plugin to apply templates to new cards.");
       return null;
     }
     if (info.folder === "" || info.files.length === 0) {
-      new Notice("Configure a Templates folder containing at least one template to use it for new cards.");
+      new Notice("Configure a templates folder containing at least one template to use it for new cards.");
       return null;
     }
 
@@ -1163,7 +1182,9 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private cardMetadataState(file: TFile): CardMetadataState {
-    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const rawFrontmatter: unknown =
+      this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const frontmatter = isRecord(rawFrontmatter) ? rawFrontmatter : undefined;
     if (
       frontmatter === undefined ||
       !Object.prototype.hasOwnProperty.call(
@@ -1180,7 +1201,7 @@ export default class SlipboxPlugin extends Plugin {
     if (typeof value !== "string") {
       return "invalid";
     }
-    return this.index.snapshot.allValidIds.includes(value) ? "filed" : "invalid";
+    return isValidZettelId(value) ? "filed" : "invalid";
   }
 
   private currentDeckView(): DeckView | null {
@@ -1214,14 +1235,34 @@ export default class SlipboxPlugin extends Plugin {
     return state === "filed" || state === "unfiled" ? activeFile : null;
   }
 
+  private async copyCurrentCardLink(): Promise<void> {
+    const id = this.currentFiledId();
+    const card = id === null ? undefined : this.index.filedById(id);
+    if (card === undefined) {
+      new Notice("Only an available filed card can be linked.");
+      return;
+    }
+
+    const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";
+    const link = generateFiledCardLink(
+      this.app,
+      card.file,
+      sourcePath,
+      card.id,
+    );
+    try {
+      await navigator.clipboard.writeText(link);
+      new Notice(`Copied ${link}.`);
+    } catch (error) {
+      new Notice(`Could not copy the card link: ${errorMessage(error)}`);
+    }
+  }
+
   async removeBookmark(zettelId: string): Promise<void> {
     if (this.bookmarkAt(zettelId) === undefined) {
       return;
     }
-    const card = this.index.filedById(zettelId);
-    const label = card === undefined
-      ? zettelId
-      : `${zettelId} · ${this.cardTitle(card.file)}`;
+    const label = this.filedCardLabel(zettelId);
     this.state = {
       ...this.state,
       bookmarks: deleteBookmark(this.state.bookmarks, zettelId),
@@ -1274,10 +1315,37 @@ export default class SlipboxPlugin extends Plugin {
     }, 80);
   }
 
+  private registerIndexEvents(): void {
+    this.registerEvent(
+      this.app.metadataCache.on("changed", () => this.queueIndexRefresh()),
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("deleted", () => this.queueIndexRefresh()),
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("resolve", () => this.queueIndexRefresh()),
+    );
+    this.registerEvent(
+      this.app.vault.on("create", () => this.queueIndexRefresh()),
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => this.handleDeletedFile(file)),
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) =>
+        this.handleRenamedFile(file, oldPath)),
+    );
+  }
+
+  private async initializeAfterLayoutReady(): Promise<void> {
+    await this.refreshIndex();
+    await this.persistState();
+  }
+
   private async refreshIndex(): Promise<void> {
     this.index.refresh();
     this.reconcileSessionTray();
-    await this.refreshViews();
+    await this.refreshDeckViews();
   }
 
   private async refreshDeckViews(): Promise<void> {
@@ -1290,13 +1358,9 @@ export default class SlipboxPlugin extends Plugin {
     );
   }
 
-  private async refreshViews(): Promise<void> {
-    await this.refreshDeckViews();
-  }
-
   private async persistStateAndRefreshViews(): Promise<void> {
     await this.persistState();
-    await this.refreshViews();
+    await this.refreshDeckViews();
   }
 
   private async persistState(): Promise<void> {
@@ -1313,17 +1377,48 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  private async waitForCachedId(file: TFile, expectedId: string): Promise<void> {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const value =
-        this.app.metadataCache.getFileCache(file)?.frontmatter?.[
-          this.settings.addressProperty
-        ];
-      if (value === expectedId) {
-        return;
-      }
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
+  private async waitForCachedId(
+    file: TFile,
+    expectedId: string,
+  ): Promise<boolean> {
+    const cachedId = (): unknown =>
+      this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+        this.settings.addressProperty
+      ];
+    if (cachedId() === expectedId) {
+      return true;
     }
+
+    return new Promise<boolean>((resolve) => {
+      let eventRef: EventRef | null = null;
+      let timeout: number | null = null;
+      let settled = false;
+      const finish = (ready: boolean): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (eventRef !== null) {
+          this.app.metadataCache.offref(eventRef);
+        }
+        if (timeout !== null) {
+          window.clearTimeout(timeout);
+        }
+        resolve(ready);
+      };
+
+      eventRef = this.app.metadataCache.on("changed", (changedFile) => {
+        if (changedFile.path === file.path && cachedId() === expectedId) {
+          finish(true);
+        }
+      });
+      timeout = window.setTimeout(() => finish(cachedId() === expectedId), 1_000);
+
+      // Close the race between the first cache check and listener registration.
+      if (cachedId() === expectedId) {
+        finish(true);
+      }
+    });
   }
 
   private handleDeletedFile(file: TAbstractFile): void {
@@ -1399,6 +1494,10 @@ export default class SlipboxPlugin extends Plugin {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export type { EntryPoint };

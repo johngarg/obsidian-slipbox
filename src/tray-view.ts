@@ -14,7 +14,6 @@ import {
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
-  moveCardWithinPile,
   setPilePosition,
   splitCardIntoNewPile,
   trayHasFiledCards,
@@ -611,7 +610,7 @@ export class TrayRenderer {
         dragSurface.removeEventListener("pointermove", move);
         dragSurface.removeEventListener("pointerup", finish);
         dragSurface.removeEventListener("pointercancel", cancel);
-        element.style.translate = "";
+        element.setCssProps({ translate: "" });
         this.clearDropCues();
       };
       dragSurface.addEventListener("pointermove", move);
@@ -667,13 +666,7 @@ export class TrayRenderer {
       ) as HTMLElement | undefined;
     const targetId = target?.dataset.pileId;
     if (target !== undefined && targetId !== undefined) {
-      const rect = target.getBoundingClientRect();
-      const relativeX = (x - rect.left) / Math.max(1, rect.width);
-      const relativeY = (y - rect.top) / Math.max(1, rect.height);
-      if (
-        relativeX > 0.2 && relativeX < 0.8 &&
-        relativeY > 0.2 && relativeY < 0.8
-      ) {
+      if (isPointInPileMergeRegion(target, x, y)) {
         return mergePiles(state, sourcePileId, targetId);
       }
     }
@@ -686,11 +679,14 @@ export class TrayRenderer {
     dragged: HTMLElement,
   ): void {
     this.clearDropCues(dragged);
-    const targetPile = this.elementsBelowPoint(
+    const elements = this.elementsBelowPoint(
       event.clientX,
       event.clientY,
       dragged,
-    ).find((element) => element.matches(".slipbox-tray-pile")) as HTMLElement | undefined;
+    );
+    const targetPile = elements.find(
+      (element) => element.matches(".slipbox-tray-pile"),
+    ) as HTMLElement | undefined;
     if (targetPile === undefined) {
       return;
     }
@@ -699,11 +695,9 @@ export class TrayRenderer {
         ? "is-reorder-target"
         : "is-card-drop-target",
     );
-    const targetCard = this.elementsBelowPoint(
-      event.clientX,
-      event.clientY,
-      dragged,
-    ).find((element) => element.matches(".slipbox-tray-card"));
+    const targetCard = elements.find(
+      (element) => element.matches(".slipbox-tray-card"),
+    );
     targetCard?.addClass("is-insertion-target");
   }
 
@@ -724,13 +718,7 @@ export class TrayRenderer {
     if (target === undefined) {
       return;
     }
-    const rect = target.getBoundingClientRect();
-    const relativeX = (event.clientX - rect.left) / Math.max(1, rect.width);
-    const relativeY = (event.clientY - rect.top) / Math.max(1, rect.height);
-    if (
-      relativeX > 0.2 && relativeX < 0.8 &&
-      relativeY > 0.2 && relativeY < 0.8
-    ) {
+    if (isPointInPileMergeRegion(target, event.clientX, event.clientY)) {
       target.addClass("is-merge-target");
     }
   }
@@ -740,11 +728,12 @@ export class TrayRenderer {
     y: number,
     dragged: HTMLElement,
   ): Element[] {
-    const previous = dragged.style.pointerEvents;
-    dragged.style.pointerEvents = "none";
-    const elements = document.elementsFromPoint(x, y);
-    dragged.style.pointerEvents = previous;
-    return elements;
+    dragged.addClass("slipbox-ignore-pointer-events");
+    try {
+      return document.elementsFromPoint(x, y);
+    } finally {
+      dragged.removeClass("slipbox-ignore-pointer-events");
+    }
   }
 
   private positionAtPoint(x: number, y: number): TrayPilePosition | null {
@@ -779,7 +768,7 @@ export class TrayRenderer {
         "is-card-drop-target",
         "is-insertion-target",
       ]);
-      element.style.translate = "";
+      element.setCssProps({ translate: "" });
     });
     this.rootEl?.removeClass("is-dragging-card");
   }
@@ -802,6 +791,20 @@ function defaultPilePosition(pileIndex: number): TrayPilePosition {
       pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX -
       DEFAULT_PILE_DECK_CLEARANCE_PX,
   };
+}
+
+function isPointInPileMergeRegion(
+  pile: HTMLElement,
+  x: number,
+  y: number,
+): boolean {
+  const rect = pile.getBoundingClientRect();
+  const relativeX = (x - rect.left) / Math.max(1, rect.width);
+  const relativeY = (y - rect.top) / Math.max(1, rect.height);
+  return (
+    relativeX > 0.2 && relativeX < 0.8 &&
+    relativeY > 0.2 && relativeY < 0.8
+  );
 }
 
 function trayIconButton(

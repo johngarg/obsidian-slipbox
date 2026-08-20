@@ -1,3 +1,5 @@
+import { fnv1a } from "./hash.js";
+
 export type TrayCardKind = "filed" | "unfiled";
 
 export interface TrayCard {
@@ -67,7 +69,7 @@ export function createPile(
     return state;
   }
   const piles = [...state.piles];
-  piles.splice(clampIndex(pileIndex, piles.length + 1), 0, {
+  piles.splice(clampInsertionIndex(pileIndex, piles.length), 0, {
     id: pileId,
     cards: unique,
   });
@@ -93,7 +95,7 @@ export function addUniqueCardToPile(
   }
   const piles = [...state.piles];
   const cards = [...piles[pileIndex]!.cards];
-  cards.splice(clampIndex(cardIndex, cards.length + 1), 0, card);
+  cards.splice(clampInsertionIndex(cardIndex, cards.length), 0, card);
   piles[pileIndex] = { ...piles[pileIndex]!, cards };
   return cleanTray({ ...state, piles });
 }
@@ -129,7 +131,7 @@ export function moveCardWithinPile(
   if (card === undefined) {
     return state;
   }
-  cards.splice(clampIndex(toIndex, cards.length + 1), 0, card);
+  cards.splice(clampInsertionIndex(toIndex, cards.length), 0, card);
   const piles = [...state.piles];
   piles[pileIndex] = { ...pile, cards };
   return cleanTray({ ...state, piles });
@@ -248,7 +250,7 @@ export function reorderPiles(
   if (pile === undefined) {
     return state;
   }
-  piles.splice(clampIndex(toIndex, piles.length + 1), 0, pile);
+  piles.splice(clampInsertionIndex(toIndex, piles.length), 0, pile);
   return cleanTray({ ...state, piles });
 }
 
@@ -438,11 +440,7 @@ export function trayHasFiledCards(state: TrayState): boolean {
 
 /** Stable pseudo-random offsets keep a pile tactile without flickering on rerender. */
 export function trayStackJitter(cardRef: string, depth: number): TrayStackJitter {
-  let hash = 2166136261;
-  for (let index = 0; index < cardRef.length; index += 1) {
-    hash ^= cardRef.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
+  let hash = fnv1a(cardRef);
   hash ^= Math.imul(Math.max(0, Math.trunc(depth)) + 1, -1640531527);
   const unsigned = hash >>> 0;
   return {
@@ -478,9 +476,8 @@ export function insertionIndexForPoint(
   point: number,
   itemCentres: readonly number[],
 ): number {
-  return itemCentres.findIndex((centre) => point < centre) < 0
-    ? itemCentres.length
-    : itemCentres.findIndex((centre) => point < centre);
+  const index = itemCentres.findIndex((centre) => point < centre);
+  return index < 0 ? itemCentres.length : index;
 }
 
 function cleanTray(state: TrayState): TrayState {
@@ -501,11 +498,11 @@ function allTrayCardRefs(state: TrayState): string[] {
   return state.piles.flatMap((pile) => pile.cards.map((card) => card.cardRef));
 }
 
-function clampIndex(index: number, length: number): number {
+function clampInsertionIndex(index: number, length: number): number {
   if (!Number.isFinite(index)) {
-    return index < 0 ? 0 : Math.max(0, length - 1);
+    return index < 0 ? 0 : Math.max(0, length);
   }
-  return Math.max(0, Math.min(Math.max(0, length - 1), Math.trunc(index)));
+  return Math.max(0, Math.min(Math.max(0, length), Math.trunc(index)));
 }
 
 function uniqueCandidates(

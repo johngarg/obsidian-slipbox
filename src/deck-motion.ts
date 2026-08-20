@@ -102,50 +102,33 @@ export function activeIndexForViewport(
   return activeIndex;
 }
 
-/** Compute one card's visual state at a continuous viewport position. */
+/**
+ * Compute one card's visual state.
+ *
+ * Translation follows the continuous viewport, while scale and opacity may be
+ * anchored to a separately selected card during discrete keyboard navigation.
+ */
 export function cardMotionStyle(
   cardIndex: number,
   viewportPosition: number,
   cardStep: number,
   isActive = false,
+  focusPosition = viewportPosition,
 ): CardMotionStyle {
   const safeStep = Math.max(cardStep, 1);
-  const distance = Math.abs(cardIndex - viewportPosition);
-  const distanceScale = Math.max(0.86, 1 - distance * 0.035);
+  const focusDistance = Math.abs(cardIndex - focusPosition);
+  const distanceScale = Math.max(0.86, 1 - focusDistance * 0.035);
   return {
     translateX: (cardIndex - viewportPosition) * safeStep,
     scale: isActive ? Math.max(0.98, distanceScale) : distanceScale,
-    opacity: isActive ? 1 : Math.max(0.42, 1 - distance * 0.13),
+    opacity: isActive ? 1 : Math.max(0.42, 1 - focusDistance * 0.13),
   };
 }
 
-/**
- * Move only far enough for the target card to fit inside the stage.
- *
- * This is used by discrete arrow-key navigation; free pointer and trackpad
- * browsing never calls it.
- */
-export function viewportPositionToRevealCard(
+/** Use a selected card's index as the centred discrete viewport target. */
+export function centredViewportPosition(
   targetIndex: number,
-  viewportPosition: number,
   cardCount: number,
-  cardStep: number,
-  stageWidth: number,
-  cardWidth: number,
-  margin = 18,
 ): number {
-  if (cardCount <= 0 || cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
-    return clampViewportPosition(viewportPosition, cardCount);
-  }
-
-  const centreLimit = Math.max(0, (stageWidth - cardWidth) / 2 - margin);
-  const targetX = (targetIndex - viewportPosition) * cardStep;
-  let nextPosition = viewportPosition;
-
-  if (targetX > centreLimit) {
-    nextPosition = targetIndex - centreLimit / cardStep;
-  } else if (targetX < -centreLimit) {
-    nextPosition = targetIndex + centreLimit / cardStep;
-  }
-  return clampViewportPosition(nextPosition, cardCount);
+  return clampViewportPosition(targetIndex, cardCount);
 }

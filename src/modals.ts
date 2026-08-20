@@ -56,7 +56,6 @@ export class TextPromptModal extends Modal {
       input.focus();
       input.select();
     });
-    submit.focus({ preventScroll: true });
   }
 
   onClose(): void {
@@ -275,12 +274,17 @@ export interface BookmarksModalActions {
 }
 
 export class BookmarksModal extends Modal {
+  private bookmarks: DeckBookmark[];
+  private listEl: HTMLElement | null = null;
+  private addButton: HTMLButtonElement | null = null;
+
   constructor(
     app: App,
-    private readonly bookmarks: readonly DeckBookmark[],
+    bookmarks: readonly DeckBookmark[],
     private readonly actions: BookmarksModalActions,
   ) {
     super(app);
+    this.bookmarks = [...bookmarks];
   }
 
   onOpen(): void {
@@ -291,8 +295,29 @@ export class BookmarksModal extends Modal {
       cls: "slipbox-empty-copy",
       text: "One persistent physical bookmark may be attached to each filed card.",
     });
+    this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
+    this.renderList();
+    this.addButton = renderCurrentCardAddAction(contentEl, {
+      label: "+ add current card as bookmark",
+      currentId: this.actions.currentId,
+      isCurrentListed: this.currentIsListed(),
+      addCurrent: () => this.actions.addCurrent(),
+      onAdded: () => this.close(),
+    });
+  }
 
-    const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
+  onClose(): void {
+    this.contentEl.empty();
+    this.listEl = null;
+    this.addButton = null;
+  }
+
+  private renderList(): void {
+    const list = this.listEl;
+    if (list === null) {
+      return;
+    }
+    list.empty();
     if (this.bookmarks.length === 0) {
       list.createEl("p", { cls: "slipbox-empty-copy", text: "No bookmarks yet." });
     }
@@ -317,27 +342,26 @@ export class BookmarksModal extends Modal {
 
       const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
       remove.addEventListener("click", () => {
-        void this.actions.remove(bookmark.zettelId).then(() => this.close());
+        remove.disabled = true;
+        void this.actions.remove(bookmark.zettelId).then(() => {
+          this.bookmarks = this.bookmarks.filter(
+            (candidate) => candidate.zettelId !== bookmark.zettelId,
+          );
+          this.renderList();
+          updateCurrentCardAddAction(
+            this.addButton,
+            this.actions.currentId,
+            this.currentIsListed(),
+          );
+        });
       });
     }
-
-    const footer = contentEl.createDiv({ cls: "slipbox-modal-actions" });
-    const add = footer.createEl("button", {
-      text: "+ Bookmark current card",
-      cls: "mod-cta",
-      attr: { type: "button" },
-    });
-    add.disabled = this.actions.currentId === null || this.bookmarks.some(
-      (bookmark) => bookmark.zettelId === this.actions.currentId,
-    );
-    add.addEventListener("click", () => {
-      void this.actions.addCurrent().then(() => this.close());
-    });
-    activateDefaultButtonOnEnter(contentEl, add);
   }
 
-  onClose(): void {
-    this.contentEl.empty();
+  private currentIsListed(): boolean {
+    return this.bookmarks.some(
+      (bookmark) => bookmark.zettelId === this.actions.currentId,
+    );
   }
 }
 
@@ -351,20 +375,46 @@ export interface EntryPointModalActions {
 }
 
 export class EntryPointsModal extends Modal {
+  private entryPoints: EntryPoint[];
+  private listEl: HTMLElement | null = null;
+  private addButton: HTMLButtonElement | null = null;
+
   constructor(
     app: App,
-    private readonly entryPoints: readonly EntryPoint[],
+    entryPoints: readonly EntryPoint[],
     private readonly actions: EntryPointModalActions,
   ) {
     super(app);
+    this.entryPoints = [...entryPoints];
   }
 
   onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Entry points" });
+    this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
+    this.renderList();
+    this.addButton = renderCurrentCardAddAction(contentEl, {
+      label: "+ add current card as entry point",
+      currentId: this.actions.currentId,
+      isCurrentListed: this.currentIsListed(),
+      addCurrent: () => this.actions.addCurrent(),
+      onAdded: () => this.close(),
+    });
+  }
 
-    const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
+  onClose(): void {
+    this.contentEl.empty();
+    this.listEl = null;
+    this.addButton = null;
+  }
+
+  private renderList(): void {
+    const list = this.listEl;
+    if (list === null) {
+      return;
+    }
+    list.empty();
     if (this.entryPoints.length === 0) {
       list.createEl("p", {
         cls: "slipbox-empty-copy",
@@ -396,25 +446,65 @@ export class EntryPointsModal extends Modal {
       });
       const remove = iconButton(row, "trash-2", `Delete ${entry.name}`);
       remove.addEventListener("click", () => {
-        void this.actions.remove(index).then(() => this.close());
+        remove.disabled = true;
+        void this.actions.remove(index).then(() => {
+          this.entryPoints.splice(index, 1);
+          this.renderList();
+          updateCurrentCardAddAction(
+            this.addButton,
+            this.actions.currentId,
+            this.currentIsListed(),
+          );
+        });
       });
     });
-
-    const footer = contentEl.createDiv({ cls: "slipbox-modal-actions" });
-    const add = footer.createEl("button", {
-      text: "+ Add current card as entry point",
-      cls: "mod-cta",
-      attr: { type: "button" },
-    });
-    add.disabled = this.actions.currentId === null;
-    add.addEventListener("click", () => {
-      void this.actions.addCurrent().then(() => this.close());
-    });
-    activateDefaultButtonOnEnter(contentEl, add);
   }
 
-  onClose(): void {
-    this.contentEl.empty();
+  private currentIsListed(): boolean {
+    return this.entryPoints.some(
+      (entry) => entry.id === this.actions.currentId,
+    );
+  }
+}
+
+interface CurrentCardAddActionOptions {
+  readonly label: string;
+  readonly currentId: string | null;
+  readonly isCurrentListed: boolean;
+  addCurrent(): Promise<void>;
+  onAdded(): void;
+}
+
+function renderCurrentCardAddAction(
+  contentEl: HTMLElement,
+  options: CurrentCardAddActionOptions,
+): HTMLButtonElement {
+  const footer = contentEl.createDiv({ cls: "slipbox-modal-actions" });
+  const add = footer.createEl("button", {
+    text: options.label,
+    cls: "mod-cta",
+    attr: { type: "button" },
+  });
+  updateCurrentCardAddAction(
+    add,
+    options.currentId,
+    options.isCurrentListed,
+  );
+  add.addEventListener("click", () => {
+    add.disabled = true;
+    void options.addCurrent().then(() => options.onAdded());
+  });
+  activateDefaultButtonOnEnter(contentEl, add);
+  return add;
+}
+
+function updateCurrentCardAddAction(
+  button: HTMLButtonElement | null,
+  currentId: string | null,
+  isCurrentListed: boolean,
+): void {
+  if (button !== null) {
+    button.disabled = currentId === null || isCurrentListed;
   }
 }
 

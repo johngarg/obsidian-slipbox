@@ -36,6 +36,9 @@ const NO_BACKLINKS: readonly FiledZettel[] = [];
 /** A lightweight, cache-backed index over all Markdown files in the vault. */
 export class ZettelIndex {
   private current: VaultZettelIndex = EMPTY_INDEX;
+  private filedByIdMap = new Map<string, FiledZettel>();
+  private filedByPathMap = new Map<string, FiledZettel>();
+  private filedIndexByIdMap = new Map<string, number>();
 
   constructor(
     private readonly app: App,
@@ -77,16 +80,25 @@ export class ZettelIndex {
       this.app.metadataCache.resolvedLinks,
     );
 
+    this.filedByIdMap = new Map(filed.map((zettel) => [zettel.id, zettel]));
+    this.filedByPathMap = new Map(filed.map((zettel) => [zettel.path, zettel]));
+    this.filedIndexByIdMap = new Map(
+      filed.map((zettel, index) => [zettel.id, index]),
+    );
     this.current = { ...indexed, filed, unfiled, backlinksByTargetPath };
     return this.current;
   }
 
   filedById(id: string): FiledZettel | undefined {
-    return this.current.filed.find((zettel) => zettel.id === id);
+    return this.filedByIdMap.get(id);
   }
 
   filedByFile(file: TFile): FiledZettel | undefined {
-    return this.current.filed.find((zettel) => zettel.path === file.path);
+    return this.filedByPathMap.get(file.path);
+  }
+
+  filedIndex(id: string | null): number {
+    return id === null ? -1 : this.filedIndexByIdMap.get(id) ?? -1;
   }
 
   fileAtPath(path: string): TFile | undefined {

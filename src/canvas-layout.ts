@@ -1,3 +1,5 @@
+import { fnv1a } from "./hash.js";
+
 export interface CanvasNode {
   readonly id: string;
   readonly type: string;
@@ -123,7 +125,7 @@ export function layoutFilesOnCanvas(
     };
   });
   return {
-    data: { ...data, nodes: [...data.nodes, ...nodes], edges: data.edges },
+    data: { ...data, nodes: [...data.nodes, ...nodes] },
     addedPaths,
     skippedPaths,
   };
@@ -167,7 +169,7 @@ export function layoutLegacyDeskOnCanvas(
     height,
   }));
   return {
-    data: { ...data, nodes: [...data.nodes, ...nodes], edges: data.edges },
+    data: { ...data, nodes: [...data.nodes, ...nodes] },
     addedPaths: additions.map((card) => card.cardRef),
     skippedPaths,
   };
@@ -188,15 +190,6 @@ function uniqueCanvasNodeId(file: string, used: Set<string>): string {
   }
   used.add(id);
   return id;
-}
-
-function fnv1a(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
 }
 
 function uniqueNonempty(values: readonly string[]): string[] {

@@ -132,7 +132,6 @@ export function indexZettelMetadata(
     }
   }
 
-  filed.sort((a, b) => compareZettelIds(a.id, b.id));
   unfiledPaths.sort((a, b) => a.localeCompare(b));
   issues.sort((a, b) => {
     const pathComparison = a.paths[0].localeCompare(b.paths[0]);

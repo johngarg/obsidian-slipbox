@@ -16,7 +16,7 @@ import {
   keyBindingConflict,
   keyBindingSignature,
   normalizeKeyBinding,
-  type DeckAction,
+  type DeckActionDefinition,
   type DeckKeyBinding,
   type KeyModifier,
   type SlipboxSettings,
@@ -58,15 +58,25 @@ export class SlipboxSettingTab extends PluginSettingTab {
       .setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.")
       .setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
     titleProperty.addText((text) => {
+      let property = this.slipbox.settings.titleProperty;
+      const queueCommit = this.debounceTextCommit(text.inputEl, () => {
+        if (
+          property !== "" &&
+          property !== this.slipbox.settings.titleProperty
+        ) {
+          void this.save({
+            ...this.slipbox.settings,
+            titleProperty: property,
+          });
+        }
+      });
       text
         .setValue(this.slipbox.settings.titleProperty)
         .setDisabled(this.slipbox.settings.titleSource !== "frontmatter")
         .onChange((value) => {
-          const property = value.trim();
+          property = value.trim();
           this.setPropertyValidity(titleProperty, property !== "");
-          if (property !== "") {
-            void this.save({ ...this.slipbox.settings, titleProperty: property });
-          }
+          queueCommit();
         });
     });
 
@@ -92,7 +102,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
     this.renderDeckHeaderButtons(containerEl);
 
-    new Setting(containerEl).setName("Slipbox shortcuts").setHeading();
+    new Setting(containerEl).setName("Keyboard shortcuts").setHeading();
     const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
     shortcutIntro.createEl("p", {
       cls: "setting-item-description",
@@ -109,7 +119,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
       }).then(() => this.display());
     });
     for (const definition of DECK_ACTION_DEFINITIONS) {
-      this.renderShortcutSetting(containerEl, definition.id, definition.label);
+      this.renderShortcutSetting(containerEl, definition);
     }
   }
 
@@ -149,23 +159,30 @@ export class SlipboxSettingTab extends PluginSettingTab {
       .setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
     const sample = timestamp.descEl.createEl("code");
     timestamp.addMomentFormat((component) => {
+      let format = this.slipbox.settings.newNoteTimestampFormat;
+      const queueCommit = this.debounceTextCommit(component.inputEl, () => {
+        if (
+          format !== "" &&
+          format !== this.slipbox.settings.newNoteTimestampFormat
+        ) {
+          void this.save({
+            ...this.slipbox.settings,
+            newNoteTimestampFormat: format,
+          });
+        }
+      });
       component
         .setSampleEl(sample)
         .setDefaultFormat(DEFAULT_SETTINGS.newNoteTimestampFormat)
         .setValue(this.slipbox.settings.newNoteTimestampFormat)
         .onChange((value) => {
-          const format = value.trim();
+          format = value.trim();
           this.setTextValidity(
             timestamp,
             format !== "",
             "A non-empty timestamp format is required.",
           );
-          if (format !== "") {
-            void this.save({
-              ...this.slipbox.settings,
-              newNoteTimestampFormat: format,
-            });
-          }
+          queueCommit();
         });
     });
 
@@ -174,7 +191,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(container)
       .setName("Apply a template to new cards")
-      .setDesc("Use Obsidian’s Templates core plugin after Slipbox creates and opens the note.")
+      .setDesc("Use Obsidian’s templates core plugin after Slipbox creates and opens the note.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.useTemplatesForNewNotes)
@@ -238,15 +255,25 @@ export class SlipboxSettingTab extends PluginSettingTab {
         "Exact top-level YAML key used to identify and order cards. Changing it re-indexes immediately but does not rewrite existing notes.",
       );
     setting.addText((text) => {
+      let property = this.slipbox.settings.addressProperty;
+      const queueCommit = this.debounceTextCommit(text.inputEl, () => {
+        if (
+          property !== "" &&
+          property !== this.slipbox.settings.addressProperty
+        ) {
+          void this.save({
+            ...this.slipbox.settings,
+            addressProperty: property,
+          });
+        }
+      });
       text
-        .setPlaceholder("zettel-id")
+        .setPlaceholder(DEFAULT_SETTINGS.addressProperty)
         .setValue(this.slipbox.settings.addressProperty)
         .onChange((value) => {
-          const property = value.trim();
+          property = value.trim();
           this.setPropertyValidity(setting, property !== "");
-          if (property !== "") {
-            void this.save({ ...this.slipbox.settings, addressProperty: property });
-          }
+          queueCommit();
         });
     });
   }
@@ -278,9 +305,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
   private renderShortcutSetting(
     container: HTMLElement,
-    action: DeckAction,
-    label: string,
+    definition: DeckActionDefinition,
   ): void {
+    const { id: action, label } = definition;
     const setting = new Setting(container).setName(label);
     setting.settingEl.addClass("slipbox-shortcut-setting");
     const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
@@ -309,7 +336,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     }
 
     const add = bindings.createEl("button", {
-      text: "+ Add shortcut",
+      text: "+ add shortcut",
       attr: { type: "button" },
     });
     const error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
@@ -339,7 +366,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         );
         if (conflict !== null) {
           const conflictLabel = DECK_ACTION_DEFINITIONS.find(
-            (definition) => definition.id === conflict,
+            (candidate) => candidate.id === conflict,
           )?.label ?? conflict;
           error.setText(`${formatKeyBinding(candidate)} is already assigned to ${conflictLabel}.`);
           return;
@@ -367,21 +394,20 @@ export class SlipboxSettingTab extends PluginSettingTab {
       };
       const finish = (): void => {
         add.removeEventListener("keydown", capture);
+        add.removeEventListener("blur", finish);
         add.removeClass("is-capturing");
-        add.setText("+ Add shortcut");
+        add.setText("+ add shortcut");
       };
       add.addEventListener("keydown", capture);
+      add.addEventListener("blur", finish);
     });
 
-    const definition = DECK_ACTION_DEFINITIONS.find(
-      (candidate) => candidate.id === action,
-    );
     const reset = bindings.createEl("button", {
       text: "Reset",
       attr: { type: "button", "aria-label": `Reset ${label} shortcuts` },
     });
     reset.addEventListener("click", () => {
-      const defaults = definition?.defaultBindings ?? [];
+      const defaults = definition.defaultBindings;
       for (const bindingValue of defaults) {
         const conflict = keyBindingConflict(
           this.slipbox.settings.deckKeybindings,
@@ -429,6 +455,27 @@ export class SlipboxSettingTab extends PluginSettingTab {
     return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
       modifiers,
       key: event.key,
+    };
+  }
+
+  private debounceTextCommit(
+    input: HTMLInputElement,
+    commit: () => void,
+  ): () => void {
+    let timer: number | null = null;
+    const flush = (): void => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      commit();
+    };
+    input.addEventListener("blur", flush);
+    return () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(flush, 300);
     };
   }
 

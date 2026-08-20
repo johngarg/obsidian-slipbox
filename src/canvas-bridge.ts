@@ -3,7 +3,6 @@ import {
   TextFileView,
   normalizePath,
   type App,
-  type WorkspaceLeaf,
 } from "obsidian";
 
 import {
@@ -35,7 +34,7 @@ export class CanvasBridge {
   constructor(private readonly app: App) {}
 
   hasActiveCanvas(): boolean {
-    return this.app.workspace.activeLeaf?.getViewState().type === "canvas";
+    return this.activeCanvasView() !== null;
   }
 
   canvasFiles(): TFile[] {
@@ -48,11 +47,10 @@ export class CanvasBridge {
   async layoutFilesOnActiveCanvas(
     filePaths: readonly string[],
   ): Promise<CanvasWriteResult> {
-    const leaf = this.app.workspace.activeLeaf;
-    if (leaf === null || leaf.getViewState().type !== "canvas") {
+    const view = this.activeCanvasView();
+    if (view === null) {
       throw new Error("Open and focus a Canvas first");
     }
-    const view = await this.requirePublicCanvasView(leaf);
     const file = view.file;
     if (file === null || file.extension !== "canvas") {
       throw new Error("The active Canvas does not expose a Canvas file");
@@ -171,14 +169,9 @@ export class CanvasBridge {
     return null;
   }
 
-  private async requirePublicCanvasView(leaf: WorkspaceLeaf): Promise<TextFileView> {
-    await leaf.loadIfDeferred();
-    if (!(leaf.view instanceof TextFileView)) {
-      throw new Error(
-        "This Obsidian version does not expose the active Canvas through the public TextFileView API",
-      );
-    }
-    return leaf.view;
+  private activeCanvasView(): TextFileView | null {
+    const view = this.app.workspace.getActiveViewOfType(TextFileView);
+    return view?.getViewType() === "canvas" ? view : null;
   }
 
   private async ensureParentFolder(path: string): Promise<void> {

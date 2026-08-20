@@ -264,6 +264,10 @@ export class TrayRenderer {
     miniature.tabIndex = expanded ? 0 : -1;
     miniature.toggleClass("is-filed", filed !== undefined);
     miniature.toggleClass("is-unfiled", filed === undefined);
+    miniature.toggleClass(
+      "is-bookmarked",
+      filed !== undefined && this.plugin.bookmarkAt(filed.id) !== undefined,
+    );
 
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
     identity.createSpan({ cls: "slipbox-tray-card-address", text: address });

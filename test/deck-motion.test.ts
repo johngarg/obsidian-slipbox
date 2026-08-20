@@ -34,6 +34,10 @@ describe("free Deck motion", () => {
       left: null,
       right: null,
     });
+    assert.deepEqual(
+      bookmarkEdgeTargets([2, 6], 4, 60, 300, 100),
+      { left: 2, right: 6 },
+    );
     assert.deepEqual(bookmarkEdgeTargets([0, 8], 4, 0, 300, 100), {
       left: null,
       right: null,

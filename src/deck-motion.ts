@@ -32,7 +32,10 @@ export function bookmarkEdgeTargets(
     return { left: null, right: null };
   }
 
-  const visibleLimit = stageWidth / 2 + cardWidth / 2;
+  // Overlap can hide a clipped card even while much of its surface remains in
+  // the viewport. Show the bookmark target once the card is no longer fully
+  // contained by the stage.
+  const visibleLimit = Math.max(0, (stageWidth - cardWidth) / 2);
   let left: number | null = null;
   let leftX = Number.NEGATIVE_INFINITY;
   let right: number | null = null;
@@ -40,10 +43,10 @@ export function bookmarkEdgeTargets(
 
   for (const index of bookmarkIndices) {
     const x = (index - viewportPosition) * cardStep;
-    if (x <= -visibleLimit && x > leftX) {
+    if (x < -visibleLimit && x > leftX) {
       left = index;
       leftX = x;
-    } else if (x >= visibleLimit && x < rightX) {
+    } else if (x > visibleLimit && x < rightX) {
       right = index;
       rightX = x;
     }

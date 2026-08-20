@@ -306,17 +306,17 @@ function bookmarkEdgeTargets(bookmarkIndices, viewportPosition, cardStep, stageW
   if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
     return { left: null, right: null };
   }
-  const visibleLimit = stageWidth / 2 + cardWidth / 2;
+  const visibleLimit = Math.max(0, (stageWidth - cardWidth) / 2);
   let left = null;
   let leftX = Number.NEGATIVE_INFINITY;
   let right = null;
   let rightX = Number.POSITIVE_INFINITY;
   for (const index of bookmarkIndices) {
     const x = (index - viewportPosition) * cardStep;
-    if (x <= -visibleLimit && x > leftX) {
+    if (x < -visibleLimit && x > leftX) {
       left = index;
       leftX = x;
-    } else if (x >= visibleLimit && x < rightX) {
+    } else if (x > visibleLimit && x < rightX) {
       right = index;
       rightX = x;
     }
@@ -1671,6 +1671,10 @@ var TrayRenderer = class {
     miniature.tabIndex = expanded ? 0 : -1;
     miniature.toggleClass("is-filed", filed !== void 0);
     miniature.toggleClass("is-unfiled", filed === void 0);
+    miniature.toggleClass(
+      "is-bookmarked",
+      filed !== void 0 && this.plugin.bookmarkAt(filed.id) !== void 0
+    );
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
     identity.createSpan({ cls: "slipbox-tray-card-address", text: address });
     identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
@@ -2606,6 +2610,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== void 0;
+      cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.id} \xB7 ${title}`;
@@ -3275,13 +3280,17 @@ var DeckView = class extends import_obsidian3.ItemView {
     }
     for (const cardEl of this.renderedCards) {
       const zettelId = cardEl.dataset.zettelId;
-      const toggle = cardEl.querySelector(
-        ".slipbox-card-bookmark-toggle"
-      );
-      if (zettelId === void 0 || toggle === null) {
+      if (zettelId === void 0) {
         continue;
       }
       const isBookmarked = bookmarkedIds.has(zettelId);
+      cardEl.toggleClass("is-bookmarked", isBookmarked);
+      const toggle = cardEl.querySelector(
+        ".slipbox-card-bookmark-toggle"
+      );
+      if (toggle === null) {
+        continue;
+      }
       const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
       toggle.toggleClass("is-bookmarked", isBookmarked);
       toggle.setAttr("aria-label", action);

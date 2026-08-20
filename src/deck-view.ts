@@ -586,6 +586,7 @@ export class DeckView extends ItemView {
       cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
       const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
+      cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.id} · ${title}`;
@@ -1376,13 +1377,17 @@ export class DeckView extends ItemView {
 
     for (const cardEl of this.renderedCards) {
       const zettelId = cardEl.dataset.zettelId;
-      const toggle = cardEl.querySelector<HTMLButtonElement>(
-        ".slipbox-card-bookmark-toggle",
-      );
-      if (zettelId === undefined || toggle === null) {
+      if (zettelId === undefined) {
         continue;
       }
       const isBookmarked = bookmarkedIds.has(zettelId);
+      cardEl.toggleClass("is-bookmarked", isBookmarked);
+      const toggle = cardEl.querySelector<HTMLButtonElement>(
+        ".slipbox-card-bookmark-toggle",
+      );
+      if (toggle === null) {
+        continue;
+      }
       const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
       toggle.toggleClass("is-bookmarked", isBookmarked);
       toggle.setAttr("aria-label", action);

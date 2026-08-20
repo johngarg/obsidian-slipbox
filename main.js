@@ -2150,7 +2150,6 @@ var DeckView = class extends import_obsidian3.ItemView {
   viewportOffset = 0;
   pointerLastX = null;
   pointerLastY = null;
-  pointerMoved = false;
   spaceOffsetX = 0;
   spaceOffsetY = 0;
   spaceRecenteringTimer = null;
@@ -2932,7 +2931,6 @@ var DeckView = class extends import_obsidian3.ItemView {
       this.cancelSpaceRecentering();
       this.pointerLastX = event.clientX;
       this.pointerLastY = event.clientY;
-      this.pointerMoved = false;
       stage.setPointerCapture(event.pointerId);
       stage.addClass("is-dragging");
       this.contentEl.focus({ preventScroll: true });
@@ -2945,33 +2943,25 @@ var DeckView = class extends import_obsidian3.ItemView {
       const movementY = event.clientY - this.pointerLastY;
       this.pointerLastX = event.clientX;
       this.pointerLastY = event.clientY;
-      if (Math.hypot(movementX, movementY) > 0) {
-        this.pointerMoved = true;
-      }
       this.spaceOffsetX += movementX;
       this.spaceOffsetY += movementY;
       this.applySpaceOffset();
     });
-    const finishPointer = (event, cancelled = false) => {
+    const finishPointer = (event) => {
       if (this.pointerLastX === null) {
         return;
       }
-      const wasClick = !cancelled && !this.pointerMoved;
       this.pointerLastX = null;
       this.pointerLastY = null;
-      this.pointerMoved = false;
       stage.removeClass("is-dragging");
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
-      }
-      if (wasClick && this.plugin.tray.expandedPileId !== null) {
-        void this.plugin.expandTrayPile(null);
       }
       this.renderBookmarkEdgeTabs(stage);
       this.queueRenderWindowRefresh();
     };
     stage.addEventListener("pointerup", finishPointer);
-    stage.addEventListener("pointercancel", (event) => finishPointer(event, true));
+    stage.addEventListener("pointercancel", finishPointer);
   }
   applySpaceOffset() {
     if (this.spaceEl === null) {

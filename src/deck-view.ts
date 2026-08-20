@@ -52,7 +52,6 @@ export class DeckView extends ItemView {
   private viewportOffset = 0;
   private pointerLastX: number | null = null;
   private pointerLastY: number | null = null;
-  private pointerMoved = false;
   private spaceOffsetX = 0;
   private spaceOffsetY = 0;
   private spaceRecenteringTimer: number | null = null;
@@ -960,7 +959,6 @@ export class DeckView extends ItemView {
       this.cancelSpaceRecentering();
       this.pointerLastX = event.clientX;
       this.pointerLastY = event.clientY;
-      this.pointerMoved = false;
       stage.setPointerCapture(event.pointerId);
       stage.addClass("is-dragging");
       this.contentEl.focus({ preventScroll: true });
@@ -973,33 +971,25 @@ export class DeckView extends ItemView {
       const movementY = event.clientY - this.pointerLastY;
       this.pointerLastX = event.clientX;
       this.pointerLastY = event.clientY;
-      if (Math.hypot(movementX, movementY) > 0) {
-        this.pointerMoved = true;
-      }
       this.spaceOffsetX += movementX;
       this.spaceOffsetY += movementY;
       this.applySpaceOffset();
     });
-    const finishPointer = (event: PointerEvent, cancelled = false): void => {
+    const finishPointer = (event: PointerEvent): void => {
       if (this.pointerLastX === null) {
         return;
       }
-      const wasClick = !cancelled && !this.pointerMoved;
       this.pointerLastX = null;
       this.pointerLastY = null;
-      this.pointerMoved = false;
       stage.removeClass("is-dragging");
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
-      }
-      if (wasClick && this.plugin.tray.expandedPileId !== null) {
-        void this.plugin.expandTrayPile(null);
       }
       this.renderBookmarkEdgeTabs(stage);
       this.queueRenderWindowRefresh();
     };
     stage.addEventListener("pointerup", finishPointer);
-    stage.addEventListener("pointercancel", (event) => finishPointer(event, true));
+    stage.addEventListener("pointercancel", finishPointer);
   }
 
   private applySpaceOffset(): void {

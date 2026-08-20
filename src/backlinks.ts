@@ -1,5 +1,7 @@
-import { compareZettelIds } from "./zettel-id.js";
-import type { FiledZettelRecord } from "./zettel-metadata.js";
+import {
+  compareFiledZettels,
+  type FiledZettelRecord,
+} from "./zettel-metadata.js";
 
 export type ResolvedLinks = Readonly<
   Record<string, Readonly<Record<string, number>>>
@@ -13,9 +15,9 @@ export interface BacklinkFit {
 /**
  * Derive unique filed-card backlinks from Obsidian's resolved file graph.
  *
- * The filed collection has already excluded ordinary, unfiled, malformed, and
- * duplicate-address notes. Keeping the result keyed by target path preserves
- * file identity while the retained records provide zettel-id presentation.
+ * The filed collection has already excluded ordinary, unfiled, and malformed
+ * notes. Keeping the result keyed by target path preserves exact file identity
+ * while the retained records provide address presentation.
  */
 export function indexFiledBacklinks<T extends FiledZettelRecord>(
   filed: readonly T[],
@@ -45,7 +47,7 @@ export function indexFiledBacklinks<T extends FiledZettelRecord>(
   }
 
   for (const sources of sourcesByTarget.values()) {
-    sources.sort((left, right) => compareZettelIds(left.id, right.id));
+    sources.sort(compareFiledZettels);
   }
   return sourcesByTarget;
 }

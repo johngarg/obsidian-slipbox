@@ -32,6 +32,10 @@ import {
 } from "./settings.js";
 import { TrayRenderer } from "./tray-view.js";
 import { cardPosition, moveCardWithinPile } from "./tray-state.js";
+import {
+  pathIsAtOrBelow,
+  renamePathReference,
+} from "./path-reference.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -42,7 +46,7 @@ const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
 
 export class DeckView extends ItemView {
-  private activeId: string | null = null;
+  private activePath: string | null = null;
   private filingFile: TFile | null = null;
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
@@ -85,7 +89,7 @@ export class DeckView extends ItemView {
       toggleTray: (file) => this.plugin.toggleFileInTray(file),
     });
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
-      jumpToFiledCard: (id) => this.jumpToId(id),
+      jumpToFiledCard: (path) => this.jumpToPath(path),
       moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta),
     });
     this.registerEvent(
@@ -147,10 +151,10 @@ export class DeckView extends ItemView {
   }
 
   get activeCard(): FiledZettel | null {
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       return null;
     }
-    return this.plugin.index.filedById(this.activeId) ?? null;
+    return this.plugin.index.filedByPath(this.activePath) ?? null;
   }
 
   get isFiling(): boolean {
@@ -163,6 +167,38 @@ export class DeckView extends ItemView {
 
   get canGoForward(): boolean {
     return this.history.canForward();
+  }
+
+  handlePathRename(oldPath: string, newPath: string): void {
+    if (this.activePath !== null) {
+      this.activePath = renamePathReference(this.activePath, oldPath, newPath);
+    }
+    this.history.transform((path) =>
+      renamePathReference(path, oldPath, newPath)
+    );
+    this.cardScrollPositions = new Map(
+      [...this.cardScrollPositions].map(([path, scroll]) => [
+        renamePathReference(path, oldPath, newPath),
+        scroll,
+      ]),
+    );
+  }
+
+  handlePathDeletion(deletedPath: string): void {
+    if (
+      this.activePath !== null &&
+      pathIsAtOrBelow(this.activePath, deletedPath)
+    ) {
+      this.activePath = null;
+    }
+    this.history.transform((path) =>
+      pathIsAtOrBelow(path, deletedPath) ? undefined : path
+    );
+    for (const path of this.cardScrollPositions.keys()) {
+      if (pathIsAtOrBelow(path, deletedPath)) {
+        this.cardScrollPositions.delete(path);
+      }
+    }
   }
 
   updateKeybindings(): void {
@@ -195,7 +231,7 @@ export class DeckView extends ItemView {
     const active = target ?? this.activeCard;
     const activeIndex = active === null
       ? -1
-      : this.plugin.index.filedIndex(active.id);
+      : this.plugin.index.filedIndexForPath(active.path);
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
@@ -235,7 +271,7 @@ export class DeckView extends ItemView {
         break;
       case "add-card":
         if (card !== null) {
-          void this.plugin.createCardFrom(card.id);
+          void this.plugin.createCardFromPath(card.path);
         }
         break;
       case "toggle-tray":
@@ -245,7 +281,7 @@ export class DeckView extends ItemView {
         break;
       case "toggle-bookmark":
         if (card !== null) {
-          void this.toggleCardBookmark(card.id);
+          void this.toggleCardBookmark(card.path);
         }
         break;
       case "back":
@@ -278,18 +314,18 @@ export class DeckView extends ItemView {
 
   async refresh(): Promise<void> {
     this.cancelViewportCentering();
-    const previousActiveId = this.activeId;
+    const previousActivePath = this.activePath;
     this.reconcileScrollPositions();
     this.chooseAvailableActiveCard();
-    if (this.activeId !== previousActiveId) {
+    if (this.activePath !== previousActivePath) {
       this.viewportOffset = 0;
     }
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       this.history.reset();
     } else if (this.history.current() === undefined) {
-      this.history.reset(this.activeId);
-    } else if (this.activeId !== previousActiveId) {
-      this.history.replaceCurrent(this.activeId);
+      this.history.reset(this.activePath);
+    } else if (this.activePath !== previousActivePath) {
+      this.history.replaceCurrent(this.activePath);
     }
     this.clampViewportOffset();
     await this.renderDeck();
@@ -306,100 +342,111 @@ export class DeckView extends ItemView {
     new Notice("Filing cancelled. The card remains in its pile.");
   }
 
-  async goToId(id: string): Promise<void> {
-    const moved = await this.navigateToId(id);
+  async goToPath(path: string): Promise<void> {
+    const moved = await this.navigateToPath(path);
     if (moved) {
-      this.history.replaceCurrent(id);
+      this.history.replaceCurrent(path);
       this.updateHistoryControls();
     }
   }
 
-  async jumpToId(id: string): Promise<void> {
-    if (this.activeId !== null) {
-      this.history.replaceCurrent(this.activeId);
+  async jumpToPath(path: string): Promise<void> {
+    if (this.activePath !== null) {
+      this.history.replaceCurrent(this.activePath);
     }
-    if (this.plugin.index.filedById(id) === undefined) {
-      new Notice(`Card ${id} is missing, invalid, or duplicated.`);
+    if (this.plugin.index.filedByPath(path) === undefined) {
+      new Notice(`Card ${path} is missing or invalid.`);
       return;
     }
-    this.history.jump(id);
-    await this.navigateToId(id);
+    this.history.jump(path);
+    await this.navigateToPath(path);
     this.updateHistoryControls();
   }
 
-  async goBack(): Promise<void> {
-    const id = this.history.back();
-    if (id === undefined) {
+  /** Intentional address-level navigation used by entry points. */
+  async jumpToAddress(id: string): Promise<void> {
+    const card = this.plugin.index.firstFiledAtAddress(id);
+    if (card === undefined) {
+      new Notice(`Card address ${id} is missing or invalid.`);
       return;
     }
-    if (!(await this.navigateToId(id))) {
-      new Notice(`The Back destination ${id} is no longer available.`);
+    await this.jumpToPath(card.path);
+  }
+
+  async goBack(): Promise<void> {
+    const path = this.history.back();
+    if (path === undefined) {
+      return;
+    }
+    if (!(await this.navigateToPath(path))) {
+      new Notice(`The Back destination ${path} is no longer available.`);
     }
     this.updateHistoryControls();
   }
 
   async goForward(): Promise<void> {
-    const id = this.history.forward();
-    if (id === undefined) {
+    const path = this.history.forward();
+    if (path === undefined) {
       return;
     }
-    if (!(await this.navigateToId(id))) {
-      new Notice(`The Forward destination ${id} is no longer available.`);
+    if (!(await this.navigateToPath(path))) {
+      new Notice(`The Forward destination ${path} is no longer available.`);
     }
     this.updateHistoryControls();
   }
 
   async addBookmarkToCurrent(): Promise<void> {
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       new Notice("There is no active filed card.");
       return;
     }
-    const bookmarkedIds = this.bookmarkedIds();
-    bookmarkedIds.add(this.activeId);
-    this.updateBookmarkUi(bookmarkedIds);
-    await this.plugin.addBookmark(this.activeId);
+    const bookmarkedPaths = this.bookmarkedPaths();
+    bookmarkedPaths.add(this.activePath);
+    this.updateBookmarkUi(bookmarkedPaths);
+    await this.plugin.addBookmark(this.activePath);
   }
 
-  async removeBookmark(zettelId: string): Promise<void> {
-    const bookmarkedIds = this.bookmarkedIds();
-    bookmarkedIds.delete(zettelId);
-    this.updateBookmarkUi(bookmarkedIds);
-    await this.plugin.removeBookmark(zettelId);
+  async removeBookmark(path: string): Promise<void> {
+    const bookmarkedPaths = this.bookmarkedPaths();
+    bookmarkedPaths.delete(path);
+    this.updateBookmarkUi(bookmarkedPaths);
+    await this.plugin.removeBookmark(path);
   }
 
-  private async navigateToId(id: string): Promise<boolean> {
-    const targetIndex = this.plugin.index.filedIndex(id);
+  private async navigateToPath(path: string): Promise<boolean> {
+    const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
-      new Notice(`Card ${id} is missing, invalid, or duplicated.`);
+      new Notice(`Card ${path} is missing or invalid.`);
       return false;
     }
     this.cancelViewportCentering();
-    this.activeId = id;
+    this.activePath = path;
     this.viewportOffset = 0;
     await this.renderDeck();
     return true;
   }
 
   async addCurrentAsEntryPoint(): Promise<void> {
-    if (this.activeId === null) {
+    const active = this.activeCard;
+    if (active === null) {
       new Notice("There is no active filed card.");
       return;
     }
-    await this.plugin.addEntryPoint(this.activeId);
+    await this.plugin.addEntryPoint(active.id);
   }
 
   private chooseAvailableActiveCard(): void {
     const filed = this.plugin.index.snapshot.filed;
-    const available = new Set(filed.map((card) => card.id));
+    const availablePaths = new Set(filed.map((card) => card.path));
 
-    if (this.activeId !== null && available.has(this.activeId)) {
+    if (this.activePath !== null && availablePaths.has(this.activePath)) {
       return;
     }
 
-    const firstEntryPoint = this.plugin.state.entryPoints.find((entry) =>
-      available.has(entry.id),
-    );
-    this.activeId = firstEntryPoint?.id ?? filed[0]?.id ?? null;
+    const firstEntryPoint = this.plugin.state.entryPoints
+      .map((entry) => this.plugin.index.firstFiledAtAddress(entry.id))
+      .find((card) => card !== undefined);
+    this.activePath = firstEntryPoint?.path ?? filed[0]?.path ?? null;
   }
 
   private async renderDeck(): Promise<void> {
@@ -435,10 +482,10 @@ export class DeckView extends ItemView {
     );
 
     const filed = this.plugin.index.snapshot.filed;
-    if (filed.length === 0 || this.activeId === null) {
+    if (filed.length === 0 || this.activePath === null) {
       this.renderEmptyDeck(space);
     } else {
-      const activeIndex = this.plugin.index.filedIndex(this.activeId);
+      const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
       if (activeIndex >= 0) {
         await this.renderCardWindow(space, filed, activeIndex, version);
       }
@@ -583,9 +630,8 @@ export class DeckView extends ItemView {
       const cardEl = stage.createDiv({ cls: "slipbox-card" });
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
-      cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
-      const isBookmarked = this.plugin.bookmarkAt(card.id) !== undefined;
+      const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
       const title = this.plugin.cardTitle(card.file);
@@ -657,7 +703,7 @@ export class DeckView extends ItemView {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),
         interactive: index === activeIndex,
-        activate: (backlink) => this.jumpToId(backlink.id),
+        activate: (backlink) => this.jumpToPath(backlink.path),
       });
       jobs.push(this.renderMarkdownCard(card, scroll, version));
 
@@ -683,12 +729,12 @@ export class DeckView extends ItemView {
         if (!(target instanceof HTMLElement)) {
           return;
         }
-        if (card.id === this.activeId) {
+        if (card.path === this.activePath) {
           return;
         }
         event.preventDefault();
         event.stopPropagation();
-        this.selectCardWithoutMoving(card.id);
+        this.selectCardWithoutMoving(card.path);
       });
     }
 
@@ -749,15 +795,15 @@ export class DeckView extends ItemView {
     }
   }
 
-  private async toggleCardBookmark(zettelId: string): Promise<void> {
-    const bookmarkedIds = this.bookmarkedIds();
-    if (bookmarkedIds.has(zettelId)) {
-      bookmarkedIds.delete(zettelId);
+  private async toggleCardBookmark(path: string): Promise<void> {
+    const bookmarkedPaths = this.bookmarkedPaths();
+    if (bookmarkedPaths.has(path)) {
+      bookmarkedPaths.delete(path);
     } else {
-      bookmarkedIds.add(zettelId);
+      bookmarkedPaths.add(path);
     }
-    this.updateBookmarkUi(bookmarkedIds);
-    await this.plugin.toggleBookmark(zettelId);
+    this.updateBookmarkUi(bookmarkedPaths);
+    await this.plugin.toggleBookmark(path);
   }
 
   private attachInternalLinkInteractions(
@@ -807,7 +853,7 @@ export class DeckView extends ItemView {
         }
         event.preventDefault();
         event.stopImmediatePropagation();
-        void this.jumpToId(filed.id);
+        void this.jumpToPath(filed.path);
       },
       { capture: true },
     );
@@ -868,15 +914,15 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const newId = await this.plugin.fileCard(file, attachment.id);
+    const newId = await this.plugin.fileCard(file, attachment.path);
     if (newId === null) {
       return;
     }
     await this.animateFiling(newId);
     this.filingFile = null;
-    this.activeId = newId;
+    this.activePath = file.path;
     this.viewportOffset = 0;
-    this.history.replaceCurrent(newId);
+    this.history.replaceCurrent(file.path);
     await this.renderDeck();
   }
 
@@ -895,21 +941,21 @@ export class DeckView extends ItemView {
 
   private renderBookmarkEdgeTabs(
     stage: HTMLElement,
-    bookmarkedIds = this.bookmarkedIds(),
+    bookmarkedPaths = this.bookmarkedPaths(),
   ): void {
     stage.querySelectorAll<HTMLElement>(".slipbox-bookmark-edge-tab")
       .forEach((tab) => tab.remove());
-    if (this.activeId === null || bookmarkedIds.size === 0) {
+    if (this.activePath === null || bookmarkedPaths.size === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const cardWidth = this.renderedCards[0]?.offsetWidth ?? 0;
     if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
-    const bookmarkIndices = [...bookmarkedIds].flatMap((zettelId) => {
-      const index = this.plugin.index.filedIndex(zettelId);
+    const bookmarkIndices = [...bookmarkedPaths].flatMap((path) => {
+      const index = this.plugin.index.filedIndexForPath(path);
       return index < 0 ? [] : [index];
     });
     const targets = bookmarkEdgeTargets(
@@ -934,7 +980,7 @@ export class DeckView extends ItemView {
           "aria-label": `Jump to bookmark ${card.id}`,
         },
       });
-      tab.addEventListener("click", () => void this.jumpToId(card.id));
+      tab.addEventListener("click", () => void this.jumpToPath(card.path));
     }
   }
 
@@ -1031,7 +1077,7 @@ export class DeckView extends ItemView {
 
   private moveViewportByPixels(deltaPixels: number): void {
     this.cancelViewportCentering();
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -1046,7 +1092,7 @@ export class DeckView extends ItemView {
 
   private moveBy(delta: number): void {
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -1055,23 +1101,23 @@ export class DeckView extends ItemView {
       Math.min(filed.length - 1, activeIndex + delta),
     );
     const target = filed[targetIndex];
-    if (target === undefined || target.id === this.activeId) {
+    if (target === undefined || target.path === this.activePath) {
       return;
     }
 
     const viewportPosition = this.viewportPosition(activeIndex);
-    this.activeId = target.id;
+    this.activePath = target.path;
     this.viewportOffset = viewportPosition - targetIndex;
-    this.history.replaceCurrent(target.id);
+    this.history.replaceCurrent(target.path);
     this.centerViewportOnActive(targetIndex, true);
   }
 
   private centerActiveCard(): void {
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       new Notice("There is no active filed card to centre.");
       return;
     }
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -1103,7 +1149,7 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const activeId = this.activeId;
+    const activePath = this.activePath;
     const startedAt = window.performance.now();
     this.positionCards();
     this.updateActiveUi();
@@ -1111,8 +1157,8 @@ export class DeckView extends ItemView {
 
     const advance = (timestamp: number): void => {
       if (
-        this.activeId !== activeId ||
-        this.plugin.index.filedIndex(activeId) !== activeIndex
+        this.activePath !== activePath ||
+        this.plugin.index.filedIndexForPath(activePath) !== activeIndex
       ) {
         this.viewportCenteringFrame = null;
         return;
@@ -1182,7 +1228,7 @@ export class DeckView extends ItemView {
       new Notice("There are no filed cards.");
       return;
     }
-    void this.goToId(target.id);
+    void this.goToPath(target.path);
   }
 
   private handleDeckActionKey(
@@ -1211,10 +1257,10 @@ export class DeckView extends ItemView {
     return true;
   }
 
-  private selectCardWithoutMoving(id: string): void {
+  private selectCardWithoutMoving(path: string): void {
     this.cancelViewportCentering();
-    const previousActiveIndex = this.plugin.index.filedIndex(this.activeId);
-    const targetIndex = this.plugin.index.filedIndex(id);
+    const previousActiveIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
       return;
     }
@@ -1222,16 +1268,16 @@ export class DeckView extends ItemView {
     const viewportPosition = previousActiveIndex < 0
       ? targetIndex
       : this.viewportPosition(previousActiveIndex);
-    this.activeId = id;
+    this.activePath = path;
     this.viewportOffset = viewportPosition - targetIndex;
-    this.history.replaceCurrent(id);
+    this.history.replaceCurrent(path);
     this.positionCards();
     this.updateActiveUi();
   }
 
   private applyViewportPosition(nextPosition: number): void {
     const filed = this.plugin.index.snapshot.filed;
-    const previousActiveIndex = this.plugin.index.filedIndex(this.activeId);
+    const previousActiveIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (previousActiveIndex < 0) {
       return;
     }
@@ -1247,9 +1293,9 @@ export class DeckView extends ItemView {
       return;
     }
 
-    this.activeId = activeCard.id;
+    this.activePath = activeCard.path;
     this.viewportOffset = viewportPosition - activeIndex;
-    this.history.replaceCurrent(activeCard.id);
+    this.history.replaceCurrent(activeCard.path);
     this.positionCards();
     this.updateActiveUi();
     if (this.pointerLastX === null) {
@@ -1258,7 +1304,7 @@ export class DeckView extends ItemView {
   }
 
   private positionCards(): boolean {
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0 || this.renderedCards.length === 0) {
       return true;
     }
@@ -1334,7 +1380,7 @@ export class DeckView extends ItemView {
   }
 
   private updateActiveUi(): void {
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -1346,21 +1392,28 @@ export class DeckView extends ItemView {
       this.cardFooters.setInteractive(card, index === activeIndex);
     }
 
-    this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
+    const activeAddress = this.activeCard?.id;
+    this.filingPromptEl?.setText(
+      activeAddress === undefined
+        ? "Choose an attachment point"
+        : `Attach from ${activeAddress}`,
+    );
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateHistoryControls();
   }
 
-  private bookmarkedIds(): Set<string> {
+  private bookmarkedPaths(): Set<string> {
     return new Set(
-      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId),
+      this.plugin.state.bookmarks.flatMap((bookmark) =>
+        "path" in bookmark ? [bookmark.path] : []
+      ),
     );
   }
 
-  private updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()): void {
-    const bookmarkCount = bookmarkedIds.size;
+  private updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()): void {
+    const bookmarkCount = bookmarkedPaths.size;
     if (this.bookmarksButtonEl !== null) {
       const countEl = this.bookmarksButtonEl.querySelector<HTMLElement>(".slipbox-count");
       if (bookmarkCount === 0) {
@@ -1376,11 +1429,11 @@ export class DeckView extends ItemView {
     }
 
     for (const cardEl of this.renderedCards) {
-      const zettelId = cardEl.dataset.zettelId;
-      if (zettelId === undefined) {
+      const path = cardEl.dataset.path;
+      if (path === undefined) {
         continue;
       }
-      const isBookmarked = bookmarkedIds.has(zettelId);
+      const isBookmarked = bookmarkedPaths.has(path);
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const toggle = cardEl.querySelector<HTMLButtonElement>(
         ".slipbox-card-bookmark-toggle",
@@ -1399,7 +1452,7 @@ export class DeckView extends ItemView {
     }
 
     if (this.stageEl !== null) {
-      this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
+      this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedPaths);
     }
   }
 
@@ -1409,7 +1462,7 @@ export class DeckView extends ItemView {
 
   private clampViewportOffset(): void {
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       this.viewportOffset = 0;
       return;
@@ -1426,7 +1479,7 @@ export class DeckView extends ItemView {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }

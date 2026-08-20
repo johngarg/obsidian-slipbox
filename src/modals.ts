@@ -265,12 +265,12 @@ export function confirmAction(
 }
 
 export interface BookmarksModalActions {
-  readonly currentId: string | null;
-  isAvailable(zettelId: string): boolean;
-  label(zettelId: string): string;
-  visit(zettelId: string): void;
+  readonly currentPath: string | null;
+  isAvailable(path: string): boolean;
+  label(path: string): string;
+  visit(path: string): void;
   addCurrent(): Promise<void>;
-  remove(zettelId: string): Promise<void>;
+  remove(path: string): Promise<void>;
 }
 
 export class BookmarksModal extends Modal {
@@ -299,7 +299,7 @@ export class BookmarksModal extends Modal {
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
       label: "+ add current card as bookmark",
-      currentId: this.actions.currentId,
+      currentId: this.actions.currentPath,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),
       onAdded: () => this.close(),
@@ -322,7 +322,7 @@ export class BookmarksModal extends Modal {
       list.createEl("p", { cls: "slipbox-empty-copy", text: "No bookmarks yet." });
     }
     for (const bookmark of this.bookmarks) {
-      const available = this.actions.isAvailable(bookmark.zettelId);
+      const available = this.actions.isAvailable(bookmark.path);
       const row = list.createDiv({ cls: "slipbox-list-row slipbox-bookmark-row" });
       const visit = row.createEl("button", {
         cls: "slipbox-entry-visit",
@@ -331,26 +331,26 @@ export class BookmarksModal extends Modal {
       visit.createSpan({
         cls: "slipbox-entry-name",
         text: available
-          ? this.actions.label(bookmark.zettelId)
-          : `${bookmark.zettelId} · missing`,
+          ? this.actions.label(bookmark.path)
+          : `${bookmark.path} · missing`,
       });
       visit.disabled = !available;
       visit.addEventListener("click", () => {
-        this.actions.visit(bookmark.zettelId);
+        this.actions.visit(bookmark.path);
         this.close();
       });
 
-      const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
+      const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.path}`);
       remove.addEventListener("click", () => {
         remove.disabled = true;
-        void this.actions.remove(bookmark.zettelId).then(() => {
+        void this.actions.remove(bookmark.path).then(() => {
           this.bookmarks = this.bookmarks.filter(
-            (candidate) => candidate.zettelId !== bookmark.zettelId,
+            (candidate) => candidate.path !== bookmark.path,
           );
           this.renderList();
           updateCurrentCardAddAction(
             this.addButton,
-            this.actions.currentId,
+            this.actions.currentPath,
             this.currentIsListed(),
           );
         });
@@ -360,7 +360,7 @@ export class BookmarksModal extends Modal {
 
   private currentIsListed(): boolean {
     return this.bookmarks.some(
-      (bookmark) => bookmark.zettelId === this.actions.currentId,
+      (bookmark) => bookmark.path === this.actions.currentPath,
     );
   }
 }
@@ -524,15 +524,18 @@ export class IssuesModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
-    contentEl.createEl("h2", { text: "Zettel address problems" });
+    contentEl.createEl("h2", { text: "Zettel address issues" });
     contentEl.createEl("p", {
-      text: "Slipbox never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes.",
+      text: "Invalid addresses are excluded until corrected. Duplicate-address cards remain in the Deck beside one another, ordered by file path. Slipbox never repairs addresses automatically.",
     });
 
     const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
     for (const issue of this.index.issues) {
       const group = list.createDiv({ cls: "slipbox-issue-group" });
-      group.createDiv({ cls: "slipbox-issue-message", text: issue.message });
+      group.createDiv({
+        cls: `slipbox-issue-message is-${issue.severity}`,
+        text: `${issue.severity === "warning" ? "Warning" : "Error"}: ${issue.message}`,
+      });
       for (const path of issue.paths) {
         const button = group.createEl("button", {
           cls: "slipbox-issue-file",

@@ -1,5 +1,5 @@
 import { isValidZettelId } from "./zettel-id.js";
-import { normalizeBookmarks, type DeckBookmark } from "./bookmarks.js";
+import { normalizeBookmarks, type StoredBookmark } from "./bookmarks.js";
 import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
 import {
   DEFAULT_SETTINGS,
@@ -15,7 +15,7 @@ export interface EntryPoint {
 
 export interface SlipboxPluginState {
   readonly entryPoints: readonly EntryPoint[];
-  readonly bookmarks: readonly DeckBookmark[];
+  readonly bookmarks: readonly StoredBookmark[];
   /** Retained only until an old persistent Desk has been exported to Canvas. */
   readonly legacyDeskCards?: readonly DeskCardState[];
   readonly spread: number;

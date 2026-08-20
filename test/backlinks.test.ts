@@ -43,7 +43,7 @@ describe("filed backlink index", () => {
     );
   });
 
-  it("excludes self-links and every source or target outside the filed index", () => {
+  it("excludes non-filed links while retaining exact duplicate-address paths", () => {
     const result = backlinks(
       [
         filed("target.md", "21/3b"),
@@ -75,10 +75,16 @@ describe("filed backlink index", () => {
 
     assert.deepEqual(result.get("target.md"), [
       { path: "valid.md", id: "4/7" },
+      { path: "duplicate-a.md", id: "18/2a" },
+      { path: "duplicate-b.md", id: "18/2a" },
     ]);
     assert.equal(result.has("unfiled-target.md"), false);
-    assert.equal(result.has("duplicate-target-a.md"), false);
-    assert.equal(result.has("duplicate-target-b.md"), false);
+    assert.deepEqual(result.get("duplicate-target-a.md"), [
+      { path: "valid.md", id: "4/7" },
+    ]);
+    assert.deepEqual(result.get("duplicate-target-b.md"), [
+      { path: "valid.md", id: "4/7" },
+    ]);
   });
 
   it("tracks link, filing, deletion, retargeting, and rename snapshots", () => {

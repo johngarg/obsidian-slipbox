@@ -4,37 +4,89 @@ import { describe, test } from "node:test";
 import {
   createBookmark,
   deleteBookmark,
+  migrateAddressBookmarks,
   normalizeBookmarks,
+  removeBookmarkPaths,
+  renameBookmarkPaths,
   type DeckBookmark,
-} from "../src/bookmarks.js";
+} from "../src/index.js";
 
 describe("bookmarks", () => {
-  const first: DeckBookmark = {
-    zettelId: "17/4a",
-  };
+  const first: DeckBookmark = { path: "Cards/first.md" };
 
-  test("creates and deletes a zettel-id bookmark", () => {
-    const created = createBookmark([], first.zettelId);
+  test("creates and deletes an exact-path bookmark", () => {
+    const created = createBookmark([], first.path);
     assert.deepEqual(created, [first]);
-    assert.deepEqual(deleteBookmark(created, first.zettelId), []);
+    assert.deepEqual(deleteBookmark(created, first.path), []);
   });
 
-  test("enforces one bookmark per filed card", () => {
+  test("bookmarks duplicate-address cards independently", () => {
+    const firstDuplicate = createBookmark([], "Cards/a.md");
+    const both = createBookmark(firstDuplicate, "Cards/b.md");
+    assert.deepEqual(both, [
+      { path: "Cards/a.md" },
+      { path: "Cards/b.md" },
+    ]);
+    assert.deepEqual(deleteBookmark(both, "Cards/a.md"), [
+      { path: "Cards/b.md" },
+    ]);
+  });
+
+  test("enforces one bookmark per exact file", () => {
     assert.throws(
-      () => createBookmark([first], first.zettelId),
+      () => createBookmark([first], first.path),
       /already has a bookmark/,
     );
   });
 
-  test("drops legacy names and identifiers while retaining valid addresses", () => {
+  test("loads path records and retains valid address records for migration", () => {
     assert.deepEqual(
       normalizeBookmarks([
-        { id: "bookmark-1", ...first, label: "Theology", color: "red" },
-        { id: "bookmark-2", zettelId: "99/1", color: "blue" },
-        { id: "duplicate-card", zettelId: "17/4a", color: "green" },
-        { id: "invalid", zettelId: "01/1", color: "red" },
+        first,
+        { path: "Cards/second.md", label: "Old label" },
+        { path: "Cards/first.md" },
+        { zettelId: "17/4a", color: "red" },
+        { zettelId: "17/4a" },
+        { zettelId: "01/1" },
       ]),
-      [first, { zettelId: "99/1" }],
+      [first, { path: "Cards/second.md" }, { zettelId: "17/4a" }],
     );
+  });
+
+  test("migrates an address bookmark to the first path-sorted card", () => {
+    const paths = new Map([
+      ["17/4a", "Cards/a.md"],
+      ["99/1", "Cards/z.md"],
+    ]);
+    assert.deepEqual(
+      migrateAddressBookmarks(
+        [{ zettelId: "17/4a" }, { path: "Cards/existing.md" }],
+        (id) => paths.get(id),
+      ),
+      [{ path: "Cards/a.md" }, { path: "Cards/existing.md" }],
+    );
+  });
+
+  test("updates file and folder renames and deletes only affected paths", () => {
+    const bookmarks = [
+      { path: "Cards/a.md" },
+      { path: "Cards/Nested/b.md" },
+      { path: "Other/c.md" },
+    ];
+    assert.deepEqual(
+      renameBookmarkPaths(bookmarks, "Cards", "Archive/Cards"),
+      [
+        { path: "Archive/Cards/a.md" },
+        { path: "Archive/Cards/Nested/b.md" },
+        { path: "Other/c.md" },
+      ],
+    );
+    assert.deepEqual(removeBookmarkPaths(bookmarks, "Cards/a.md"), [
+      { path: "Cards/Nested/b.md" },
+      { path: "Other/c.md" },
+    ]);
+    assert.deepEqual(removeBookmarkPaths(bookmarks, "Cards"), [
+      { path: "Other/c.md" },
+    ]);
   });
 });

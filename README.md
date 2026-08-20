@@ -11,8 +11,15 @@ zettel-id: ""
 ```
 
 An empty value is an unfiled card. A canonical nonempty value such as `1/2b1`
-is a permanently filed card. The address is the sole source of filing order;
+is a permanently filed card. Filed cards are identified internally by their
+vault-relative Markdown path. Their address determines filing order, with the
+path as a deterministic tie-breaker when several files share one address;
 Slipbox stores no hidden sequence and imposes no folder.
+
+Duplicate addresses are allowed. Every valid duplicate remains independently
+selectable and actionable, and duplicate groups appear together in lexical path
+order. Slipbox reports one non-blocking warning per duplicate address. Invalid
+nonempty addresses remain blocking problems and are excluded until corrected.
 
 ## Slipbox workspace, working piles, and Canvas
 
@@ -97,21 +104,27 @@ longer exist.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
 - Browser-style session history for filed links, entry points, and bookmarks.
-- Persistent named entry points and one persistent bookmark per filed address.
+- Persistent named address-level entry points and one persistent bookmark per
+  filed file.
 - Card-header and context-menu actions for opening notes, adding from a card,
   pulling cards out or returning them, bookmarking, and deletion.
 - Deliberate Filing Mode from the active attachment point, plus new-section and
   ordinary-note conversion workflows.
 - Filename- or frontmatter-derived centred titles, configurable new-card folder
   and timestamp naming, and Obsidian Templates integration.
-- Visible malformed-address and duplicate-address diagnostics.
+- Visible malformed-address errors and non-blocking duplicate-address warnings.
 - Windowed Slipbox rendering around the active card rather than the whole vault.
 - `Return` activates the affirmative action in Slipbox prompt and confirmation
   dialogs, including card creation and bookmark or entry-point edits.
 
 Backlinks come from Obsidian's resolved-link graph and are never written to card
-frontmatter or plugin state. Only unique, valid filed sources are shown;
+frontmatter or plugin state. Only valid filed source files are shown;
 ordinary notes, unfiled cards, self-links, and unresolved links are excluded.
+
+Bookmarks, navigation history, working piles, backlinks, and direct card actions
+retain exact file paths. File and folder renames rewrite those path references.
+Entry points intentionally retain addresses and select the first matching card
+in lexical path order.
 
 ## Settings
 

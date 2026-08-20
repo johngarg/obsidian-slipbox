@@ -17,10 +17,14 @@ export type {
 } from "./zettel-id.js";
 
 export {
+  buildFiledZettelLookups,
+  compareFiledZettels,
+  compareVaultPaths,
   indexZettelMetadata,
   zettelMetadataRecord,
 } from "./zettel-metadata.js";
 export { generateFiledCardLink } from "./zettel-links.js";
+export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
@@ -41,7 +45,11 @@ export { NavigationHistory } from "./navigation-history.js";
 export {
   createBookmark,
   deleteBookmark,
+  isPathBookmark,
+  migrateAddressBookmarks,
   normalizeBookmarks,
+  removeBookmarkPaths,
+  renameBookmarkPaths,
 } from "./bookmarks.js";
 export {
   normalizeDeskCards,
@@ -58,7 +66,11 @@ export type {
   ZettelMetadataRecord,
 } from "./zettel-metadata.js";
 
-export type { DeckBookmark } from "./bookmarks.js";
+export type {
+  DeckBookmark,
+  LegacyAddressBookmark,
+  StoredBookmark,
+} from "./bookmarks.js";
 export {
   EMPTY_TRAY,
   addUniqueCardToPile,

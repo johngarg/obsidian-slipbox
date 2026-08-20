@@ -16,7 +16,7 @@ describe("normalizePluginState", () => {
         entryPoints: [{ name: " Systems ", id: "1/1" }],
         lastActiveId: "2/3a",
         bookmarks: [
-          { id: "bookmark-1", zettelId: "2/3a", label: " Here ", color: "blue" },
+          { path: "Cards/here.md", label: " Here ", color: "blue" },
         ],
         legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
         spread: 0.75,
@@ -24,7 +24,7 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Systems", id: "1/1" }],
         bookmarks: [
-          { zettelId: "2/3a" },
+          { path: "Cards/here.md" },
         ],
         legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
         spread: 0.75,
@@ -43,7 +43,7 @@ describe("normalizePluginState", () => {
         lastActiveId: "not-an-id",
         bookmarks: [
           { id: "bad", zettelId: "1/01", color: "infrared" },
-          { id: "good", zettelId: "4/1", color: "infrared" },
+          { path: "Cards/good.md", color: "infrared" },
         ],
         deskCards: [{ cardRef: "", x: 0, y: 0, z: 0 }],
         spread: 99,
@@ -51,7 +51,7 @@ describe("normalizePluginState", () => {
       {
         entryPoints: [{ name: "Good", id: "3/1a" }],
         bookmarks: [
-          { zettelId: "4/1" },
+          { path: "Cards/good.md" },
         ],
         spread: 1.12,
       },
@@ -95,7 +95,7 @@ describe("normalizePluginData", () => {
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 2);
+    assert.equal(data.schemaVersion, 3);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.deepEqual(data.state.entryPoints, [{ name: "Start", id: "1/1" }]);
     assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);

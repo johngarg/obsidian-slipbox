@@ -29,12 +29,14 @@ export interface FiledZettelRecord {
 
 export interface InvalidZettelIssue {
   readonly kind: "invalid";
+  readonly severity: "error";
   readonly paths: readonly [string];
   readonly message: string;
 }
 
 export interface DuplicateZettelIssue {
   readonly kind: "duplicate";
+  readonly severity: "warning";
   readonly id: string;
   readonly paths: readonly [string, string, ...string[]];
   readonly message: string;
@@ -56,12 +58,51 @@ function displayValue(value: unknown): string {
   return serialized === undefined ? String(value) : serialized;
 }
 
+/** Deterministic vault-path comparison, independent of the host locale. */
+export function compareVaultPaths(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Canonical Deck order: address first, exact vault-relative path second. */
+export function compareFiledZettels(
+  left: FiledZettelRecord,
+  right: FiledZettelRecord,
+): number {
+  const addressComparison = compareZettelIds(left.id, right.id);
+  return addressComparison !== 0
+    ? addressComparison
+    : compareVaultPaths(left.path, right.path);
+}
+
+export interface FiledZettelLookups<T extends FiledZettelRecord> {
+  readonly byPath: ReadonlyMap<string, T>;
+  readonly indexByPath: ReadonlyMap<string, number>;
+  readonly byAddress: ReadonlyMap<string, readonly T[]>;
+}
+
+/** Build duplicate-safe lookup maps from a Deck-ordered filed collection. */
+export function buildFiledZettelLookups<T extends FiledZettelRecord>(
+  filed: readonly T[],
+): FiledZettelLookups<T> {
+  const byPath = new Map<string, T>();
+  const indexByPath = new Map<string, number>();
+  const byAddress = new Map<string, T[]>();
+  filed.forEach((card, index) => {
+    byPath.set(card.path, card);
+    indexByPath.set(card.path, index);
+    const matches = byAddress.get(card.id) ?? [];
+    matches.push(card);
+    byAddress.set(card.id, matches);
+  });
+  return { byPath, indexByPath, byAddress };
+}
+
 /**
  * Classify cached frontmatter without depending on Obsidian.
  *
  * Missing properties are ordinary notes. Null, undefined, and the empty string
- * are unfiled cards. Duplicate IDs are all withheld from the Deck: choosing one
- * file would silently invent an ordering tie-breaker and conceal the problem.
+ * are unfiled cards. Every valid address is filed; duplicate addresses remain
+ * adjacent in deterministic path order and produce a non-blocking warning.
  */
 export function indexZettelMetadata(
   records: Iterable<ZettelMetadataRecord>,
@@ -91,6 +132,7 @@ export function indexZettelMetadata(
     ) {
       issues.push({
         kind: "invalid",
+        severity: "error",
         paths: [record.path],
         message: `Unsupported ${addressProperty} ${displayValue(record.zettelId)}`,
       });
@@ -111,13 +153,9 @@ export function indexZettelMetadata(
       continue;
     }
 
-    paths.sort((a, b) => a.localeCompare(b));
-    if (paths.length === 1) {
-      const path = paths[0];
-      if (path !== undefined) {
-        filed.push({ path, id });
-      }
-      continue;
+    paths.sort(compareVaultPaths);
+    for (const path of paths) {
+      filed.push({ path, id });
     }
 
     const first = paths[0];
@@ -125,6 +163,7 @@ export function indexZettelMetadata(
     if (first !== undefined && second !== undefined) {
       issues.push({
         kind: "duplicate",
+        severity: "warning",
         id,
         paths: [first, second, ...paths.slice(2)],
         message: `Duplicate ${addressProperty} ${id}`,
@@ -132,9 +171,10 @@ export function indexZettelMetadata(
     }
   }
 
-  unfiledPaths.sort((a, b) => a.localeCompare(b));
+  filed.sort(compareFiledZettels);
+  unfiledPaths.sort(compareVaultPaths);
   issues.sort((a, b) => {
-    const pathComparison = a.paths[0].localeCompare(b.paths[0]);
+    const pathComparison = compareVaultPaths(a.paths[0], b.paths[0]);
     return pathComparison !== 0 ? pathComparison : a.kind.localeCompare(b.kind);
   });
 

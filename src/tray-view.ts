@@ -32,7 +32,7 @@ const PILE_BASE_Y_OFFSET_PX = 126;
 const PILE_CARD_HALF_HEIGHT_PX = 58;
 
 export interface TrayViewActions {
-  jumpToFiledCard(id: string): Promise<void>;
+  jumpToFiledCard(path: string): Promise<void>;
   moveCardBy(cardRef: string, delta: -1 | 1): Promise<void>;
 }
 
@@ -266,7 +266,7 @@ export class TrayRenderer {
     miniature.toggleClass("is-unfiled", filed === undefined);
     miniature.toggleClass(
       "is-bookmarked",
-      filed !== undefined && this.plugin.bookmarkAt(filed.id) !== undefined,
+      filed !== undefined && this.plugin.bookmarkAtPath(filed.path) !== undefined,
     );
 
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
@@ -340,7 +340,7 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.actions.jumpToFiledCard(filed.id);
+      void this.actions.jumpToFiledCard(filed.path);
     });
     miniature.addEventListener("keydown", (event) => {
       if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
@@ -355,7 +355,7 @@ export class TrayRenderer {
       if (event.key === "Enter" && filed !== undefined) {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.jumpToFiledCard(filed.id);
+        void this.actions.jumpToFiledCard(filed.path);
       }
     });
     miniature.addEventListener("contextmenu", (event) => {

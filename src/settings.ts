@@ -1,4 +1,4 @@
-export const SLIPBOX_DATA_SCHEMA_VERSION = 2;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 3;
 
 export type TitleSource = "filename" | "frontmatter";
 

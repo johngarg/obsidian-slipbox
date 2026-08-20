@@ -82,6 +82,27 @@ export class NavigationHistory<T> {
     return this.current();
   }
 
+  /** Rewrite or remove stored locations after file and folder path changes. */
+  transform(transformLocation: (location: T) => T | undefined): void {
+    const transformed: T[] = [];
+    let transformedIndex = -1;
+    this.entries.forEach((entry, index) => {
+      const next = transformLocation(entry);
+      if (next === undefined) {
+        return;
+      }
+      const previous = transformed[transformed.length - 1];
+      if (previous === undefined || !this.equals(previous, next)) {
+        transformed.push(next);
+      }
+      if (index <= this.index) {
+        transformedIndex = transformed.length - 1;
+      }
+    });
+    this.entries = transformed;
+    this.index = transformedIndex;
+  }
+
   snapshot(): NavigationHistorySnapshot<T> {
     return { entries: [...this.entries], index: this.index };
   }

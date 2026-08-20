@@ -2,6 +2,7 @@ import type { App, TFile } from "obsidian";
 import { TFile as ObsidianFile } from "obsidian";
 
 import {
+  buildFiledZettelLookups,
   indexZettelMetadata,
   zettelMetadataRecord,
   type FiledZettelRecord,
@@ -32,13 +33,14 @@ const EMPTY_INDEX: VaultZettelIndex = {
 };
 
 const NO_BACKLINKS: readonly FiledZettel[] = [];
+const NO_FILED_CARDS: readonly FiledZettel[] = [];
 
 /** A lightweight, cache-backed index over all Markdown files in the vault. */
 export class ZettelIndex {
   private current: VaultZettelIndex = EMPTY_INDEX;
-  private filedByIdMap = new Map<string, FiledZettel>();
   private filedByPathMap = new Map<string, FiledZettel>();
-  private filedIndexByIdMap = new Map<string, number>();
+  private filedIndexByPathMap = new Map<string, number>();
+  private filedByAddressMap = new Map<string, readonly FiledZettel[]>();
 
   constructor(
     private readonly app: App,
@@ -80,25 +82,32 @@ export class ZettelIndex {
       this.app.metadataCache.resolvedLinks,
     );
 
-    this.filedByIdMap = new Map(filed.map((zettel) => [zettel.id, zettel]));
-    this.filedByPathMap = new Map(filed.map((zettel) => [zettel.path, zettel]));
-    this.filedIndexByIdMap = new Map(
-      filed.map((zettel, index) => [zettel.id, index]),
-    );
+    const lookups = buildFiledZettelLookups(filed);
+    this.filedByPathMap = new Map(lookups.byPath);
+    this.filedIndexByPathMap = new Map(lookups.indexByPath);
+    this.filedByAddressMap = new Map(lookups.byAddress);
     this.current = { ...indexed, filed, unfiled, backlinksByTargetPath };
     return this.current;
   }
 
-  filedById(id: string): FiledZettel | undefined {
-    return this.filedByIdMap.get(id);
+  filedByPath(path: string): FiledZettel | undefined {
+    return this.filedByPathMap.get(path);
   }
 
   filedByFile(file: TFile): FiledZettel | undefined {
-    return this.filedByPathMap.get(file.path);
+    return this.filedByPath(file.path);
   }
 
-  filedIndex(id: string | null): number {
-    return id === null ? -1 : this.filedIndexByIdMap.get(id) ?? -1;
+  filedAtAddress(id: string): readonly FiledZettel[] {
+    return this.filedByAddressMap.get(id) ?? NO_FILED_CARDS;
+  }
+
+  firstFiledAtAddress(id: string): FiledZettel | undefined {
+    return this.filedAtAddress(id)[0];
+  }
+
+  filedIndexForPath(path: string | null): number {
+    return path === null ? -1 : this.filedIndexByPathMap.get(path) ?? -1;
   }
 
   fileAtPath(path: string): TFile | undefined {

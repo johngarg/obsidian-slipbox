@@ -16,6 +16,10 @@ import {
 import {
   createBookmark,
   deleteBookmark,
+  isPathBookmark,
+  migrateAddressBookmarks,
+  removeBookmarkPaths,
+  renameBookmarkPaths,
   type DeckBookmark,
 } from "./bookmarks.js";
 import { DECK_VIEW_TYPE, DeckView } from "./deck-view.js";
@@ -80,6 +84,7 @@ import {
 import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
 import { normalizeCanvasPath } from "./canvas-layout.js";
 import { generateFiledCardLink } from "./zettel-links.js";
+import { pathIsAtOrBelow } from "./path-reference.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -190,11 +195,11 @@ export default class SlipboxPlugin extends Plugin {
     );
   }
 
-  private filedCardLabel(zettelId: string): string {
-    const card = this.index.filedById(zettelId);
+  private filedCardLabel(path: string): string {
+    const card = this.index.filedByPath(path);
     return card === undefined
-      ? zettelId
-      : `${zettelId} · ${this.cardTitle(card.file)}`;
+      ? path
+      : `${card.id} · ${this.cardTitle(card.file)}`;
   }
 
   templatesInfo(): TemplatesInfo {
@@ -243,7 +248,7 @@ export default class SlipboxPlugin extends Plugin {
     event.stopPropagation();
 
     const isBookmarked =
-      zettelId !== null && this.bookmarkAt(zettelId) !== undefined;
+      zettelId !== null && this.bookmarkAtPath(file.path) !== undefined;
     const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
@@ -263,7 +268,7 @@ export default class SlipboxPlugin extends Plugin {
         .setDisabled(zettelId === null)
         .onClick(() => {
           if (zettelId !== null) {
-            void this.toggleBookmark(zettelId);
+            void this.toggleBookmark(file.path);
           }
         });
     });
@@ -287,7 +292,7 @@ export default class SlipboxPlugin extends Plugin {
         .setDisabled(zettelId === null)
         .onClick(() => {
           if (zettelId !== null) {
-            void this.createCardFrom(zettelId);
+            void this.createCardFromPath(file.path);
           }
         });
     });
@@ -335,8 +340,8 @@ export default class SlipboxPlugin extends Plugin {
     const entries = this.state.entryPoints;
     new EntryPointsModal(this.app, entries, {
       currentId: view.activeCard?.id ?? null,
-      isAvailable: (id) => this.index.filedById(id) !== undefined,
-      visit: (id) => void view.jumpToId(id),
+      isAvailable: (id) => this.index.firstFiledAtAddress(id) !== undefined,
+      visit: (id) => void view.jumpToAddress(id),
       addCurrent: () => view.addCurrentAsEntryPoint(),
       rename: (index) => this.renameEntryPoint(index),
       remove: (index) => this.removeEntryPoint(index),
@@ -344,34 +349,38 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   showBookmarks(view: DeckView): void {
-    new BookmarksModal(this.app, this.state.bookmarks, {
-      currentId: view.activeCard?.id ?? null,
-      isAvailable: (id) => this.index.filedById(id) !== undefined,
-      label: (id) => this.filedCardLabel(id),
-      visit: (id) => void view.jumpToId(id),
+    const bookmarks = this.state.bookmarks.filter(isPathBookmark);
+    new BookmarksModal(this.app, bookmarks, {
+      currentPath: view.activeCard?.path ?? null,
+      isAvailable: (path) => this.index.filedByPath(path) !== undefined,
+      label: (path) => this.filedCardLabel(path),
+      visit: (path) => void view.jumpToPath(path),
       addCurrent: () => view.addBookmarkToCurrent(),
-      remove: (zettelId) => view.removeBookmark(zettelId),
+      remove: (path) => view.removeBookmark(path),
     }).open();
   }
 
-  bookmarkAt(zettelId: string): DeckBookmark | undefined {
-    return this.state.bookmarks.find((bookmark) => bookmark.zettelId === zettelId);
+  bookmarkAtPath(path: string): DeckBookmark | undefined {
+    return this.state.bookmarks.find(
+      (bookmark): bookmark is DeckBookmark =>
+        isPathBookmark(bookmark) && bookmark.path === path,
+    );
   }
 
-  async addBookmark(zettelId: string): Promise<void> {
-    if (this.index.filedById(zettelId) === undefined) {
+  async addBookmark(path: string): Promise<void> {
+    if (this.index.filedByPath(path) === undefined) {
       new Notice("Only an available filed card can be bookmarked.");
       return;
     }
-    const label = this.filedCardLabel(zettelId);
-    if (this.bookmarkAt(zettelId) !== undefined) {
+    const label = this.filedCardLabel(path);
+    if (this.bookmarkAtPath(path) !== undefined) {
       new Notice(`${label} already has a bookmark.`);
       return;
     }
     try {
       this.state = {
         ...this.state,
-        bookmarks: createBookmark(this.state.bookmarks, zettelId),
+        bookmarks: createBookmark(this.state.bookmarks, path),
       };
       await this.persistStateAndRefreshViews();
       new Notice(`Bookmarked ${label}.`);
@@ -380,11 +389,11 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async toggleBookmark(zettelId: string): Promise<void> {
-    if (this.bookmarkAt(zettelId) === undefined) {
-      await this.addBookmark(zettelId);
+  async toggleBookmark(path: string): Promise<void> {
+    if (this.bookmarkAtPath(path) === undefined) {
+      await this.addBookmark(path);
     } else {
-      await this.removeBookmark(zettelId);
+      await this.removeBookmark(path);
     }
   }
 
@@ -402,7 +411,7 @@ export default class SlipboxPlugin extends Plugin {
     this.index.refresh();
     const filed = this.index.filedByFile(file);
     if (filed === undefined) {
-      new Notice("Only a uniquely filed card can be pulled out.");
+      new Notice("Only an available filed card can be pulled out.");
       return;
     }
     this.tray = toggleFiledCard(
@@ -564,7 +573,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async addEntryPoint(id: string): Promise<void> {
-    if (this.index.filedById(id) === undefined) {
+    if (this.index.firstFiledAtAddress(id) === undefined) {
       new Notice(`Card ${id} is not available in Slipbox.`);
       return;
     }
@@ -604,21 +613,21 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async createCardFrom(attachmentId: string): Promise<void> {
+  async createCardFromPath(attachmentPath: string): Promise<void> {
     if (this.cardCreationInProgress) {
       return;
     }
     this.cardCreationInProgress = true;
     try {
       this.index.refresh();
-      const attachment = this.index.filedById(attachmentId);
+      const attachment = this.index.filedByPath(attachmentPath);
       if (attachment === undefined) {
         throw new Error(
-          `Attachment ${attachmentId} is missing, invalid, or duplicated`,
+          `Attachment ${attachmentPath} is missing or invalid`,
         );
       }
       const id = generateFiledId(
-        attachmentId,
+        attachment.id,
         this.index.snapshot.allValidIds,
       );
       const file = await this.createCardFile(id, attachment.path);
@@ -628,25 +637,26 @@ export default class SlipboxPlugin extends Plugin {
       this.queueIndexRefresh();
     } catch (error) {
       new Notice(
-        `Could not add a card from ${attachmentId}: ${errorMessage(error)}`,
+        `Could not add a card from ${attachmentPath}: ${errorMessage(error)}`,
       );
     } finally {
       this.cardCreationInProgress = false;
     }
   }
 
-  async fileCard(file: TFile, attachmentId: string): Promise<string | null> {
+  async fileCard(file: TFile, attachmentPath: string): Promise<string | null> {
     let refreshAfterFiling = false;
     this.filingWriteInProgress = true;
     try {
       this.index.refresh();
-      if (this.index.filedById(attachmentId) === undefined) {
+      const attachment = this.index.filedByPath(attachmentPath);
+      if (attachment === undefined) {
         throw new Error(
-          `Attachment ${attachmentId} is missing, invalid, or duplicated`,
+          `Attachment ${attachmentPath} is missing or invalid`,
         );
       }
       const newId = generateFiledId(
-        attachmentId,
+        attachment.id,
         this.index.snapshot.allValidIds,
       );
 
@@ -832,17 +842,17 @@ export default class SlipboxPlugin extends Plugin {
       id: "add-bookmark-current-card",
       name: "Toggle bookmark on current card",
       checkCallback: (checking) => {
-        const id = this.currentFiledId();
-        const available = id !== null;
+        const path = this.currentFiledPath();
+        const available = path !== null;
         if (checking) {
           return available;
         }
-        if (available && id !== null) {
+        if (available && path !== null) {
           const deck = this.app.workspace.getActiveViewOfType(DeckView);
           if (deck !== null) {
             deck.runAction("toggle-bookmark");
           } else {
-            void this.toggleBookmark(id);
+            void this.toggleBookmark(path);
           }
         }
         return available;
@@ -905,8 +915,8 @@ export default class SlipboxPlugin extends Plugin {
       id: "copy-current-card-link",
       name: "Copy link to current card",
       checkCallback: (checking) => {
-        const id = this.currentFiledId();
-        const available = id !== null && this.index.filedById(id) !== undefined;
+        const path = this.currentFiledPath();
+        const available = path !== null && this.index.filedByPath(path) !== undefined;
         if (checking) {
           return available;
         }
@@ -921,19 +931,19 @@ export default class SlipboxPlugin extends Plugin {
       id: "add-card-from-current",
       name: "Add card from current card",
       checkCallback: (checking) => {
-        const id = this.currentFiledId();
+        const path = this.currentFiledPath();
         if (checking) {
-          return id !== null;
+          return path !== null;
         }
-        if (id !== null) {
+        if (path !== null) {
           const deck = this.app.workspace.getActiveViewOfType(DeckView);
           if (deck !== null) {
             deck.runAction("add-card");
           } else {
-            void this.createCardFrom(id);
+            void this.createCardFromPath(path);
           }
         }
-        return id !== null;
+        return path !== null;
       },
     });
 
@@ -1213,13 +1223,15 @@ export default class SlipboxPlugin extends Plugin {
     return leaf?.view instanceof DeckView ? leaf.view : null;
   }
 
-  private currentFiledId(): string | null {
-    const deckId = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.id;
-    if (deckId !== undefined) {
-      return deckId;
+  private currentFiledPath(): string | null {
+    const deckPath = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.path;
+    if (deckPath !== undefined) {
+      return deckPath;
     }
     const activeFile = this.app.workspace.getActiveFile();
-    return activeFile === null ? null : this.index.filedByFile(activeFile)?.id ?? null;
+    return activeFile === null
+      ? null
+      : this.index.filedByFile(activeFile)?.path ?? null;
   }
 
   private currentCardFile(): TFile | null {
@@ -1236,8 +1248,8 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private async copyCurrentCardLink(): Promise<void> {
-    const id = this.currentFiledId();
-    const card = id === null ? undefined : this.index.filedById(id);
+    const path = this.currentFiledPath();
+    const card = path === null ? undefined : this.index.filedByPath(path);
     if (card === undefined) {
       new Notice("Only an available filed card can be linked.");
       return;
@@ -1258,14 +1270,14 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async removeBookmark(zettelId: string): Promise<void> {
-    if (this.bookmarkAt(zettelId) === undefined) {
+  async removeBookmark(path: string): Promise<void> {
+    if (this.bookmarkAtPath(path) === undefined) {
       return;
     }
-    const label = this.filedCardLabel(zettelId);
+    const label = this.filedCardLabel(path);
     this.state = {
       ...this.state,
-      bookmarks: deleteBookmark(this.state.bookmarks, zettelId),
+      bookmarks: deleteBookmark(this.state.bookmarks, path),
     };
     await this.persistStateAndRefreshViews();
     new Notice(`Deleted bookmark at ${label}.`);
@@ -1344,6 +1356,16 @@ export default class SlipboxPlugin extends Plugin {
 
   private async refreshIndex(): Promise<void> {
     this.index.refresh();
+    if (this.state.bookmarks.some((bookmark) => !isPathBookmark(bookmark))) {
+      this.state = {
+        ...this.state,
+        bookmarks: migrateAddressBookmarks(
+          this.state.bookmarks,
+          (id) => this.index.firstFiledAtAddress(id)?.path,
+        ),
+      };
+      await this.persistState();
+    }
     this.reconcileSessionTray();
     await this.refreshDeckViews();
   }
@@ -1423,16 +1445,26 @@ export default class SlipboxPlugin extends Plugin {
 
   private handleDeletedFile(file: TAbstractFile): void {
     this.tray = removeTrayPath(this.tray, file.path);
-    void this.refreshDeckViews();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handlePathDeletion(file.path);
+      }
+    }
     const prefix = `${file.path.replace(/\/$/, "")}/`;
     const legacyDeskCards = this.state.legacyDeskCards ?? [];
-    if (legacyDeskCards.some(
+    const removesLegacyDeskCard = legacyDeskCards.some(
       (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix),
-    )) {
+    );
+    const nextBookmarks = removeBookmarkPaths(this.state.bookmarks, file.path);
+    if (
+      removesLegacyDeskCard ||
+      nextBookmarks.length !== this.state.bookmarks.length
+    ) {
       const next = removeDeskPath(legacyDeskCards, file.path);
       const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
       this.state = {
         ...state,
+        bookmarks: nextBookmarks,
         ...(next.length > 0 ? { legacyDeskCards: next } : {}),
       };
       void this.persistState();
@@ -1442,15 +1474,27 @@ export default class SlipboxPlugin extends Plugin {
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
     this.tray = renameTrayPath(this.tray, oldPath, file.path);
-    void this.refreshDeckViews();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handlePathRename(oldPath, file.path);
+      }
+    }
     const prefix = `${oldPath.replace(/\/$/, "")}/`;
     const legacyDeskCards = this.state.legacyDeskCards ?? [];
-    if (legacyDeskCards.some(
+    const renamesLegacyDeskCard = legacyDeskCards.some(
       (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix),
-    )) {
+    );
+    const renamesBookmark = this.state.bookmarks.some(
+      (bookmark) =>
+        isPathBookmark(bookmark) && pathIsAtOrBelow(bookmark.path, oldPath),
+    );
+    if (renamesLegacyDeskCard || renamesBookmark) {
       this.state = {
         ...this.state,
-        legacyDeskCards: renameDeskCard(legacyDeskCards, oldPath, file.path),
+        bookmarks: renameBookmarkPaths(this.state.bookmarks, oldPath, file.path),
+        ...(renamesLegacyDeskCard
+          ? { legacyDeskCards: renameDeskCard(legacyDeskCards, oldPath, file.path) }
+          : {}),
       };
       void this.persistState();
     }

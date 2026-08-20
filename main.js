@@ -259,39 +259,96 @@ function generateNextSectionId(existingIds) {
   return `${highestSection + 1}/1`;
 }
 
+// src/path-reference.ts
+function pathIsAtOrBelow(path, target) {
+  const prefix = `${target.replace(/\/$/, "")}/`;
+  return path === target || path.startsWith(prefix);
+}
+function renamePathReference(path, oldPath, newPath) {
+  if (path === oldPath) {
+    return newPath;
+  }
+  const oldPrefix = `${oldPath.replace(/\/$/, "")}/`;
+  if (!path.startsWith(oldPrefix)) {
+    return path;
+  }
+  const newPrefix = `${newPath.replace(/\/$/, "")}/`;
+  return `${newPrefix}${path.slice(oldPrefix.length)}`;
+}
+
 // src/bookmarks.ts
 function isRecord(value) {
   return typeof value === "object" && value !== null;
+}
+function isPathBookmark(bookmark) {
+  return "path" in bookmark;
 }
 function normalizeBookmarks(value) {
   if (!Array.isArray(value)) {
     return [];
   }
-  const seenZettelIds = /* @__PURE__ */ new Set();
+  const seenPaths = /* @__PURE__ */ new Set();
+  const seenLegacyIds = /* @__PURE__ */ new Set();
   const bookmarks = [];
   for (const candidate of value) {
-    if (!isRecord(candidate) || typeof candidate.zettelId !== "string" || !isValidZettelId(candidate.zettelId)) {
+    if (!isRecord(candidate)) {
       continue;
     }
-    if (seenZettelIds.has(candidate.zettelId)) {
+    if (typeof candidate.path === "string" && candidate.path !== "") {
+      if (!seenPaths.has(candidate.path)) {
+        seenPaths.add(candidate.path);
+        bookmarks.push({ path: candidate.path });
+      }
       continue;
     }
-    seenZettelIds.add(candidate.zettelId);
-    bookmarks.push({ zettelId: candidate.zettelId });
+    if (typeof candidate.zettelId === "string" && isValidZettelId(candidate.zettelId) && !seenLegacyIds.has(candidate.zettelId)) {
+      seenLegacyIds.add(candidate.zettelId);
+      bookmarks.push({ zettelId: candidate.zettelId });
+    }
   }
   return bookmarks;
 }
-function createBookmark(bookmarks, zettelId) {
-  if (bookmarks.some((bookmark) => bookmark.zettelId === zettelId)) {
-    throw new Error(`${zettelId} already has a bookmark`);
+function migrateAddressBookmarks(bookmarks, firstPathAtAddress) {
+  const seenPaths = /* @__PURE__ */ new Set();
+  const migrated = [];
+  for (const bookmark of bookmarks) {
+    const path = isPathBookmark(bookmark) ? bookmark.path : firstPathAtAddress(bookmark.zettelId);
+    if (path === void 0 || path === "" || seenPaths.has(path)) {
+      continue;
+    }
+    seenPaths.add(path);
+    migrated.push({ path });
   }
-  if (!isValidZettelId(zettelId)) {
-    throw new Error(`${zettelId} is not a valid Zettel address`);
-  }
-  return [...bookmarks, { zettelId }];
+  return migrated;
 }
-function deleteBookmark(bookmarks, zettelId) {
-  return bookmarks.filter((bookmark) => bookmark.zettelId !== zettelId);
+function createBookmark(bookmarks, path) {
+  if (path === "") {
+    throw new Error("A bookmark path is required");
+  }
+  if (bookmarks.some(
+    (bookmark) => isPathBookmark(bookmark) && bookmark.path === path
+  )) {
+    throw new Error(`${path} already has a bookmark`);
+  }
+  return [...bookmarks, { path }];
+}
+function deleteBookmark(bookmarks, path) {
+  return bookmarks.filter(
+    (bookmark) => !isPathBookmark(bookmark) || bookmark.path !== path
+  );
+}
+function renameBookmarkPaths(bookmarks, oldPath, newPath) {
+  return normalizeBookmarks(bookmarks.map((bookmark) => {
+    if (!isPathBookmark(bookmark)) {
+      return bookmark;
+    }
+    return { path: renamePathReference(bookmark.path, oldPath, newPath) };
+  }));
+}
+function removeBookmarkPaths(bookmarks, deletedPath) {
+  return bookmarks.filter(
+    (bookmark) => !isPathBookmark(bookmark) || !pathIsAtOrBelow(bookmark.path, deletedPath)
+  );
 }
 
 // src/deck-view.ts
@@ -423,6 +480,26 @@ var NavigationHistory = class {
     this.index += 1;
     return this.current();
   }
+  /** Rewrite or remove stored locations after file and folder path changes. */
+  transform(transformLocation) {
+    const transformed = [];
+    let transformedIndex = -1;
+    this.entries.forEach((entry, index) => {
+      const next = transformLocation(entry);
+      if (next === void 0) {
+        return;
+      }
+      const previous = transformed[transformed.length - 1];
+      if (previous === void 0 || !this.equals(previous, next)) {
+        transformed.push(next);
+      }
+      if (index <= this.index) {
+        transformedIndex = transformed.length - 1;
+      }
+    });
+    this.entries = transformed;
+    this.index = transformedIndex;
+  }
   snapshot() {
     return { entries: [...this.entries], index: this.index };
   }
@@ -430,6 +507,101 @@ var NavigationHistory = class {
 
 // src/card-footer.ts
 var import_obsidian = require("obsidian");
+
+// src/zettel-metadata.ts
+function zettelMetadataRecord(path, frontmatter, addressProperty) {
+  const hasZettelId = frontmatter !== void 0 && Object.prototype.hasOwnProperty.call(frontmatter, addressProperty);
+  return {
+    path,
+    hasZettelId,
+    zettelId: hasZettelId ? frontmatter[addressProperty] : void 0
+  };
+}
+function displayValue(value) {
+  const serialized = JSON.stringify(value);
+  return serialized === void 0 ? String(value) : serialized;
+}
+function compareVaultPaths(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function compareFiledZettels(left, right) {
+  const addressComparison = compareZettelIds(left.id, right.id);
+  return addressComparison !== 0 ? addressComparison : compareVaultPaths(left.path, right.path);
+}
+function buildFiledZettelLookups(filed) {
+  const byPath = /* @__PURE__ */ new Map();
+  const indexByPath = /* @__PURE__ */ new Map();
+  const byAddress = /* @__PURE__ */ new Map();
+  filed.forEach((card, index) => {
+    byPath.set(card.path, card);
+    indexByPath.set(card.path, index);
+    const matches = byAddress.get(card.id) ?? [];
+    matches.push(card);
+    byAddress.set(card.id, matches);
+  });
+  return { byPath, indexByPath, byAddress };
+}
+function indexZettelMetadata(records, addressProperty = "zettel-id") {
+  const unfiledPaths = [];
+  const issues = [];
+  const candidates = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    if (!record.hasZettelId) {
+      continue;
+    }
+    if (record.zettelId === "" || record.zettelId === null || record.zettelId === void 0) {
+      unfiledPaths.push(record.path);
+      continue;
+    }
+    if (typeof record.zettelId !== "string" || !isValidZettelId(record.zettelId)) {
+      issues.push({
+        kind: "invalid",
+        severity: "error",
+        paths: [record.path],
+        message: `Unsupported ${addressProperty} ${displayValue(record.zettelId)}`
+      });
+      continue;
+    }
+    const paths = candidates.get(record.zettelId) ?? [];
+    paths.push(record.path);
+    candidates.set(record.zettelId, paths);
+  }
+  const filed = [];
+  const allValidIds = [...candidates.keys()].sort(compareZettelIds);
+  for (const id of allValidIds) {
+    const paths = candidates.get(id);
+    if (paths === void 0 || paths.length === 0) {
+      continue;
+    }
+    paths.sort(compareVaultPaths);
+    for (const path of paths) {
+      filed.push({ path, id });
+    }
+    const first = paths[0];
+    const second = paths[1];
+    if (first !== void 0 && second !== void 0) {
+      issues.push({
+        kind: "duplicate",
+        severity: "warning",
+        id,
+        paths: [first, second, ...paths.slice(2)],
+        message: `Duplicate ${addressProperty} ${id}`
+      });
+    }
+  }
+  filed.sort(compareFiledZettels);
+  unfiledPaths.sort(compareVaultPaths);
+  issues.sort((a, b) => {
+    const pathComparison = compareVaultPaths(a.paths[0], b.paths[0]);
+    return pathComparison !== 0 ? pathComparison : a.kind.localeCompare(b.kind);
+  });
+  return {
+    filed,
+    unfiledPaths,
+    issues,
+    allValidIds
+  };
+}
 
 // src/backlinks.ts
 function indexFiledBacklinks(filed, resolvedLinks) {
@@ -450,7 +622,7 @@ function indexFiledBacklinks(filed, resolvedLinks) {
     }
   }
   for (const sources of sourcesByTarget.values()) {
-    sources.sort((left, right) => compareZettelIds(left.id, right.id));
+    sources.sort(compareFiledZettels);
   }
   return sourcesByTarget;
 }
@@ -889,7 +1061,7 @@ function renameDeskCard(cards, oldRef, newRef) {
 }
 
 // src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 2;
+var SLIPBOX_DATA_SCHEMA_VERSION = 3;
 var binding = (key, modifiers = []) => ({ key, modifiers });
 var DECK_ACTION_DEFINITIONS = [
   {
@@ -1673,7 +1845,7 @@ var TrayRenderer = class {
     miniature.toggleClass("is-unfiled", filed === void 0);
     miniature.toggleClass(
       "is-bookmarked",
-      filed !== void 0 && this.plugin.bookmarkAt(filed.id) !== void 0
+      filed !== void 0 && this.plugin.bookmarkAtPath(filed.path) !== void 0
     );
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
     identity.createSpan({ cls: "slipbox-tray-card-address", text: address });
@@ -1744,7 +1916,7 @@ var TrayRenderer = class {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.actions.jumpToFiledCard(filed.id);
+      void this.actions.jumpToFiledCard(filed.path);
     });
     miniature.addEventListener("keydown", (event) => {
       if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
@@ -1759,7 +1931,7 @@ var TrayRenderer = class {
       if (event.key === "Enter" && filed !== void 0) {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.jumpToFiledCard(filed.id);
+        void this.actions.jumpToFiledCard(filed.path);
       }
     });
     miniature.addEventListener("contextmenu", (event) => {
@@ -2135,7 +2307,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       toggleTray: (file) => this.plugin.toggleFileInTray(file)
     });
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
-      jumpToFiledCard: (id) => this.jumpToId(id),
+      jumpToFiledCard: (path) => this.jumpToPath(path),
       moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta)
     });
     this.registerEvent(
@@ -2144,7 +2316,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.scope = new import_obsidian3.Scope(this.app.scope);
     this.updateKeybindings();
   }
-  activeId = null;
+  activePath = null;
   filingFile = null;
   stageEl = null;
   spaceEl = null;
@@ -2219,10 +2391,10 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.cardFooters.scheduleLayout();
   }
   get activeCard() {
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       return null;
     }
-    return this.plugin.index.filedById(this.activeId) ?? null;
+    return this.plugin.index.filedByPath(this.activePath) ?? null;
   }
   get isFiling() {
     return this.filingFile !== null;
@@ -2232,6 +2404,33 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   get canGoForward() {
     return this.history.canForward();
+  }
+  handlePathRename(oldPath, newPath) {
+    if (this.activePath !== null) {
+      this.activePath = renamePathReference(this.activePath, oldPath, newPath);
+    }
+    this.history.transform(
+      (path) => renamePathReference(path, oldPath, newPath)
+    );
+    this.cardScrollPositions = new Map(
+      [...this.cardScrollPositions].map(([path, scroll]) => [
+        renamePathReference(path, oldPath, newPath),
+        scroll
+      ])
+    );
+  }
+  handlePathDeletion(deletedPath) {
+    if (this.activePath !== null && pathIsAtOrBelow(this.activePath, deletedPath)) {
+      this.activePath = null;
+    }
+    this.history.transform(
+      (path) => pathIsAtOrBelow(path, deletedPath) ? void 0 : path
+    );
+    for (const path of this.cardScrollPositions.keys()) {
+      if (pathIsAtOrBelow(path, deletedPath)) {
+        this.cardScrollPositions.delete(path);
+      }
+    }
   }
   updateKeybindings() {
     const scope = this.scope;
@@ -2260,7 +2459,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   canRunAction(action, target) {
     const filed = this.plugin.index.snapshot.filed;
     const active = target ?? this.activeCard;
-    const activeIndex = active === null ? -1 : this.plugin.index.filedIndex(active.id);
+    const activeIndex = active === null ? -1 : this.plugin.index.filedIndexForPath(active.path);
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
@@ -2299,7 +2498,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         break;
       case "add-card":
         if (card !== null) {
-          void this.plugin.createCardFrom(card.id);
+          void this.plugin.createCardFromPath(card.path);
         }
         break;
       case "toggle-tray":
@@ -2309,7 +2508,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         break;
       case "toggle-bookmark":
         if (card !== null) {
-          void this.toggleCardBookmark(card.id);
+          void this.toggleCardBookmark(card.path);
         }
         break;
       case "back":
@@ -2341,18 +2540,18 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   async refresh() {
     this.cancelViewportCentering();
-    const previousActiveId = this.activeId;
+    const previousActivePath = this.activePath;
     this.reconcileScrollPositions();
     this.chooseAvailableActiveCard();
-    if (this.activeId !== previousActiveId) {
+    if (this.activePath !== previousActivePath) {
       this.viewportOffset = 0;
     }
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       this.history.reset();
     } else if (this.history.current() === void 0) {
-      this.history.reset(this.activeId);
-    } else if (this.activeId !== previousActiveId) {
-      this.history.replaceCurrent(this.activeId);
+      this.history.reset(this.activePath);
+    } else if (this.activePath !== previousActivePath) {
+      this.history.replaceCurrent(this.activePath);
     }
     this.clampViewportOffset();
     await this.renderDeck();
@@ -2366,90 +2565,98 @@ var DeckView = class extends import_obsidian3.ItemView {
     await this.renderDeck();
     new import_obsidian3.Notice("Filing cancelled. The card remains in its pile.");
   }
-  async goToId(id) {
-    const moved = await this.navigateToId(id);
+  async goToPath(path) {
+    const moved = await this.navigateToPath(path);
     if (moved) {
-      this.history.replaceCurrent(id);
+      this.history.replaceCurrent(path);
       this.updateHistoryControls();
     }
   }
-  async jumpToId(id) {
-    if (this.activeId !== null) {
-      this.history.replaceCurrent(this.activeId);
+  async jumpToPath(path) {
+    if (this.activePath !== null) {
+      this.history.replaceCurrent(this.activePath);
     }
-    if (this.plugin.index.filedById(id) === void 0) {
-      new import_obsidian3.Notice(`Card ${id} is missing, invalid, or duplicated.`);
+    if (this.plugin.index.filedByPath(path) === void 0) {
+      new import_obsidian3.Notice(`Card ${path} is missing or invalid.`);
       return;
     }
-    this.history.jump(id);
-    await this.navigateToId(id);
+    this.history.jump(path);
+    await this.navigateToPath(path);
     this.updateHistoryControls();
   }
-  async goBack() {
-    const id = this.history.back();
-    if (id === void 0) {
+  /** Intentional address-level navigation used by entry points. */
+  async jumpToAddress(id) {
+    const card = this.plugin.index.firstFiledAtAddress(id);
+    if (card === void 0) {
+      new import_obsidian3.Notice(`Card address ${id} is missing or invalid.`);
       return;
     }
-    if (!await this.navigateToId(id)) {
-      new import_obsidian3.Notice(`The Back destination ${id} is no longer available.`);
+    await this.jumpToPath(card.path);
+  }
+  async goBack() {
+    const path = this.history.back();
+    if (path === void 0) {
+      return;
+    }
+    if (!await this.navigateToPath(path)) {
+      new import_obsidian3.Notice(`The Back destination ${path} is no longer available.`);
     }
     this.updateHistoryControls();
   }
   async goForward() {
-    const id = this.history.forward();
-    if (id === void 0) {
+    const path = this.history.forward();
+    if (path === void 0) {
       return;
     }
-    if (!await this.navigateToId(id)) {
-      new import_obsidian3.Notice(`The Forward destination ${id} is no longer available.`);
+    if (!await this.navigateToPath(path)) {
+      new import_obsidian3.Notice(`The Forward destination ${path} is no longer available.`);
     }
     this.updateHistoryControls();
   }
   async addBookmarkToCurrent() {
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       new import_obsidian3.Notice("There is no active filed card.");
       return;
     }
-    const bookmarkedIds = this.bookmarkedIds();
-    bookmarkedIds.add(this.activeId);
-    this.updateBookmarkUi(bookmarkedIds);
-    await this.plugin.addBookmark(this.activeId);
+    const bookmarkedPaths = this.bookmarkedPaths();
+    bookmarkedPaths.add(this.activePath);
+    this.updateBookmarkUi(bookmarkedPaths);
+    await this.plugin.addBookmark(this.activePath);
   }
-  async removeBookmark(zettelId) {
-    const bookmarkedIds = this.bookmarkedIds();
-    bookmarkedIds.delete(zettelId);
-    this.updateBookmarkUi(bookmarkedIds);
-    await this.plugin.removeBookmark(zettelId);
+  async removeBookmark(path) {
+    const bookmarkedPaths = this.bookmarkedPaths();
+    bookmarkedPaths.delete(path);
+    this.updateBookmarkUi(bookmarkedPaths);
+    await this.plugin.removeBookmark(path);
   }
-  async navigateToId(id) {
-    const targetIndex = this.plugin.index.filedIndex(id);
+  async navigateToPath(path) {
+    const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
-      new import_obsidian3.Notice(`Card ${id} is missing, invalid, or duplicated.`);
+      new import_obsidian3.Notice(`Card ${path} is missing or invalid.`);
       return false;
     }
     this.cancelViewportCentering();
-    this.activeId = id;
+    this.activePath = path;
     this.viewportOffset = 0;
     await this.renderDeck();
     return true;
   }
   async addCurrentAsEntryPoint() {
-    if (this.activeId === null) {
+    const active = this.activeCard;
+    if (active === null) {
       new import_obsidian3.Notice("There is no active filed card.");
       return;
     }
-    await this.plugin.addEntryPoint(this.activeId);
+    await this.plugin.addEntryPoint(active.id);
   }
   chooseAvailableActiveCard() {
     const filed = this.plugin.index.snapshot.filed;
-    const available = new Set(filed.map((card) => card.id));
-    if (this.activeId !== null && available.has(this.activeId)) {
+    const availablePaths = new Set(filed.map((card) => card.path));
+    if (this.activePath !== null && availablePaths.has(this.activePath)) {
       return;
     }
-    const firstEntryPoint = this.plugin.state.entryPoints.find(
-      (entry) => available.has(entry.id)
-    );
-    this.activeId = firstEntryPoint?.id ?? filed[0]?.id ?? null;
+    const firstEntryPoint = this.plugin.state.entryPoints.map((entry) => this.plugin.index.firstFiledAtAddress(entry.id)).find((card) => card !== void 0);
+    this.activePath = firstEntryPoint?.path ?? filed[0]?.path ?? null;
   }
   async renderDeck() {
     const version = ++this.renderVersion;
@@ -2481,10 +2688,10 @@ var DeckView = class extends import_obsidian3.ItemView {
       () => version === this.renderVersion
     );
     const filed = this.plugin.index.snapshot.filed;
-    if (filed.length === 0 || this.activeId === null) {
+    if (filed.length === 0 || this.activePath === null) {
       this.renderEmptyDeck(space);
     } else {
-      const activeIndex = this.plugin.index.filedIndex(this.activeId);
+      const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
       if (activeIndex >= 0) {
         await this.renderCardWindow(space, filed, activeIndex, version);
       }
@@ -2607,9 +2814,8 @@ var DeckView = class extends import_obsidian3.ItemView {
       const cardEl = stage.createDiv({ cls: "slipbox-card" });
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
-      cardEl.dataset.zettelId = card.id;
       cardEl.toggleClass("is-active", index === activeIndex);
-      const isBookmarked = this.plugin.bookmarkAt(card.id) !== void 0;
+      const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== void 0;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
       const title = this.plugin.cardTitle(card.file);
@@ -2677,7 +2883,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),
         interactive: index === activeIndex,
-        activate: (backlink) => this.jumpToId(backlink.id)
+        activate: (backlink) => this.jumpToPath(backlink.path)
       });
       jobs.push(this.renderMarkdownCard(card, scroll, version));
       cardEl.addEventListener("contextmenu", (event) => {
@@ -2698,12 +2904,12 @@ var DeckView = class extends import_obsidian3.ItemView {
         if (!(target instanceof HTMLElement)) {
           return;
         }
-        if (card.id === this.activeId) {
+        if (card.path === this.activePath) {
           return;
         }
         event.preventDefault();
         event.stopPropagation();
-        this.selectCardWithoutMoving(card.id);
+        this.selectCardWithoutMoving(card.path);
       });
     }
     this.positionCards();
@@ -2749,15 +2955,15 @@ var DeckView = class extends import_obsidian3.ItemView {
       });
     }
   }
-  async toggleCardBookmark(zettelId) {
-    const bookmarkedIds = this.bookmarkedIds();
-    if (bookmarkedIds.has(zettelId)) {
-      bookmarkedIds.delete(zettelId);
+  async toggleCardBookmark(path) {
+    const bookmarkedPaths = this.bookmarkedPaths();
+    if (bookmarkedPaths.has(path)) {
+      bookmarkedPaths.delete(path);
     } else {
-      bookmarkedIds.add(zettelId);
+      bookmarkedPaths.add(path);
     }
-    this.updateBookmarkUi(bookmarkedIds);
-    await this.plugin.toggleBookmark(zettelId);
+    this.updateBookmarkUi(bookmarkedPaths);
+    await this.plugin.toggleBookmark(path);
   }
   attachInternalLinkInteractions(target, sourcePath) {
     target.addEventListener("mouseover", (event) => {
@@ -2802,7 +3008,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         }
         event.preventDefault();
         event.stopImmediatePropagation();
-        void this.jumpToId(filed.id);
+        void this.jumpToPath(filed.path);
       },
       { capture: true }
     );
@@ -2853,15 +3059,15 @@ var DeckView = class extends import_obsidian3.ItemView {
     if (file === null || attachment === null) {
       return;
     }
-    const newId = await this.plugin.fileCard(file, attachment.id);
+    const newId = await this.plugin.fileCard(file, attachment.path);
     if (newId === null) {
       return;
     }
     await this.animateFiling(newId);
     this.filingFile = null;
-    this.activeId = newId;
+    this.activePath = file.path;
     this.viewportOffset = 0;
-    this.history.replaceCurrent(newId);
+    this.history.replaceCurrent(file.path);
     await this.renderDeck();
   }
   async animateFiling(newId) {
@@ -2876,19 +3082,19 @@ var DeckView = class extends import_obsidian3.ItemView {
       (resolve) => window.setTimeout(resolve, FILING_ANIMATION_DURATION_MS + 40)
     );
   }
-  renderBookmarkEdgeTabs(stage, bookmarkedIds = this.bookmarkedIds()) {
+  renderBookmarkEdgeTabs(stage, bookmarkedPaths = this.bookmarkedPaths()) {
     stage.querySelectorAll(".slipbox-bookmark-edge-tab").forEach((tab) => tab.remove());
-    if (this.activeId === null || bookmarkedIds.size === 0) {
+    if (this.activePath === null || bookmarkedPaths.size === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const cardWidth = this.renderedCards[0]?.offsetWidth ?? 0;
     if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
-    const bookmarkIndices = [...bookmarkedIds].flatMap((zettelId) => {
-      const index = this.plugin.index.filedIndex(zettelId);
+    const bookmarkIndices = [...bookmarkedPaths].flatMap((path) => {
+      const index = this.plugin.index.filedIndexForPath(path);
       return index < 0 ? [] : [index];
     });
     const targets = bookmarkEdgeTargets(
@@ -2912,7 +3118,7 @@ var DeckView = class extends import_obsidian3.ItemView {
           "aria-label": `Jump to bookmark ${card.id}`
         }
       });
-      tab.addEventListener("click", () => void this.jumpToId(card.id));
+      tab.addEventListener("click", () => void this.jumpToPath(card.path));
     }
   }
   attachBrowsingEvents(stage) {
@@ -3001,7 +3207,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   moveViewportByPixels(deltaPixels) {
     this.cancelViewportCentering();
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -3014,7 +3220,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   moveBy(delta) {
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -3023,21 +3229,21 @@ var DeckView = class extends import_obsidian3.ItemView {
       Math.min(filed.length - 1, activeIndex + delta)
     );
     const target = filed[targetIndex];
-    if (target === void 0 || target.id === this.activeId) {
+    if (target === void 0 || target.path === this.activePath) {
       return;
     }
     const viewportPosition = this.viewportPosition(activeIndex);
-    this.activeId = target.id;
+    this.activePath = target.path;
     this.viewportOffset = viewportPosition - targetIndex;
-    this.history.replaceCurrent(target.id);
+    this.history.replaceCurrent(target.path);
     this.centerViewportOnActive(targetIndex, true);
   }
   centerActiveCard() {
-    if (this.activeId === null) {
+    if (this.activePath === null) {
       new import_obsidian3.Notice("There is no active filed card to centre.");
       return;
     }
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -3059,13 +3265,13 @@ var DeckView = class extends import_obsidian3.ItemView {
       this.queueRenderWindowRefresh();
       return;
     }
-    const activeId = this.activeId;
+    const activePath = this.activePath;
     const startedAt = window.performance.now();
     this.positionCards();
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
     const advance = (timestamp) => {
-      if (this.activeId !== activeId || this.plugin.index.filedIndex(activeId) !== activeIndex) {
+      if (this.activePath !== activePath || this.plugin.index.filedIndexForPath(activePath) !== activeIndex) {
         this.viewportCenteringFrame = null;
         return;
       }
@@ -3123,7 +3329,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       new import_obsidian3.Notice("There are no filed cards.");
       return;
     }
-    void this.goToId(target.id);
+    void this.goToPath(target.path);
   }
   handleDeckActionKey(event, action, repeatable = false) {
     const target = event.target;
@@ -3139,23 +3345,23 @@ var DeckView = class extends import_obsidian3.ItemView {
     }
     return true;
   }
-  selectCardWithoutMoving(id) {
+  selectCardWithoutMoving(path) {
     this.cancelViewportCentering();
-    const previousActiveIndex = this.plugin.index.filedIndex(this.activeId);
-    const targetIndex = this.plugin.index.filedIndex(id);
+    const previousActiveIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
       return;
     }
     const viewportPosition = previousActiveIndex < 0 ? targetIndex : this.viewportPosition(previousActiveIndex);
-    this.activeId = id;
+    this.activePath = path;
     this.viewportOffset = viewportPosition - targetIndex;
-    this.history.replaceCurrent(id);
+    this.history.replaceCurrent(path);
     this.positionCards();
     this.updateActiveUi();
   }
   applyViewportPosition(nextPosition) {
     const filed = this.plugin.index.snapshot.filed;
-    const previousActiveIndex = this.plugin.index.filedIndex(this.activeId);
+    const previousActiveIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (previousActiveIndex < 0) {
       return;
     }
@@ -3169,9 +3375,9 @@ var DeckView = class extends import_obsidian3.ItemView {
     if (activeCard === void 0) {
       return;
     }
-    this.activeId = activeCard.id;
+    this.activePath = activeCard.path;
     this.viewportOffset = viewportPosition - activeIndex;
-    this.history.replaceCurrent(activeCard.id);
+    this.history.replaceCurrent(activeCard.path);
     this.positionCards();
     this.updateActiveUi();
     if (this.pointerLastX === null) {
@@ -3179,7 +3385,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     }
   }
   positionCards() {
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0 || this.renderedCards.length === 0) {
       return true;
     }
@@ -3242,7 +3448,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.positioningRetriesRemaining = 0;
   }
   updateActiveUi() {
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -3252,19 +3458,24 @@ var DeckView = class extends import_obsidian3.ItemView {
       card.style.zIndex = String(cardStackOrder(index, activeIndex));
       this.cardFooters.setInteractive(card, index === activeIndex);
     }
-    this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
+    const activeAddress = this.activeCard?.id;
+    this.filingPromptEl?.setText(
+      activeAddress === void 0 ? "Choose an attachment point" : `Attach from ${activeAddress}`
+    );
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateHistoryControls();
   }
-  bookmarkedIds() {
+  bookmarkedPaths() {
     return new Set(
-      this.plugin.state.bookmarks.map((bookmark) => bookmark.zettelId)
+      this.plugin.state.bookmarks.flatMap(
+        (bookmark) => "path" in bookmark ? [bookmark.path] : []
+      )
     );
   }
-  updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()) {
-    const bookmarkCount = bookmarkedIds.size;
+  updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()) {
+    const bookmarkCount = bookmarkedPaths.size;
     if (this.bookmarksButtonEl !== null) {
       const countEl = this.bookmarksButtonEl.querySelector(".slipbox-count");
       if (bookmarkCount === 0) {
@@ -3279,11 +3490,11 @@ var DeckView = class extends import_obsidian3.ItemView {
       }
     }
     for (const cardEl of this.renderedCards) {
-      const zettelId = cardEl.dataset.zettelId;
-      if (zettelId === void 0) {
+      const path = cardEl.dataset.path;
+      if (path === void 0) {
         continue;
       }
-      const isBookmarked = bookmarkedIds.has(zettelId);
+      const isBookmarked = bookmarkedPaths.has(path);
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const toggle = cardEl.querySelector(
         ".slipbox-card-bookmark-toggle"
@@ -3301,7 +3512,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       });
     }
     if (this.stageEl !== null) {
-      this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedIds);
+      this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedPaths);
     }
   }
   viewportPosition(activeIndex) {
@@ -3309,7 +3520,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   clampViewportOffset() {
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       this.viewportOffset = 0;
       return;
@@ -3325,7 +3536,7 @@ var DeckView = class extends import_obsidian3.ItemView {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndex(this.activeId);
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     if (activeIndex < 0) {
       return;
     }
@@ -3608,7 +3819,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
       label: "+ add current card as bookmark",
-      currentId: this.actions.currentId,
+      currentId: this.actions.currentPath,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),
       onAdded: () => this.close()
@@ -3629,7 +3840,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
       list.createEl("p", { cls: "slipbox-empty-copy", text: "No bookmarks yet." });
     }
     for (const bookmark of this.bookmarks) {
-      const available = this.actions.isAvailable(bookmark.zettelId);
+      const available = this.actions.isAvailable(bookmark.path);
       const row = list.createDiv({ cls: "slipbox-list-row slipbox-bookmark-row" });
       const visit = row.createEl("button", {
         cls: "slipbox-entry-visit",
@@ -3637,24 +3848,24 @@ var BookmarksModal = class extends import_obsidian4.Modal {
       });
       visit.createSpan({
         cls: "slipbox-entry-name",
-        text: available ? this.actions.label(bookmark.zettelId) : `${bookmark.zettelId} \xB7 missing`
+        text: available ? this.actions.label(bookmark.path) : `${bookmark.path} \xB7 missing`
       });
       visit.disabled = !available;
       visit.addEventListener("click", () => {
-        this.actions.visit(bookmark.zettelId);
+        this.actions.visit(bookmark.path);
         this.close();
       });
-      const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.zettelId}`);
+      const remove = iconButton(row, "trash-2", `Delete bookmark at ${bookmark.path}`);
       remove.addEventListener("click", () => {
         remove.disabled = true;
-        void this.actions.remove(bookmark.zettelId).then(() => {
+        void this.actions.remove(bookmark.path).then(() => {
           this.bookmarks = this.bookmarks.filter(
-            (candidate) => candidate.zettelId !== bookmark.zettelId
+            (candidate) => candidate.path !== bookmark.path
           );
           this.renderList();
           updateCurrentCardAddAction(
             this.addButton,
-            this.actions.currentId,
+            this.actions.currentPath,
             this.currentIsListed()
           );
         });
@@ -3663,7 +3874,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
   }
   currentIsListed() {
     return this.bookmarks.some(
-      (bookmark) => bookmark.zettelId === this.actions.currentId
+      (bookmark) => bookmark.path === this.actions.currentPath
     );
   }
 };
@@ -3782,14 +3993,17 @@ var IssuesModal = class extends import_obsidian4.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
-    contentEl.createEl("h2", { text: "Zettel address problems" });
+    contentEl.createEl("h2", { text: "Zettel address issues" });
     contentEl.createEl("p", {
-      text: "Slipbox never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes."
+      text: "Invalid addresses are excluded until corrected. Duplicate-address cards remain in the Deck beside one another, ordered by file path. Slipbox never repairs addresses automatically."
     });
     const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
     for (const issue of this.index.issues) {
       const group = list.createDiv({ cls: "slipbox-issue-group" });
-      group.createDiv({ cls: "slipbox-issue-message", text: issue.message });
+      group.createDiv({
+        cls: `slipbox-issue-message is-${issue.severity}`,
+        text: `${issue.severity === "warning" ? "Warning" : "Error"}: ${issue.message}`
+      });
       for (const path of issue.paths) {
         const button = group.createEl("button", {
           cls: "slipbox-issue-file",
@@ -4254,84 +4468,6 @@ function errorMessage2(error) {
 
 // src/zettel-index.ts
 var import_obsidian6 = require("obsidian");
-
-// src/zettel-metadata.ts
-function zettelMetadataRecord(path, frontmatter, addressProperty) {
-  const hasZettelId = frontmatter !== void 0 && Object.prototype.hasOwnProperty.call(frontmatter, addressProperty);
-  return {
-    path,
-    hasZettelId,
-    zettelId: hasZettelId ? frontmatter[addressProperty] : void 0
-  };
-}
-function displayValue(value) {
-  const serialized = JSON.stringify(value);
-  return serialized === void 0 ? String(value) : serialized;
-}
-function indexZettelMetadata(records, addressProperty = "zettel-id") {
-  const unfiledPaths = [];
-  const issues = [];
-  const candidates = /* @__PURE__ */ new Map();
-  for (const record of records) {
-    if (!record.hasZettelId) {
-      continue;
-    }
-    if (record.zettelId === "" || record.zettelId === null || record.zettelId === void 0) {
-      unfiledPaths.push(record.path);
-      continue;
-    }
-    if (typeof record.zettelId !== "string" || !isValidZettelId(record.zettelId)) {
-      issues.push({
-        kind: "invalid",
-        paths: [record.path],
-        message: `Unsupported ${addressProperty} ${displayValue(record.zettelId)}`
-      });
-      continue;
-    }
-    const paths = candidates.get(record.zettelId) ?? [];
-    paths.push(record.path);
-    candidates.set(record.zettelId, paths);
-  }
-  const filed = [];
-  const allValidIds = [...candidates.keys()].sort(compareZettelIds);
-  for (const id of allValidIds) {
-    const paths = candidates.get(id);
-    if (paths === void 0 || paths.length === 0) {
-      continue;
-    }
-    paths.sort((a, b) => a.localeCompare(b));
-    if (paths.length === 1) {
-      const path = paths[0];
-      if (path !== void 0) {
-        filed.push({ path, id });
-      }
-      continue;
-    }
-    const first = paths[0];
-    const second = paths[1];
-    if (first !== void 0 && second !== void 0) {
-      issues.push({
-        kind: "duplicate",
-        id,
-        paths: [first, second, ...paths.slice(2)],
-        message: `Duplicate ${addressProperty} ${id}`
-      });
-    }
-  }
-  unfiledPaths.sort((a, b) => a.localeCompare(b));
-  issues.sort((a, b) => {
-    const pathComparison = a.paths[0].localeCompare(b.paths[0]);
-    return pathComparison !== 0 ? pathComparison : a.kind.localeCompare(b.kind);
-  });
-  return {
-    filed,
-    unfiledPaths,
-    issues,
-    allValidIds
-  };
-}
-
-// src/zettel-index.ts
 var EMPTY_INDEX = {
   filed: [],
   unfiled: [],
@@ -4341,15 +4477,16 @@ var EMPTY_INDEX = {
   backlinksByTargetPath: /* @__PURE__ */ new Map()
 };
 var NO_BACKLINKS = [];
+var NO_FILED_CARDS = [];
 var ZettelIndex = class {
   constructor(app, addressProperty = "zettel-id") {
     this.app = app;
     this.addressProperty = addressProperty;
   }
   current = EMPTY_INDEX;
-  filedByIdMap = /* @__PURE__ */ new Map();
   filedByPathMap = /* @__PURE__ */ new Map();
-  filedIndexByIdMap = /* @__PURE__ */ new Map();
+  filedIndexByPathMap = /* @__PURE__ */ new Map();
+  filedByAddressMap = /* @__PURE__ */ new Map();
   get snapshot() {
     return this.current;
   }
@@ -4377,22 +4514,27 @@ var ZettelIndex = class {
       filed,
       this.app.metadataCache.resolvedLinks
     );
-    this.filedByIdMap = new Map(filed.map((zettel) => [zettel.id, zettel]));
-    this.filedByPathMap = new Map(filed.map((zettel) => [zettel.path, zettel]));
-    this.filedIndexByIdMap = new Map(
-      filed.map((zettel, index) => [zettel.id, index])
-    );
+    const lookups = buildFiledZettelLookups(filed);
+    this.filedByPathMap = new Map(lookups.byPath);
+    this.filedIndexByPathMap = new Map(lookups.indexByPath);
+    this.filedByAddressMap = new Map(lookups.byAddress);
     this.current = { ...indexed, filed, unfiled, backlinksByTargetPath };
     return this.current;
   }
-  filedById(id) {
-    return this.filedByIdMap.get(id);
+  filedByPath(path) {
+    return this.filedByPathMap.get(path);
   }
   filedByFile(file) {
-    return this.filedByPathMap.get(file.path);
+    return this.filedByPath(file.path);
   }
-  filedIndex(id) {
-    return id === null ? -1 : this.filedIndexByIdMap.get(id) ?? -1;
+  filedAtAddress(id) {
+    return this.filedByAddressMap.get(id) ?? NO_FILED_CARDS;
+  }
+  firstFiledAtAddress(id) {
+    return this.filedAtAddress(id)[0];
+  }
+  filedIndexForPath(path) {
+    return path === null ? -1 : this.filedIndexByPathMap.get(path) ?? -1;
   }
   fileAtPath(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
@@ -4768,9 +4910,9 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       this.settings
     );
   }
-  filedCardLabel(zettelId) {
-    const card = this.index.filedById(zettelId);
-    return card === void 0 ? zettelId : `${zettelId} \xB7 ${this.cardTitle(card.file)}`;
+  filedCardLabel(path) {
+    const card = this.index.filedByPath(path);
+    return card === void 0 ? path : `${card.id} \xB7 ${this.cardTitle(card.file)}`;
   }
   templatesInfo() {
     const plugin = this.templatesPlugin();
@@ -4805,7 +4947,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   showCardContextMenu(event, file, zettelId, source, leaf) {
     event.preventDefault();
     event.stopPropagation();
-    const isBookmarked = zettelId !== null && this.bookmarkAt(zettelId) !== void 0;
+    const isBookmarked = zettelId !== null && this.bookmarkAtPath(file.path) !== void 0;
     const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = import_obsidian8.Menu.forEvent(event);
@@ -4815,7 +4957,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     menu.addItem((item) => {
       item.setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark").setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
         if (zettelId !== null) {
-          void this.toggleBookmark(zettelId);
+          void this.toggleBookmark(file.path);
         }
       });
     });
@@ -4829,7 +4971,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     menu.addItem((item) => {
       item.setTitle(`Add card from ${title}`).setIcon("plus").setSection("slipbox-card").setDisabled(zettelId === null).onClick(() => {
         if (zettelId !== null) {
-          void this.createCardFrom(zettelId);
+          void this.createCardFromPath(file.path);
         }
       });
     });
@@ -4866,40 +5008,43 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     const entries = this.state.entryPoints;
     new EntryPointsModal(this.app, entries, {
       currentId: view.activeCard?.id ?? null,
-      isAvailable: (id) => this.index.filedById(id) !== void 0,
-      visit: (id) => void view.jumpToId(id),
+      isAvailable: (id) => this.index.firstFiledAtAddress(id) !== void 0,
+      visit: (id) => void view.jumpToAddress(id),
       addCurrent: () => view.addCurrentAsEntryPoint(),
       rename: (index) => this.renameEntryPoint(index),
       remove: (index) => this.removeEntryPoint(index)
     }).open();
   }
   showBookmarks(view) {
-    new BookmarksModal(this.app, this.state.bookmarks, {
-      currentId: view.activeCard?.id ?? null,
-      isAvailable: (id) => this.index.filedById(id) !== void 0,
-      label: (id) => this.filedCardLabel(id),
-      visit: (id) => void view.jumpToId(id),
+    const bookmarks = this.state.bookmarks.filter(isPathBookmark);
+    new BookmarksModal(this.app, bookmarks, {
+      currentPath: view.activeCard?.path ?? null,
+      isAvailable: (path) => this.index.filedByPath(path) !== void 0,
+      label: (path) => this.filedCardLabel(path),
+      visit: (path) => void view.jumpToPath(path),
       addCurrent: () => view.addBookmarkToCurrent(),
-      remove: (zettelId) => view.removeBookmark(zettelId)
+      remove: (path) => view.removeBookmark(path)
     }).open();
   }
-  bookmarkAt(zettelId) {
-    return this.state.bookmarks.find((bookmark) => bookmark.zettelId === zettelId);
+  bookmarkAtPath(path) {
+    return this.state.bookmarks.find(
+      (bookmark) => isPathBookmark(bookmark) && bookmark.path === path
+    );
   }
-  async addBookmark(zettelId) {
-    if (this.index.filedById(zettelId) === void 0) {
+  async addBookmark(path) {
+    if (this.index.filedByPath(path) === void 0) {
       new import_obsidian8.Notice("Only an available filed card can be bookmarked.");
       return;
     }
-    const label = this.filedCardLabel(zettelId);
-    if (this.bookmarkAt(zettelId) !== void 0) {
+    const label = this.filedCardLabel(path);
+    if (this.bookmarkAtPath(path) !== void 0) {
       new import_obsidian8.Notice(`${label} already has a bookmark.`);
       return;
     }
     try {
       this.state = {
         ...this.state,
-        bookmarks: createBookmark(this.state.bookmarks, zettelId)
+        bookmarks: createBookmark(this.state.bookmarks, path)
       };
       await this.persistStateAndRefreshViews();
       new import_obsidian8.Notice(`Bookmarked ${label}.`);
@@ -4907,11 +5052,11 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       new import_obsidian8.Notice(`Could not add bookmark: ${errorMessage4(error)}`);
     }
   }
-  async toggleBookmark(zettelId) {
-    if (this.bookmarkAt(zettelId) === void 0) {
-      await this.addBookmark(zettelId);
+  async toggleBookmark(path) {
+    if (this.bookmarkAtPath(path) === void 0) {
+      await this.addBookmark(path);
     } else {
-      await this.removeBookmark(zettelId);
+      await this.removeBookmark(path);
     }
   }
   createTrayPileId() {
@@ -4926,7 +5071,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     this.index.refresh();
     const filed = this.index.filedByFile(file);
     if (filed === void 0) {
-      new import_obsidian8.Notice("Only a uniquely filed card can be pulled out.");
+      new import_obsidian8.Notice("Only an available filed card can be pulled out.");
       return;
     }
     this.tray = toggleFiledCard(
@@ -5072,7 +5217,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     await this.openDeck(file);
   }
   async addEntryPoint(id) {
-    if (this.index.filedById(id) === void 0) {
+    if (this.index.firstFiledAtAddress(id) === void 0) {
       new import_obsidian8.Notice(`Card ${id} is not available in Slipbox.`);
       return;
     }
@@ -5108,21 +5253,21 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       new import_obsidian8.Notice(`Could not create a section: ${errorMessage4(error)}`);
     }
   }
-  async createCardFrom(attachmentId) {
+  async createCardFromPath(attachmentPath) {
     if (this.cardCreationInProgress) {
       return;
     }
     this.cardCreationInProgress = true;
     try {
       this.index.refresh();
-      const attachment = this.index.filedById(attachmentId);
+      const attachment = this.index.filedByPath(attachmentPath);
       if (attachment === void 0) {
         throw new Error(
-          `Attachment ${attachmentId} is missing, invalid, or duplicated`
+          `Attachment ${attachmentPath} is missing or invalid`
         );
       }
       const id = generateFiledId(
-        attachmentId,
+        attachment.id,
         this.index.snapshot.allValidIds
       );
       const file = await this.createCardFile(id, attachment.path);
@@ -5132,24 +5277,25 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       this.queueIndexRefresh();
     } catch (error) {
       new import_obsidian8.Notice(
-        `Could not add a card from ${attachmentId}: ${errorMessage4(error)}`
+        `Could not add a card from ${attachmentPath}: ${errorMessage4(error)}`
       );
     } finally {
       this.cardCreationInProgress = false;
     }
   }
-  async fileCard(file, attachmentId) {
+  async fileCard(file, attachmentPath) {
     let refreshAfterFiling = false;
     this.filingWriteInProgress = true;
     try {
       this.index.refresh();
-      if (this.index.filedById(attachmentId) === void 0) {
+      const attachment = this.index.filedByPath(attachmentPath);
+      if (attachment === void 0) {
         throw new Error(
-          `Attachment ${attachmentId} is missing, invalid, or duplicated`
+          `Attachment ${attachmentPath} is missing or invalid`
         );
       }
       const newId = generateFiledId(
-        attachmentId,
+        attachment.id,
         this.index.snapshot.allValidIds
       );
       await this.app.fileManager.processFrontMatter(
@@ -5312,17 +5458,17 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       id: "add-bookmark-current-card",
       name: "Toggle bookmark on current card",
       checkCallback: (checking) => {
-        const id = this.currentFiledId();
-        const available = id !== null;
+        const path = this.currentFiledPath();
+        const available = path !== null;
         if (checking) {
           return available;
         }
-        if (available && id !== null) {
+        if (available && path !== null) {
           const deck = this.app.workspace.getActiveViewOfType(DeckView);
           if (deck !== null) {
             deck.runAction("toggle-bookmark");
           } else {
-            void this.toggleBookmark(id);
+            void this.toggleBookmark(path);
           }
         }
         return available;
@@ -5381,8 +5527,8 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       id: "copy-current-card-link",
       name: "Copy link to current card",
       checkCallback: (checking) => {
-        const id = this.currentFiledId();
-        const available = id !== null && this.index.filedById(id) !== void 0;
+        const path = this.currentFiledPath();
+        const available = path !== null && this.index.filedByPath(path) !== void 0;
         if (checking) {
           return available;
         }
@@ -5396,19 +5542,19 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       id: "add-card-from-current",
       name: "Add card from current card",
       checkCallback: (checking) => {
-        const id = this.currentFiledId();
+        const path = this.currentFiledPath();
         if (checking) {
-          return id !== null;
+          return path !== null;
         }
-        if (id !== null) {
+        if (path !== null) {
           const deck = this.app.workspace.getActiveViewOfType(DeckView);
           if (deck !== null) {
             deck.runAction("add-card");
           } else {
-            void this.createCardFrom(id);
+            void this.createCardFromPath(path);
           }
         }
-        return id !== null;
+        return path !== null;
       }
     });
     this.registerDeckCommand("previous-card", "Previous card", "previous-card");
@@ -5644,13 +5790,13 @@ ${frontmatter}---
     const leaf = this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)[0];
     return leaf?.view instanceof DeckView ? leaf.view : null;
   }
-  currentFiledId() {
-    const deckId = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.id;
-    if (deckId !== void 0) {
-      return deckId;
+  currentFiledPath() {
+    const deckPath = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.path;
+    if (deckPath !== void 0) {
+      return deckPath;
     }
     const activeFile = this.app.workspace.getActiveFile();
-    return activeFile === null ? null : this.index.filedByFile(activeFile)?.id ?? null;
+    return activeFile === null ? null : this.index.filedByFile(activeFile)?.path ?? null;
   }
   currentCardFile() {
     const deckFile = this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.file;
@@ -5665,8 +5811,8 @@ ${frontmatter}---
     return state === "filed" || state === "unfiled" ? activeFile : null;
   }
   async copyCurrentCardLink() {
-    const id = this.currentFiledId();
-    const card = id === null ? void 0 : this.index.filedById(id);
+    const path = this.currentFiledPath();
+    const card = path === null ? void 0 : this.index.filedByPath(path);
     if (card === void 0) {
       new import_obsidian8.Notice("Only an available filed card can be linked.");
       return;
@@ -5685,14 +5831,14 @@ ${frontmatter}---
       new import_obsidian8.Notice(`Could not copy the card link: ${errorMessage4(error)}`);
     }
   }
-  async removeBookmark(zettelId) {
-    if (this.bookmarkAt(zettelId) === void 0) {
+  async removeBookmark(path) {
+    if (this.bookmarkAtPath(path) === void 0) {
       return;
     }
-    const label = this.filedCardLabel(zettelId);
+    const label = this.filedCardLabel(path);
     this.state = {
       ...this.state,
-      bookmarks: deleteBookmark(this.state.bookmarks, zettelId)
+      bookmarks: deleteBookmark(this.state.bookmarks, path)
     };
     await this.persistStateAndRefreshViews();
     new import_obsidian8.Notice(`Deleted bookmark at ${label}.`);
@@ -5764,6 +5910,16 @@ ${frontmatter}---
   }
   async refreshIndex() {
     this.index.refresh();
+    if (this.state.bookmarks.some((bookmark) => !isPathBookmark(bookmark))) {
+      this.state = {
+        ...this.state,
+        bookmarks: migrateAddressBookmarks(
+          this.state.bookmarks,
+          (id) => this.index.firstFiledAtAddress(id)?.path
+        )
+      };
+      await this.persistState();
+    }
     this.reconcileSessionTray();
     await this.refreshDeckViews();
   }
@@ -5826,16 +5982,23 @@ ${frontmatter}---
   }
   handleDeletedFile(file) {
     this.tray = removeTrayPath(this.tray, file.path);
-    void this.refreshDeckViews();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handlePathDeletion(file.path);
+      }
+    }
     const prefix = `${file.path.replace(/\/$/, "")}/`;
     const legacyDeskCards = this.state.legacyDeskCards ?? [];
-    if (legacyDeskCards.some(
+    const removesLegacyDeskCard = legacyDeskCards.some(
       (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix)
-    )) {
+    );
+    const nextBookmarks = removeBookmarkPaths(this.state.bookmarks, file.path);
+    if (removesLegacyDeskCard || nextBookmarks.length !== this.state.bookmarks.length) {
       const next = removeDeskPath(legacyDeskCards, file.path);
       const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
       this.state = {
         ...state,
+        bookmarks: nextBookmarks,
         ...next.length > 0 ? { legacyDeskCards: next } : {}
       };
       void this.persistState();
@@ -5844,15 +6007,24 @@ ${frontmatter}---
   }
   handleRenamedFile(file, oldPath) {
     this.tray = renameTrayPath(this.tray, oldPath, file.path);
-    void this.refreshDeckViews();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handlePathRename(oldPath, file.path);
+      }
+    }
     const prefix = `${oldPath.replace(/\/$/, "")}/`;
     const legacyDeskCards = this.state.legacyDeskCards ?? [];
-    if (legacyDeskCards.some(
+    const renamesLegacyDeskCard = legacyDeskCards.some(
       (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix)
-    )) {
+    );
+    const renamesBookmark = this.state.bookmarks.some(
+      (bookmark) => isPathBookmark(bookmark) && pathIsAtOrBelow(bookmark.path, oldPath)
+    );
+    if (renamesLegacyDeskCard || renamesBookmark) {
       this.state = {
         ...this.state,
-        legacyDeskCards: renameDeskCard(legacyDeskCards, oldPath, file.path)
+        bookmarks: renameBookmarkPaths(this.state.bookmarks, oldPath, file.path),
+        ...renamesLegacyDeskCard ? { legacyDeskCards: renameDeskCard(legacyDeskCards, oldPath, file.path) } : {}
       };
       void this.persistState();
     }

@@ -78,13 +78,13 @@ export class TextPromptModal extends Modal {
 
 export function promptForNewCardTitle(
   app: App,
-  timestampPreview: string,
+  placeholder: string,
 ): Promise<string | null> {
   return new Promise((resolve) => {
     const modal = new TextPromptModal(
       app,
       "New card title",
-      `Leave blank for ${timestampPreview}`,
+      placeholder,
       "",
       resolve,
       true,

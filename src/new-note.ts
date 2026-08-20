@@ -39,3 +39,13 @@ export function newCardFrontmatterTitle(
 ): string | null {
   return titleSource === "frontmatter" ? title.trim() : null;
 }
+
+/** Describe what leaving the new-card title prompt blank will do. */
+export function newCardTitlePlaceholder(
+  timestamp: string,
+  titleSource: "filename" | "frontmatter",
+): string {
+  return titleSource === "frontmatter"
+    ? "Leave blank for an empty title"
+    : `Leave blank to use ${timestamp} as the filename`;
+}

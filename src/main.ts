@@ -39,6 +39,7 @@ import {
 import {
   newCardBasename,
   newCardFrontmatterTitle,
+  newCardTitlePlaceholder,
   newNoteBasename,
 } from "./new-note.js";
 import {
@@ -922,7 +923,10 @@ export default class SlipboxPlugin extends Plugin {
       "",
       moment().format(this.settings.newNoteTimestampFormat),
     );
-    const title = await promptForNewCardTitle(this.app, timestamp);
+    const title = await promptForNewCardTitle(
+      this.app,
+      newCardTitlePlaceholder(timestamp, this.settings.titleSource),
+    );
     if (title === null) {
       return null;
     }

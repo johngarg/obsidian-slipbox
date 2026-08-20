@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   newCardBasename,
   newCardFrontmatterTitle,
+  newCardTitlePlaceholder,
   newNoteBasename,
   safeNoteBasename,
 } from "../src/new-note.js";
@@ -38,6 +39,17 @@ describe("new-note filenames", () => {
     assert.equal(newCardFrontmatterTitle("  Renormalisation  ", "frontmatter"), "Renormalisation");
     assert.equal(newCardFrontmatterTitle("   ", "frontmatter"), "");
     assert.equal(newCardFrontmatterTitle("Renormalisation", "filename"), null);
+  });
+
+  test("describes the blank-title result for each title source", () => {
+    assert.equal(
+      newCardTitlePlaceholder("20260820T163727", "filename"),
+      "Leave blank to use 20260820T163727 as the filename",
+    );
+    assert.equal(
+      newCardTitlePlaceholder("20260820T163727", "frontmatter"),
+      "Leave blank for an empty title",
+    );
   });
 
   test("replaces filename-unsafe characters without changing display text", () => {

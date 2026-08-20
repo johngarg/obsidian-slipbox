@@ -2719,12 +2719,12 @@ var TextPromptModal = class extends import_obsidian4.Modal {
     this.close();
   }
 };
-function promptForNewCardTitle(app, timestampPreview) {
+function promptForNewCardTitle(app, placeholder) {
   return new Promise((resolve) => {
     const modal = new TextPromptModal(
       app,
       "New card title",
-      `Leave blank for ${timestampPreview}`,
+      placeholder,
       "",
       resolve,
       true,
@@ -2953,6 +2953,9 @@ function newCardBasename(title, timestamp, titleSource) {
 }
 function newCardFrontmatterTitle(title, titleSource) {
   return titleSource === "frontmatter" ? title.trim() : null;
+}
+function newCardTitlePlaceholder(timestamp, titleSource) {
+  return titleSource === "frontmatter" ? "Leave blank for an empty title" : `Leave blank to use ${timestamp} as the filename`;
 }
 
 // src/plugin-state.ts
@@ -4266,7 +4269,10 @@ var SlipboxPlugin = class extends import_obsidian7.Plugin {
       "",
       (0, import_obsidian7.moment)().format(this.settings.newNoteTimestampFormat)
     );
-    const title = await promptForNewCardTitle(this.app, timestamp);
+    const title = await promptForNewCardTitle(
+      this.app,
+      newCardTitlePlaceholder(timestamp, this.settings.titleSource)
+    );
     if (title === null) {
       return null;
     }

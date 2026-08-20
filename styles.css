@@ -1,11 +1,11 @@
-.zk-deck-view {
-  --zk-card-radius: 10px;
+.slipbox-deck-view {
+  --slipbox-card-radius: 10px;
   height: 100%;
   padding: 0 !important;
   overflow: hidden !important;
 }
 
-.zk-deck-shell {
+.slipbox-deck-shell {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -18,7 +18,7 @@
   user-select: none;
 }
 
-.zk-deck-toolbar {
+.slipbox-deck-toolbar {
   position: relative;
   z-index: 250;
   display: flex;
@@ -31,16 +31,16 @@
   backdrop-filter: blur(12px);
 }
 
-.zk-deck-identity,
-.zk-toolbar-group,
-.zk-problem-button,
-.zk-spread-control,
-.zk-desk-button {
+.slipbox-deck-identity,
+.slipbox-toolbar-group,
+.slipbox-problem-button,
+.slipbox-spread-control,
+.slipbox-desk-button {
   display: flex;
   align-items: center;
 }
 
-.zk-deck-identity {
+.slipbox-deck-identity {
   gap: 7px;
   padding-right: 4px;
   font-size: var(--font-ui-small);
@@ -48,21 +48,21 @@
   letter-spacing: 0.02em;
 }
 
-.zk-deck-icon,
-.zk-deck-icon svg {
+.slipbox-deck-icon,
+.slipbox-deck-icon svg {
   width: 17px;
   height: 17px;
 }
 
-.zk-toolbar-group {
+.slipbox-toolbar-group {
   gap: 5px;
 }
 
-.zk-toolbar-main {
+.slipbox-toolbar-main {
   flex: 1;
 }
 
-.zk-deck-toolbar button {
+.slipbox-deck-toolbar button {
   min-height: 30px;
   padding: 4px 9px;
   border: 1px solid var(--background-modifier-border);
@@ -73,14 +73,14 @@
   font-size: var(--font-ui-smaller);
 }
 
-.zk-deck-toolbar button:hover {
+.slipbox-deck-toolbar button:hover {
   color: var(--text-normal);
   border-color: var(--background-modifier-border-hover);
   background: var(--background-modifier-hover);
 }
 
-.zk-deck-toolbar button:disabled,
-.zk-deck-toolbar button:disabled:hover {
+.slipbox-deck-toolbar button:disabled,
+.slipbox-deck-toolbar button:disabled:hover {
   opacity: 0.42;
   color: var(--text-faint);
   border-color: var(--background-modifier-border);
@@ -88,12 +88,12 @@
   cursor: not-allowed;
 }
 
-.zk-deck-toolbar .zk-icon-button {
+.slipbox-deck-toolbar .slipbox-icon-button {
   width: 30px;
   padding: 5px;
 }
 
-.zk-count {
+.slipbox-count {
   min-width: 18px;
   margin-left: 6px;
   padding: 0 5px;
@@ -105,17 +105,17 @@
   text-align: center;
 }
 
-.zk-problem-button {
+.slipbox-problem-button {
   gap: 5px;
   color: var(--text-warning) !important;
 }
 
-.zk-problem-button svg {
+.slipbox-problem-button svg {
   width: 15px;
   height: 15px;
 }
 
-.zk-spread-control {
+.slipbox-spread-control {
   gap: 8px;
   margin-left: auto;
   color: var(--text-muted);
@@ -123,11 +123,11 @@
   white-space: nowrap;
 }
 
-.zk-spread-control input {
+.slipbox-spread-control input {
   width: clamp(80px, 10vw, 145px);
 }
 
-.zk-deck-stage {
+.slipbox-deck-stage {
   position: relative;
   flex: 1;
   min-height: 0;
@@ -136,11 +136,11 @@
   cursor: grab;
 }
 
-.zk-deck-stage.is-dragging {
+.slipbox-deck-stage.is-dragging {
   cursor: grabbing;
 }
 
-.zk-card {
+.slipbox-card {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -154,7 +154,7 @@
   flex-direction: column;
   overflow: visible;
   border: 1px solid var(--background-modifier-border);
-  border-radius: var(--zk-card-radius);
+  border-radius: var(--slipbox-card-radius);
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.12),
     0 12px 36px rgb(0 0 0 / 0.12);
@@ -162,17 +162,17 @@
   cursor: pointer;
 }
 
-.zk-card-frame {
+.slipbox-card-frame {
   display: flex;
   flex: 1;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border-radius: calc(var(--zk-card-radius) - 1px);
+  border-radius: calc(var(--slipbox-card-radius) - 1px);
   background: var(--background-primary);
 }
 
-.zk-card.is-active {
+.slipbox-card.is-active {
   border-color: var(--interactive-accent);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--interactive-accent) 32%, transparent),
@@ -181,7 +181,7 @@
   cursor: default;
 }
 
-.zk-card-address-row {
+.slipbox-card-address-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -191,7 +191,7 @@
   background: var(--background-primary-alt);
 }
 
-.zk-card-address {
+.slipbox-card-address {
   color: var(--text-muted);
   font-family: var(--font-monospace);
   font-size: 0.78rem;
@@ -200,7 +200,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.zk-card-bookmark-toggle {
+.slipbox-card-bookmark-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -214,28 +214,28 @@
   transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 
-.zk-card:hover .zk-card-bookmark-toggle,
-.zk-card:focus-within .zk-card-bookmark-toggle,
-.zk-card-bookmark-toggle.is-bookmarked {
+.slipbox-card:hover .slipbox-card-bookmark-toggle,
+.slipbox-card:focus-within .slipbox-card-bookmark-toggle,
+.slipbox-card-bookmark-toggle.is-bookmarked {
   opacity: 1;
 }
 
-.zk-card-bookmark-toggle:hover,
-.zk-card-bookmark-toggle:focus-visible {
+.slipbox-card-bookmark-toggle:hover,
+.slipbox-card-bookmark-toggle:focus-visible {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
 
-.zk-card-bookmark-toggle svg {
+.slipbox-card-bookmark-toggle svg {
   width: 14px;
   height: 14px;
 }
 
-.zk-card-bookmark-toggle.is-bookmarked svg {
+.slipbox-card-bookmark-toggle.is-bookmarked svg {
   fill: currentColor;
 }
 
-.zk-card-scroll {
+.slipbox-card-scroll {
   flex: 1;
   min-height: 0;
   padding: clamp(20px, 3.2vw, 42px) clamp(22px, 4vw, 58px);
@@ -246,26 +246,26 @@
   scrollbar-gutter: stable;
 }
 
-.zk-card-scroll.markdown-rendered > :first-child,
-.zk-in-hand-preview.markdown-rendered > :first-child {
+.slipbox-card-scroll.markdown-rendered > :first-child,
+.slipbox-in-hand-preview.markdown-rendered > :first-child {
   margin-top: 0;
 }
 
-.zk-card-scroll.markdown-rendered > :last-child,
-.zk-in-hand-preview.markdown-rendered > :last-child {
+.slipbox-card-scroll.markdown-rendered > :last-child,
+.slipbox-in-hand-preview.markdown-rendered > :last-child {
   margin-bottom: 0;
 }
 
-.zk-card:not(.is-active) .zk-card-scroll {
+.slipbox-card:not(.is-active) .slipbox-card-scroll {
   pointer-events: none;
   user-select: none;
 }
 
-.zk-render-error {
+.slipbox-render-error {
   color: var(--text-error);
 }
 
-.zk-bookmark-edge-tab {
+.slipbox-bookmark-edge-tab {
   position: absolute;
   top: 50%;
   z-index: 220;
@@ -280,17 +280,17 @@
   transform: translateY(-50%);
 }
 
-.zk-bookmark-edge-tab.is-left {
+.slipbox-bookmark-edge-tab.is-left {
   left: 0;
   border-radius: 0 6px 6px 0;
 }
 
-.zk-bookmark-edge-tab.is-right {
+.slipbox-bookmark-edge-tab.is-right {
   right: 0;
   border-radius: 6px 0 0 6px;
 }
 
-.zk-in-hand {
+.slipbox-in-hand {
   position: absolute;
   top: 61px;
   left: 50%;
@@ -308,7 +308,7 @@
   transform: translateX(-50%) rotate(-0.7deg);
 }
 
-.zk-in-hand-label {
+.slipbox-in-hand-label {
   padding: 5px 10px;
   color: var(--text-on-accent);
   background: var(--interactive-accent);
@@ -318,7 +318,7 @@
   text-transform: uppercase;
 }
 
-.zk-in-hand-name {
+.slipbox-in-hand-name {
   padding: 5px 11px;
   overflow: hidden;
   border-bottom: 1px solid var(--background-modifier-border);
@@ -328,7 +328,7 @@
   white-space: nowrap;
 }
 
-.zk-in-hand-preview {
+.slipbox-in-hand-preview {
   flex: 1;
   min-height: 0;
   padding: 10px 14px;
@@ -338,12 +338,12 @@
   user-select: text;
 }
 
-.zk-in-hand.is-entering-deck {
+.slipbox-in-hand.is-entering-deck {
   pointer-events: none;
-  animation: zk-enter-deck 280ms cubic-bezier(0.4, 0, 0.25, 1) forwards;
+  animation: slipbox-enter-deck 280ms cubic-bezier(0.4, 0, 0.25, 1) forwards;
 }
 
-@keyframes zk-enter-deck {
+@keyframes slipbox-enter-deck {
   from {
     opacity: 1;
     transform: translateX(-50%) rotate(-0.7deg) scale(1);
@@ -356,13 +356,13 @@
   }
 }
 
-.is-filing .zk-card {
+.is-filing .slipbox-card {
   top: 62%;
   width: min(56%, 800px);
   max-height: 58%;
 }
 
-.zk-filing-actions {
+.slipbox-filing-actions {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -379,14 +379,14 @@
   backdrop-filter: blur(10px);
 }
 
-.zk-filing-prompt {
+.slipbox-filing-prompt {
   margin-right: 8px;
   color: var(--text-muted);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);
 }
 
-.zk-deck-empty {
+.slipbox-deck-empty {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -400,40 +400,40 @@
   transform: translate(-50%, -50%);
 }
 
-.zk-deck-empty h2 {
+.slipbox-deck-empty h2 {
   margin-top: 0;
 }
 
-.zk-deck-empty p,
-.zk-empty-copy {
+.slipbox-deck-empty p,
+.slipbox-empty-copy {
   color: var(--text-muted);
 }
 
-.zk-modal .modal-content {
+.slipbox-modal .modal-content {
   max-height: min(72vh, 720px);
 }
 
-.zk-prompt-form {
+.slipbox-prompt-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.zk-prompt-form input {
+.slipbox-prompt-form input {
   width: 100%;
 }
 
-.zk-field {
+.slipbox-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.zk-entry-id.is-missing {
+.slipbox-entry-id.is-missing {
   color: var(--text-error);
 }
 
-.zk-modal-list {
+.slipbox-modal-list {
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -441,7 +441,7 @@
   overflow: auto;
 }
 
-.zk-list-row {
+.slipbox-list-row {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -451,8 +451,8 @@
   background: var(--background-primary-alt);
 }
 
-.zk-entry-visit,
-.zk-file-visit {
+.slipbox-entry-visit,
+.slipbox-file-visit {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -465,7 +465,7 @@
   text-align: left;
 }
 
-.zk-entry-name {
+.slipbox-entry-name {
   overflow: hidden;
   color: var(--text-normal);
   font-weight: var(--font-medium);
@@ -473,14 +473,14 @@
   white-space: nowrap;
 }
 
-.zk-entry-id {
+.slipbox-entry-id {
   color: var(--text-muted);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
 
-.zk-file-path {
+.slipbox-file-path {
   overflow: hidden;
   color: var(--text-faint);
   font-size: var(--font-ui-smaller);
@@ -488,27 +488,27 @@
   white-space: nowrap;
 }
 
-.zk-modal-actions {
+.slipbox-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
 }
 
-.zk-issue-group {
+.slipbox-issue-group {
   padding: 9px 11px;
   border-left: 3px solid var(--text-error);
   border-radius: 4px;
   background: var(--background-primary-alt);
 }
 
-.zk-issue-message {
+.slipbox-issue-message {
   margin-bottom: 5px;
   color: var(--text-error);
   font-weight: var(--font-semibold);
 }
 
-.zk-issue-file {
+.slipbox-issue-file {
   display: block;
   width: 100%;
   padding: 3px 0;
@@ -521,13 +521,13 @@
   text-align: left;
 }
 
-.zk-desk-view {
+.slipbox-desk-view {
   height: 100%;
   padding: 0 !important;
   overflow: hidden !important;
 }
 
-.zk-desk-shell {
+.slipbox-desk-shell {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -536,23 +536,23 @@
   background: var(--background-secondary);
 }
 
-.zk-desk-toolbar {
+.slipbox-desk-toolbar {
   flex: 0 0 auto;
 }
 
-.zk-desk-description {
+.slipbox-desk-description {
   flex: 1;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-.zk-desk-body {
+.slipbox-desk-body {
   display: flex;
   flex: 1;
   min-height: 0;
 }
 
-.zk-unfiled-tray {
+.slipbox-unfiled-tray {
   z-index: 3;
   flex: 0 0 235px;
   padding: 14px 12px;
@@ -561,24 +561,24 @@
   background: var(--background-primary-alt);
 }
 
-.zk-unfiled-tray h3 {
+.slipbox-unfiled-tray h3 {
   margin: 0 0 4px;
   font-size: var(--font-ui-medium);
 }
 
-.zk-unfiled-tray > p {
+.slipbox-unfiled-tray > p {
   margin: 0 0 12px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-.zk-unfiled-list {
+.slipbox-unfiled-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.zk-unfiled-item {
+.slipbox-unfiled-item {
   display: flex;
   align-items: center;
   gap: 3px;
@@ -588,7 +588,7 @@
   background: var(--background-primary);
 }
 
-.zk-unfiled-open {
+.slipbox-unfiled-open {
   flex: 1;
   min-width: 0;
   padding: 5px 6px;
@@ -603,7 +603,7 @@
   white-space: nowrap;
 }
 
-.zk-desk-viewport {
+.slipbox-desk-viewport {
   position: relative;
   flex: 1;
   min-width: 0;
@@ -616,13 +616,13 @@
   background-size: 40px 40px;
 }
 
-.zk-desk-surface {
+.slipbox-desk-surface {
   position: relative;
   min-width: 100%;
   min-height: 100%;
 }
 
-.zk-desk-card {
+.slipbox-desk-card {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -634,21 +634,21 @@
   transition: box-shadow 100ms ease;
 }
 
-.zk-desk-card.is-dragging {
+.slipbox-desk-card.is-dragging {
   box-shadow: 0 17px 42px rgb(0 0 0 / 0.27);
   cursor: grabbing;
 }
 
-.zk-desk-card.is-unfiled {
+.slipbox-desk-card.is-unfiled {
   border-color: color-mix(in srgb, var(--interactive-accent) 58%, var(--background-modifier-border));
 }
 
-.zk-desk-card.is-invalid,
-.zk-desk-card.is-missing {
+.slipbox-desk-card.is-invalid,
+.slipbox-desk-card.is-missing {
   border-color: var(--text-error);
 }
 
-.zk-desk-card-header {
+.slipbox-desk-card-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -660,7 +660,7 @@
   user-select: none;
 }
 
-.zk-desk-card-identity {
+.slipbox-desk-card-identity {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -668,7 +668,7 @@
   gap: 10px;
 }
 
-.zk-desk-card-address {
+.slipbox-desk-card-address {
   flex: 0 0 auto;
   color: var(--text-muted);
   font-family: var(--font-monospace);
@@ -677,7 +677,7 @@
   letter-spacing: 0.045em;
 }
 
-.zk-desk-card-title {
+.slipbox-desk-card-title {
   overflow: hidden;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
@@ -685,13 +685,13 @@
   white-space: nowrap;
 }
 
-.zk-desk-card-actions {
+.slipbox-desk-card-actions {
   display: flex;
   flex: 0 0 auto;
   gap: 2px;
 }
 
-.zk-desk-card-scroll {
+.slipbox-desk-card-scroll {
   flex: 1;
   min-height: 0;
   padding: 20px 25px;
@@ -701,7 +701,7 @@
   scrollbar-gutter: stable;
 }
 
-.zk-desk-missing-copy {
+.slipbox-desk-missing-copy {
   padding: 24px;
   color: var(--text-error);
   font-family: var(--font-monospace);
@@ -709,34 +709,34 @@
 }
 
 @media (max-width: 850px) {
-  .zk-deck-identity,
-  .zk-toolbar-group:first-of-type {
+  .slipbox-deck-identity,
+  .slipbox-toolbar-group:first-of-type {
     display: none;
   }
 
-  .zk-deck-toolbar {
+  .slipbox-deck-toolbar {
     gap: 6px;
   }
 
-  .zk-card {
+  .slipbox-card {
     width: 72%;
   }
 
-  .zk-in-hand {
+  .slipbox-in-hand {
     width: 52%;
   }
 
-  .zk-history-controls {
+  .slipbox-history-controls {
     display: flex !important;
   }
 
-  .zk-history-controls button {
+  .slipbox-history-controls button {
     max-width: 42px;
     overflow: hidden;
     white-space: nowrap;
   }
 
-  .zk-unfiled-tray {
+  .slipbox-unfiled-tray {
     flex-basis: 185px;
   }
 }

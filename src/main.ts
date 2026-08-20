@@ -33,14 +33,14 @@ import {
   DEFAULT_STATE,
   normalizePluginState,
   type EntryPoint,
-  type ZettelkastenPluginState,
+  type SlipboxPluginState,
 } from "./plugin-state.js";
 import { ZettelIndex } from "./zettel-index.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
-export default class ZettelkastenPlugin extends Plugin {
-  state: ZettelkastenPluginState = DEFAULT_STATE;
+export default class SlipboxPlugin extends Plugin {
+  state: SlipboxPluginState = DEFAULT_STATE;
   index!: ZettelIndex;
 
   private indexRefreshTimer: number | null = null;
@@ -62,7 +62,7 @@ export default class ZettelkastenPlugin extends Plugin {
       (leaf) => new DeskView(leaf, this),
     );
 
-    this.addRibbonIcon("archive", "Open Zettelkasten Deck", () => {
+    this.addRibbonIcon("archive", "Open Slipbox Deck", () => {
       void this.openDeck();
     });
 
@@ -107,7 +107,7 @@ export default class ZettelkastenPlugin extends Plugin {
 
     await this.app.workspace.revealLeaf(leaf);
     if (!(leaf.view instanceof DeckView)) {
-      throw new Error("Obsidian did not create the Zettelkasten Deck view");
+      throw new Error("Obsidian did not create the Slipbox Deck view");
     }
     if (filingFile !== undefined) {
       await leaf.view.startFiling(filingFile);
@@ -127,7 +127,7 @@ export default class ZettelkastenPlugin extends Plugin {
     }
     await this.app.workspace.revealLeaf(leaf);
     if (!(leaf.view instanceof DeskView)) {
-      throw new Error("Obsidian did not create the Zettelkasten Desk view");
+      throw new Error("Obsidian did not create the Slipbox Desk view");
     }
     return leaf.view;
   }
@@ -225,7 +225,7 @@ export default class ZettelkastenPlugin extends Plugin {
     this.index.refresh();
     const metadataState = this.cardMetadataState(file);
     if (metadataState !== "filed" && metadataState !== "unfiled") {
-      new Notice("Only a filed or unfiled Zettel can be placed on Desk.");
+      new Notice("Only a filed or unfiled Slipbox card can be placed on Desk.");
       return;
     }
     if (this.state.deskCards.some((card) => card.cardRef === file.path)) {
@@ -727,7 +727,7 @@ export default class ZettelkastenPlugin extends Plugin {
     try {
       await this.saveData(this.state);
     } catch (error) {
-      new Notice(`Could not save Zettelkasten state: ${errorMessage(error)}`);
+      new Notice(`Could not save Slipbox state: ${errorMessage(error)}`);
     }
   }
 

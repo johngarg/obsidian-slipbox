@@ -9,7 +9,7 @@ import {
   setTooltip,
 } from "obsidian";
 
-import type ZettelkastenPlugin from "./main.js";
+import type SlipboxPlugin from "./main.js";
 import {
   DESK_CARD_HEIGHT,
   DESK_CARD_WIDTH,
@@ -19,7 +19,7 @@ import {
   type DeskCardState,
 } from "./desk-state.js";
 
-export const DESK_VIEW_TYPE = "zettelkasten-desk";
+export const DESK_VIEW_TYPE = "slipbox-desk";
 
 export class DeskView extends ItemView {
   private renderComponents: Component[] = [];
@@ -27,7 +27,7 @@ export class DeskView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private readonly plugin: ZettelkastenPlugin,
+    private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
   }
@@ -37,7 +37,7 @@ export class DeskView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Zettelkasten Desk";
+    return "Slipbox Desk";
   }
 
   getIcon(): string {
@@ -45,7 +45,7 @@ export class DeskView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.contentEl.addClass("zk-desk-view");
+    this.contentEl.addClass("slipbox-desk-view");
     await this.refresh();
   }
 
@@ -62,13 +62,13 @@ export class DeskView extends ItemView {
     this.unloadRenderComponents();
     this.contentEl.empty();
 
-    const shell = this.contentEl.createDiv({ cls: "zk-desk-shell" });
+    const shell = this.contentEl.createDiv({ cls: "slipbox-desk-shell" });
     this.renderToolbar(shell);
-    const body = shell.createDiv({ cls: "zk-desk-body" });
+    const body = shell.createDiv({ cls: "slipbox-desk-body" });
     this.renderUnfiledTray(body);
 
-    const viewport = body.createDiv({ cls: "zk-desk-viewport" });
-    const surface = viewport.createDiv({ cls: "zk-desk-surface" });
+    const viewport = body.createDiv({ cls: "slipbox-desk-viewport" });
+    const surface = viewport.createDiv({ cls: "slipbox-desk-surface" });
     surface.style.width = `${DESK_WIDTH}px`;
     surface.style.height = `${DESK_HEIGHT}px`;
     const jobs: Promise<void>[] = [];
@@ -79,13 +79,13 @@ export class DeskView extends ItemView {
   }
 
   private renderToolbar(shell: HTMLElement): void {
-    const toolbar = shell.createDiv({ cls: "zk-deck-toolbar zk-desk-toolbar" });
-    const identity = toolbar.createDiv({ cls: "zk-deck-identity" });
-    const icon = identity.createSpan({ cls: "zk-deck-icon" });
+    const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar slipbox-desk-toolbar" });
+    const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
+    const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     setIcon(icon, "panels-top-left");
     identity.createSpan({ text: "Desk" });
     toolbar.createSpan({
-      cls: "zk-desk-description",
+      cls: "slipbox-desk-description",
       text: `${this.plugin.state.deskCards.length} card${this.plugin.state.deskCards.length === 1 ? "" : "s"} on the table`,
     });
     const openDeck = toolbar.createEl("button", {
@@ -96,7 +96,7 @@ export class DeskView extends ItemView {
   }
 
   private renderUnfiledTray(body: HTMLElement): void {
-    const tray = body.createEl("aside", { cls: "zk-unfiled-tray" });
+    const tray = body.createEl("aside", { cls: "slipbox-unfiled-tray" });
     tray.createEl("h3", { text: "Unfiled cards" });
     tray.createEl("p", {
       text: "Place a card on the table or file it directly.",
@@ -105,20 +105,20 @@ export class DeskView extends ItemView {
     const available = this.plugin.index.snapshot.unfiled.filter(
       (file) => !placed.has(file.path),
     );
-    const list = tray.createDiv({ cls: "zk-unfiled-list" });
+    const list = tray.createDiv({ cls: "slipbox-unfiled-list" });
     if (available.length === 0) {
       list.createEl("p", {
-        cls: "zk-empty-copy",
+        cls: "slipbox-empty-copy",
         text: this.plugin.index.snapshot.unfiled.length === 0
           ? "No unfiled cards."
           : "All unfiled cards are on the table.",
       });
     }
     for (const file of available) {
-      const item = list.createDiv({ cls: "zk-unfiled-item" });
+      const item = list.createDiv({ cls: "slipbox-unfiled-item" });
       const name = item.createEl("button", {
         text: file.basename,
-        cls: "zk-unfiled-open",
+        cls: "slipbox-unfiled-open",
         attr: { type: "button" },
       });
       setTooltip(name, file.path);
@@ -136,7 +136,7 @@ export class DeskView extends ItemView {
     version: number,
   ): Promise<void> {
     const file = this.plugin.index.fileAtPath(state.cardRef);
-    const card = surface.createDiv({ cls: "zk-desk-card" });
+    const card = surface.createDiv({ cls: "slipbox-desk-card" });
     card.dataset.path = state.cardRef;
     card.style.left = `${state.x}px`;
     card.style.top = `${state.y}px`;
@@ -157,15 +157,15 @@ export class DeskView extends ItemView {
     card.toggleClass("is-unfiled", isUnfiled);
     card.toggleClass("is-invalid", filed === undefined && !isUnfiled);
 
-    const header = card.createDiv({ cls: "zk-desk-card-header" });
-    const identity = header.createDiv({ cls: "zk-desk-card-identity" });
+    const header = card.createDiv({ cls: "slipbox-desk-card-header" });
+    const identity = header.createDiv({ cls: "slipbox-desk-card-identity" });
     identity.createSpan({
-      cls: "zk-desk-card-address",
+      cls: "slipbox-desk-card-address",
       text: filed?.id ?? (isUnfiled ? "unfiled" : "invalid Zettel"),
     });
-    identity.createSpan({ cls: "zk-desk-card-title", text: file.basename });
+    identity.createSpan({ cls: "slipbox-desk-card-title", text: file.basename });
 
-    const actions = header.createDiv({ cls: "zk-desk-card-actions" });
+    const actions = header.createDiv({ cls: "slipbox-desk-card-actions" });
     if (isUnfiled) {
       const fileButton = iconButton(actions, "archive-restore", `File ${file.basename}`);
       fileButton.addEventListener("pointerdown", (event) => event.stopPropagation());
@@ -182,7 +182,7 @@ export class DeskView extends ItemView {
     card.addEventListener("pointerdown", (event) => {
       if (
         event.button !== 0 ||
-        (event.target as HTMLElement).closest(".zk-desk-card-header, button, a") !== null
+        (event.target as HTMLElement).closest(".slipbox-desk-card-header, button, a") !== null
       ) {
         return;
       }
@@ -195,7 +195,7 @@ export class DeskView extends ItemView {
       }
     });
 
-    const scroll = card.createDiv({ cls: "zk-desk-card-scroll markdown-rendered" });
+    const scroll = card.createDiv({ cls: "slipbox-desk-card-scroll markdown-rendered" });
     const component = new Component();
     component.load();
     this.renderComponents.push(component);
@@ -206,19 +206,19 @@ export class DeskView extends ItemView {
       }
     } catch (error) {
       scroll.createEl("p", {
-        cls: "zk-render-error",
+        cls: "slipbox-render-error",
         text: `Could not render this card: ${errorMessage(error)}`,
       });
     }
   }
 
   private renderMissingCard(card: HTMLElement, state: DeskCardState): void {
-    const header = card.createDiv({ cls: "zk-desk-card-header" });
-    header.createSpan({ cls: "zk-desk-card-address", text: "missing card" });
+    const header = card.createDiv({ cls: "slipbox-desk-card-header" });
+    header.createSpan({ cls: "slipbox-desk-card-address", text: "missing card" });
     const remove = iconButton(header, "x", "Remove missing card from Desk");
     remove.addEventListener("click", () => void this.plugin.removeFromDesk(state.cardRef));
     card.createDiv({
-      cls: "zk-desk-missing-copy",
+      cls: "slipbox-desk-missing-copy",
       text: `${state.cardRef} no longer resolves to a note.`,
     });
   }
@@ -304,7 +304,7 @@ function iconButton(
   label: string,
 ): HTMLButtonElement {
   const button = parent.createEl("button", {
-    cls: "clickable-icon zk-icon-button",
+    cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label },
   });
   setIcon(button, icon);

@@ -1,10 +1,10 @@
-/** A numeric component in a canonical Zettelkasten path. */
+/** A numeric component in a canonical Slipbox path. */
 export interface NumericToken {
   readonly type: "number";
   readonly value: number;
 }
 
-/** An alphabetic component in a canonical Zettelkasten path. */
+/** An alphabetic component in a canonical Slipbox path. */
 export interface AlphaToken {
   readonly type: "alpha";
   readonly value: string;
@@ -12,7 +12,7 @@ export interface AlphaToken {
 
 export type PathToken = NumericToken | AlphaToken;
 
-/** A parsed canonical Zettelkasten address. */
+/** A parsed canonical Slipbox address. */
 export interface ParsedZettelId {
   readonly section: number;
   readonly path: readonly [NumericToken, ...PathToken[]];
@@ -69,23 +69,23 @@ function alphaToken(value: string): AlphaToken {
   return Object.freeze({ type: "alpha", value });
 }
 
-/** Parse a canonical v0.1 Zettelkasten address. */
+/** Parse a canonical v0.1 Slipbox address. */
 export function parseZettelId(id: string): ParsedZettelId {
   const match = ZETTEL_ID_PATTERN.exec(id);
   if (match === null) {
-    throw new ZettelIdError(`Invalid Zettelkasten address: ${JSON.stringify(id)}`);
+    throw new ZettelIdError(`Invalid Slipbox address: ${JSON.stringify(id)}`);
   }
 
   const sectionText = match[1];
   const pathText = match[2];
   if (sectionText === undefined || pathText === undefined) {
-    throw new ZettelIdError(`Invalid Zettelkasten address: ${JSON.stringify(id)}`);
+    throw new ZettelIdError(`Invalid Slipbox address: ${JSON.stringify(id)}`);
   }
 
   const section = parsePositiveInteger(sectionText, "Section");
   const tokenTexts = pathText.match(PATH_TOKEN_PATTERN);
   if (tokenTexts === null || tokenTexts.length === 0) {
-    throw new ZettelIdError(`Invalid Zettelkasten path: ${JSON.stringify(pathText)}`);
+    throw new ZettelIdError(`Invalid Slipbox path: ${JSON.stringify(pathText)}`);
   }
 
   const path = tokenTexts.map((tokenText, index): PathToken => {
@@ -104,7 +104,7 @@ export function parseZettelId(id: string): ParsedZettelId {
   });
 }
 
-/** Return whether a string is a canonical v0.1 Zettelkasten address. */
+/** Return whether a string is a canonical v0.1 Slipbox address. */
 export function isValidZettelId(id: string): boolean {
   try {
     parseZettelId(id);
@@ -121,7 +121,7 @@ export function isValidZettelId(id: string): boolean {
 export function formatZettelId(id: ParsedZettelId): string {
   assertPositiveInteger(id.section, "Section");
   if (id.path.length === 0) {
-    throw new ZettelIdError("A Zettelkasten path must contain at least one token");
+    throw new ZettelIdError("A Slipbox path must contain at least one token");
   }
 
   const formattedPath = id.path.map((token, index): string => {
@@ -239,7 +239,7 @@ function nextSibling(id: ParsedZettelId): string {
   const path = [...id.path];
   const lastToken = path[path.length - 1];
   if (lastToken === undefined) {
-    throw new ZettelIdError("A Zettelkasten path must not be empty");
+    throw new ZettelIdError("A Slipbox path must not be empty");
   }
 
   path[path.length - 1] =
@@ -256,7 +256,7 @@ function firstAvailableChild(
 ): string {
   const lastToken = attachment.path[attachment.path.length - 1];
   if (lastToken === undefined) {
-    throw new ZettelIdError("A Zettelkasten path must not be empty");
+    throw new ZettelIdError("A Slipbox path must not be empty");
   }
 
   if (lastToken.type === "number") {

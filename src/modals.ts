@@ -19,10 +19,10 @@ export class TextPromptModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.addClass("zk-modal");
+    contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: this.heading });
 
-    const form = contentEl.createEl("form", { cls: "zk-prompt-form" });
+    const form = contentEl.createEl("form", { cls: "slipbox-prompt-form" });
     const input = form.createEl("input", {
       type: "text",
       placeholder: this.placeholder,
@@ -30,7 +30,7 @@ export class TextPromptModal extends Modal {
     });
     input.required = true;
 
-    const actions = form.createDiv({ cls: "zk-modal-actions" });
+    const actions = form.createDiv({ cls: "slipbox-modal-actions" });
     const cancel = actions.createEl("button", { text: "Cancel", type: "button" });
     const submit = actions.createEl("button", {
       text: "Save",
@@ -110,26 +110,26 @@ export class BookmarksModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.addClass("zk-modal");
+    contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Bookmarks" });
     contentEl.createEl("p", {
-      cls: "zk-empty-copy",
+      cls: "slipbox-empty-copy",
       text: "One persistent physical bookmark may be attached to each filed card.",
     });
 
-    const list = contentEl.createDiv({ cls: "zk-modal-list" });
+    const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
     if (this.bookmarks.length === 0) {
-      list.createEl("p", { cls: "zk-empty-copy", text: "No bookmarks yet." });
+      list.createEl("p", { cls: "slipbox-empty-copy", text: "No bookmarks yet." });
     }
     for (const bookmark of this.bookmarks) {
       const available = this.actions.isAvailable(bookmark.zettelId);
-      const row = list.createDiv({ cls: "zk-list-row zk-bookmark-row" });
+      const row = list.createDiv({ cls: "slipbox-list-row slipbox-bookmark-row" });
       const visit = row.createEl("button", {
-        cls: "zk-entry-visit",
+        cls: "slipbox-entry-visit",
         attr: { type: "button" },
       });
       visit.createSpan({
-        cls: "zk-entry-name",
+        cls: "slipbox-entry-name",
         text: available ? bookmark.zettelId : `${bookmark.zettelId} · missing`,
       });
       visit.disabled = !available;
@@ -144,7 +144,7 @@ export class BookmarksModal extends Modal {
       });
     }
 
-    const footer = contentEl.createDiv({ cls: "zk-modal-actions" });
+    const footer = contentEl.createDiv({ cls: "slipbox-modal-actions" });
     const add = footer.createEl("button", {
       text: "+ Bookmark current card",
       cls: "mod-cta",
@@ -183,26 +183,26 @@ export class EntryPointsModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.addClass("zk-modal");
+    contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Entry points" });
 
-    const list = contentEl.createDiv({ cls: "zk-modal-list" });
+    const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
     if (this.entryPoints.length === 0) {
       list.createEl("p", {
-        cls: "zk-empty-copy",
+        cls: "slipbox-empty-copy",
         text: "No entry points yet.",
       });
     }
 
     this.entryPoints.forEach((entry, index) => {
-      const row = list.createDiv({ cls: "zk-list-row" });
+      const row = list.createDiv({ cls: "slipbox-list-row" });
       const available = this.actions.isAvailable(entry.id);
       const visit = row.createEl("button", {
-        cls: "zk-entry-visit",
+        cls: "slipbox-entry-visit",
         attr: { type: "button" },
       });
-      visit.createSpan({ cls: "zk-entry-name", text: entry.name });
-      visit.createSpan({ cls: "zk-entry-id", text: entry.id });
+      visit.createSpan({ cls: "slipbox-entry-name", text: entry.name });
+      visit.createSpan({ cls: "slipbox-entry-id", text: entry.id });
       if (!available) {
         visit.disabled = true;
         visit.setAttr("aria-label", "The filed card is missing or invalid");
@@ -222,7 +222,7 @@ export class EntryPointsModal extends Modal {
       });
     });
 
-    const footer = contentEl.createDiv({ cls: "zk-modal-actions" });
+    const footer = contentEl.createDiv({ cls: "slipbox-modal-actions" });
     const add = footer.createEl("button", {
       text: "+ Add current card as entry point",
       cls: "mod-cta",
@@ -254,19 +254,19 @@ export class IssuesModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.addClass("zk-modal");
+    contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Zettel address problems" });
     contentEl.createEl("p", {
       text: "Deck never rewrites invalid or duplicate addresses. Correct the YAML in the affected notes.",
     });
 
-    const list = contentEl.createDiv({ cls: "zk-modal-list" });
+    const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
     for (const issue of this.index.issues) {
-      const group = list.createDiv({ cls: "zk-issue-group" });
-      group.createDiv({ cls: "zk-issue-message", text: issue.message });
+      const group = list.createDiv({ cls: "slipbox-issue-group" });
+      group.createDiv({ cls: "slipbox-issue-message", text: issue.message });
       for (const path of issue.paths) {
         const button = group.createEl("button", {
-          cls: "zk-issue-file",
+          cls: "slipbox-issue-file",
           text: path,
           attr: { type: "button" },
         });
@@ -289,7 +289,7 @@ function iconButton(
   label: string,
 ): HTMLButtonElement {
   const button = parent.createEl("button", {
-    cls: "clickable-icon zk-icon-button",
+    cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label },
   });
   setIcon(button, icon);

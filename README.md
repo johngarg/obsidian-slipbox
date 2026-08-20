@@ -1,8 +1,8 @@
-# Zettelkasten Deck
+# Slipbox
 
-Zettelkasten Deck is a desktop Obsidian plugin for browsing ordinary Markdown
-notes as a physical, sequential Luhmann-style card index. A note participates
-only when its frontmatter contains `zettel-id`:
+Slipbox is a desktop Obsidian plugin for browsing, arranging, and filing
+ordinary Markdown notes as a tactile, sequential Luhmann-style card index. A
+note participates only when its frontmatter contains `zettel-id`:
 
 ```yaml
 ---

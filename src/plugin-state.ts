@@ -7,7 +7,7 @@ export interface EntryPoint {
   readonly id: string;
 }
 
-export interface ZettelkastenPluginState {
+export interface SlipboxPluginState {
   readonly entryPoints: readonly EntryPoint[];
   readonly bookmarks: readonly DeckBookmark[];
   readonly deskCards: readonly DeskCardState[];
@@ -16,7 +16,7 @@ export interface ZettelkastenPluginState {
 
 export const DEFAULT_SPREAD = 0.58;
 
-export const DEFAULT_STATE: ZettelkastenPluginState = {
+export const DEFAULT_STATE: SlipboxPluginState = {
   entryPoints: [],
   bookmarks: [],
   deskCards: [],
@@ -28,7 +28,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Tolerant loading for plugin data written by this or an older release. */
-export function normalizePluginState(value: unknown): ZettelkastenPluginState {
+export function normalizePluginState(value: unknown): SlipboxPluginState {
   if (!isRecord(value)) {
     return DEFAULT_STATE;
   }

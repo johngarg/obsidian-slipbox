@@ -10,7 +10,7 @@ import {
   setTooltip,
 } from "obsidian";
 
-import type ZettelkastenPlugin from "./main.js";
+import type SlipboxPlugin from "./main.js";
 import {
   activeCardActionAvailability,
   activeIndexForViewport,
@@ -23,7 +23,7 @@ import {
 import { NavigationHistory } from "./navigation-history.js";
 import type { FiledZettel } from "./zettel-index.js";
 
-export const DECK_VIEW_TYPE = "zettelkasten-deck";
+export const DECK_VIEW_TYPE = "slipbox-deck";
 
 const FILING_ANIMATION_DURATION_MS = 280;
 const RENDER_EDGE_BUFFER = 2;
@@ -51,7 +51,7 @@ export class DeckView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private readonly plugin: ZettelkastenPlugin,
+    private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
     this.scope = new Scope(this.app.scope);
@@ -83,7 +83,7 @@ export class DeckView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Zettelkasten Deck";
+    return "Slipbox Deck";
   }
 
   getIcon(): string {
@@ -91,7 +91,7 @@ export class DeckView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.contentEl.addClass("zk-deck-view");
+    this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
     await this.refresh();
   }
@@ -267,13 +267,13 @@ export class DeckView extends ItemView {
     this.addBookmarkButtonEl = null;
     this.putOnDeskButtonEl = null;
 
-    const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
+    const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
       shell.addClass("is-filing");
     }
     this.renderToolbar(shell);
 
-    const stage = shell.createDiv({ cls: "zk-deck-stage" });
+    const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
 
@@ -300,19 +300,19 @@ export class DeckView extends ItemView {
   }
 
   private renderToolbar(shell: HTMLElement): void {
-    const toolbar = shell.createDiv({ cls: "zk-deck-toolbar" });
-    const identity = toolbar.createDiv({ cls: "zk-deck-identity" });
-    const icon = identity.createSpan({ cls: "zk-deck-icon" });
+    const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
+    const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
+    const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     setIcon(icon, "archive");
     identity.createSpan({ text: "Deck" });
 
-    const navigation = toolbar.createDiv({ cls: "zk-toolbar-group" });
+    const navigation = toolbar.createDiv({ cls: "slipbox-toolbar-group" });
     const previous = iconButton(navigation, "arrow-left", "Previous card");
     previous.addEventListener("click", () => void this.moveBy(-1));
     const next = iconButton(navigation, "arrow-right", "Next card");
     next.addEventListener("click", () => void this.moveBy(1));
 
-    const history = toolbar.createDiv({ cls: "zk-toolbar-group zk-history-controls" });
+    const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
       text: "← Back",
       attr: { type: "button" },
@@ -327,7 +327,7 @@ export class DeckView extends ItemView {
     this.forwardButtonEl = forward;
     this.updateHistoryControls();
 
-    const controls = toolbar.createDiv({ cls: "zk-toolbar-group zk-toolbar-main" });
+    const controls = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-toolbar-main" });
     const entries = controls.createEl("button", {
       text: "Entry points",
       attr: { type: "button" },
@@ -336,11 +336,11 @@ export class DeckView extends ItemView {
 
     const bookmarks = controls.createEl("button", {
       attr: { type: "button" },
-      cls: "zk-bookmarks-button",
+      cls: "slipbox-bookmarks-button",
     });
     bookmarks.createSpan({ text: "Bookmarks" });
     if (this.plugin.state.bookmarks.length > 0) {
-      bookmarks.createSpan({ cls: "zk-count", text: String(this.plugin.state.bookmarks.length) });
+      bookmarks.createSpan({ cls: "slipbox-count", text: String(this.plugin.state.bookmarks.length) });
     }
     bookmarks.addEventListener("click", () => this.plugin.showBookmarks(this));
     this.bookmarksButtonEl = bookmarks;
@@ -355,12 +355,12 @@ export class DeckView extends ItemView {
 
     const desk = controls.createEl("button", {
       attr: { type: "button" },
-      cls: "zk-desk-button",
+      cls: "slipbox-desk-button",
     });
     desk.createSpan({ text: "Desk" });
     const deskCount = this.plugin.state.deskCards.length;
     if (deskCount > 0) {
-      desk.createSpan({ cls: "zk-count", text: String(deskCount) });
+      desk.createSpan({ cls: "slipbox-count", text: String(deskCount) });
     }
     desk.addEventListener("click", () => this.plugin.showDesk());
 
@@ -376,7 +376,7 @@ export class DeckView extends ItemView {
 
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
-        cls: "zk-problem-button",
+        cls: "slipbox-problem-button",
         attr: { type: "button" },
       });
       const warning = problems.createSpan();
@@ -389,7 +389,7 @@ export class DeckView extends ItemView {
       problems.addEventListener("click", () => this.plugin.showIssues());
     }
 
-    const spreadControl = toolbar.createEl("label", { cls: "zk-spread-control" });
+    const spreadControl = toolbar.createEl("label", { cls: "slipbox-spread-control" });
     spreadControl.createSpan({ text: "Spread" });
     const slider = spreadControl.createEl("input", {
       type: "range",
@@ -412,7 +412,7 @@ export class DeckView extends ItemView {
   }
 
   private renderEmptyDeck(stage: HTMLElement): void {
-    const empty = stage.createDiv({ cls: "zk-deck-empty" });
+    const empty = stage.createDiv({ cls: "slipbox-deck-empty" });
     empty.createEl("h2", { text: "The filing box is empty" });
     empty.createEl("p", {
       text: this.filingFile === null
@@ -451,7 +451,7 @@ export class DeckView extends ItemView {
         continue;
       }
 
-      const cardEl = stage.createDiv({ cls: "zk-card" });
+      const cardEl = stage.createDiv({ cls: "slipbox-card" });
       cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
       cardEl.dataset.zettelId = card.id;
@@ -466,14 +466,14 @@ export class DeckView extends ItemView {
       cardEl.style.zIndex = String(cardStackOrder(index, viewportPosition, activeIndex));
       this.renderedCards.push(cardEl);
 
-      const frame = cardEl.createDiv({ cls: "zk-card-frame" });
-      const addressRow = frame.createDiv({ cls: "zk-card-address-row" });
-      addressRow.createSpan({ cls: "zk-card-address", text: card.id });
+      const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
+      const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
+      addressRow.createSpan({ cls: "slipbox-card-address", text: card.id });
       const bookmarkAction = isBookmarked
         ? `Remove bookmark from ${card.id}`
         : `Add bookmark to ${card.id}`;
       const bookmarkToggle = addressRow.createEl("button", {
-        cls: "clickable-icon zk-card-bookmark-toggle",
+        cls: "clickable-icon slipbox-card-bookmark-toggle",
         attr: {
           type: "button",
           "aria-label": bookmarkAction,
@@ -495,7 +495,7 @@ export class DeckView extends ItemView {
         void this.toggleCardBookmark(card.id);
       });
 
-      const scroll = frame.createDiv({ cls: "zk-card-scroll markdown-rendered" });
+      const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
       jobs.push(this.renderMarkdownCard(card, scroll, version));
 
@@ -546,7 +546,7 @@ export class DeckView extends ItemView {
       target.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
     } catch (error) {
       target.createEl("p", {
-        cls: "zk-render-error",
+        cls: "slipbox-render-error",
         text: `Could not render this card: ${errorMessage(error)}`,
       });
     }
@@ -599,10 +599,10 @@ export class DeckView extends ItemView {
     file: TFile,
     version: number,
   ): Promise<void> {
-    const inHand = shell.createDiv({ cls: "zk-in-hand" });
-    inHand.createDiv({ cls: "zk-in-hand-label", text: "Unfiled card in hand" });
-    inHand.createDiv({ cls: "zk-in-hand-name", text: file.basename });
-    const preview = inHand.createDiv({ cls: "zk-in-hand-preview markdown-rendered" });
+    const inHand = shell.createDiv({ cls: "slipbox-in-hand" });
+    inHand.createDiv({ cls: "slipbox-in-hand-label", text: "Unfiled card in hand" });
+    inHand.createDiv({ cls: "slipbox-in-hand-name", text: file.basename });
+    const preview = inHand.createDiv({ cls: "slipbox-in-hand-preview markdown-rendered" });
     const component = new Component();
     component.load();
     this.renderComponents.push(component);
@@ -617,10 +617,10 @@ export class DeckView extends ItemView {
   }
 
   private renderFilingActions(shell: HTMLElement): void {
-    const actions = shell.createDiv({ cls: "zk-filing-actions" });
+    const actions = shell.createDiv({ cls: "slipbox-filing-actions" });
     const attachment = this.activeCard;
     this.filingPromptEl = actions.createSpan({
-      cls: "zk-filing-prompt",
+      cls: "slipbox-filing-prompt",
       text: attachment === null
         ? "Choose an attachment point"
         : `Attach from ${attachment.id}`,
@@ -659,11 +659,11 @@ export class DeckView extends ItemView {
   }
 
   private async animateFiling(newId: string): Promise<void> {
-    const inHand = this.contentEl.querySelector<HTMLElement>(".zk-in-hand");
+    const inHand = this.contentEl.querySelector<HTMLElement>(".slipbox-in-hand");
     if (inHand === null) {
       return;
     }
-    const label = inHand.querySelector<HTMLElement>(".zk-in-hand-label");
+    const label = inHand.querySelector<HTMLElement>(".slipbox-in-hand-label");
     label?.setText(`Filed as ${newId}`);
     inHand.addClass("is-entering-deck");
     await new Promise<void>((resolve) =>
@@ -675,7 +675,7 @@ export class DeckView extends ItemView {
     stage: HTMLElement,
     bookmarkedIds = this.bookmarkedIds(),
   ): void {
-    stage.querySelectorAll<HTMLElement>(".zk-bookmark-edge-tab")
+    stage.querySelectorAll<HTMLElement>(".slipbox-bookmark-edge-tab")
       .forEach((tab) => tab.remove());
     if (this.activeId === null || bookmarkedIds.size === 0) {
       return;
@@ -705,7 +705,7 @@ export class DeckView extends ItemView {
         continue;
       }
       const tab = stage.createEl("button", {
-        cls: `zk-bookmark-edge-tab is-${direction}`,
+        cls: `slipbox-bookmark-edge-tab is-${direction}`,
         text: `${direction === "left" ? "◀" : "▶"} ${card.id}`,
         attr: {
           type: "button",
@@ -974,12 +974,12 @@ export class DeckView extends ItemView {
   private updateBookmarkUi(bookmarkedIds = this.bookmarkedIds()): void {
     const bookmarkCount = bookmarkedIds.size;
     if (this.bookmarksButtonEl !== null) {
-      const countEl = this.bookmarksButtonEl.querySelector<HTMLElement>(".zk-count");
+      const countEl = this.bookmarksButtonEl.querySelector<HTMLElement>(".slipbox-count");
       if (bookmarkCount === 0) {
         countEl?.remove();
       } else if (countEl === null) {
         this.bookmarksButtonEl.createSpan({
-          cls: "zk-count",
+          cls: "slipbox-count",
           text: String(bookmarkCount),
         });
       } else {
@@ -990,7 +990,7 @@ export class DeckView extends ItemView {
     for (const cardEl of this.renderedCards) {
       const zettelId = cardEl.dataset.zettelId;
       const toggle = cardEl.querySelector<HTMLButtonElement>(
-        ".zk-card-bookmark-toggle",
+        ".slipbox-card-bookmark-toggle",
       );
       if (zettelId === undefined || toggle === null) {
         continue;
@@ -1081,7 +1081,7 @@ export class DeckView extends ItemView {
   private rememberScrollPositions(): void {
     for (const card of this.renderedCards) {
       const path = card.dataset.path;
-      const scroll = card.querySelector<HTMLElement>(".zk-card-scroll");
+      const scroll = card.querySelector<HTMLElement>(".slipbox-card-scroll");
       if (path !== undefined && scroll !== null) {
         this.cardScrollPositions.set(path, scroll.scrollTop);
       }
@@ -1103,7 +1103,7 @@ function iconButton(
   label: string,
 ): HTMLButtonElement {
   const button = parent.createEl("button", {
-    cls: "clickable-icon zk-icon-button",
+    cls: "clickable-icon slipbox-icon-button",
     attr: { type: "button", "aria-label": label },
   });
   setIcon(button, icon);

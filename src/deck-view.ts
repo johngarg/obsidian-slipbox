@@ -700,7 +700,12 @@ export class DeckView extends ItemView {
 
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
-      const motion = cardMotionStyle(index, viewportPosition, step);
+      const motion = cardMotionStyle(
+        index,
+        viewportPosition,
+        step,
+        index === activeIndex,
+      );
       card.style.transform =
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);

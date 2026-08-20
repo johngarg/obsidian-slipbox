@@ -61,13 +61,15 @@ export function cardMotionStyle(
   cardIndex: number,
   viewportPosition: number,
   cardStep: number,
+  isActive = false,
 ): CardMotionStyle {
   const safeStep = Math.max(cardStep, 1);
   const distance = Math.abs(cardIndex - viewportPosition);
+  const distanceScale = Math.max(0.86, 1 - distance * 0.035);
   return {
     translateX: (cardIndex - viewportPosition) * safeStep,
-    scale: Math.max(0.86, 1 - distance * 0.035),
-    opacity: Math.max(0.42, 1 - distance * 0.13),
+    scale: isActive ? Math.max(0.98, distanceScale) : distanceScale,
+    opacity: isActive ? 1 : Math.max(0.42, 1 - distance * 0.13),
   };
 }
 

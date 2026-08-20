@@ -41,6 +41,19 @@ describe("free Deck motion", () => {
     assert.equal(cardMotionStyle(1, 1.25, 400).translateX, -100);
   });
 
+  test("keeps the active card legible away from the Deck centre", () => {
+    assert.deepEqual(cardMotionStyle(0, 4, 300, true), {
+      translateX: -1200,
+      scale: 0.98,
+      opacity: 1,
+    });
+    assert.deepEqual(cardMotionStyle(0, 4, 300), {
+      translateX: -1200,
+      scale: 0.86,
+      opacity: 0.48,
+    });
+  });
+
   test("arrow navigation does not move an already visible target", () => {
     assert.equal(
       viewportPositionToRevealCard(2, 1.5, 6, 300, 1000, 600),

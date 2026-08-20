@@ -54,13 +54,14 @@ function activeIndexForViewport(viewportPosition, previousActiveIndex, cardCount
   }
   return activeIndex;
 }
-function cardMotionStyle(cardIndex, viewportPosition, cardStep) {
+function cardMotionStyle(cardIndex, viewportPosition, cardStep, isActive = false) {
   const safeStep = Math.max(cardStep, 1);
   const distance = Math.abs(cardIndex - viewportPosition);
+  const distanceScale = Math.max(0.86, 1 - distance * 0.035);
   return {
     translateX: (cardIndex - viewportPosition) * safeStep,
-    scale: Math.max(0.86, 1 - distance * 0.035),
-    opacity: Math.max(0.42, 1 - distance * 0.13)
+    scale: isActive ? Math.max(0.98, distanceScale) : distanceScale,
+    opacity: isActive ? 1 : Math.max(0.42, 1 - distance * 0.13)
   };
 }
 function viewportPositionToRevealCard(targetIndex, viewportPosition, cardCount, cardStep, stageWidth, cardWidth, margin = 18) {
@@ -657,7 +658,12 @@ var DeckView = class extends import_obsidian.ItemView {
     const viewportPosition = this.viewportPosition(activeIndex);
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
-      const motion = cardMotionStyle(index, viewportPosition, step);
+      const motion = cardMotionStyle(
+        index,
+        viewportPosition,
+        step,
+        index === activeIndex
+      );
       card.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }

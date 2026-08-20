@@ -45,7 +45,8 @@ the cards beneath it exposed. Click the pile itself to expand its ordered,
 gently tilted card miniatures directly onto the workspace—there is no panel,
 expanded-pile box, or disclosure control. An expanded pile has a small handle
 to its upper left: click it to collapse the pile, or drag it to move the complete
-expanded row. Only one pile is expanded at a time.
+expanded row. Piles expand and collapse independently, so several can remain
+open at once.
 
 Drag empty background to pan the whole workspace, including both filed cards
 and piles. This makes overlapped or off-centre piles reachable without changing
@@ -139,6 +140,10 @@ centred between the left-aligned address and right-aligned actions.
 
 Header-button settings affect presentation only. Hidden actions remain
 available through commands, Slipbox shortcuts, and card context menus.
+
+Main-card and tray-card sizes each have small, medium, and large presets. Medium
+preserves the default 840 px main-card cap and 360 px tray-card cap. Tray
+presets remain smaller than main-card presets, including on narrow views.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
 The empty default inherits the source note's folder, or uses the vault root when

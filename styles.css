@@ -4,12 +4,31 @@
 
 .slipbox-deck-view {
   --slipbox-card-radius: 10px;
-  --slipbox-tray-card-width: 360px;
-  --slipbox-tray-pile-width: 376px;
-  --slipbox-tray-pile-height: 258px;
+  --slipbox-main-card-width: min(58%, 840px);
+  --slipbox-tray-card-width: min(360px, 36cqw);
+  --slipbox-tray-pile-height: min(258px, calc(24cqw + 18px));
+  container-type: inline-size;
   height: 100%;
   padding: 0 !important;
   overflow: hidden !important;
+}
+
+.slipbox-deck-view[data-main-card-size="small"] {
+  --slipbox-main-card-width: min(50%, 720px);
+}
+
+.slipbox-deck-view[data-main-card-size="large"] {
+  --slipbox-main-card-width: min(66%, 960px);
+}
+
+.slipbox-deck-view[data-tray-card-size="small"] {
+  --slipbox-tray-card-width: min(280px, 30cqw);
+  --slipbox-tray-pile-height: min(205px, calc(20cqw + 18px));
+}
+
+.slipbox-deck-view[data-tray-card-size="large"] {
+  --slipbox-tray-card-width: min(440px, 42cqw);
+  --slipbox-tray-pile-height: min(312px, calc(28cqw + 18px));
 }
 
 .slipbox-deck-shell {
@@ -176,7 +195,7 @@
 }
 
 .slipbox-tray-pile.is-collapsed {
-  width: var(--slipbox-tray-pile-width);
+  width: calc(var(--slipbox-tray-card-width) + 16px);
   height: var(--slipbox-tray-pile-height);
   padding: 2px 8px 6px;
   cursor: pointer;
@@ -470,7 +489,7 @@ button.slipbox-tray-pile-handle svg {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: min(58%, 840px);
+  width: var(--slipbox-main-card-width);
   max-height: calc(100% - 54px);
   aspect-ratio: 3 / 2;
   transform: translate(-50%, -50%);
@@ -1093,9 +1112,15 @@ button.slipbox-card-backlink-overflow:disabled {
 
 @media (max-width: 850px) {
   .slipbox-deck-view {
-    --slipbox-tray-card-width: 280px;
-    --slipbox-tray-pile-width: 296px;
-    --slipbox-tray-pile-height: 205px;
+    --slipbox-main-card-width: 68%;
+  }
+
+  .slipbox-deck-view[data-main-card-size="small"] {
+    --slipbox-main-card-width: 60%;
+  }
+
+  .slipbox-deck-view[data-main-card-size="large"] {
+    --slipbox-main-card-width: 76%;
   }
 
   .slipbox-deck-identity,
@@ -1105,10 +1130,6 @@ button.slipbox-card-backlink-overflow:disabled {
 
   .slipbox-deck-toolbar {
     gap: 6px;
-  }
-
-  .slipbox-card {
-    width: 68%;
   }
 
   .slipbox-in-hand {

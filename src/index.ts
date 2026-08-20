@@ -126,6 +126,7 @@ export type {
 export type { DeskCardState } from "./desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
 export type {
+  CardSize,
   DeckAction,
   DeckHeaderButton,
   DeckKeyBinding,

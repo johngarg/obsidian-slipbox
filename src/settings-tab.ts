@@ -15,6 +15,7 @@ import {
   formatKeyBinding,
   keyBindingConflict,
   keyBindingSignature,
+  normalizeCardSize,
   normalizeKeyBinding,
   type DeckActionDefinition,
   type DeckKeyBinding,
@@ -92,6 +93,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
           }));
       });
 
+    new Setting(containerEl).setName("Card sizes").setHeading();
+    this.renderCardSizeSettings(containerEl);
+
     new Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
 
@@ -121,6 +125,38 @@ export class SlipboxSettingTab extends PluginSettingTab {
     for (const definition of DECK_ACTION_DEFINITIONS) {
       this.renderShortcutSetting(containerEl, definition);
     }
+  }
+
+  private renderCardSizeSettings(container: HTMLElement): void {
+    new Setting(container)
+      .setName("Main card size")
+      .setDesc("Maximum Deck-card width: small 720 px, medium 840 px, or large 960 px.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("small", "Small")
+          .addOption("medium", "Medium")
+          .addOption("large", "Large")
+          .setValue(this.slipbox.settings.mainCardSize)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            mainCardSize: normalizeCardSize(value),
+          }));
+      });
+
+    new Setting(container)
+      .setName("Tray card size")
+      .setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Tray cards remain smaller than main cards.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("small", "Small")
+          .addOption("medium", "Medium")
+          .addOption("large", "Large")
+          .setValue(this.slipbox.settings.trayCardSize)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            trayCardSize: normalizeCardSize(value),
+          }));
+      });
   }
 
   private renderNewCardSettings(container: HTMLElement): void {

@@ -1061,7 +1061,7 @@ function renameDeskCard(cards, oldRef, newRef) {
 }
 
 // src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 3;
+var SLIPBOX_DATA_SCHEMA_VERSION = 4;
 var binding = (key, modifiers = []) => ({ key, modifiers });
 var DECK_ACTION_DEFINITIONS = [
   {
@@ -1173,6 +1173,8 @@ var DEFAULT_SETTINGS = {
   addressProperty: "zettel-id",
   titleSource: "filename",
   titleProperty: "title",
+  mainCardSize: "medium",
+  trayCardSize: "medium",
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   useTemplatesForNewNotes: false,
@@ -1197,6 +1199,9 @@ function normalizeFolderPath(value) {
     return "";
   }
   return segments.join("/");
+}
+function normalizeCardSize(value) {
+  return value === "small" || value === "large" ? value : "medium";
 }
 function normalizeKeyBinding(value) {
   if (!isRecord3(value) || typeof value.key !== "string" || value.key === "") {
@@ -1259,6 +1264,8 @@ function normalizeSettings(value) {
       source.titleProperty,
       DEFAULT_SETTINGS.titleProperty
     ),
+    mainCardSize: normalizeCardSize(source.mainCardSize),
+    trayCardSize: normalizeCardSize(source.trayCardSize),
     newCardFolder: normalizeFolderPath(source.newCardFolder),
     newNoteTimestampFormat: normalizePropertyName(
       source.newNoteTimestampFormat,
@@ -2680,6 +2687,8 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
+    this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {
       shell.addClass("is-filing");
@@ -4137,6 +4146,8 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         showTitleInDeck: value
       }));
     });
+    new import_obsidian5.Setting(containerEl).setName("Card sizes").setHeading();
+    this.renderCardSizeSettings(containerEl);
     new import_obsidian5.Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
     new import_obsidian5.Setting(containerEl).setName("Card-header buttons").setHeading();
@@ -4164,6 +4175,20 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     for (const definition of DECK_ACTION_DEFINITIONS) {
       this.renderShortcutSetting(containerEl, definition);
     }
+  }
+  renderCardSizeSettings(container) {
+    new import_obsidian5.Setting(container).setName("Main card size").setDesc("Maximum Deck-card width: small 720 px, medium 840 px, or large 960 px.").addDropdown((dropdown) => {
+      dropdown.addOption("small", "Small").addOption("medium", "Medium").addOption("large", "Large").setValue(this.slipbox.settings.mainCardSize).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        mainCardSize: normalizeCardSize(value)
+      }));
+    });
+    new import_obsidian5.Setting(container).setName("Tray card size").setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Tray cards remain smaller than main cards.").addDropdown((dropdown) => {
+      dropdown.addOption("small", "Small").addOption("medium", "Medium").addOption("large", "Large").setValue(this.slipbox.settings.trayCardSize).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        trayCardSize: normalizeCardSize(value)
+      }));
+    });
   }
   renderNewCardSettings(container) {
     const folderSetting = new import_obsidian5.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note\u2019s folder, or the vault root when no source note is active.");

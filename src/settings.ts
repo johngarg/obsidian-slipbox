@@ -1,6 +1,7 @@
-export const SLIPBOX_DATA_SCHEMA_VERSION = 3;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 4;
 
 export type TitleSource = "filename" | "frontmatter";
+export type CardSize = "small" | "medium" | "large";
 
 export type DeckHeaderButton = "add-card" | "open-note" | "tray" | "bookmark";
 
@@ -141,6 +142,8 @@ export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
+  readonly mainCardSize: CardSize;
+  readonly trayCardSize: CardSize;
   readonly newCardFolder: string;
   readonly newNoteTimestampFormat: string;
   readonly useTemplatesForNewNotes: boolean;
@@ -168,6 +171,8 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "zettel-id",
   titleSource: "filename",
   titleProperty: "title",
+  mainCardSize: "medium",
+  trayCardSize: "medium",
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   useTemplatesForNewNotes: false,
@@ -202,6 +207,10 @@ export function normalizeFolderPath(value: unknown): string {
     return "";
   }
   return segments.join("/");
+}
+
+export function normalizeCardSize(value: unknown): CardSize {
+  return value === "small" || value === "large" ? value : "medium";
 }
 
 export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
@@ -279,6 +288,8 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       source.titleProperty,
       DEFAULT_SETTINGS.titleProperty,
     ),
+    mainCardSize: normalizeCardSize(source.mainCardSize),
+    trayCardSize: normalizeCardSize(source.trayCardSize),
     newCardFolder: normalizeFolderPath(source.newCardFolder),
     newNoteTimestampFormat: normalizePropertyName(
       source.newNoteTimestampFormat,

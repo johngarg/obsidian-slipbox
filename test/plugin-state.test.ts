@@ -95,7 +95,7 @@ describe("normalizePluginData", () => {
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 3);
+    assert.equal(data.schemaVersion, 4);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.deepEqual(data.state.entryPoints, [{ name: "Start", id: "1/1" }]);
     assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
@@ -127,6 +127,8 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.showTitleInDeck, true);
     assert.equal(data.settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(data.settings.useTemplatesForNewNotes, false);
+    assert.equal(data.settings.mainCardSize, "medium");
+    assert.equal(data.settings.trayCardSize, "medium");
     assert.equal(data.state.spread, 0.42);
     assert.equal("legacyDeskCards" in data.state, false);
   });

@@ -461,6 +461,8 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
+    this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     if (this.filingFile !== null) {

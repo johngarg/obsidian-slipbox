@@ -29,24 +29,60 @@ var import_obsidian4 = require("obsidian");
 var import_obsidian = require("obsidian");
 
 // src/deck-motion.ts
-function transitionStripOffset(indexDelta, cardStep, releasedDragOffset = 0) {
-  return indexDelta * cardStep + releasedDragOffset;
+var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
+function clampViewportPosition(viewportPosition, cardCount) {
+  if (cardCount <= 0 || !Number.isFinite(viewportPosition)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(cardCount - 1, viewportPosition));
 }
-function cardMotionStyle(cardOffset, cardStep, stripOffset) {
+function activeIndexForViewport(viewportPosition, previousActiveIndex, cardCount, hysteresis = DEFAULT_ACTIVE_HYSTERESIS) {
+  if (cardCount <= 0) {
+    return -1;
+  }
+  const position = clampViewportPosition(viewportPosition, cardCount);
+  let activeIndex = Math.max(
+    0,
+    Math.min(cardCount - 1, Math.trunc(previousActiveIndex))
+  );
+  const margin = Math.max(0, Math.min(0.49, hysteresis));
+  while (activeIndex < cardCount - 1 && position > activeIndex + 0.5 + margin) {
+    activeIndex += 1;
+  }
+  while (activeIndex > 0 && position < activeIndex - 0.5 - margin) {
+    activeIndex -= 1;
+  }
+  return activeIndex;
+}
+function cardMotionStyle(cardIndex, viewportPosition, cardStep) {
   const safeStep = Math.max(cardStep, 1);
-  const distance = Math.abs(cardOffset + stripOffset / safeStep);
+  const distance = Math.abs(cardIndex - viewportPosition);
   return {
-    translateX: cardOffset * cardStep + stripOffset,
+    translateX: (cardIndex - viewportPosition) * safeStep,
     scale: Math.max(0.86, 1 - distance * 0.035),
     opacity: Math.max(0.42, 1 - distance * 0.13)
   };
 }
+function viewportPositionToRevealCard(targetIndex, viewportPosition, cardCount, cardStep, stageWidth, cardWidth, margin = 18) {
+  if (cardCount <= 0 || cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
+    return clampViewportPosition(viewportPosition, cardCount);
+  }
+  const centreLimit = Math.max(0, (stageWidth - cardWidth) / 2 - margin);
+  const targetX = (targetIndex - viewportPosition) * cardStep;
+  let nextPosition = viewportPosition;
+  if (targetX > centreLimit) {
+    nextPosition = targetIndex - centreLimit / cardStep;
+  } else if (targetX < -centreLimit) {
+    nextPosition = targetIndex + centreLimit / cardStep;
+  }
+  return clampViewportPosition(nextPosition, cardCount);
+}
 
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "zettelkasten-deck";
-var SNAP_DURATION_MS = 300;
 var FILING_ANIMATION_DURATION_MS = 280;
-var WHEEL_SETTLE_MS = 110;
+var ACTIVE_SAVE_DELAY_MS = 120;
+var RENDER_EDGE_BUFFER = 2;
 var DeckView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -70,9 +106,14 @@ var DeckView = class extends import_obsidian.ItemView {
   renderedCards = [];
   renderComponents = [];
   cardScrollPositions = /* @__PURE__ */ new Map();
-  dragOffset = 0;
-  pointerStartX = null;
-  wheelTimer = null;
+  viewportOffset = 0;
+  pointerLastX = null;
+  holdButtonEl = null;
+  filingPromptEl = null;
+  renderWindowStart = 0;
+  renderWindowEnd = -1;
+  renderRefreshPending = false;
+  activeSaveTimer = null;
   renderVersion = 0;
   getViewType() {
     return DECK_VIEW_TYPE;
@@ -91,10 +132,12 @@ var DeckView = class extends import_obsidian.ItemView {
   async onClose() {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
-    this.clearWheelTimer();
+    this.flushActiveCardSave();
     this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
+    this.holdButtonEl = null;
+    this.filingPromptEl = null;
   }
   get activeCard() {
     if (this.activeId === null) {
@@ -106,7 +149,12 @@ var DeckView = class extends import_obsidian.ItemView {
     return this.filingFile !== null;
   }
   async refresh() {
+    const previousActiveId = this.activeId;
     this.chooseAvailableActiveCard();
+    if (this.activeId !== previousActiveId) {
+      this.viewportOffset = 0;
+    }
+    this.clampViewportOffset();
     await this.renderDeck();
   }
   async startFiling(file) {
@@ -126,26 +174,17 @@ var DeckView = class extends import_obsidian.ItemView {
     this.thumbId = this.thumbId === this.activeId ? null : this.activeId;
     void this.renderDeck();
   }
-  async goToId(id, releasedDragOffset = 0) {
+  async goToId(id) {
     const filed = this.plugin.index.snapshot.filed;
-    const previousIndex = filed.findIndex((card) => card.id === this.activeId);
     const targetIndex = filed.findIndex((card) => card.id === id);
     if (targetIndex < 0) {
       new import_obsidian.Notice(`Card ${id} is missing, invalid, or duplicated.`);
       return;
     }
-    if (targetIndex === previousIndex) {
-      return;
-    }
-    const indexDelta = targetIndex - previousIndex;
-    const visualIndexDelta = releasedDragOffset === 0 ? Math.sign(indexDelta) : indexDelta;
     this.activeId = id;
-    this.dragOffset = 0;
+    this.viewportOffset = 0;
     await this.plugin.rememberActiveCard(id);
-    await this.renderDeck({
-      indexDelta: visualIndexDelta,
-      releasedDragOffset
-    });
+    await this.renderDeck();
   }
   async addCurrentAsEntryPoint() {
     if (this.activeId === null) {
@@ -169,12 +208,14 @@ var DeckView = class extends import_obsidian.ItemView {
     );
     this.activeId = firstEntryPoint?.id ?? filed[0]?.id ?? null;
   }
-  async renderDeck(transition) {
+  async renderDeck() {
     const version = ++this.renderVersion;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.contentEl.empty();
     this.renderedCards = [];
+    this.holdButtonEl = null;
+    this.filingPromptEl = null;
     const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
     if (this.filingFile !== null) {
       shell.addClass("is-filing");
@@ -189,13 +230,7 @@ var DeckView = class extends import_obsidian.ItemView {
     } else {
       const activeIndex = filed.findIndex((card) => card.id === this.activeId);
       if (activeIndex >= 0) {
-        await this.renderCardWindow(
-          stage,
-          filed,
-          activeIndex,
-          version,
-          transition
-        );
+        await this.renderCardWindow(stage, filed, activeIndex, version);
       }
     }
     if (version !== this.renderVersion) {
@@ -206,22 +241,7 @@ var DeckView = class extends import_obsidian.ItemView {
       this.renderFilingActions(shell);
     }
     this.renderThumbTab(stage);
-    if (transition === void 0) {
-      this.positionCards(0, false);
-      return;
-    }
-    const initialStripOffset = transitionStripOffset(
-      transition.indexDelta,
-      this.cardStep(),
-      transition.releasedDragOffset
-    );
-    this.positionCards(initialStripOffset, false);
-    stage.getBoundingClientRect();
-    window.requestAnimationFrame(() => {
-      if (version === this.renderVersion) {
-        this.positionCards(0, true);
-      }
-    });
+    this.positionCards();
   }
   renderToolbar(shell) {
     const toolbar = shell.createDiv({ cls: "zk-deck-toolbar" });
@@ -254,6 +274,7 @@ var DeckView = class extends import_obsidian.ItemView {
       text: this.thumbId === this.activeId && this.activeId !== null ? "Release hold" : "Hold place",
       attr: { type: "button" }
     });
+    this.holdButtonEl = hold;
     hold.addEventListener("click", () => this.holdPlace());
     if (this.plugin.index.snapshot.issues.length > 0) {
       const problems = controls.createEl("button", {
@@ -281,7 +302,10 @@ var DeckView = class extends import_obsidian.ItemView {
     });
     slider.addEventListener("input", () => {
       this.plugin.setSpread(Number(slider.value));
-      this.positionCards(this.dragOffset, false);
+      this.positionCards();
+      if (this.stageEl !== null) {
+        this.renderThumbTab(this.stageEl);
+      }
     });
     slider.addEventListener("change", () => void this.renderDeck());
   }
@@ -298,31 +322,36 @@ var DeckView = class extends import_obsidian.ItemView {
     });
     create.addEventListener("click", () => void this.plugin.createNewSection());
   }
-  async renderCardWindow(stage, filed, activeIndex, version, transition) {
+  async renderCardWindow(stage, filed, activeIndex, version) {
+    const viewportPosition = this.viewportPosition(activeIndex);
+    const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
       8,
       Math.max(3, Math.ceil(1 / this.plugin.state.spread) + 2)
     );
-    const start = Math.max(0, activeIndex - radius);
-    const end = Math.min(filed.length - 1, activeIndex + radius);
+    const start = Math.max(0, viewportIndex - radius);
+    const end = Math.min(filed.length - 1, viewportIndex + radius);
+    this.renderWindowStart = start;
+    this.renderWindowEnd = end;
     const jobs = [];
     for (let index = start; index <= end; index += 1) {
       const card = filed[index];
       if (card === void 0) {
         continue;
       }
-      const offset = index - activeIndex;
       const cardEl = stage.createDiv({ cls: "zk-card" });
-      cardEl.dataset.offset = String(offset);
+      cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
-      cardEl.toggleClass("is-active", offset === 0);
+      cardEl.toggleClass("is-active", index === activeIndex);
       const cardLabel = `${card.id} \xB7 ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       (0, import_obsidian.setTooltip)(cardEl, cardLabel, {
         placement: "bottom",
         delay: 350
       });
-      cardEl.style.zIndex = String(100 - Math.abs(offset));
+      cardEl.style.zIndex = String(
+        index === activeIndex ? 200 : 100 - Math.floor(Math.abs(index - viewportPosition))
+      );
       this.renderedCards.push(cardEl);
       const addressRow = cardEl.createDiv({ cls: "zk-card-address-row" });
       addressRow.createSpan({ cls: "zk-card-address", text: card.id });
@@ -341,10 +370,10 @@ var DeckView = class extends import_obsidian.ItemView {
         if (!(target instanceof HTMLElement)) {
           return;
         }
-        if (offset !== 0) {
+        if (card.id !== this.activeId) {
           event.preventDefault();
           event.stopPropagation();
-          void this.goToId(card.id);
+          this.selectCardWithoutMoving(card.id);
           return;
         }
         if (target.closest("a, button, input, textarea, select") !== null) {
@@ -353,12 +382,7 @@ var DeckView = class extends import_obsidian.ItemView {
         this.plugin.openMarkdownFile(card.file);
       });
     }
-    const initialStripOffset = transition === void 0 ? 0 : transitionStripOffset(
-      transition.indexDelta,
-      this.cardStep(),
-      transition.releasedDragOffset
-    );
-    this.positionCards(initialStripOffset, false);
+    this.positionCards();
     await Promise.all(jobs);
   }
   async renderMarkdownCard(card, target, version) {
@@ -405,7 +429,7 @@ var DeckView = class extends import_obsidian.ItemView {
   renderFilingActions(shell) {
     const actions = shell.createDiv({ cls: "zk-filing-actions" });
     const attachment = this.activeCard;
-    actions.createSpan({
+    this.filingPromptEl = actions.createSpan({
       cls: "zk-filing-prompt",
       text: attachment === null ? "Choose an attachment point" : `Attach from ${attachment.id}`
     });
@@ -435,7 +459,7 @@ var DeckView = class extends import_obsidian.ItemView {
     await this.animateFiling(newId);
     this.filingFile = null;
     this.activeId = newId;
-    this.dragOffset = 0;
+    this.viewportOffset = 0;
     await this.renderDeck();
   }
   async animateFiling(newId) {
@@ -451,27 +475,28 @@ var DeckView = class extends import_obsidian.ItemView {
     );
   }
   renderThumbTab(stage) {
+    stage.querySelector(".zk-thumb-tab")?.remove();
     if (this.thumbId === null || this.activeId === null) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
     const thumbIndex = filed.findIndex((card) => card.id === this.thumbId);
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
-    if (thumbIndex < 0) {
+    if (thumbIndex < 0 || activeIndex < 0) {
       this.thumbId = null;
       return;
     }
-    const thumbCard = this.renderedCards.find((card) => {
-      const path = card.dataset.path;
-      return path === filed[thumbIndex]?.path;
-    });
-    const cardWidth = thumbCard?.offsetWidth ?? 0;
-    const centreDistance = Math.abs(thumbIndex - activeIndex) * cardWidth * this.plugin.state.spread;
-    const isVisible = thumbCard !== void 0 && centreDistance < stage.clientWidth / 2 + cardWidth / 2;
-    if (isVisible || thumbIndex === activeIndex) {
+    const thumbCard = this.renderedCards.find(
+      (card) => Number(card.dataset.index) === thumbIndex
+    );
+    const cardWidth = thumbCard?.offsetWidth ?? this.renderedCards[0]?.offsetWidth ?? 0;
+    const viewportPosition = this.viewportPosition(activeIndex);
+    const thumbX = (thumbIndex - viewportPosition) * this.cardStep();
+    const isVisible = thumbCard !== void 0 && Math.abs(thumbX) < stage.clientWidth / 2 + cardWidth / 2;
+    if (isVisible) {
       return;
     }
-    const direction = thumbIndex < activeIndex ? "left" : "right";
+    const direction = thumbX < 0 ? "left" : "right";
     const tab = stage.createEl("button", {
       cls: `zk-thumb-tab is-${direction}`,
       text: `${direction === "left" ? "\u25C0" : "\u25B6"} ${this.thumbId}`,
@@ -492,13 +517,7 @@ var DeckView = class extends import_obsidian.ItemView {
         }
         event.preventDefault();
         const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
-        this.dragOffset -= event.deltaX * scale;
-        this.positionCards(this.dragOffset, false);
-        this.clearWheelTimer();
-        this.wheelTimer = window.setTimeout(
-          () => void this.finishMotion(),
-          WHEEL_SETTLE_MS
-        );
+        this.moveViewportByPixels(event.deltaX * scale);
       },
       { passive: false }
     );
@@ -506,65 +525,76 @@ var DeckView = class extends import_obsidian.ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
-      this.pointerStartX = event.clientX;
-      this.dragOffset = 0;
+      this.pointerLastX = event.clientX;
       stage.setPointerCapture(event.pointerId);
       stage.addClass("is-dragging");
       this.contentEl.focus({ preventScroll: true });
     });
     stage.addEventListener("pointermove", (event) => {
-      if (this.pointerStartX === null) {
+      if (this.pointerLastX === null) {
         return;
       }
-      this.dragOffset = event.clientX - this.pointerStartX;
-      this.positionCards(this.dragOffset, false);
+      const movement = event.clientX - this.pointerLastX;
+      this.pointerLastX = event.clientX;
+      this.moveViewportByPixels(-movement);
     });
     const finishPointer = (event) => {
-      if (this.pointerStartX === null) {
+      if (this.pointerLastX === null) {
         return;
       }
-      this.pointerStartX = null;
+      this.pointerLastX = null;
       stage.removeClass("is-dragging");
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
       }
-      void this.finishMotion();
+      this.queueRenderWindowRefresh();
     };
     stage.addEventListener("pointerup", finishPointer);
     stage.addEventListener("pointercancel", finishPointer);
   }
-  async finishMotion() {
-    this.clearWheelTimer();
+  moveViewportByPixels(deltaPixels) {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
     if (activeIndex < 0) {
-      this.dragOffset = 0;
       return;
     }
     const step = this.cardStep();
-    const delta = step === 0 ? 0 : Math.round(-this.dragOffset / step);
-    const targetIndex = Math.max(0, Math.min(filed.length - 1, activeIndex + delta));
-    const releasedDragOffset = this.dragOffset;
-    this.dragOffset = 0;
-    if (targetIndex === activeIndex) {
-      this.positionCards(0, true);
+    if (step <= 0) {
       return;
     }
-    const target = filed[targetIndex];
-    if (target !== void 0) {
-      await this.goToId(target.id, releasedDragOffset);
-    }
+    const nextPosition = this.viewportPosition(activeIndex) + deltaPixels / step;
+    this.applyViewportPosition(nextPosition);
   }
-  async moveBy(delta) {
+  moveBy(delta) {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
     if (activeIndex < 0) {
       return;
     }
-    const target = filed[Math.max(0, Math.min(filed.length - 1, activeIndex + delta))];
-    if (target !== void 0 && target.id !== this.activeId) {
-      await this.goToId(target.id);
+    const targetIndex = Math.max(
+      0,
+      Math.min(filed.length - 1, activeIndex + delta)
+    );
+    const target = filed[targetIndex];
+    const stage = this.stageEl;
+    const firstCard = this.renderedCards[0];
+    if (target === void 0 || target.id === this.activeId || stage === null) {
+      return;
     }
+    const viewportPosition = viewportPositionToRevealCard(
+      targetIndex,
+      this.viewportPosition(activeIndex),
+      filed.length,
+      this.cardStep(),
+      stage.clientWidth,
+      firstCard?.offsetWidth ?? 0
+    );
+    this.activeId = target.id;
+    this.viewportOffset = viewportPosition - targetIndex;
+    this.positionCards();
+    this.updateActiveUi();
+    this.scheduleActiveCardSave();
+    this.queueRenderWindowRefresh();
   }
   handleArrowNavigation(event, delta) {
     const target = event.target;
@@ -572,24 +602,146 @@ var DeckView = class extends import_obsidian.ItemView {
       return false;
     }
     event.preventDefault();
-    void this.moveBy(delta);
+    this.moveBy(delta);
     return true;
   }
-  positionCards(stripOffset, animate) {
-    const stage = this.stageEl;
-    if (stage === null) {
+  selectCardWithoutMoving(id) {
+    const filed = this.plugin.index.snapshot.filed;
+    const previousActiveIndex = filed.findIndex((card) => card.id === this.activeId);
+    const targetIndex = filed.findIndex((card) => card.id === id);
+    if (targetIndex < 0) {
       return;
     }
-    stage.toggleClass("is-snapping", animate);
+    const viewportPosition = previousActiveIndex < 0 ? targetIndex : this.viewportPosition(previousActiveIndex);
+    this.activeId = id;
+    this.viewportOffset = viewportPosition - targetIndex;
+    this.positionCards();
+    this.updateActiveUi();
+    this.scheduleActiveCardSave();
+  }
+  applyViewportPosition(nextPosition) {
+    const filed = this.plugin.index.snapshot.filed;
+    const previousActiveIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (previousActiveIndex < 0) {
+      return;
+    }
+    const viewportPosition = clampViewportPosition(nextPosition, filed.length);
+    const activeIndex = activeIndexForViewport(
+      viewportPosition,
+      previousActiveIndex,
+      filed.length
+    );
+    const activeCard = filed[activeIndex];
+    if (activeCard === void 0) {
+      return;
+    }
+    const activeChanged = activeCard.id !== this.activeId;
+    this.activeId = activeCard.id;
+    this.viewportOffset = viewportPosition - activeIndex;
+    this.positionCards();
+    this.updateActiveUi();
+    if (activeChanged) {
+      this.scheduleActiveCardSave();
+    }
+    if (this.pointerLastX === null) {
+      this.queueRenderWindowRefresh();
+    }
+  }
+  positionCards() {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      return;
+    }
     const step = this.cardStep();
+    const viewportPosition = this.viewportPosition(activeIndex);
     for (const card of this.renderedCards) {
-      const offset = Number(card.dataset.offset ?? "0");
-      const motion = cardMotionStyle(offset, step, stripOffset);
+      const index = Number(card.dataset.index ?? "-1");
+      const motion = cardMotionStyle(index, viewportPosition, step);
       card.style.transform = `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
-    if (animate) {
-      window.setTimeout(() => stage.removeClass("is-snapping"), SNAP_DURATION_MS);
+  }
+  updateActiveUi() {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      return;
+    }
+    const viewportPosition = this.viewportPosition(activeIndex);
+    for (const card of this.renderedCards) {
+      const index = Number(card.dataset.index ?? "-1");
+      card.toggleClass("is-active", index === activeIndex);
+      card.style.zIndex = String(
+        index === activeIndex ? 200 : 100 - Math.floor(Math.abs(index - viewportPosition))
+      );
+    }
+    this.holdButtonEl?.setText(
+      this.thumbId === this.activeId ? "Release hold" : "Hold place"
+    );
+    this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
+    if (this.stageEl !== null) {
+      this.renderThumbTab(this.stageEl);
+    }
+  }
+  viewportPosition(activeIndex) {
+    return activeIndex + this.viewportOffset;
+  }
+  clampViewportOffset() {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      this.viewportOffset = 0;
+      return;
+    }
+    const position = clampViewportPosition(
+      this.viewportPosition(activeIndex),
+      filed.length
+    );
+    this.viewportOffset = position - activeIndex;
+  }
+  queueRenderWindowRefresh() {
+    if (this.renderRefreshPending || this.pointerLastX !== null) {
+      return;
+    }
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      return;
+    }
+    const viewportIndex = Math.round(this.viewportPosition(activeIndex));
+    const needsEarlierCards = this.renderWindowStart > 0 && viewportIndex <= this.renderWindowStart + RENDER_EDGE_BUFFER;
+    const needsLaterCards = this.renderWindowEnd < filed.length - 1 && viewportIndex >= this.renderWindowEnd - RENDER_EDGE_BUFFER;
+    if (!needsEarlierCards && !needsLaterCards) {
+      return;
+    }
+    this.renderRefreshPending = true;
+    window.requestAnimationFrame(() => {
+      this.renderRefreshPending = false;
+      if (this.stageEl !== null) {
+        void this.renderDeck();
+      }
+    });
+  }
+  scheduleActiveCardSave() {
+    if (this.activeSaveTimer !== null) {
+      window.clearTimeout(this.activeSaveTimer);
+    }
+    this.activeSaveTimer = window.setTimeout(() => {
+      this.activeSaveTimer = null;
+      if (this.activeId !== null) {
+        void this.plugin.rememberActiveCard(this.activeId);
+      }
+    }, ACTIVE_SAVE_DELAY_MS);
+  }
+  flushActiveCardSave() {
+    if (this.activeSaveTimer === null) {
+      return;
+    }
+    window.clearTimeout(this.activeSaveTimer);
+    this.activeSaveTimer = null;
+    if (this.activeId !== null) {
+      void this.plugin.rememberActiveCard(this.activeId);
     }
   }
   cardStep() {
@@ -613,12 +765,6 @@ var DeckView = class extends import_obsidian.ItemView {
       component.unload();
     }
     this.renderComponents = [];
-  }
-  clearWheelTimer() {
-    if (this.wheelTimer !== null) {
-      window.clearTimeout(this.wheelTimer);
-      this.wheelTimer = null;
-    }
   }
 };
 function iconButton(parent, icon, label) {

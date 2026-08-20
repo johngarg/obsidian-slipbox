@@ -12,21 +12,18 @@ import {
 
 import type ZettelkastenPlugin from "./main.js";
 import {
+  activeIndexForViewport,
   cardMotionStyle,
-  transitionStripOffset,
+  clampViewportPosition,
+  viewportPositionToRevealCard,
 } from "./deck-motion.js";
 import type { FiledZettel } from "./zettel-index.js";
 
 export const DECK_VIEW_TYPE = "zettelkasten-deck";
 
-const SNAP_DURATION_MS = 300;
 const FILING_ANIMATION_DURATION_MS = 280;
-const WHEEL_SETTLE_MS = 110;
-
-interface DeckTransition {
-  readonly indexDelta: number;
-  readonly releasedDragOffset: number;
-}
+const ACTIVE_SAVE_DELAY_MS = 120;
+const RENDER_EDGE_BUFFER = 2;
 
 export class DeckView extends ItemView {
   private activeId: string | null = null;
@@ -36,9 +33,14 @@ export class DeckView extends ItemView {
   private renderedCards: HTMLElement[] = [];
   private renderComponents: Component[] = [];
   private cardScrollPositions = new Map<string, number>();
-  private dragOffset = 0;
-  private pointerStartX: number | null = null;
-  private wheelTimer: number | null = null;
+  private viewportOffset = 0;
+  private pointerLastX: number | null = null;
+  private holdButtonEl: HTMLButtonElement | null = null;
+  private filingPromptEl: HTMLElement | null = null;
+  private renderWindowStart = 0;
+  private renderWindowEnd = -1;
+  private renderRefreshPending = false;
+  private activeSaveTimer: number | null = null;
   private renderVersion = 0;
 
   constructor(
@@ -76,10 +78,12 @@ export class DeckView extends ItemView {
   async onClose(): Promise<void> {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
-    this.clearWheelTimer();
+    this.flushActiveCardSave();
     this.thumbId = null;
     this.filingFile = null;
     this.stageEl = null;
+    this.holdButtonEl = null;
+    this.filingPromptEl = null;
   }
 
   get activeCard(): FiledZettel | null {
@@ -94,7 +98,12 @@ export class DeckView extends ItemView {
   }
 
   async refresh(): Promise<void> {
+    const previousActiveId = this.activeId;
     this.chooseAvailableActiveCard();
+    if (this.activeId !== previousActiveId) {
+      this.viewportOffset = 0;
+    }
+    this.clampViewportOffset();
     await this.renderDeck();
   }
 
@@ -118,28 +127,17 @@ export class DeckView extends ItemView {
     void this.renderDeck();
   }
 
-  async goToId(id: string, releasedDragOffset = 0): Promise<void> {
+  async goToId(id: string): Promise<void> {
     const filed = this.plugin.index.snapshot.filed;
-    const previousIndex = filed.findIndex((card) => card.id === this.activeId);
     const targetIndex = filed.findIndex((card) => card.id === id);
     if (targetIndex < 0) {
       new Notice(`Card ${id} is missing, invalid, or duplicated.`);
       return;
     }
-    if (targetIndex === previousIndex) {
-      return;
-    }
-
-    const indexDelta = targetIndex - previousIndex;
-    const visualIndexDelta =
-      releasedDragOffset === 0 ? Math.sign(indexDelta) : indexDelta;
     this.activeId = id;
-    this.dragOffset = 0;
+    this.viewportOffset = 0;
     await this.plugin.rememberActiveCard(id);
-    await this.renderDeck({
-      indexDelta: visualIndexDelta,
-      releasedDragOffset,
-    });
+    await this.renderDeck();
   }
 
   async addCurrentAsEntryPoint(): Promise<void> {
@@ -172,12 +170,14 @@ export class DeckView extends ItemView {
     this.activeId = firstEntryPoint?.id ?? filed[0]?.id ?? null;
   }
 
-  private async renderDeck(transition?: DeckTransition): Promise<void> {
+  private async renderDeck(): Promise<void> {
     const version = ++this.renderVersion;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.contentEl.empty();
     this.renderedCards = [];
+    this.holdButtonEl = null;
+    this.filingPromptEl = null;
 
     const shell = this.contentEl.createDiv({ cls: "zk-deck-shell" });
     if (this.filingFile !== null) {
@@ -195,13 +195,7 @@ export class DeckView extends ItemView {
     } else {
       const activeIndex = filed.findIndex((card) => card.id === this.activeId);
       if (activeIndex >= 0) {
-        await this.renderCardWindow(
-          stage,
-          filed,
-          activeIndex,
-          version,
-          transition,
-        );
+        await this.renderCardWindow(stage, filed, activeIndex, version);
       }
     }
 
@@ -214,23 +208,7 @@ export class DeckView extends ItemView {
       this.renderFilingActions(shell);
     }
     this.renderThumbTab(stage);
-    if (transition === undefined) {
-      this.positionCards(0, false);
-      return;
-    }
-
-    const initialStripOffset = transitionStripOffset(
-      transition.indexDelta,
-      this.cardStep(),
-      transition.releasedDragOffset,
-    );
-    this.positionCards(initialStripOffset, false);
-    stage.getBoundingClientRect();
-    window.requestAnimationFrame(() => {
-      if (version === this.renderVersion) {
-        this.positionCards(0, true);
-      }
-    });
+    this.positionCards();
   }
 
   private renderToolbar(shell: HTMLElement): void {
@@ -270,6 +248,7 @@ export class DeckView extends ItemView {
         : "Hold place",
       attr: { type: "button" },
     });
+    this.holdButtonEl = hold;
     hold.addEventListener("click", () => this.holdPlace());
 
     if (this.plugin.index.snapshot.issues.length > 0) {
@@ -301,7 +280,10 @@ export class DeckView extends ItemView {
     });
     slider.addEventListener("input", () => {
       this.plugin.setSpread(Number(slider.value));
-      this.positionCards(this.dragOffset, false);
+      this.positionCards();
+      if (this.stageEl !== null) {
+        this.renderThumbTab(this.stageEl);
+      }
     });
     slider.addEventListener("change", () => void this.renderDeck());
   }
@@ -327,14 +309,17 @@ export class DeckView extends ItemView {
     filed: readonly FiledZettel[],
     activeIndex: number,
     version: number,
-    transition?: DeckTransition,
   ): Promise<void> {
+    const viewportPosition = this.viewportPosition(activeIndex);
+    const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
       8,
       Math.max(3, Math.ceil(1 / this.plugin.state.spread) + 2),
     );
-    const start = Math.max(0, activeIndex - radius);
-    const end = Math.min(filed.length - 1, activeIndex + radius);
+    const start = Math.max(0, viewportIndex - radius);
+    const end = Math.min(filed.length - 1, viewportIndex + radius);
+    this.renderWindowStart = start;
+    this.renderWindowEnd = end;
     const jobs: Promise<void>[] = [];
 
     for (let index = start; index <= end; index += 1) {
@@ -343,18 +328,21 @@ export class DeckView extends ItemView {
         continue;
       }
 
-      const offset = index - activeIndex;
       const cardEl = stage.createDiv({ cls: "zk-card" });
-      cardEl.dataset.offset = String(offset);
+      cardEl.dataset.index = String(index);
       cardEl.dataset.path = card.path;
-      cardEl.toggleClass("is-active", offset === 0);
+      cardEl.toggleClass("is-active", index === activeIndex);
       const cardLabel = `${card.id} · ${card.file.basename}`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
         placement: "bottom",
         delay: 350,
       });
-      cardEl.style.zIndex = String(100 - Math.abs(offset));
+      cardEl.style.zIndex = String(
+        index === activeIndex
+          ? 200
+          : 100 - Math.floor(Math.abs(index - viewportPosition)),
+      );
       this.renderedCards.push(cardEl);
 
       const addressRow = cardEl.createDiv({ cls: "zk-card-address-row" });
@@ -376,10 +364,10 @@ export class DeckView extends ItemView {
         if (!(target instanceof HTMLElement)) {
           return;
         }
-        if (offset !== 0) {
+        if (card.id !== this.activeId) {
           event.preventDefault();
           event.stopPropagation();
-          void this.goToId(card.id);
+          this.selectCardWithoutMoving(card.id);
           return;
         }
         if (target.closest("a, button, input, textarea, select") !== null) {
@@ -389,14 +377,7 @@ export class DeckView extends ItemView {
       });
     }
 
-    const initialStripOffset = transition === undefined
-      ? 0
-      : transitionStripOffset(
-          transition.indexDelta,
-          this.cardStep(),
-          transition.releasedDragOffset,
-        );
-    this.positionCards(initialStripOffset, false);
+    this.positionCards();
 
     await Promise.all(jobs);
   }
@@ -455,7 +436,7 @@ export class DeckView extends ItemView {
   private renderFilingActions(shell: HTMLElement): void {
     const actions = shell.createDiv({ cls: "zk-filing-actions" });
     const attachment = this.activeCard;
-    actions.createSpan({
+    this.filingPromptEl = actions.createSpan({
       cls: "zk-filing-prompt",
       text: attachment === null
         ? "Choose an attachment point"
@@ -489,7 +470,7 @@ export class DeckView extends ItemView {
     await this.animateFiling(newId);
     this.filingFile = null;
     this.activeId = newId;
-    this.dragOffset = 0;
+    this.viewportOffset = 0;
     await this.renderDeck();
   }
 
@@ -507,32 +488,32 @@ export class DeckView extends ItemView {
   }
 
   private renderThumbTab(stage: HTMLElement): void {
+    stage.querySelector<HTMLElement>(".zk-thumb-tab")?.remove();
     if (this.thumbId === null || this.activeId === null) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
     const thumbIndex = filed.findIndex((card) => card.id === this.thumbId);
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
-    if (thumbIndex < 0) {
+    if (thumbIndex < 0 || activeIndex < 0) {
       this.thumbId = null;
       return;
     }
 
-    const thumbCard = this.renderedCards.find((card) => {
-      const path = card.dataset.path;
-      return path === filed[thumbIndex]?.path;
-    });
-    const cardWidth = thumbCard?.offsetWidth ?? 0;
-    const centreDistance =
-      Math.abs(thumbIndex - activeIndex) * cardWidth * this.plugin.state.spread;
+    const thumbCard = this.renderedCards.find(
+      (card) => Number(card.dataset.index) === thumbIndex,
+    );
+    const cardWidth = thumbCard?.offsetWidth ?? this.renderedCards[0]?.offsetWidth ?? 0;
+    const viewportPosition = this.viewportPosition(activeIndex);
+    const thumbX = (thumbIndex - viewportPosition) * this.cardStep();
     const isVisible =
       thumbCard !== undefined &&
-      centreDistance < stage.clientWidth / 2 + cardWidth / 2;
-    if (isVisible || thumbIndex === activeIndex) {
+      Math.abs(thumbX) < stage.clientWidth / 2 + cardWidth / 2;
+    if (isVisible) {
       return;
     }
 
-    const direction = thumbIndex < activeIndex ? "left" : "right";
+    const direction = thumbX < 0 ? "left" : "right";
     const tab = stage.createEl("button", {
       cls: `zk-thumb-tab is-${direction}`,
       text: `${direction === "left" ? "◀" : "▶"} ${this.thumbId}`,
@@ -554,13 +535,7 @@ export class DeckView extends ItemView {
         }
         event.preventDefault();
         const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
-        this.dragOffset -= event.deltaX * scale;
-        this.positionCards(this.dragOffset, false);
-        this.clearWheelTimer();
-        this.wheelTimer = window.setTimeout(
-          () => void this.finishMotion(),
-          WHEEL_SETTLE_MS,
-        );
+        this.moveViewportByPixels(event.deltaX * scale);
       },
       { passive: false },
     );
@@ -569,69 +544,80 @@ export class DeckView extends ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
-      this.pointerStartX = event.clientX;
-      this.dragOffset = 0;
+      this.pointerLastX = event.clientX;
       stage.setPointerCapture(event.pointerId);
       stage.addClass("is-dragging");
       this.contentEl.focus({ preventScroll: true });
     });
     stage.addEventListener("pointermove", (event) => {
-      if (this.pointerStartX === null) {
+      if (this.pointerLastX === null) {
         return;
       }
-      this.dragOffset = event.clientX - this.pointerStartX;
-      this.positionCards(this.dragOffset, false);
+      const movement = event.clientX - this.pointerLastX;
+      this.pointerLastX = event.clientX;
+      this.moveViewportByPixels(-movement);
     });
     const finishPointer = (event: PointerEvent): void => {
-      if (this.pointerStartX === null) {
+      if (this.pointerLastX === null) {
         return;
       }
-      this.pointerStartX = null;
+      this.pointerLastX = null;
       stage.removeClass("is-dragging");
       if (stage.hasPointerCapture(event.pointerId)) {
         stage.releasePointerCapture(event.pointerId);
       }
-      void this.finishMotion();
+      this.queueRenderWindowRefresh();
     };
     stage.addEventListener("pointerup", finishPointer);
     stage.addEventListener("pointercancel", finishPointer);
   }
 
-  private async finishMotion(): Promise<void> {
-    this.clearWheelTimer();
+  private moveViewportByPixels(deltaPixels: number): void {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
     if (activeIndex < 0) {
-      this.dragOffset = 0;
       return;
     }
 
     const step = this.cardStep();
-    const delta = step === 0 ? 0 : Math.round(-this.dragOffset / step);
-    const targetIndex = Math.max(0, Math.min(filed.length - 1, activeIndex + delta));
-    const releasedDragOffset = this.dragOffset;
-    this.dragOffset = 0;
-
-    if (targetIndex === activeIndex) {
-      this.positionCards(0, true);
+    if (step <= 0) {
       return;
     }
-    const target = filed[targetIndex];
-    if (target !== undefined) {
-      await this.goToId(target.id, releasedDragOffset);
-    }
+    const nextPosition = this.viewportPosition(activeIndex) + deltaPixels / step;
+    this.applyViewportPosition(nextPosition);
   }
 
-  private async moveBy(delta: number): Promise<void> {
+  private moveBy(delta: number): void {
     const filed = this.plugin.index.snapshot.filed;
     const activeIndex = filed.findIndex((card) => card.id === this.activeId);
     if (activeIndex < 0) {
       return;
     }
-    const target = filed[Math.max(0, Math.min(filed.length - 1, activeIndex + delta))];
-    if (target !== undefined && target.id !== this.activeId) {
-      await this.goToId(target.id);
+    const targetIndex = Math.max(
+      0,
+      Math.min(filed.length - 1, activeIndex + delta),
+    );
+    const target = filed[targetIndex];
+    const stage = this.stageEl;
+    const firstCard = this.renderedCards[0];
+    if (target === undefined || target.id === this.activeId || stage === null) {
+      return;
     }
+
+    const viewportPosition = viewportPositionToRevealCard(
+      targetIndex,
+      this.viewportPosition(activeIndex),
+      filed.length,
+      this.cardStep(),
+      stage.clientWidth,
+      firstCard?.offsetWidth ?? 0,
+    );
+    this.activeId = target.id;
+    this.viewportOffset = viewportPosition - targetIndex;
+    this.positionCards();
+    this.updateActiveUi();
+    this.scheduleActiveCardSave();
+    this.queueRenderWindowRefresh();
   }
 
   private handleArrowNavigation(
@@ -649,28 +635,172 @@ export class DeckView extends ItemView {
     }
 
     event.preventDefault();
-    void this.moveBy(delta);
+    this.moveBy(delta);
     return true;
   }
 
-  private positionCards(stripOffset: number, animate: boolean): void {
-    const stage = this.stageEl;
-    if (stage === null) {
+  private selectCardWithoutMoving(id: string): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const previousActiveIndex = filed.findIndex((card) => card.id === this.activeId);
+    const targetIndex = filed.findIndex((card) => card.id === id);
+    if (targetIndex < 0) {
       return;
     }
-    stage.toggleClass("is-snapping", animate);
+
+    const viewportPosition = previousActiveIndex < 0
+      ? targetIndex
+      : this.viewportPosition(previousActiveIndex);
+    this.activeId = id;
+    this.viewportOffset = viewportPosition - targetIndex;
+    this.positionCards();
+    this.updateActiveUi();
+    this.scheduleActiveCardSave();
+  }
+
+  private applyViewportPosition(nextPosition: number): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const previousActiveIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (previousActiveIndex < 0) {
+      return;
+    }
+
+    const viewportPosition = clampViewportPosition(nextPosition, filed.length);
+    const activeIndex = activeIndexForViewport(
+      viewportPosition,
+      previousActiveIndex,
+      filed.length,
+    );
+    const activeCard = filed[activeIndex];
+    if (activeCard === undefined) {
+      return;
+    }
+
+    const activeChanged = activeCard.id !== this.activeId;
+    this.activeId = activeCard.id;
+    this.viewportOffset = viewportPosition - activeIndex;
+    this.positionCards();
+    this.updateActiveUi();
+    if (activeChanged) {
+      this.scheduleActiveCardSave();
+    }
+    if (this.pointerLastX === null) {
+      this.queueRenderWindowRefresh();
+    }
+  }
+
+  private positionCards(): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      return;
+    }
+
     const step = this.cardStep();
+    const viewportPosition = this.viewportPosition(activeIndex);
 
     for (const card of this.renderedCards) {
-      const offset = Number(card.dataset.offset ?? "0");
-      const motion = cardMotionStyle(offset, step, stripOffset);
+      const index = Number(card.dataset.index ?? "-1");
+      const motion = cardMotionStyle(index, viewportPosition, step);
       card.style.transform =
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
+  }
 
-    if (animate) {
-      window.setTimeout(() => stage.removeClass("is-snapping"), SNAP_DURATION_MS);
+  private updateActiveUi(): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      return;
+    }
+
+    const viewportPosition = this.viewportPosition(activeIndex);
+    for (const card of this.renderedCards) {
+      const index = Number(card.dataset.index ?? "-1");
+      card.toggleClass("is-active", index === activeIndex);
+      card.style.zIndex = String(
+        index === activeIndex
+          ? 200
+          : 100 - Math.floor(Math.abs(index - viewportPosition)),
+      );
+    }
+
+    this.holdButtonEl?.setText(
+      this.thumbId === this.activeId ? "Release hold" : "Hold place",
+    );
+    this.filingPromptEl?.setText(`Attach from ${this.activeId}`);
+    if (this.stageEl !== null) {
+      this.renderThumbTab(this.stageEl);
+    }
+  }
+
+  private viewportPosition(activeIndex: number): number {
+    return activeIndex + this.viewportOffset;
+  }
+
+  private clampViewportOffset(): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      this.viewportOffset = 0;
+      return;
+    }
+    const position = clampViewportPosition(
+      this.viewportPosition(activeIndex),
+      filed.length,
+    );
+    this.viewportOffset = position - activeIndex;
+  }
+
+  private queueRenderWindowRefresh(): void {
+    if (this.renderRefreshPending || this.pointerLastX !== null) {
+      return;
+    }
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = filed.findIndex((card) => card.id === this.activeId);
+    if (activeIndex < 0) {
+      return;
+    }
+    const viewportIndex = Math.round(this.viewportPosition(activeIndex));
+    const needsEarlierCards =
+      this.renderWindowStart > 0 &&
+      viewportIndex <= this.renderWindowStart + RENDER_EDGE_BUFFER;
+    const needsLaterCards =
+      this.renderWindowEnd < filed.length - 1 &&
+      viewportIndex >= this.renderWindowEnd - RENDER_EDGE_BUFFER;
+    if (!needsEarlierCards && !needsLaterCards) {
+      return;
+    }
+
+    this.renderRefreshPending = true;
+    window.requestAnimationFrame(() => {
+      this.renderRefreshPending = false;
+      if (this.stageEl !== null) {
+        void this.renderDeck();
+      }
+    });
+  }
+
+  private scheduleActiveCardSave(): void {
+    if (this.activeSaveTimer !== null) {
+      window.clearTimeout(this.activeSaveTimer);
+    }
+    this.activeSaveTimer = window.setTimeout(() => {
+      this.activeSaveTimer = null;
+      if (this.activeId !== null) {
+        void this.plugin.rememberActiveCard(this.activeId);
+      }
+    }, ACTIVE_SAVE_DELAY_MS);
+  }
+
+  private flushActiveCardSave(): void {
+    if (this.activeSaveTimer === null) {
+      return;
+    }
+    window.clearTimeout(this.activeSaveTimer);
+    this.activeSaveTimer = null;
+    if (this.activeId !== null) {
+      void this.plugin.rememberActiveCard(this.activeId);
     }
   }
 
@@ -699,12 +829,6 @@ export class DeckView extends ItemView {
     this.renderComponents = [];
   }
 
-  private clearWheelTimer(): void {
-    if (this.wheelTimer !== null) {
-      window.clearTimeout(this.wheelTimer);
-      this.wheelTimer = null;
-    }
-  }
 }
 
 function iconButton(

@@ -17,8 +17,9 @@ order; the plugin stores no hidden filing sequence and imposes no folder.
 ## v0.1 features
 
 - A custom, read-only Deck view with rendered Obsidian Markdown.
-- Continuous horizontal trackpad and background-drag browsing, neighbour-card
-  clicks, arrow-key navigation, internal vertical scrolling, and snap-to-card.
+- Free horizontal trackpad and background-drag browsing with no snap or settle,
+  hysteretic centre-based card highlighting, non-repositioning card selection,
+  minimal-reveal arrow navigation, and internal vertical scrolling.
 - A persistent Spread control that changes spacing without resizing cards.
 - A session-only thumb with an edge tab when the held card is out of view.
 - Persistent named entry points with add, rename, delete, and jump actions.

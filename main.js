@@ -1897,7 +1897,7 @@ var TrayRenderer = class {
           element
         );
         this.clearDropCues();
-        void this.moveAndFocus(next, card.cardRef);
+        void this.plugin.updateTray(next);
       };
       const cancel = () => {
         element.removeEventListener("pointermove", move);

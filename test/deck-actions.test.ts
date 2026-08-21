@@ -22,6 +22,7 @@ describe("Deck action availability", () => {
   test("enables stable actions when their context is available", () => {
     assert.equal(canRunDeckAction("previous-card", READY), true);
     assert.equal(canRunDeckAction("open-note", READY), true);
+    assert.equal(canRunDeckAction("copy-link", READY), true);
     assert.equal(canRunDeckAction("toggle-tray", READY), true);
     assert.equal(canRunDeckAction("back", READY), true);
     assert.equal(canRunDeckAction("problems", READY), true);
@@ -41,6 +42,7 @@ describe("Deck action availability", () => {
     };
     assert.equal(canRunDeckAction("next-card", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
+    assert.equal(canRunDeckAction("copy-link", unavailable), false);
     assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
     assert.equal(canRunDeckAction("forward", unavailable), false);
     assert.equal(canRunDeckAction("problems", unavailable), false);
@@ -62,6 +64,13 @@ describe("Deck action availability", () => {
         definition.defaultBindings.some((binding) => binding.key === "a")),
       false,
     );
+  });
+
+  test("uses y as the Deck-scoped copy-link shortcut", () => {
+    const copy = DECK_ACTION_DEFINITIONS.find(
+      (definition) => definition.id === "copy-link",
+    );
+    assert.deepEqual(copy?.defaultBindings, [{ key: "y", modifiers: [] }]);
   });
 
   test("uses concise state-dependent wording in shared card actions", () => {

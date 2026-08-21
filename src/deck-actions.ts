@@ -27,6 +27,7 @@ export function canRunDeckAction(
       return context.hasNextCard;
     case "centre-card":
     case "open-note":
+    case "copy-link":
     case "toggle-tray":
     case "toggle-bookmark":
       return context.hasActiveCard;

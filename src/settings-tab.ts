@@ -336,6 +336,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
   private renderDeckHeaderButtons(container: HTMLElement): void {
     const labels = {
       "open-note": "Open Markdown note",
+      "copy-link": "Copy card link",
       tray: "Pull out or return card",
       bookmark: "Toggle bookmark",
     } as const;

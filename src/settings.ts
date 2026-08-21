@@ -5,7 +5,11 @@ export const SLIPBOX_DATA_SCHEMA_VERSION = 5;
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
 
-export type DeckHeaderButton = "open-note" | "tray" | "bookmark";
+export type DeckHeaderButton =
+  | "open-note"
+  | "copy-link"
+  | "tray"
+  | "bookmark";
 
 export type DeckAction =
   | "previous-card"
@@ -14,6 +18,7 @@ export type DeckAction =
   | "first-card"
   | "last-card"
   | "open-note"
+  | "copy-link"
   | "toggle-tray"
   | "toggle-bookmark"
   | "back"
@@ -124,6 +129,12 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     repeatable: false,
     defaultBindings: [],
   },
+  {
+    id: "copy-link",
+    label: "Copy card link",
+    repeatable: false,
+    defaultBindings: [binding("y")],
+  },
 ];
 
 export interface SlipboxSettings {
@@ -144,6 +155,7 @@ export interface SlipboxSettings {
 
 export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, boolean>> = {
   "open-note": true,
+  "copy-link": true,
   tray: true,
   bookmark: true,
 };

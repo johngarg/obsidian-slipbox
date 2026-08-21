@@ -357,6 +357,11 @@ export class DeckView extends ItemView {
           void this.plugin.openMarkdownFile(card.file);
         }
         break;
+      case "copy-link":
+        if (card !== null) {
+          void this.plugin.copyCardLink(card);
+        }
+        break;
       case "toggle-tray":
         if (card !== null) {
           void this.plugin.toggleFileInTray(card.file);
@@ -774,6 +779,15 @@ export class DeckView extends ItemView {
           "slipbox-card-open",
           "Open",
           () => this.runAction("open-note", card),
+        );
+      }
+      if (this.plugin.settings.deckHeaderButtons["copy-link"]) {
+        this.renderCardAction(
+          cardActions,
+          "copy",
+          "slipbox-card-copy-link",
+          "Copy card link",
+          () => this.runAction("copy-link", card),
         );
       }
       if (this.plugin.settings.deckHeaderButtons.tray) {

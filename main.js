@@ -438,6 +438,7 @@ function canRunDeckAction(action, context) {
       return context.hasNextCard;
     case "centre-card":
     case "open-note":
+    case "copy-link":
     case "toggle-tray":
     case "toggle-bookmark":
       return context.hasActiveCard;
@@ -928,10 +929,17 @@ var DECK_ACTION_DEFINITIONS = [
     label: "Cancel filing",
     repeatable: false,
     defaultBindings: []
+  },
+  {
+    id: "copy-link",
+    label: "Copy card link",
+    repeatable: false,
+    defaultBindings: [binding("y")]
   }
 ];
 var DEFAULT_DECK_HEADER_BUTTONS = {
   "open-note": true,
+  "copy-link": true,
   tray: true,
   bookmark: true
 };
@@ -2633,6 +2641,11 @@ var DeckView = class extends import_obsidian3.ItemView {
           void this.plugin.openMarkdownFile(card.file);
         }
         break;
+      case "copy-link":
+        if (card !== null) {
+          void this.plugin.copyCardLink(card);
+        }
+        break;
       case "toggle-tray":
         if (card !== null) {
           void this.plugin.toggleFileInTray(card.file);
@@ -3002,6 +3015,15 @@ var DeckView = class extends import_obsidian3.ItemView {
           "slipbox-card-open",
           "Open",
           () => this.runAction("open-note", card)
+        );
+      }
+      if (this.plugin.settings.deckHeaderButtons["copy-link"]) {
+        this.renderCardAction(
+          cardActions,
+          "copy",
+          "slipbox-card-copy-link",
+          "Copy card link",
+          () => this.runAction("copy-link", card)
         );
       }
       if (this.plugin.settings.deckHeaderButtons.tray) {
@@ -4479,6 +4501,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
   renderDeckHeaderButtons(container) {
     const labels = {
       "open-note": "Open Markdown note",
+      "copy-link": "Copy card link",
       tray: "Pull out or return card",
       bookmark: "Toggle bookmark"
     };
@@ -5859,12 +5882,13 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       name: "Copy link to current card",
       checkCallback: (checking) => {
         const path = this.currentFiledPath();
-        const available = path !== null && this.index.filedByPath(path) !== void 0;
+        const card = path === null ? void 0 : this.index.filedByPath(path);
+        const available = card !== void 0;
         if (checking) {
           return available;
         }
-        if (available) {
-          void this.copyCurrentCardLink();
+        if (card !== void 0) {
+          void this.copyCardLink(card);
         }
         return available;
       }
@@ -6140,13 +6164,7 @@ ${frontmatter}---
     const state = this.cardMetadataState(activeFile);
     return state === "filed" || state === "unfiled" ? activeFile : null;
   }
-  async copyCurrentCardLink() {
-    const path = this.currentFiledPath();
-    const card = path === null ? void 0 : this.index.filedByPath(path);
-    if (card === void 0) {
-      new import_obsidian8.Notice("Only an available filed card can be linked.");
-      return;
-    }
+  async copyCardLink(card) {
     const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";
     const link = generateFiledCardLink(
       this.app,

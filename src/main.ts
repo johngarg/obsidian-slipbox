@@ -63,7 +63,7 @@ import {
   type SlipboxSettings,
 } from "./settings.js";
 import { SlipboxSettingTab } from "./settings-tab.js";
-import { CardIndex } from "./card-index.js";
+import { CardIndex, type FiledCard } from "./card-index.js";
 import {
   EMPTY_TRAY,
   clearFiledCardsFromPile,
@@ -925,12 +925,13 @@ export default class SlipboxPlugin extends Plugin {
       name: "Copy link to current card",
       checkCallback: (checking) => {
         const path = this.currentFiledPath();
-        const available = path !== null && this.index.filedByPath(path) !== undefined;
+        const card = path === null ? undefined : this.index.filedByPath(path);
+        const available = card !== undefined;
         if (checking) {
           return available;
         }
-        if (available) {
-          void this.copyCurrentCardLink();
+        if (card !== undefined) {
+          void this.copyCardLink(card);
         }
         return available;
       },
@@ -1258,14 +1259,7 @@ export default class SlipboxPlugin extends Plugin {
     return state === "filed" || state === "unfiled" ? activeFile : null;
   }
 
-  private async copyCurrentCardLink(): Promise<void> {
-    const path = this.currentFiledPath();
-    const card = path === null ? undefined : this.index.filedByPath(path);
-    if (card === undefined) {
-      new Notice("Only an available filed card can be linked.");
-      return;
-    }
-
+  async copyCardLink(card: FiledCard): Promise<void> {
     const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";
     const link = generateFiledCardLink(
       this.app,

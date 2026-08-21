@@ -24,6 +24,10 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray"], [
       { key: "p", modifiers: [] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["copy-link"], [
+      { key: "y", modifiers: [] },
+    ]);
+    assert.equal(DEFAULT_SETTINGS.deckHeaderButtons["copy-link"], true);
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
     assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, false);
@@ -78,6 +82,29 @@ describe("Slipbox settings", () => {
     ]);
     assert.deepEqual(settings.deckKeybindings["next-card"], []);
     assert.deepEqual(settings.deckKeybindings["open-note"], []);
+    assert.deepEqual(settings.deckKeybindings["copy-link"], [
+      { key: "y", modifiers: [] },
+    ]);
+    assert.equal(settings.deckHeaderButtons["copy-link"], true);
+  });
+
+  test("preserves customized and deliberately empty copy-link settings", () => {
+    const customized = normalizeSettings({
+      deckHeaderButtons: { "copy-link": false },
+      deckKeybindings: {
+        "copy-link": [{ key: "L", modifiers: ["Mod"] }],
+      },
+    });
+    assert.equal(customized.deckHeaderButtons["copy-link"], false);
+    assert.deepEqual(customized.deckKeybindings["copy-link"], [{
+      key: "l",
+      modifiers: ["Mod"],
+    }]);
+
+    const empty = normalizeSettings({
+      deckKeybindings: { "copy-link": [] },
+    });
+    assert.deepEqual(empty.deckKeybindings["copy-link"], []);
   });
 
   test("ignores removed settings at runtime but preserves them on save", () => {
@@ -154,6 +181,14 @@ describe("Slipbox settings", () => {
     assert.equal(
       keyBindingConflict(DEFAULT_SETTINGS.deckKeybindings, "open-note", binding),
       "last-card",
+    );
+    assert.equal(
+      keyBindingConflict(
+        DEFAULT_SETTINGS.deckKeybindings,
+        "open-note",
+        { key: "y", modifiers: [] },
+      ),
+      "copy-link",
     );
     assert.equal(formatKeyBinding(binding), "Shift+g");
   });

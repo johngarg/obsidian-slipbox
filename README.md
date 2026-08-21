@@ -235,7 +235,9 @@ preferred Markdown-link generator and uses the address as display text. Slipbox
 does not copy addresses into `aliases`, where they could become stale or
 ambiguous, and does not generate bare address links because `/` may be
 interpreted as a path separator. The command-palette action `Copy link to current
-card` copies this preferred aliased link for the active filed card.
+card`, the Deck-scoped `y` shortcut, and the optional card-header copy button
+all copy this preferred aliased link. A header button targets the exact card it
+belongs to, including when that card is not active.
 
 ## Compatibility notes
 

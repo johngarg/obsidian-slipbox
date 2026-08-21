@@ -1180,6 +1180,8 @@ function renderInlineFilingEditor(addressSlot, card, state, actions) {
   card.append(feedback);
   input.addEventListener("pointerdown", (event) => event.stopPropagation());
   input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("focus", () => actions.onFocusChange(true));
+  input.addEventListener("blur", () => actions.onFocusChange(false));
   input.addEventListener("input", () => actions.onInput(input.value));
   input.addEventListener("keydown", (event) => {
     if (handleFilingEscape(event, true, actions.onCancel)) {
@@ -1591,6 +1593,9 @@ var TrayRenderer = class {
   filingEditor = null;
   suppressClickUntil = 0;
   clear() {
+    if (this.filingEditor !== null) {
+      this.actions.filingInputFocusChanged(false);
+    }
     for (const component of this.components) {
       component.unload();
     }
@@ -1818,7 +1823,8 @@ var TrayRenderer = class {
           onInput: (value) => this.actions.updateFilingInput(value),
           onConfirm: () => this.actions.confirmFiling(),
           onCancel: () => this.actions.cancelFiling(),
-          onPreview: () => this.actions.previewFilingPlacement()
+          onPreview: () => this.actions.previewFilingPlacement(),
+          onFocusChange: (focused) => this.actions.filingInputFocusChanged(focused)
         }
       );
     } else if (filed === void 0) {
@@ -2360,7 +2366,8 @@ var DeckView = class extends import_obsidian3.ItemView {
       updateFilingInput: (value) => this.updateFilingInput(value),
       confirmFiling: () => void this.confirmFiling(),
       cancelFiling: () => void this.cancelFiling(),
-      previewFilingPlacement: () => void this.previewFilingPlacement()
+      previewFilingPlacement: () => void this.previewFilingPlacement(),
+      filingInputFocusChanged: (focused) => this.setDeckKeybindingsSuspended(focused)
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout())
@@ -2401,6 +2408,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   cardFooters;
   trayRenderer;
   keymapHandlers = [];
+  deckKeybindingsSuspended = false;
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -2533,6 +2541,9 @@ var DeckView = class extends import_obsidian3.ItemView {
         () => void this.cancelFiling()
       )
     ));
+    if (this.deckKeybindingsSuspended) {
+      return;
+    }
     for (const definition of DECK_ACTION_DEFINITIONS) {
       for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
         const handler = scope.register(
@@ -2547,6 +2558,13 @@ var DeckView = class extends import_obsidian3.ItemView {
         this.keymapHandlers.push(handler);
       }
     }
+  }
+  setDeckKeybindingsSuspended(suspended) {
+    if (this.deckKeybindingsSuspended === suspended) {
+      return;
+    }
+    this.deckKeybindingsSuspended = suspended;
+    this.updateKeybindings();
   }
   canRunAction(action, target) {
     if (action === "confirm-filing") {

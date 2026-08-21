@@ -12,6 +12,7 @@ export interface InlineFilingEditorActions {
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   readonly onPreview: () => void;
+  readonly onFocusChange: (focused: boolean) => void;
 }
 
 export interface InlineFilingEditorElements {
@@ -99,6 +100,8 @@ export function renderInlineFilingEditor(
 
   input.addEventListener("pointerdown", (event) => event.stopPropagation());
   input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("focus", () => actions.onFocusChange(true));
+  input.addEventListener("blur", () => actions.onFocusChange(false));
   input.addEventListener("input", () => actions.onInput(input.value));
   input.addEventListener("keydown", (event) => {
     if (handleFilingEscape(event, true, actions.onCancel)) {

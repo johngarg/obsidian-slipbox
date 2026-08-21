@@ -91,6 +91,7 @@ export class DeckView extends ItemView {
   private readonly cardFooters: CardFooterManager;
   private readonly trayRenderer: TrayRenderer;
   private keymapHandlers: KeymapEventHandler[] = [];
+  private deckKeybindingsSuspended = false;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -112,6 +113,8 @@ export class DeckView extends ItemView {
       confirmFiling: () => void this.confirmFiling(),
       cancelFiling: () => void this.cancelFiling(),
       previewFilingPlacement: () => void this.previewFilingPlacement(),
+      filingInputFocusChanged: (focused) =>
+        this.setDeckKeybindingsSuspended(focused),
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
@@ -275,6 +278,9 @@ export class DeckView extends ItemView {
         () => void this.cancelFiling(),
       ),
     ));
+    if (this.deckKeybindingsSuspended) {
+      return;
+    }
     for (const definition of DECK_ACTION_DEFINITIONS) {
       for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
         const handler = scope.register(
@@ -289,6 +295,14 @@ export class DeckView extends ItemView {
         this.keymapHandlers.push(handler);
       }
     }
+  }
+
+  private setDeckKeybindingsSuspended(suspended: boolean): void {
+    if (this.deckKeybindingsSuspended === suspended) {
+      return;
+    }
+    this.deckKeybindingsSuspended = suspended;
+    this.updateKeybindings();
   }
 
   canRunAction(action: DeckAction, target?: FiledCard): boolean {

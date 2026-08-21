@@ -46,6 +46,7 @@ export interface TrayViewActions {
   confirmFiling(): void;
   cancelFiling(): void;
   previewFilingPlacement(): void;
+  filingInputFocusChanged(focused: boolean): void;
 }
 
 export interface TrayFilingState extends InlineFilingEditorState {
@@ -65,6 +66,9 @@ export class TrayRenderer {
   ) {}
 
   clear(): void {
+    if (this.filingEditor !== null) {
+      this.actions.filingInputFocusChanged(false);
+    }
     for (const component of this.components) {
       component.unload();
     }
@@ -354,6 +358,8 @@ export class TrayRenderer {
           onConfirm: () => this.actions.confirmFiling(),
           onCancel: () => this.actions.cancelFiling(),
           onPreview: () => this.actions.previewFilingPlacement(),
+          onFocusChange: (focused) =>
+            this.actions.filingInputFocusChanged(focused),
         },
       );
     } else if (filed === undefined) {

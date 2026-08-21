@@ -299,6 +299,7 @@ describe("inline tray filing editor DOM", () => {
     const card = happyCard as unknown as HTMLElement;
     const address = happyAddress as unknown as HTMLElement;
     const events: string[] = [];
+    const focusChanges: boolean[] = [];
     let changedValue = "";
     const editor = renderInlineFilingEditor(
       address,
@@ -318,6 +319,7 @@ describe("inline tray filing editor DOM", () => {
         onConfirm: () => events.push("confirm"),
         onCancel: () => events.push("cancel"),
         onPreview: () => events.push("preview"),
+        onFocusChange: (focused) => focusChanges.push(focused),
       },
     );
     assert.equal(address.querySelector("input"), editor.input);
@@ -325,6 +327,14 @@ describe("inline tray filing editor DOM", () => {
     assert.equal(card.querySelectorAll(".slipbox-tray-filing-input").length, 1);
     assert.match(editor.feedback.textContent ?? "", /a\.md/);
     assert.match(editor.feedback.textContent ?? "", /z\.md/);
+
+    editor.input.dispatchEvent(
+      new window.FocusEvent("focus") as unknown as Event,
+    );
+    editor.input.dispatchEvent(
+      new window.FocusEvent("blur") as unknown as Event,
+    );
+    assert.deepEqual(focusChanges, [true, false]);
 
     editor.input.value = "Project-17";
     editor.input.dispatchEvent(new window.Event("input") as unknown as Event);

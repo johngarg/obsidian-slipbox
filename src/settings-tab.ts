@@ -94,6 +94,18 @@ export class SlipboxSettingTab extends PluginSettingTab {
           }));
       });
 
+    new Setting(containerEl)
+      .setName("Show Deck map")
+      .setDesc("Show a clickable overview of every filed card and bookmark.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.slipbox.settings.showDeckMap)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            showDeckMap: value,
+          }));
+      });
+
     new Setting(containerEl).setName("Card sizes").setHeading();
     this.renderCardSizeSettings(containerEl);
 

@@ -961,6 +961,7 @@ var DEFAULT_SETTINGS = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
+  showDeckMap: true,
   deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS
 };
@@ -1056,6 +1057,7 @@ function normalizeSettings(value) {
     useTemplatesForNewNotes: typeof source.useTemplatesForNewNotes === "boolean" ? source.useTemplatesForNewNotes : DEFAULT_SETTINGS.useTemplatesForNewNotes,
     newNoteTemplatePath: typeof source.newNoteTemplatePath === "string" ? source.newNoteTemplatePath.trim() : DEFAULT_SETTINGS.newNoteTemplatePath,
     showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
+    showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
     deckHeaderButtons: normalizeBooleanRecord(
       source.deckHeaderButtons,
       DEFAULT_DECK_HEADER_BUTTONS
@@ -2371,12 +2373,75 @@ function filingPlacementMatches(filed, candidate, ordering, preview) {
   ).placementSignature === preview.placementSignature;
 }
 
+// src/deck-map.ts
+function deckMapCoordinate(index, cardCount) {
+  if (!Number.isInteger(index) || !Number.isInteger(cardCount) || cardCount <= 0 || index < 0 || index >= cardCount) {
+    return null;
+  }
+  return cardCount === 1 ? 0.5 : index / (cardCount - 1);
+}
+function buildDeckMapModel(orderedFiledPaths, activePath, bookmarkedPaths) {
+  const cardCount = orderedFiledPaths.length;
+  const bookmarked = new Set(bookmarkedPaths);
+  const markers = orderedFiledPaths.map((path, index) => ({
+    path,
+    ordinal: index + 1,
+    position: deckMapCoordinate(index, cardCount) ?? 0
+  }));
+  return {
+    cardCount,
+    active: activePath === null ? null : markers.find((marker) => marker.path === activePath) ?? null,
+    bookmarks: markers.filter((marker) => bookmarked.has(marker.path))
+  };
+}
+function buildDeckMapSectionMarkers(orderedFiledCards) {
+  const sections = [];
+  let previousLabel = null;
+  for (const [index, card] of orderedFiledCards.entries()) {
+    const label = Array.from(card.address)[0] ?? "";
+    if (label === "" || label === previousLabel) {
+      continue;
+    }
+    sections.push({
+      path: card.path,
+      ordinal: index + 1,
+      position: deckMapCoordinate(index, orderedFiledCards.length) ?? 0,
+      label
+    });
+    previousLabel = label;
+  }
+  return sections;
+}
+function visibleDeckMapSectionMarkers(sections, railWidth, minimumSpacing) {
+  const visible = [];
+  let previousPosition = null;
+  for (const section of sections) {
+    const pixelPosition = section.position * Math.max(0, railWidth);
+    if (previousPosition === null || pixelPosition - previousPosition >= Math.max(0, minimumSpacing)) {
+      visible.push(section);
+      previousPosition = pixelPosition;
+    }
+  }
+  return visible;
+}
+function deckMapIndexAtOffset(offset, railWidth, cardCount) {
+  if (!Number.isFinite(offset) || !Number.isFinite(railWidth) || railWidth <= 0 || !Number.isInteger(cardCount) || cardCount <= 0) {
+    return null;
+  }
+  if (cardCount === 1) {
+    return 0;
+  }
+  const normalized = Math.max(0, Math.min(1, offset / railWidth));
+  return Math.round(normalized * (cardCount - 1));
+}
+
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "slipbox-deck";
 var RENDER_EDGE_BUFFER = 2;
 var LAYOUT_MEASUREMENT_RETRIES = 2;
 var SPACE_RECENTER_DURATION_MS = 180;
 var VIEWPORT_CENTER_DURATION_MS = 180;
+var DECK_MAP_SECTION_LABEL_SPACING = 14;
 var DeckView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -2431,6 +2496,13 @@ var DeckView = class extends import_obsidian3.ItemView {
   backButtonEl = null;
   forwardButtonEl = null;
   bookmarksButtonEl = null;
+  deckMapEl = null;
+  deckMapRailEl = null;
+  deckMapSectionLayerEl = null;
+  deckMapMarkerEls = /* @__PURE__ */ new Map();
+  deckMapSections = [];
+  deckMapActivePath = null;
+  deckMapBookmarkCount = 0;
   resizeObserver = null;
   positioningFrame = null;
   positioningRetriesRemaining = 0;
@@ -2492,11 +2564,19 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.deckMapEl = null;
+    this.deckMapRailEl = null;
+    this.deckMapSectionLayerEl = null;
+    this.deckMapMarkerEls.clear();
+    this.deckMapSections = [];
+    this.deckMapActivePath = null;
+    this.deckMapBookmarkCount = 0;
     this.history.reset();
   }
   onResize() {
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
+    this.updateDeckMapSectionLabels();
   }
   get activeCard() {
     if (this.activePath === null) {
@@ -2798,6 +2878,9 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.updateBookmarkUi(bookmarkedPaths);
     await this.plugin.removeBookmark(path);
   }
+  handleBookmarksChanged() {
+    this.updateBookmarkUi();
+  }
   async navigateToPath(path) {
     const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
@@ -2842,10 +2925,18 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.deckMapEl = null;
+    this.deckMapRailEl = null;
+    this.deckMapSectionLayerEl = null;
+    this.deckMapMarkerEls.clear();
+    this.deckMapSections = [];
+    this.deckMapActivePath = null;
+    this.deckMapBookmarkCount = 0;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     this.renderToolbar(shell);
+    this.renderDeckMap(shell);
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
@@ -2948,6 +3039,139 @@ var DeckView = class extends import_obsidian3.ItemView {
       }
     });
     slider.addEventListener("change", () => void this.renderDeck());
+  }
+  renderDeckMap(shell) {
+    const filed = this.plugin.index.snapshot.filed;
+    if (!this.plugin.settings.showDeckMap || filed.length === 0) {
+      return;
+    }
+    const map = shell.createDiv({
+      cls: "slipbox-deck-map",
+      attr: {
+        role: "slider",
+        tabindex: "0",
+        "aria-label": "Deck map",
+        "aria-valuemin": "1",
+        "aria-valuemax": String(filed.length)
+      }
+    });
+    const rail = map.createDiv({
+      cls: "slipbox-deck-map-rail",
+      attr: { "aria-hidden": "true" }
+    });
+    const markerLayer = rail.createDiv({
+      cls: "slipbox-deck-map-markers"
+    });
+    this.deckMapSectionLayerEl = rail.createDiv({
+      cls: "slipbox-deck-map-sections"
+    });
+    this.deckMapEl = map;
+    this.deckMapRailEl = rail;
+    for (const [index, card] of filed.entries()) {
+      const marker = markerLayer.createSpan({
+        cls: "slipbox-deck-map-marker"
+      });
+      marker.style.setProperty(
+        "--slipbox-deck-map-position",
+        String(deckMapCoordinate(index, filed.length) ?? 0)
+      );
+      this.deckMapMarkerEls.set(card.path, marker);
+    }
+    this.deckMapSections = buildDeckMapSectionMarkers(filed);
+    this.updateDeckMapBookmarks(this.bookmarkedPaths());
+    this.updateDeckMapSectionLabels();
+    map.addEventListener("click", (event) => {
+      const bounds = rail.getBoundingClientRect();
+      const cards = this.plugin.index.snapshot.filed;
+      const targetIndex = deckMapIndexAtOffset(
+        event.clientX - bounds.left,
+        bounds.width,
+        cards.length
+      );
+      const target = targetIndex === null ? void 0 : cards[targetIndex];
+      if (target !== void 0 && target.path !== this.activePath) {
+        void this.jumpToPath(target.path);
+      }
+    });
+    map.addEventListener("keydown", (event) => {
+      const action = event.key === "ArrowLeft" ? "previous-card" : event.key === "ArrowRight" ? "next-card" : event.key === "Home" ? "first-card" : event.key === "End" ? "last-card" : null;
+      if (action === null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.runAction(action);
+    });
+  }
+  updateDeckMapBookmarks(bookmarkedPaths) {
+    if (this.deckMapEl === null) {
+      return;
+    }
+    const model = buildDeckMapModel(
+      this.plugin.index.snapshot.filed.map((card) => card.path),
+      this.activePath,
+      bookmarkedPaths
+    );
+    const resolvedBookmarks = new Set(
+      model.bookmarks.map((marker) => marker.path)
+    );
+    for (const [path, marker] of this.deckMapMarkerEls) {
+      marker.toggleClass("is-bookmarked", resolvedBookmarks.has(path));
+    }
+    this.deckMapBookmarkCount = model.bookmarks.length;
+    this.updateDeckMapActiveUi();
+  }
+  updateDeckMapSectionLabels() {
+    const rail = this.deckMapRailEl;
+    const layer = this.deckMapSectionLayerEl;
+    if (rail === null || layer === null) {
+      return;
+    }
+    const sections = visibleDeckMapSectionMarkers(
+      this.deckMapSections,
+      rail.getBoundingClientRect().width,
+      DECK_MAP_SECTION_LABEL_SPACING
+    );
+    layer.empty();
+    for (const section of sections) {
+      const label = layer.createSpan({
+        cls: "slipbox-deck-map-section",
+        text: section.label
+      });
+      label.style.setProperty(
+        "--slipbox-deck-map-position",
+        String(section.position)
+      );
+    }
+  }
+  updateDeckMapActiveUi() {
+    const map = this.deckMapEl;
+    if (map === null) {
+      return;
+    }
+    const cardCount = this.plugin.index.snapshot.filed.length;
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const position = deckMapCoordinate(activeIndex, cardCount);
+    const bookmarkLabel = `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
+    if (this.deckMapActivePath !== null) {
+      this.deckMapMarkerEls.get(this.deckMapActivePath)?.removeClass("is-active");
+    }
+    if (position === null) {
+      this.deckMapActivePath = null;
+      map.removeAttribute("aria-valuenow");
+      map.setAttr(
+        "aria-valuetext",
+        `${cardCount} filed cards; ${bookmarkLabel}`
+      );
+      return;
+    }
+    this.deckMapActivePath = this.activePath;
+    if (this.activePath !== null) {
+      this.deckMapMarkerEls.get(this.activePath)?.addClass("is-active");
+    }
+    const summary = `Card ${activeIndex + 1} of ${cardCount}; ${bookmarkLabel}`;
+    map.setAttr("aria-valuenow", String(activeIndex + 1));
+    map.setAttr("aria-valuetext", summary);
   }
   renderEmptyDeck(stage) {
     const empty = stage.createDiv({ cls: "slipbox-deck-empty" });
@@ -3637,6 +3861,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.resizeObserver?.disconnect();
     this.resizeObserver = new ResizeObserver(() => {
       this.scheduleCardPositioning();
+      this.updateDeckMapSectionLabels();
     });
     this.resizeObserver.observe(this.contentEl);
   }
@@ -3686,6 +3911,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
+    this.updateDeckMapActiveUi();
     this.updateHistoryControls();
   }
   bookmarkedPaths() {
@@ -3735,6 +3961,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl, bookmarkedPaths);
     }
+    this.updateDeckMapBookmarks(bookmarkedPaths);
   }
   viewportPosition(activeIndex) {
     return activeIndex + this.viewportOffset;
@@ -4342,6 +4569,12 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDeck: value
+      }));
+    });
+    new import_obsidian5.Setting(containerEl).setName("Show Deck map").setDesc("Show a clickable overview of every filed card and bookmark.").addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.showDeckMap).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        showDeckMap: value
       }));
     });
     new import_obsidian5.Setting(containerEl).setName("Card sizes").setHeading();
@@ -5417,7 +5650,8 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
         ...this.state,
         bookmarks: createBookmark(this.state.bookmarks, path)
       };
-      await this.persistStateAndRefreshViews();
+      this.refreshBookmarkUi();
+      await this.persistState();
       new import_obsidian8.Notice(`Bookmarked ${label}.`);
     } catch (error) {
       new import_obsidian8.Notice(`Could not add bookmark: ${errorMessage4(error)}`);
@@ -6188,7 +6422,8 @@ ${frontmatter}---
       ...this.state,
       bookmarks: deleteBookmark(this.state.bookmarks, path)
     };
-    await this.persistStateAndRefreshViews();
+    this.refreshBookmarkUi();
+    await this.persistState();
     new import_obsidian8.Notice(`Deleted bookmark at ${label}.`);
   }
   async renameEntryPoint(index) {
@@ -6277,9 +6512,12 @@ ${frontmatter}---
       )
     );
   }
-  async persistStateAndRefreshViews() {
-    await this.persistState();
-    await this.refreshDeckViews();
+  refreshBookmarkUi() {
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handleBookmarksChanged();
+      }
+    }
   }
   async persistState() {
     const persistedSettings = settingsForPersistence(

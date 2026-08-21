@@ -398,7 +398,8 @@ export default class SlipboxPlugin extends Plugin {
         ...this.state,
         bookmarks: createBookmark(this.state.bookmarks, path),
       };
-      await this.persistStateAndRefreshViews();
+      this.refreshBookmarkUi();
+      await this.persistState();
       new Notice(`Bookmarked ${label}.`);
     } catch (error) {
       new Notice(`Could not add bookmark: ${errorMessage(error)}`);
@@ -1284,7 +1285,8 @@ export default class SlipboxPlugin extends Plugin {
       ...this.state,
       bookmarks: deleteBookmark(this.state.bookmarks, path),
     };
-    await this.persistStateAndRefreshViews();
+    this.refreshBookmarkUi();
+    await this.persistState();
     new Notice(`Deleted bookmark at ${label}.`);
   }
 
@@ -1384,9 +1386,12 @@ export default class SlipboxPlugin extends Plugin {
     );
   }
 
-  private async persistStateAndRefreshViews(): Promise<void> {
-    await this.persistState();
-    await this.refreshDeckViews();
+  private refreshBookmarkUi(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handleBookmarksChanged();
+      }
+    }
   }
 
   private async persistState(): Promise<void> {

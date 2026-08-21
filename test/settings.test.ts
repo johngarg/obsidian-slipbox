@@ -35,6 +35,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
+    assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
   });
 
   test("normalizes property names, buttons, and configured shortcuts", () => {
@@ -50,6 +51,7 @@ describe("Slipbox settings", () => {
       useTemplatesForNewNotes: false,
       newNoteTemplatePath: " Templates/Zettel.md ",
       showTitleInDeck: true,
+      showDeckMap: false,
       deckHeaderButtons: { bookmark: false, tray: false },
       deckKeybindings: {
         "previous-card": [
@@ -72,6 +74,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
     assert.equal(settings.showTitleInDeck, true);
+    assert.equal(settings.showDeckMap, false);
     assert.equal(settings.deckHeaderButtons.bookmark, false);
     assert.equal(settings.deckHeaderButtons.tray, false);
     assert.equal("desk" in settings.deckHeaderButtons, false);
@@ -105,6 +108,17 @@ describe("Slipbox settings", () => {
       deckKeybindings: { "copy-link": [] },
     });
     assert.deepEqual(empty.deckKeybindings["copy-link"], []);
+  });
+
+  test("defaults older Deck-map settings on while preserving explicit disablement", () => {
+    assert.equal(normalizeSettings({}).showDeckMap, true);
+    assert.equal(normalizeSettings({ showDeckMap: "no" }).showDeckMap, true);
+    const disabled = normalizeSettings({ showDeckMap: false });
+    assert.equal(disabled.showDeckMap, false);
+    assert.equal(
+      settingsForPersistence({}, disabled).showDeckMap,
+      false,
+    );
   });
 
   test("ignores removed settings at runtime but preserves them on save", () => {
@@ -151,6 +165,7 @@ describe("Slipbox settings", () => {
       newNoteTimestampFormat: "   ",
       useTemplatesForNewNotes: "yes",
       newNoteTemplatePath: 42,
+      showDeckMap: "yes",
     });
     assert.equal(settings.addressProperty, "zettel-id");
     assert.equal(settings.titleSource, "filename");
@@ -161,6 +176,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "");
+    assert.equal(settings.showDeckMap, true);
   });
 
   test("normalizes vault folder paths and rejects traversal", () => {

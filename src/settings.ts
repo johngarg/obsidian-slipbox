@@ -149,6 +149,7 @@ export interface SlipboxSettings {
   readonly useTemplatesForNewNotes: boolean;
   readonly newNoteTemplatePath: string;
   readonly showTitleInDeck: boolean;
+  readonly showDeckMap: boolean;
   readonly deckHeaderButtons: Readonly<Record<DeckHeaderButton, boolean>>;
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
 }
@@ -179,6 +180,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
+  showDeckMap: true,
   deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
 };
@@ -310,6 +312,10 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
         : DEFAULT_SETTINGS.showTitleInDeck,
+    showDeckMap:
+      typeof source.showDeckMap === "boolean"
+        ? source.showDeckMap
+        : DEFAULT_SETTINGS.showDeckMap,
     deckHeaderButtons: normalizeBooleanRecord(
       source.deckHeaderButtons,
       DEFAULT_DECK_HEADER_BUTTONS,

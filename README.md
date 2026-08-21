@@ -108,6 +108,8 @@ longer exist.
   footers.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
+- A subtle ordinal Deck map with one dot per filed card, accent-coloured
+  bookmarks, section initials, and click navigation to exact file paths.
 - Browser-style session history for filed links, entry points, and bookmarks.
 - Persistent named address-level entry points and one persistent bookmark per
   filed file.
@@ -148,6 +150,12 @@ Titles use the filename by default. They may instead use `title`, or another
 configured top-level frontmatter property, with a filename fallback for missing,
 blank, or non-text values. Slipbox card titles are hidden by default. Visible
 titles are centred between the left-aligned address and right-aligned actions.
+
+`Show Deck map` is enabled by default. The map derives card and bookmark
+positions from the complete configured Deck order and exact file paths. Click a
+dot to jump to that card; the active card is a grey bar, bookmarked cards use
+the accent colour, and unobtrusive initials mark changes in the first address
+character. Disabling it removes the overlay.
 
 Header-button settings affect presentation only. Hidden actions remain
 available through commands, Slipbox shortcuts, and card context menus.
@@ -216,7 +224,8 @@ The pure TypeScript domain in `src/address-order.ts` exports
 are compared as significant digit strings, so they are not bounded by
 JavaScript's numeric range. Pure address, metadata, preview, working-pile, and
 Canvas layout APIs are exported from `src/index.ts` and tested independently of
-Obsidian.
+Obsidian. The Deck-map domain similarly exports its coordinate, exact-path,
+click-target, and address-section helpers for independent testing.
 
 This experiment removes the former structured-address parser and automatic
 address-generation public API. That is a breaking package API change. It also

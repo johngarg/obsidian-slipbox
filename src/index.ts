@@ -34,6 +34,13 @@ export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
+  buildDeckMapModel,
+  buildDeckMapSectionMarkers,
+  deckMapCoordinate,
+  deckMapIndexAtOffset,
+  visibleDeckMapSectionMarkers,
+} from "./deck-map.js";
+export {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
@@ -140,6 +147,12 @@ export type {
 } from "./tray-state.js";
 export type { DeskCardState } from "./desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
+export type {
+  DeckMapMarker,
+  DeckMapModel,
+  DeckMapSectionCard,
+  DeckMapSectionMarker,
+} from "./deck-map.js";
 export type {
   CardSize,
   DeckAction,

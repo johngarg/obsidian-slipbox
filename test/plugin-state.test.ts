@@ -98,6 +98,7 @@ describe("normalizePluginData", () => {
     assert.equal(data.schemaVersion, 5);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.equal(data.settings.deckOrdering, "natural");
+    assert.equal(data.settings.showDeckMap, true);
     assert.deepEqual(data.state.entryPoints, [{ name: "Start", address: "1/1" }]);
     assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
     assert.deepEqual(data.state.legacyDeskCards, [
@@ -115,6 +116,7 @@ describe("normalizePluginData", () => {
         titleProperty: "name",
         newCardFolder: "Cards",
         showTitleInDeck: true,
+        showDeckMap: false,
       },
       state: {
         entryPoints: [],
@@ -126,6 +128,7 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.titleProperty, "name");
     assert.equal(data.settings.newCardFolder, "Cards");
     assert.equal(data.settings.showTitleInDeck, true);
+    assert.equal(data.settings.showDeckMap, false);
     assert.equal(data.settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(data.settings.useTemplatesForNewNotes, false);
     assert.equal(data.settings.mainCardSize, "medium");

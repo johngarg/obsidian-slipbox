@@ -317,3 +317,13 @@ npm run check
 `npm run build` produces `main.js`. The installable plugin consists of
 `manifest.json`, `main.js`, and `styles.css`. Tests use Node's built-in runner,
 and strict TypeScript checks the complete plugin.
+
+For repeatable large-vault profiling, generate a standalone synthetic vault:
+
+```sh
+npm run generate:scale-vault -- --notes 25000 --output /tmp/SlipboxScaleVault
+```
+
+The generator refuses to write into a non-empty directory, installs the current
+plugin bundle into the fixture, and creates a deterministic mix of filed cards,
+unfiled cards, ordinary notes, resolved-link traffic, and a high-backlink hub.

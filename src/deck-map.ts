@@ -37,6 +37,40 @@ export function deckMapCoordinate(
   return cardCount === 1 ? 0.5 : index / (cardCount - 1);
 }
 
+/**
+ * Select a bounded, evenly distributed set of ordinal markers for the map.
+ *
+ * Once there are more cards than useful horizontal pixels, rendering one DOM
+ * node per card adds memory and layout work without adding visible detail.
+ * Active cards and bookmarks are rendered separately at their exact positions.
+ */
+export function sampleDeckMapIndices(
+  cardCount: number,
+  markerBudget: number,
+): readonly number[] {
+  if (
+    !Number.isInteger(cardCount) ||
+    !Number.isInteger(markerBudget) ||
+    cardCount <= 0 ||
+    markerBudget <= 0
+  ) {
+    return [];
+  }
+
+  const sampleCount = Math.min(cardCount, markerBudget);
+  if (sampleCount === cardCount) {
+    return Array.from({ length: cardCount }, (_, index) => index);
+  }
+  if (sampleCount === 1) {
+    return [Math.floor((cardCount - 1) / 2)];
+  }
+
+  return Array.from(
+    { length: sampleCount },
+    (_, index) => Math.round(index * (cardCount - 1) / (sampleCount - 1)),
+  );
+}
+
 export function buildDeckMapModel(
   orderedFiledPaths: readonly string[],
   activePath: string | null,

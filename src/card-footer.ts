@@ -6,7 +6,7 @@ import {
   type WorkspaceLeaf,
 } from "obsidian";
 
-import { fitBacklinkPrefix } from "./backlinks.js";
+import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { trayToggleLabel } from "./deck-actions.js";
 import type { FiledCard } from "./card-index.js";
 
@@ -38,6 +38,8 @@ interface RenderedFooter extends CardFooterRenderOptions {
   interactive: boolean;
   fitKey: string | null;
 }
+
+const BACKLINK_MEASUREMENT_LIMIT = 64;
 
 /** Shared, view-agnostic renderer for the fixed card backlink footer. */
 export class CardFooterManager {
@@ -77,12 +79,14 @@ export class CardFooterManager {
         cls: "slipbox-card-footer-measure",
         attr: { "aria-hidden": "true" },
       });
-      const measureItems = options.backlinks.map((backlink) =>
+      const measureItems = options.backlinks
+        .slice(0, BACKLINK_MEASUREMENT_LIMIT)
+        .map((backlink) =>
         measure.createSpan({
           cls: "slipbox-card-backlink",
           text: backlink.address,
         }),
-      );
+        );
       const measureSeparator = measure.createSpan({
         cls: "slipbox-card-backlink-separator",
         text: "·",
@@ -179,9 +183,10 @@ export class CardFooterManager {
       return;
     }
 
-    const fit = fitBacklinkPrefix(
+    const fit = fitMeasuredBacklinkPrefix(
       content.clientWidth,
       measureItems.map((item) => item.getBoundingClientRect().width),
+      entry.backlinks.length,
       measureSeparator.getBoundingClientRect().width,
       (hiddenCount) => {
         measureOverflow.setText(`+${hiddenCount}`);

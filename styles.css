@@ -130,6 +130,10 @@
   transform: translate(-50%, -50%);
 }
 
+.slipbox-deck-map-marker.is-hidden {
+  display: none;
+}
+
 .slipbox-deck-map-marker.is-bookmarked {
   width: 4px;
   height: 4px;

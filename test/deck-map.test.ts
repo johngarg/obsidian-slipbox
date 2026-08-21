@@ -6,6 +6,7 @@ import {
   buildDeckMapSectionMarkers,
   deckMapCoordinate,
   deckMapIndexAtOffset,
+  sampleDeckMapIndices,
   visibleDeckMapSectionMarkers,
 } from "../src/deck-map.js";
 
@@ -126,5 +127,14 @@ describe("Deck map", () => {
     assert.equal(deckMapIndexAtOffset(120, 100, 5), 4);
     assert.equal(deckMapIndexAtOffset(20, 100, 1), 0);
     assert.equal(deckMapIndexAtOffset(0, 0, 5), null);
+  });
+
+  test("bounds dense map markers while retaining evenly spaced endpoints", () => {
+    assert.deepEqual(sampleDeckMapIndices(5, 10), [0, 1, 2, 3, 4]);
+    assert.deepEqual(sampleDeckMapIndices(10_000, 5), [0, 2500, 5000, 7499, 9999]);
+    assert.equal(sampleDeckMapIndices(100_000, 512).length, 512);
+    assert.deepEqual(sampleDeckMapIndices(10, 1), [4]);
+    assert.deepEqual(sampleDeckMapIndices(0, 10), []);
+    assert.deepEqual(sampleDeckMapIndices(10, 0), []);
   });
 });

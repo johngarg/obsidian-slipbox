@@ -414,29 +414,28 @@ function indexFiledBacklinks(filed, resolvedLinks) {
   }
   return sourcesByTarget;
 }
-function fitBacklinkPrefix(availableWidth, itemWidths, separatorWidth, overflowWidth) {
+function fitMeasuredBacklinkPrefix(availableWidth, itemWidths, totalCount, separatorWidth, overflowWidth) {
   const widths = itemWidths.map((width) => Math.max(0, width));
   const available = Math.max(0, availableWidth);
   const separator = Math.max(0, separatorWidth);
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + separator * Math.max(0, widths.length - 1);
-  if (totalWidth <= available) {
-    return { visibleCount: widths.length, hiddenCount: 0 };
-  }
-  let prefixWidth = totalWidth;
-  for (let visibleCount = widths.length - 1; visibleCount >= 0; visibleCount -= 1) {
-    const removedIndex = visibleCount;
-    const removedWidth = widths[removedIndex] ?? 0;
-    prefixWidth -= removedWidth;
-    if (visibleCount > 0) {
-      prefixWidth -= separator;
-    }
-    const hiddenCount = widths.length - visibleCount;
-    const widthWithOverflow = prefixWidth + (visibleCount > 0 ? separator : 0) + Math.max(0, overflowWidth(hiddenCount));
+  const count = Number.isInteger(totalCount) ? Math.max(widths.length, totalCount) : widths.length;
+  let bestVisibleCount = 0;
+  let prefixWidth = 0;
+  for (let visibleCount = 0; visibleCount <= widths.length; visibleCount += 1) {
+    const hiddenCount = count - visibleCount;
+    const widthWithOverflow = prefixWidth + (hiddenCount > 0 && visibleCount > 0 ? separator : 0) + (hiddenCount > 0 ? Math.max(0, overflowWidth(hiddenCount)) : 0);
     if (widthWithOverflow <= available) {
-      return { visibleCount, hiddenCount };
+      bestVisibleCount = visibleCount;
+    }
+    const nextWidth = widths[visibleCount];
+    if (nextWidth !== void 0) {
+      prefixWidth += (visibleCount > 0 ? separator : 0) + nextWidth;
     }
   }
-  return { visibleCount: 0, hiddenCount: widths.length };
+  return {
+    visibleCount: bestVisibleCount,
+    hiddenCount: count - bestVisibleCount
+  };
 }
 
 // src/deck-actions.ts
@@ -483,6 +482,7 @@ function canRunDeckAction(action, context) {
 }
 
 // src/card-footer.ts
+var BACKLINK_MEASUREMENT_LIMIT = 64;
 var CardFooterManager = class {
   constructor(environment) {
     this.environment = environment;
@@ -518,7 +518,7 @@ var CardFooterManager = class {
         cls: "slipbox-card-footer-measure",
         attr: { "aria-hidden": "true" }
       });
-      const measureItems = options.backlinks.map(
+      const measureItems = options.backlinks.slice(0, BACKLINK_MEASUREMENT_LIMIT).map(
         (backlink) => measure.createSpan({
           cls: "slipbox-card-backlink",
           text: backlink.address
@@ -608,9 +608,10 @@ var CardFooterManager = class {
     if (content === null || measureSeparator === null || measureOverflow === null || content.clientWidth <= 0) {
       return;
     }
-    const fit = fitBacklinkPrefix(
+    const fit = fitMeasuredBacklinkPrefix(
       content.clientWidth,
       measureItems.map((item) => item.getBoundingClientRect().width),
+      entry.backlinks.length,
       measureSeparator.getBoundingClientRect().width,
       (hiddenCount) => {
         measureOverflow.setText(`+${hiddenCount}`);
@@ -2815,19 +2816,21 @@ function deckMapCoordinate(index, cardCount) {
   }
   return cardCount === 1 ? 0.5 : index / (cardCount - 1);
 }
-function buildDeckMapModel(orderedFiledPaths, activePath, bookmarkedPaths) {
-  const cardCount = orderedFiledPaths.length;
-  const bookmarked = new Set(bookmarkedPaths);
-  const markers = orderedFiledPaths.map((path, index) => ({
-    path,
-    ordinal: index + 1,
-    position: deckMapCoordinate(index, cardCount) ?? 0
-  }));
-  return {
-    cardCount,
-    active: activePath === null ? null : markers.find((marker) => marker.path === activePath) ?? null,
-    bookmarks: markers.filter((marker) => bookmarked.has(marker.path))
-  };
+function sampleDeckMapIndices(cardCount, markerBudget) {
+  if (!Number.isInteger(cardCount) || !Number.isInteger(markerBudget) || cardCount <= 0 || markerBudget <= 0) {
+    return [];
+  }
+  const sampleCount = Math.min(cardCount, markerBudget);
+  if (sampleCount === cardCount) {
+    return Array.from({ length: cardCount }, (_, index) => index);
+  }
+  if (sampleCount === 1) {
+    return [Math.floor((cardCount - 1) / 2)];
+  }
+  return Array.from(
+    { length: sampleCount },
+    (_, index) => Math.round(index * (cardCount - 1) / (sampleCount - 1))
+  );
 }
 function buildDeckMapSectionMarkers(orderedFiledCards) {
   const sections = [];
@@ -3262,6 +3265,7 @@ var LAYOUT_MEASUREMENT_RETRIES = 2;
 var SPACE_RECENTER_DURATION_MS = 180;
 var VIEWPORT_CENTER_DURATION_MS = 180;
 var DECK_MAP_SECTION_LABEL_SPACING = 14;
+var DECK_MAP_MARKER_BUDGET = 512;
 var COMMAND_FEEDBACK_DURATION_MS = 1800;
 var PENDING_COMMAND_ACTIONS = /* @__PURE__ */ new Set([
   "find-address-forward",
@@ -3333,9 +3337,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   deckMapEl = null;
   deckMapRailEl = null;
   deckMapSectionLayerEl = null;
-  deckMapMarkerEls = /* @__PURE__ */ new Map();
+  deckMapBookmarkLayerEl = null;
+  deckMapActiveMarkerEl = null;
+  deckMapBookmarkMarkerEls = /* @__PURE__ */ new Map();
   deckMapSections = [];
-  deckMapActivePath = null;
   deckMapBookmarkCount = 0;
   resizeObserver = null;
   positioningFrame = null;
@@ -3515,9 +3520,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
-    this.deckMapMarkerEls.clear();
+    this.deckMapBookmarkLayerEl = null;
+    this.deckMapActiveMarkerEl = null;
+    this.deckMapBookmarkMarkerEls.clear();
     this.deckMapSections = [];
-    this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
     this.pendingCommandEl = null;
     this.pendingCommandStartEvent = null;
@@ -4328,9 +4334,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
-    this.deckMapMarkerEls.clear();
+    this.deckMapBookmarkLayerEl = null;
+    this.deckMapActiveMarkerEl = null;
+    this.deckMapBookmarkMarkerEls.clear();
     this.deckMapSections = [];
-    this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
     this.pendingCommandEl = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
@@ -4476,7 +4483,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     });
     this.deckMapEl = map;
     this.deckMapRailEl = rail;
-    for (const [index, card] of filed.entries()) {
+    for (const index of sampleDeckMapIndices(
+      filed.length,
+      DECK_MAP_MARKER_BUDGET
+    )) {
       const marker = markerLayer.createSpan({
         cls: "slipbox-deck-map-marker"
       });
@@ -4484,8 +4494,16 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         "--slipbox-deck-map-position",
         String(deckMapCoordinate(index, filed.length) ?? 0)
       );
-      this.deckMapMarkerEls.set(card.path, marker);
     }
+    this.deckMapBookmarkLayerEl = rail.createDiv({
+      cls: "slipbox-deck-map-markers"
+    });
+    const activeLayer = rail.createDiv({
+      cls: "slipbox-deck-map-markers"
+    });
+    this.deckMapActiveMarkerEl = activeLayer.createSpan({
+      cls: "slipbox-deck-map-marker is-active is-hidden"
+    });
     this.deckMapSections = buildDeckMapSectionMarkers(filed);
     this.updateDeckMapBookmarks(this.bookmarkedPaths());
     this.updateDeckMapSectionLabels();
@@ -4633,21 +4651,31 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     void this.plugin.updateTray(next);
   }
   updateDeckMapBookmarks(bookmarkedPaths) {
-    if (this.deckMapEl === null) {
+    const layer = this.deckMapBookmarkLayerEl;
+    if (this.deckMapEl === null || layer === null) {
       return;
     }
-    const model = buildDeckMapModel(
-      this.plugin.index.snapshot.filed.map((card) => card.path),
-      this.activePath,
-      bookmarkedPaths
-    );
-    const resolvedBookmarks = new Set(
-      model.bookmarks.map((marker) => marker.path)
-    );
-    for (const [path, marker] of this.deckMapMarkerEls) {
-      marker.toggleClass("is-bookmarked", resolvedBookmarks.has(path));
+    for (const marker of this.deckMapBookmarkMarkerEls.values()) {
+      marker.remove();
     }
-    this.deckMapBookmarkCount = model.bookmarks.length;
+    this.deckMapBookmarkMarkerEls.clear();
+    const cardCount = this.plugin.index.snapshot.filed.length;
+    for (const path of bookmarkedPaths) {
+      const index = this.plugin.index.filedIndexForPath(path);
+      const position = deckMapCoordinate(index, cardCount);
+      if (position === null) {
+        continue;
+      }
+      const marker = layer.createSpan({
+        cls: "slipbox-deck-map-marker is-bookmarked"
+      });
+      marker.style.setProperty(
+        "--slipbox-deck-map-position",
+        String(position)
+      );
+      this.deckMapBookmarkMarkerEls.set(path, marker);
+    }
+    this.deckMapBookmarkCount = this.deckMapBookmarkMarkerEls.size;
     this.updateDeckMapActiveUi();
   }
   updateDeckMapSectionLabels() {
@@ -4681,12 +4709,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const cardCount = this.plugin.index.snapshot.filed.length;
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const position = deckMapCoordinate(activeIndex, cardCount);
+    const activeMarker = this.deckMapActiveMarkerEl;
     const bookmarkLabel = `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
-    if (this.deckMapActivePath !== null) {
-      this.deckMapMarkerEls.get(this.deckMapActivePath)?.removeClass("is-active");
-    }
     if (position === null) {
-      this.deckMapActivePath = null;
+      if (activeMarker !== null) {
+        activeMarker.addClass("is-hidden");
+      }
       map.removeAttribute("aria-valuenow");
       map.setAttr(
         "aria-valuetext",
@@ -4694,9 +4722,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       );
       return;
     }
-    this.deckMapActivePath = this.activePath;
-    if (this.activePath !== null) {
-      this.deckMapMarkerEls.get(this.activePath)?.addClass("is-active");
+    if (activeMarker !== null) {
+      activeMarker.removeClass("is-hidden");
+      activeMarker.style.setProperty(
+        "--slipbox-deck-map-position",
+        String(position)
+      );
     }
     const summary = `Card ${activeIndex + 1} of ${cardCount}; ${bookmarkLabel}`;
     map.setAttr("aria-valuenow", String(activeIndex + 1));

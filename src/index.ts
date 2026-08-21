@@ -56,6 +56,7 @@ export {
   buildDeckMapSectionMarkers,
   deckMapCoordinate,
   deckMapIndexAtOffset,
+  sampleDeckMapIndices,
   visibleDeckMapSectionMarkers,
 } from "./deck-map.js";
 export {
@@ -71,6 +72,7 @@ export {
 } from "./settings.js";
 export {
   fitBacklinkPrefix,
+  fitMeasuredBacklinkPrefix,
   indexFiledBacklinks,
 } from "./backlinks.js";
 

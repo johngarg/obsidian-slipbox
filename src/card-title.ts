@@ -1,5 +1,12 @@
 import type { SlipboxSettings } from "./settings.js";
 
+export function cardHeaderTitle(
+  resolvedTitle: string,
+  showTitle: boolean,
+): string | null {
+  return showTitle ? resolvedTitle : null;
+}
+
 export function resolveCardTitle(
   basename: string,
   frontmatter: Readonly<Record<string, unknown>> | undefined,

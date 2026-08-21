@@ -84,7 +84,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Show title in Slipbox card headers")
-      .setDesc("Centre the title between the address and card buttons.")
+      .setDesc("Show resolved titles beside addresses in Deck and tray card headers.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.showTitleInDeck)

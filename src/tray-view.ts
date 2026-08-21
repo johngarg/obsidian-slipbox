@@ -9,6 +9,7 @@ import {
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
+import { cardHeaderTitle } from "./card-title.js";
 import {
   attachUnfiledAddressFiling,
   renderInlineFilingEditor,
@@ -372,7 +373,16 @@ export class TrayRenderer {
         void this.actions.beginFiling(file);
       });
     }
-    identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
+    const headerTitle = cardHeaderTitle(
+      title,
+      this.plugin.settings.showTitleInDeck,
+    );
+    if (headerTitle !== null) {
+      identity.createSpan({
+        cls: "slipbox-tray-card-title",
+        text: headerTitle,
+      });
+    }
     const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
     if (!isFilingSource) {
       if (filed === undefined) {

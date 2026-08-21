@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { resolveCardTitle } from "../src/card-title.js";
+import { cardHeaderTitle, resolveCardTitle } from "../src/card-title.js";
 
 describe("resolveCardTitle", () => {
+  test("uses the same title-visibility setting for every card header", () => {
+    assert.equal(cardHeaderTitle("Systems", true), "Systems");
+    assert.equal(cardHeaderTitle("Systems", false), null);
+  });
+
   test("uses the filename by default", () => {
     assert.equal(
       resolveCardTitle("20260820T010101", { title: "Systems" }, {

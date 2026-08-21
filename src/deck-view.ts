@@ -24,6 +24,7 @@ import {
 import { NavigationHistory } from "./navigation-history.js";
 import type { FiledCard } from "./card-index.js";
 import { CardFooterManager } from "./card-footer.js";
+import { cardHeaderTitle } from "./card-title.js";
 import { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 import { MAX_SPREAD, MIN_SPREAD } from "./plugin-state.js";
 import {
@@ -755,8 +756,15 @@ export class DeckView extends ItemView {
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
       identity.createSpan({ cls: "slipbox-card-address", text: card.address });
-      if (this.plugin.settings.showTitleInDeck) {
-        identity.createSpan({ cls: "slipbox-card-header-title", text: title });
+      const headerTitle = cardHeaderTitle(
+        title,
+        this.plugin.settings.showTitleInDeck,
+      );
+      if (headerTitle !== null) {
+        identity.createSpan({
+          cls: "slipbox-card-header-title",
+          text: headerTitle,
+        });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
       if (this.plugin.settings.deckHeaderButtons["open-note"]) {

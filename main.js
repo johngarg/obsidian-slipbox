@@ -771,6 +771,18 @@ var CardFooterManager = class {
   }
 };
 
+// src/card-title.ts
+function cardHeaderTitle(resolvedTitle, showTitle) {
+  return showTitle ? resolvedTitle : null;
+}
+function resolveCardTitle(basename, frontmatter, settings) {
+  if (settings.titleSource !== "frontmatter") {
+    return basename;
+  }
+  const value = frontmatter?.[settings.titleProperty];
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : basename;
+}
+
 // src/desk-state.ts
 var DESK_WIDTH = 2400;
 var DESK_HEIGHT = 1600;
@@ -1837,7 +1849,16 @@ var TrayRenderer = class {
         void this.actions.beginFiling(file);
       });
     }
-    identity.createSpan({ cls: "slipbox-tray-card-title", text: title });
+    const headerTitle = cardHeaderTitle(
+      title,
+      this.plugin.settings.showTitleInDeck
+    );
+    if (headerTitle !== null) {
+      identity.createSpan({
+        cls: "slipbox-tray-card-title",
+        text: headerTitle
+      });
+    }
     const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
     if (!isFilingSource) {
       if (filed === void 0) {
@@ -2963,8 +2984,15 @@ var DeckView = class extends import_obsidian3.ItemView {
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
       identity.createSpan({ cls: "slipbox-card-address", text: card.address });
-      if (this.plugin.settings.showTitleInDeck) {
-        identity.createSpan({ cls: "slipbox-card-header-title", text: title });
+      const headerTitle = cardHeaderTitle(
+        title,
+        this.plugin.settings.showTitleInDeck
+      );
+      if (headerTitle !== null) {
+        identity.createSpan({
+          cls: "slipbox-card-header-title",
+          text: headerTitle
+        });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
       if (this.plugin.settings.deckHeaderButtons["open-note"]) {
@@ -4250,15 +4278,6 @@ function newCardTitlePlaceholder(timestamp, titleSource) {
   return titleSource === "frontmatter" ? "Leave blank for an empty title" : `Leave blank to use ${timestamp} as the filename`;
 }
 
-// src/card-title.ts
-function resolveCardTitle(basename, frontmatter, settings) {
-  if (settings.titleSource !== "frontmatter") {
-    return basename;
-  }
-  const value = frontmatter?.[settings.titleProperty];
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : basename;
-}
-
 // src/settings-tab.ts
 var import_obsidian5 = require("obsidian");
 var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
@@ -4297,7 +4316,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         queueCommit();
       });
     });
-    new import_obsidian5.Setting(containerEl).setName("Show title in Slipbox card headers").setDesc("Centre the title between the address and card buttons.").addToggle((toggle) => {
+    new import_obsidian5.Setting(containerEl).setName("Show title in Slipbox card headers").setDesc("Show resolved titles beside addresses in Deck and tray card headers.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDeck: value

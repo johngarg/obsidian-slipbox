@@ -31,7 +31,6 @@ export type DeckAction =
   | "pull-into-pile"
   | "toggle-toolbar"
   | "toggle-deck-map"
-  | "entry-points"
   | "bookmarks"
   | "problems"
   | "confirm-filing"
@@ -171,12 +170,6 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     defaultBindings: [binding("m")],
   },
   {
-    id: "entry-points",
-    label: "Manage entry points",
-    repeatable: false,
-    defaultBindings: [],
-  },
-  {
     id: "bookmarks",
     label: "Manage bookmarks",
     repeatable: false,
@@ -251,7 +244,6 @@ const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKe
   "toggle-bookmark": [binding("b")],
   back: [],
   forward: [],
-  "entry-points": [],
   bookmarks: [],
   problems: [],
   "confirm-filing": [],
@@ -519,9 +511,12 @@ export function settingsForPersistence(
   const rawButtons = isRecord(raw.deckHeaderButtons)
     ? raw.deckHeaderButtons
     : {};
-  const rawKeybindings = isRecord(raw.deckKeybindings)
+  const rawKeybindingsSource = isRecord(raw.deckKeybindings)
     ? raw.deckKeybindings
     : {};
+  const rawKeybindings = Object.fromEntries(
+    Object.entries(rawKeybindingsSource).filter(([key]) => key !== "entry-points"),
+  );
   return {
     ...raw,
     ...settings,

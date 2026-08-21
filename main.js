@@ -471,7 +471,6 @@ function canRunDeckAction(action, context) {
       return context.filing;
     case "cancel-filing":
       return context.filing;
-    case "entry-points":
     case "bookmarks":
     case "toggle-toolbar":
     case "toggle-deck-map":
@@ -981,12 +980,6 @@ var DECK_ACTION_DEFINITIONS = [
     defaultBindings: [binding("m")]
   },
   {
-    id: "entry-points",
-    label: "Manage entry points",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
     id: "bookmarks",
     label: "Manage bookmarks",
     repeatable: false,
@@ -1040,7 +1033,6 @@ var PREVIOUS_DEFAULT_DECK_KEYBINDINGS = {
   "toggle-bookmark": [binding("b")],
   back: [],
   forward: [],
-  "entry-points": [],
   bookmarks: [],
   problems: [],
   "confirm-filing": [],
@@ -1236,7 +1228,10 @@ function normalizeSettings(value) {
 function settingsForPersistence(rawValue, settings) {
   const raw = isRecord3(rawValue) ? rawValue : {};
   const rawButtons = isRecord3(raw.deckHeaderButtons) ? raw.deckHeaderButtons : {};
-  const rawKeybindings = isRecord3(raw.deckKeybindings) ? raw.deckKeybindings : {};
+  const rawKeybindingsSource = isRecord3(raw.deckKeybindings) ? raw.deckKeybindings : {};
+  const rawKeybindings = Object.fromEntries(
+    Object.entries(rawKeybindingsSource).filter(([key]) => key !== "entry-points")
+  );
   return {
     ...raw,
     ...settings,
@@ -1267,7 +1262,6 @@ var DEFAULT_SPREAD = 0.58;
 var MIN_SPREAD = 0.18;
 var MAX_SPREAD = 1.12;
 var DEFAULT_STATE = {
-  entryPoints: [],
   bookmarks: [],
   spread: DEFAULT_SPREAD
 };
@@ -1279,26 +1273,24 @@ var DEFAULT_DATA = {
 function isRecord4(value) {
   return typeof value === "object" && value !== null;
 }
+function hasRemovedEntryPointData(value) {
+  if (!isRecord4(value)) {
+    return false;
+  }
+  const state = isRecord4(value.state) ? value.state : value;
+  const settings = isRecord4(value.settings) ? value.settings : {};
+  const keybindings = isRecord4(settings.deckKeybindings) ? settings.deckKeybindings : {};
+  return Object.prototype.hasOwnProperty.call(state, "entryPoints") || Object.prototype.hasOwnProperty.call(keybindings, "entry-points");
+}
 function normalizePluginState(value) {
   if (!isRecord4(value)) {
     return DEFAULT_STATE;
   }
-  const entryPoints = Array.isArray(value.entryPoints) ? value.entryPoints.flatMap((entry) => {
-    if (!isRecord4(entry)) {
-      return [];
-    }
-    const address = typeof entry.address === "string" ? entry.address : entry.id;
-    if (typeof entry.name !== "string" || entry.name.trim() === "" || typeof address !== "string" || !validateAddress(address).valid) {
-      return [];
-    }
-    return [{ name: entry.name.trim(), address }];
-  }) : [];
   const rawSpread = typeof value.spread === "number" && Number.isFinite(value.spread) ? value.spread : DEFAULT_SPREAD;
   const legacyDeskCards = normalizeDeskCards(
     Object.prototype.hasOwnProperty.call(value, "legacyDeskCards") ? value.legacyDeskCards : value.deskCards
   );
   return {
-    entryPoints,
     bookmarks: normalizeBookmarks(value.bookmarks),
     ...legacyDeskCards.length > 0 ? { legacyDeskCards } : {},
     spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread))
@@ -3106,9 +3098,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         );
         this.applyChromeVisibility();
         break;
-      case "entry-points":
-        this.plugin.showEntryPoints(this);
-        break;
       case "bookmarks":
         this.plugin.showBookmarks(this);
         break;
@@ -3197,15 +3186,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     await this.navigateToPath(path);
     this.updateHistoryControls();
   }
-  /** Intentional address-level navigation used by entry points. */
-  async jumpToAddress(address) {
-    const card = this.plugin.index.firstFiledAtAddress(address);
-    if (card === void 0) {
-      new import_obsidian3.Notice(`Card address ${address} is missing or invalid.`);
-      return;
-    }
-    await this.jumpToPath(card.path);
-  }
   async goBack() {
     const path = this.history.back();
     if (path === void 0) {
@@ -3261,22 +3241,13 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     }
     return true;
   }
-  async addCurrentAsEntryPoint() {
-    const active = this.activeCard;
-    if (active === null) {
-      new import_obsidian3.Notice("There is no active filed card.");
-      return;
-    }
-    await this.plugin.addEntryPoint(active.address);
-  }
   chooseAvailableActiveCard() {
     const filed = this.plugin.index.snapshot.filed;
     const availablePaths = new Set(filed.map((card) => card.path));
     if (this.activePath !== null && availablePaths.has(this.activePath)) {
       return;
     }
-    const firstEntryPoint = this.plugin.state.entryPoints.map((entry) => this.plugin.index.firstFiledAtAddress(entry.address)).find((card) => card !== void 0);
-    this.activePath = firstEntryPoint?.path ?? filed[0]?.path ?? null;
+    this.activePath = filed[0]?.path ?? null;
   }
   async renderDeck(focusFilingInput = true) {
     const version = ++this.renderVersion;
@@ -3348,24 +3319,21 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     identity.createSpan({ text: "Slipbox" });
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
-      text: "\u2190 back",
-      attr: { type: "button" }
+      cls: "slipbox-icon-button",
+      attr: { type: "button", "aria-label": "Back" }
     });
+    (0, import_obsidian3.setIcon)(back, "arrow-left");
     back.addEventListener("click", () => this.runAction("back"));
     this.backButtonEl = back;
     const forward = history.createEl("button", {
-      text: "Forward \u2192",
-      attr: { type: "button" }
+      cls: "slipbox-icon-button",
+      attr: { type: "button", "aria-label": "Forward" }
     });
+    (0, import_obsidian3.setIcon)(forward, "arrow-right");
     forward.addEventListener("click", () => this.runAction("forward"));
     this.forwardButtonEl = forward;
     this.updateHistoryControls();
     const controls = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-toolbar-main" });
-    const entries = controls.createEl("button", {
-      text: "Entry points",
-      attr: { type: "button" }
-    });
-    entries.addEventListener("click", () => this.runAction("entry-points"));
     const bookmarks = controls.createEl("button", {
       attr: { type: "button" },
       cls: "slipbox-bookmarks-button"
@@ -4828,11 +4796,11 @@ var BookmarksModal = class extends import_obsidian4.Modal {
       const available = this.actions.isAvailable(bookmark.path);
       const row = list.createDiv({ cls: "slipbox-list-row slipbox-bookmark-row" });
       const visit = row.createEl("button", {
-        cls: "slipbox-entry-visit",
+        cls: "slipbox-file-visit",
         attr: { type: "button" }
       });
       visit.createSpan({
-        cls: "slipbox-entry-name",
+        cls: "slipbox-list-label",
         text: available ? this.actions.label(bookmark.path) : `${bookmark.path} \xB7 missing`
       });
       visit.disabled = !available;
@@ -4860,88 +4828,6 @@ var BookmarksModal = class extends import_obsidian4.Modal {
   currentIsListed() {
     return this.bookmarks.some(
       (bookmark) => bookmark.path === this.actions.currentPath
-    );
-  }
-};
-var EntryPointsModal = class extends import_obsidian4.Modal {
-  constructor(app, entryPoints, actions) {
-    super(app);
-    this.actions = actions;
-    this.entryPoints = [...entryPoints];
-  }
-  entryPoints;
-  listEl = null;
-  addButton = null;
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.addClass("slipbox-modal");
-    contentEl.createEl("h2", { text: "Entry points" });
-    this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
-    this.renderList();
-    this.addButton = renderCurrentCardAddAction(contentEl, {
-      label: "+ add current card as entry point",
-      currentAddress: this.actions.currentAddress,
-      isCurrentListed: this.currentIsListed(),
-      addCurrent: () => this.actions.addCurrent(),
-      onAdded: () => this.close()
-    });
-  }
-  onClose() {
-    this.contentEl.empty();
-    this.listEl = null;
-    this.addButton = null;
-  }
-  renderList() {
-    const list = this.listEl;
-    if (list === null) {
-      return;
-    }
-    list.empty();
-    if (this.entryPoints.length === 0) {
-      list.createEl("p", {
-        cls: "slipbox-empty-copy",
-        text: "No entry points yet."
-      });
-    }
-    this.entryPoints.forEach((entry, index) => {
-      const row = list.createDiv({ cls: "slipbox-list-row" });
-      const available = this.actions.isAvailable(entry.address);
-      const visit = row.createEl("button", {
-        cls: "slipbox-entry-visit",
-        attr: { type: "button" }
-      });
-      visit.createSpan({ cls: "slipbox-entry-name", text: entry.name });
-      visit.createSpan({ cls: "slipbox-entry-address", text: entry.address });
-      if (!available) {
-        visit.disabled = true;
-        visit.setAttr("aria-label", "The filed card is missing or invalid");
-      }
-      visit.addEventListener("click", () => {
-        this.actions.visit(entry.address);
-        this.close();
-      });
-      const rename = iconButton(row, "pencil", `Rename ${entry.name}`);
-      rename.addEventListener("click", () => {
-        void this.actions.rename(index).then(() => this.close());
-      });
-      const remove = iconButton(row, "trash-2", `Delete ${entry.name}`);
-      remove.addEventListener("click", () => {
-        remove.disabled = true;
-        void this.actions.remove(index).then(() => {
-          this.entryPoints.splice(index, 1);
-          this.renderList();
-          updateCurrentCardAddAction(
-            this.addButton,
-            this.actions.currentAddress,
-            this.currentIsListed()
-          );
-        });
-      });
-    });
-  }
-  currentIsListed() {
-    return this.entryPoints.some(
-      (entry) => entry.address === this.actions.currentAddress
     );
   }
 };
@@ -5104,7 +4990,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         showTitleInDeck: value
       }));
     });
-    new import_obsidian5.Setting(containerEl).setName("Show Deck toolbar").setDesc("Show the navigation, entry-point, bookmark, and spread controls above the Deck.").addToggle((toggle) => {
+    new import_obsidian5.Setting(containerEl).setName("Show Deck toolbar").setDesc("Show the navigation, bookmark, and spread controls above the Deck.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showDeckToolbar).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showDeckToolbar: value
@@ -5958,6 +5844,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   rawSettings = {};
   async onload() {
     const loadedData = await this.loadData();
+    const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
     const data = normalizePluginData(loadedData);
     this.rawSettings = rawSettingsFromPluginData(loadedData);
     this.settings = data.settings;
@@ -5981,6 +5868,9 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       void this.openDeck();
     });
     this.registerCommands();
+    if (purgeRemovedEntryPoints) {
+      void this.persistState();
+    }
     this.app.workspace.onLayoutReady(() => {
       this.registerIndexEvents();
       void this.initializeAfterLayoutReady();
@@ -6128,17 +6018,6 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
           void this.openMarkdownFile(file);
         }
       }
-    }).open();
-  }
-  showEntryPoints(view) {
-    const entries = this.state.entryPoints;
-    new EntryPointsModal(this.app, entries, {
-      currentAddress: view.activeCard?.address ?? null,
-      isAvailable: (address) => this.index.firstFiledAtAddress(address) !== void 0,
-      visit: (address) => void view.jumpToAddress(address),
-      addCurrent: () => view.addCurrentAsEntryPoint(),
-      rename: (index) => this.renameEntryPoint(index),
-      remove: (index) => this.removeEntryPoint(index)
     }).open();
   }
   showBookmarks(view) {
@@ -6346,30 +6225,6 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   isUnfiledCard(file) {
     return this.cardMetadataState(file) === "unfiled";
   }
-  async addEntryPoint(address) {
-    if (this.index.firstFiledAtAddress(address) === void 0) {
-      new import_obsidian8.Notice(`Card ${address} is not available in Slipbox.`);
-      return;
-    }
-    if (this.state.entryPoints.some((entry) => entry.address === address)) {
-      new import_obsidian8.Notice(`${address} is already an entry point.`);
-      return;
-    }
-    const name = await promptForText(
-      this.app,
-      "Name this entry point",
-      "e.g. Communication"
-    );
-    if (name === null) {
-      return;
-    }
-    this.state = {
-      ...this.state,
-      entryPoints: [...this.state.entryPoints, { name, address }]
-    };
-    await this.persistState();
-    new import_obsidian8.Notice(`Added entry point \u201C${name}\u201D.`);
-  }
   filingPreviewFor(file, address) {
     return createFilingPreview(
       this.index.snapshot.filed,
@@ -6493,25 +6348,6 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
         }
         if (available && file !== null) {
           void this.beginFiling(file);
-        }
-        return available;
-      }
-    });
-    this.addCommand({
-      id: "add-current-card-entry-point",
-      name: "Add current card as entry point",
-      checkCallback: (checking) => {
-        const deckView = this.app.workspace.getActiveViewOfType(DeckView);
-        const deckAddress = deckView?.activeCard?.address;
-        const activeFile = this.app.workspace.getActiveFile();
-        const fileAddress = activeFile === null ? void 0 : this.index.filedByFile(activeFile)?.address;
-        const address = deckAddress ?? fileAddress;
-        const available = address !== void 0;
-        if (checking) {
-          return available;
-        }
-        if (address !== void 0) {
-          void this.addEntryPoint(address);
         }
         return available;
       }
@@ -6694,13 +6530,6 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       "Toggle Deck-map visibility",
       "toggle-deck-map"
     );
-    this.addCommand({
-      id: "manage-entry-points",
-      name: "Manage entry points",
-      callback: () => void this.openDeck().then((view) => {
-        view.runAction("entry-points");
-      })
-    });
     this.addCommand({
       id: "manage-bookmarks",
       name: "Manage bookmarks",
@@ -6987,35 +6816,6 @@ ${frontmatter}---
     this.refreshBookmarkUi();
     await this.persistState();
     new import_obsidian8.Notice(`Deleted bookmark at ${label}.`);
-  }
-  async renameEntryPoint(index) {
-    const entry = this.state.entryPoints[index];
-    if (entry === void 0) {
-      return;
-    }
-    const name = await promptForText(
-      this.app,
-      "Rename entry point",
-      "Entry point name",
-      entry.name
-    );
-    if (name === null) {
-      return;
-    }
-    const entries = [...this.state.entryPoints];
-    entries[index] = { ...entry, name };
-    this.state = { ...this.state, entryPoints: entries };
-    await this.persistState();
-  }
-  async removeEntryPoint(index) {
-    const entries = [...this.state.entryPoints];
-    const removed = entries.splice(index, 1)[0];
-    if (removed === void 0) {
-      return;
-    }
-    this.state = { ...this.state, entryPoints: entries };
-    await this.persistState();
-    new import_obsidian8.Notice(`Deleted entry point \u201C${removed.name}\u201D.`);
   }
   queueIndexRefresh() {
     if (this.filingWriteInProgress) {

@@ -484,9 +484,6 @@ export class DeckView extends ItemView {
         );
         this.applyChromeVisibility();
         break;
-      case "entry-points":
-        this.plugin.showEntryPoints(this);
-        break;
       case "bookmarks":
         this.plugin.showBookmarks(this);
         break;
@@ -586,16 +583,6 @@ export class DeckView extends ItemView {
     this.updateHistoryControls();
   }
 
-  /** Intentional address-level navigation used by entry points. */
-  async jumpToAddress(address: string): Promise<void> {
-    const card = this.plugin.index.firstFiledAtAddress(address);
-    if (card === undefined) {
-      new Notice(`Card address ${address} is missing or invalid.`);
-      return;
-    }
-    await this.jumpToPath(card.path);
-  }
-
   async goBack(): Promise<void> {
     const path = this.history.back();
     if (path === undefined) {
@@ -657,15 +644,6 @@ export class DeckView extends ItemView {
     return true;
   }
 
-  async addCurrentAsEntryPoint(): Promise<void> {
-    const active = this.activeCard;
-    if (active === null) {
-      new Notice("There is no active filed card.");
-      return;
-    }
-    await this.plugin.addEntryPoint(active.address);
-  }
-
   private chooseAvailableActiveCard(): void {
     const filed = this.plugin.index.snapshot.filed;
     const availablePaths = new Set(filed.map((card) => card.path));
@@ -674,10 +652,7 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const firstEntryPoint = this.plugin.state.entryPoints
-      .map((entry) => this.plugin.index.firstFiledAtAddress(entry.address))
-      .find((card) => card !== undefined);
-    this.activePath = firstEntryPoint?.path ?? filed[0]?.path ?? null;
+    this.activePath = filed[0]?.path ?? null;
   }
 
   private async renderDeck(focusFilingInput = true): Promise<void> {
@@ -758,26 +733,22 @@ export class DeckView extends ItemView {
 
     const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
     const back = history.createEl("button", {
-      text: "← back",
-      attr: { type: "button" },
+      cls: "slipbox-icon-button",
+      attr: { type: "button", "aria-label": "Back" },
     });
+    setIcon(back, "arrow-left");
     back.addEventListener("click", () => this.runAction("back"));
     this.backButtonEl = back;
     const forward = history.createEl("button", {
-      text: "Forward →",
-      attr: { type: "button" },
+      cls: "slipbox-icon-button",
+      attr: { type: "button", "aria-label": "Forward" },
     });
+    setIcon(forward, "arrow-right");
     forward.addEventListener("click", () => this.runAction("forward"));
     this.forwardButtonEl = forward;
     this.updateHistoryControls();
 
     const controls = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-toolbar-main" });
-    const entries = controls.createEl("button", {
-      text: "Entry points",
-      attr: { type: "button" },
-    });
-    entries.addEventListener("click", () => this.runAction("entry-points"));
-
     const bookmarks = controls.createEl("button", {
       attr: { type: "button" },
       cls: "slipbox-bookmarks-button",

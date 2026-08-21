@@ -49,7 +49,6 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("problems", unavailable), false);
     assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
-    assert.equal(canRunDeckAction("entry-points", unavailable), true);
     assert.equal(canRunDeckAction("toggle-toolbar", unavailable), true);
     assert.equal(canRunDeckAction("toggle-deck-map", unavailable), true);
   });
@@ -62,6 +61,7 @@ describe("Deck action availability", () => {
     assert.equal(definitions.some((definition) => definition.id === "add-card"), false);
     assert.equal(definitions.some((definition) => definition.id === "new-section"), false);
     assert.equal(definitions.some((definition) => definition.id === "file-here"), false);
+    assert.equal(definitions.some((definition) => definition.id === "entry-points"), false);
     assert.equal(
       definitions.some((definition) =>
         definition.defaultBindings.some((binding) => binding.key === "a")),

@@ -110,9 +110,8 @@ longer exist.
   navigation, and a persistent Spread control.
 - A subtle ordinal Deck map with one dot per filed card, accent-coloured
   bookmarks, section initials, and click navigation to exact file paths.
-- Browser-style session history for filed links, entry points, and bookmarks.
-- Persistent named address-level entry points and one persistent bookmark per
-  filed file.
+- Browser-style session history for filed links and bookmarks.
+- One persistent bookmark per filed file.
 - Card-header and context-menu actions for opening notes, pulling cards out or
   returning them, bookmarking, and deletion.
 - Inline manual filing in the existing working card, with optional real-Deck
@@ -122,7 +121,7 @@ longer exist.
 - Visible malformed-address errors and non-blocking duplicate-address warnings.
 - Windowed Slipbox rendering around the active card rather than the whole vault.
 - `Return` activates the affirmative action in Slipbox prompt and confirmation
-  dialogs, including card creation and bookmark or entry-point edits.
+  dialogs, including card creation and bookmark edits.
 
 Backlinks come from Obsidian's resolved-link graph and are never written to card
 frontmatter or plugin state. Only valid filed source files are shown;
@@ -130,8 +129,6 @@ ordinary notes, unfiled cards, self-links, and unresolved links are excluded.
 
 Bookmarks, navigation history, working piles, backlinks, and direct card actions
 retain exact file paths. File and folder renames rewrite those path references.
-Entry points intentionally retain addresses and select the first matching card
-in deterministic code-unit path order.
 
 ## Settings
 
@@ -152,7 +149,7 @@ blank, or non-text values. Slipbox card titles are hidden by default. Visible
 titles are centred between the left-aligned address and right-aligned actions.
 
 `Show Deck toolbar` is enabled by default. Disabling it hides the navigation,
-entry-point, bookmark, problem, and spread controls above the Deck while leaving
+bookmark, problem, and spread controls above the Deck while leaving
 their commands and shortcuts available.
 
 `Show Deck map` is enabled by default. The map derives card and bookmark

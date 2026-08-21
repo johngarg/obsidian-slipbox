@@ -32,7 +32,6 @@ import { validateAddress } from "./address-order.js";
 import {
   BookmarksModal,
   confirmAction,
-  EntryPointsModal,
   IssuesModal,
   promptForCanvas,
   promptForNewCardTitle,
@@ -49,8 +48,8 @@ import {
   DEFAULT_STATE,
   MAX_SPREAD,
   MIN_SPREAD,
+  hasRemovedEntryPointData,
   normalizePluginData,
-  type EntryPoint,
   type SlipboxPluginState,
 } from "./plugin-state.js";
 import { resolveCardTitle } from "./card-title.js";
@@ -124,6 +123,7 @@ export default class SlipboxPlugin extends Plugin {
 
   async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
+    const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
     const data = normalizePluginData(loadedData);
     this.rawSettings = rawSettingsFromPluginData(loadedData);
     this.settings = data.settings;
@@ -150,6 +150,9 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.registerCommands();
+    if (purgeRemovedEntryPoints) {
+      void this.persistState();
+    }
     this.app.workspace.onLayoutReady(() => {
       this.registerIndexEvents();
       void this.initializeAfterLayoutReady();
@@ -348,19 +351,6 @@ export default class SlipboxPlugin extends Plugin {
           void this.openMarkdownFile(file);
         }
       },
-    }).open();
-  }
-
-  showEntryPoints(view: DeckView): void {
-    const entries = this.state.entryPoints;
-    new EntryPointsModal(this.app, entries, {
-      currentAddress: view.activeCard?.address ?? null,
-      isAvailable: (address) =>
-        this.index.firstFiledAtAddress(address) !== undefined,
-      visit: (address) => void view.jumpToAddress(address),
-      addCurrent: () => view.addCurrentAsEntryPoint(),
-      rename: (index) => this.renameEntryPoint(index),
-      remove: (index) => this.removeEntryPoint(index),
     }).open();
   }
 
@@ -593,33 +583,6 @@ export default class SlipboxPlugin extends Plugin {
     return this.cardMetadataState(file) === "unfiled";
   }
 
-  async addEntryPoint(address: string): Promise<void> {
-    if (this.index.firstFiledAtAddress(address) === undefined) {
-      new Notice(`Card ${address} is not available in Slipbox.`);
-      return;
-    }
-    if (this.state.entryPoints.some((entry) => entry.address === address)) {
-      new Notice(`${address} is already an entry point.`);
-      return;
-    }
-
-    const name = await promptForText(
-      this.app,
-      "Name this entry point",
-      "e.g. Communication",
-    );
-    if (name === null) {
-      return;
-    }
-
-    this.state = {
-      ...this.state,
-      entryPoints: [...this.state.entryPoints, { name, address }],
-    };
-    await this.persistState();
-    new Notice(`Added entry point “${name}”.`);
-  }
-
   filingPreviewFor(file: TFile, address: string): FilingPreview {
     return createFilingPreview(
       this.index.snapshot.filed,
@@ -770,28 +733,6 @@ export default class SlipboxPlugin extends Plugin {
         }
         if (available && file !== null) {
           void this.beginFiling(file);
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
-      id: "add-current-card-entry-point",
-      name: "Add current card as entry point",
-      checkCallback: (checking) => {
-        const deckView = this.app.workspace.getActiveViewOfType(DeckView);
-        const deckAddress = deckView?.activeCard?.address;
-        const activeFile = this.app.workspace.getActiveFile();
-        const fileAddress = activeFile === null
-          ? undefined
-          : this.index.filedByFile(activeFile)?.address;
-        const address = deckAddress ?? fileAddress;
-        const available = address !== undefined;
-        if (checking) {
-          return available;
-        }
-        if (address !== undefined) {
-          void this.addEntryPoint(address);
         }
         return available;
       },
@@ -983,13 +924,6 @@ export default class SlipboxPlugin extends Plugin {
       "Toggle Deck-map visibility",
       "toggle-deck-map",
     );
-    this.addCommand({
-      id: "manage-entry-points",
-      name: "Manage entry points",
-      callback: () => void this.openDeck().then((view) => {
-        view.runAction("entry-points");
-      }),
-    });
     this.addCommand({
       id: "manage-bookmarks",
       name: "Manage bookmarks",
@@ -1330,37 +1264,6 @@ export default class SlipboxPlugin extends Plugin {
     new Notice(`Deleted bookmark at ${label}.`);
   }
 
-  private async renameEntryPoint(index: number): Promise<void> {
-    const entry = this.state.entryPoints[index];
-    if (entry === undefined) {
-      return;
-    }
-    const name = await promptForText(
-      this.app,
-      "Rename entry point",
-      "Entry point name",
-      entry.name,
-    );
-    if (name === null) {
-      return;
-    }
-    const entries = [...this.state.entryPoints];
-    entries[index] = { ...entry, name };
-    this.state = { ...this.state, entryPoints: entries };
-    await this.persistState();
-  }
-
-  private async removeEntryPoint(index: number): Promise<void> {
-    const entries = [...this.state.entryPoints];
-    const removed = entries.splice(index, 1)[0];
-    if (removed === undefined) {
-      return;
-    }
-    this.state = { ...this.state, entryPoints: entries };
-    await this.persistState();
-    new Notice(`Deleted entry point “${removed.name}”.`);
-  }
-
   private queueIndexRefresh(): void {
     if (this.filingWriteInProgress) {
       return;
@@ -1607,5 +1510,3 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function rawSettingsFromPluginData(value: unknown): unknown {
   return isRecord(value) && isRecord(value.settings) ? value.settings : {};
 }
-
-export type { EntryPoint };

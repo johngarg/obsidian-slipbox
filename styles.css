@@ -1057,10 +1057,6 @@ button.slipbox-card-backlink-overflow:disabled {
   gap: 6px;
 }
 
-.slipbox-entry-address.is-missing {
-  color: var(--text-error);
-}
-
 .slipbox-modal-list {
   display: flex;
   flex-direction: column;
@@ -1079,7 +1075,6 @@ button.slipbox-card-backlink-overflow:disabled {
   background: transparent;
 }
 
-.slipbox-entry-visit,
 .slipbox-file-visit {
   display: flex;
   flex: 1;
@@ -1095,26 +1090,17 @@ button.slipbox-card-backlink-overflow:disabled {
   text-align: left;
 }
 
-.slipbox-entry-visit:hover,
-.slipbox-entry-visit:focus-visible,
 .slipbox-file-visit:hover,
 .slipbox-file-visit:focus-visible {
   color: var(--text-normal);
   background: transparent !important;
 }
 
-.slipbox-entry-name {
+.slipbox-list-label {
   overflow: hidden;
   color: var(--text-normal);
   font-weight: var(--font-medium);
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.slipbox-entry-address {
-  color: var(--text-muted);
-  font-family: var(--font-monospace);
-  font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
 

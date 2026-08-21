@@ -51,7 +51,6 @@ export function canRunDeckAction(
       return context.filing;
     case "cancel-filing":
       return context.filing;
-    case "entry-points":
     case "bookmarks":
     case "toggle-toolbar":
     case "toggle-deck-map":

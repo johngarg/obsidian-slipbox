@@ -1,4 +1,3 @@
-import { validateAddress } from "./address-order.js";
 import { normalizeBookmarks, type StoredBookmark } from "./bookmarks.js";
 import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
 import {
@@ -8,13 +7,7 @@ import {
   type SlipboxSettings,
 } from "./settings.js";
 
-export interface EntryPoint {
-  readonly name: string;
-  readonly address: string;
-}
-
 export interface SlipboxPluginState {
-  readonly entryPoints: readonly EntryPoint[];
   readonly bookmarks: readonly StoredBookmark[];
   /** Retained only until an old persistent Desk has been exported to Canvas. */
   readonly legacyDeskCards?: readonly DeskCardState[];
@@ -32,7 +25,6 @@ export const MIN_SPREAD = 0.18;
 export const MAX_SPREAD = 1.12;
 
 export const DEFAULT_STATE: SlipboxPluginState = {
-  entryPoints: [],
   bookmarks: [],
   spread: DEFAULT_SPREAD,
 };
@@ -47,31 +39,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+export function hasRemovedEntryPointData(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const state = isRecord(value.state) ? value.state : value;
+  const settings = isRecord(value.settings) ? value.settings : {};
+  const keybindings = isRecord(settings.deckKeybindings)
+    ? settings.deckKeybindings
+    : {};
+  return Object.prototype.hasOwnProperty.call(state, "entryPoints") ||
+    Object.prototype.hasOwnProperty.call(keybindings, "entry-points");
+}
+
 /** Tolerant loading for plugin data written by this or an older release. */
 export function normalizePluginState(value: unknown): SlipboxPluginState {
   if (!isRecord(value)) {
     return DEFAULT_STATE;
   }
-
-  const entryPoints = Array.isArray(value.entryPoints)
-    ? value.entryPoints.flatMap((entry): EntryPoint[] => {
-        if (!isRecord(entry)) {
-          return [];
-        }
-        const address = typeof entry.address === "string"
-          ? entry.address
-          : entry.id;
-        if (
-          typeof entry.name !== "string" ||
-          entry.name.trim() === "" ||
-          typeof address !== "string" ||
-          !validateAddress(address).valid
-        ) {
-          return [];
-        }
-        return [{ name: entry.name.trim(), address }];
-      })
-    : [];
 
   const rawSpread =
     typeof value.spread === "number" && Number.isFinite(value.spread)
@@ -84,7 +69,6 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
       : value.deskCards,
   );
   return {
-    entryPoints,
     bookmarks: normalizeBookmarks(value.bookmarks),
     ...(legacyDeskCards.length > 0 ? { legacyDeskCards } : {}),
     spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread)),

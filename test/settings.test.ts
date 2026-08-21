@@ -171,7 +171,6 @@ describe("Slipbox settings", () => {
       "toggle-bookmark": [{ key: "b", modifiers: [] }],
       back: [],
       forward: [],
-      "entry-points": [],
       bookmarks: [],
       problems: [],
       "confirm-filing": [],
@@ -212,11 +211,15 @@ describe("Slipbox settings", () => {
 
   test("supplies missing defaults only when existing bindings do not conflict", () => {
     const normalized = normalizeDeckKeybindings({
-      "entry-points": [{ key: "t", modifiers: [] }],
-      bookmarks: [{ key: "d", modifiers: ["Ctrl"] }],
+      bookmarks: [
+        { key: "t", modifiers: [] },
+        { key: "d", modifiers: ["Ctrl"] },
+      ],
     });
-    assert.deepEqual(normalized["entry-points"], [{ key: "t", modifiers: [] }]);
-    assert.deepEqual(normalized.bookmarks, [{ key: "d", modifiers: ["Ctrl"] }]);
+    assert.deepEqual(normalized.bookmarks, [
+      { key: "t", modifiers: [] },
+      { key: "d", modifiers: ["Ctrl"] },
+    ]);
     assert.deepEqual(normalized["toggle-toolbar"], []);
     assert.deepEqual(normalized["forward-ten-cards"], []);
     assert.deepEqual(normalized["backward-ten-cards"], [{
@@ -300,7 +303,7 @@ describe("Slipbox settings", () => {
     );
   });
 
-  test("ignores removed settings at runtime but preserves them on save", () => {
+  test("purges entry-point shortcuts while preserving other removed settings", () => {
     const raw = {
       addressProperty: "zettel-id",
       unknownFutureKey: { retained: true },
@@ -308,12 +311,14 @@ describe("Slipbox settings", () => {
       deckKeybindings: {
         "add-card": [{ key: "a", modifiers: [] }],
         "new-section": [{ key: "n", modifiers: [] }],
+        "entry-points": [{ key: "e", modifiers: [] }],
       },
     };
     const settings = normalizeSettings(raw);
     assert.equal("add-card" in settings.deckHeaderButtons, false);
     assert.equal("add-card" in settings.deckKeybindings, false);
     assert.equal("new-section" in settings.deckKeybindings, false);
+    assert.equal("entry-points" in settings.deckKeybindings, false);
     assert.equal(
       Object.values(settings.deckKeybindings).flat().some(
         (binding) => binding.key === "a",
@@ -330,6 +335,10 @@ describe("Slipbox settings", () => {
     assert.deepEqual(
       (persisted.deckKeybindings as Record<string, unknown>)["add-card"],
       [{ key: "a", modifiers: [] }],
+    );
+    assert.equal(
+      "entry-points" in (persisted.deckKeybindings as Record<string, unknown>),
+      false,
     );
   });
 

@@ -95,7 +95,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Show Deck toolbar")
-      .setDesc("Show the navigation, entry-point, bookmark, and spread controls above the Deck.")
+      .setDesc("Show the navigation, bookmark, and spread controls above the Deck.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.showDeckToolbar)

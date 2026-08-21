@@ -5,6 +5,7 @@ import {
   DEFAULT_DATA,
   DEFAULT_SPREAD,
   MIN_SPREAD,
+  hasRemovedEntryPointData,
   normalizePluginData,
   normalizePluginState,
 } from "../src/plugin-state.js";
@@ -22,7 +23,6 @@ describe("normalizePluginState", () => {
         spread: 0.75,
       }),
       {
-        entryPoints: [{ name: "Systems", address: "1/1" }],
         bookmarks: [
           { path: "Cards/here.md" },
         ],
@@ -32,7 +32,7 @@ describe("normalizePluginState", () => {
     );
   });
 
-  test("drops malformed routes and clamps visual state", () => {
+  test("drops removed entry points and clamps visual state", () => {
     assert.deepEqual(
       normalizePluginState({
         entryPoints: [
@@ -49,7 +49,6 @@ describe("normalizePluginState", () => {
         spread: 99,
       }),
       {
-        entryPoints: [{ name: "Good", address: "3/1a" }],
         bookmarks: [
           { path: "Cards/good.md" },
         ],
@@ -65,7 +64,6 @@ describe("normalizePluginState", () => {
 
   test("uses defaults for unknown data", () => {
     assert.deepEqual(normalizePluginState(null), {
-      entryPoints: [],
       bookmarks: [],
       spread: DEFAULT_SPREAD,
     });
@@ -79,7 +77,6 @@ describe("normalizePluginState", () => {
         spread: 0.58,
       }),
       {
-        entryPoints: [{ name: "Start", address: "1/1" }],
         bookmarks: [],
         spread: 0.58,
       },
@@ -99,7 +96,7 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.equal(data.settings.deckOrdering, "natural");
     assert.equal(data.settings.showDeckMap, true);
-    assert.deepEqual(data.state.entryPoints, [{ name: "Start", address: "1/1" }]);
+    assert.equal("entryPoints" in data.state, false);
     assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
     assert.deepEqual(data.state.legacyDeskCards, [
       { cardRef: "Start.md", x: 10, y: 20, z: 1 },
@@ -134,6 +131,7 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.mainCardSize, "medium");
     assert.equal(data.settings.trayCardSize, "medium");
     assert.equal(data.state.spread, 0.42);
+    assert.equal("entryPoints" in data.state, false);
     assert.equal("legacyDeskCards" in data.state, false);
   });
 
@@ -158,5 +156,20 @@ describe("normalizePluginData", () => {
 
   test("uses complete defaults for unknown data", () => {
     assert.deepEqual(normalizePluginData(null), DEFAULT_DATA);
+  });
+
+  test("detects removed entry-point data for eager persistence cleanup", () => {
+    assert.equal(hasRemovedEntryPointData({ entryPoints: [] }), true);
+    assert.equal(hasRemovedEntryPointData({
+      state: { entryPoints: [{ name: "Start", address: "1/1" }] },
+    }), true);
+    assert.equal(hasRemovedEntryPointData({
+      settings: { deckKeybindings: { "entry-points": [] } },
+      state: {},
+    }), true);
+    assert.equal(hasRemovedEntryPointData({
+      settings: { deckKeybindings: { bookmarks: [] } },
+      state: { bookmarks: [] },
+    }), false);
   });
 });

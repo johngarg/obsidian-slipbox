@@ -1,7 +1,6 @@
 import { App, FuzzySuggestModal, Modal, Notice, TFile, setIcon } from "obsidian";
 
 import type { DeckBookmark } from "./bookmarks.js";
-import type { EntryPoint } from "./plugin-state.js";
 import type { VaultCardIndex } from "./card-index.js";
 
 export class TextPromptModal extends Modal {
@@ -325,11 +324,11 @@ export class BookmarksModal extends Modal {
       const available = this.actions.isAvailable(bookmark.path);
       const row = list.createDiv({ cls: "slipbox-list-row slipbox-bookmark-row" });
       const visit = row.createEl("button", {
-        cls: "slipbox-entry-visit",
+        cls: "slipbox-file-visit",
         attr: { type: "button" },
       });
       visit.createSpan({
-        cls: "slipbox-entry-name",
+        cls: "slipbox-list-label",
         text: available
           ? this.actions.label(bookmark.path)
           : `${bookmark.path} · missing`,
@@ -361,108 +360,6 @@ export class BookmarksModal extends Modal {
   private currentIsListed(): boolean {
     return this.bookmarks.some(
       (bookmark) => bookmark.path === this.actions.currentPath,
-    );
-  }
-}
-
-export interface EntryPointModalActions {
-  readonly currentAddress: string | null;
-  isAvailable(address: string): boolean;
-  visit(address: string): void;
-  addCurrent(): Promise<void>;
-  rename(index: number): Promise<void>;
-  remove(index: number): Promise<void>;
-}
-
-export class EntryPointsModal extends Modal {
-  private entryPoints: EntryPoint[];
-  private listEl: HTMLElement | null = null;
-  private addButton: HTMLButtonElement | null = null;
-
-  constructor(
-    app: App,
-    entryPoints: readonly EntryPoint[],
-    private readonly actions: EntryPointModalActions,
-  ) {
-    super(app);
-    this.entryPoints = [...entryPoints];
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.addClass("slipbox-modal");
-    contentEl.createEl("h2", { text: "Entry points" });
-    this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
-    this.renderList();
-    this.addButton = renderCurrentCardAddAction(contentEl, {
-      label: "+ add current card as entry point",
-      currentAddress: this.actions.currentAddress,
-      isCurrentListed: this.currentIsListed(),
-      addCurrent: () => this.actions.addCurrent(),
-      onAdded: () => this.close(),
-    });
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
-    this.listEl = null;
-    this.addButton = null;
-  }
-
-  private renderList(): void {
-    const list = this.listEl;
-    if (list === null) {
-      return;
-    }
-    list.empty();
-    if (this.entryPoints.length === 0) {
-      list.createEl("p", {
-        cls: "slipbox-empty-copy",
-        text: "No entry points yet.",
-      });
-    }
-
-    this.entryPoints.forEach((entry, index) => {
-      const row = list.createDiv({ cls: "slipbox-list-row" });
-      const available = this.actions.isAvailable(entry.address);
-      const visit = row.createEl("button", {
-        cls: "slipbox-entry-visit",
-        attr: { type: "button" },
-      });
-      visit.createSpan({ cls: "slipbox-entry-name", text: entry.name });
-      visit.createSpan({ cls: "slipbox-entry-address", text: entry.address });
-      if (!available) {
-        visit.disabled = true;
-        visit.setAttr("aria-label", "The filed card is missing or invalid");
-      }
-      visit.addEventListener("click", () => {
-        this.actions.visit(entry.address);
-        this.close();
-      });
-
-      const rename = iconButton(row, "pencil", `Rename ${entry.name}`);
-      rename.addEventListener("click", () => {
-        void this.actions.rename(index).then(() => this.close());
-      });
-      const remove = iconButton(row, "trash-2", `Delete ${entry.name}`);
-      remove.addEventListener("click", () => {
-        remove.disabled = true;
-        void this.actions.remove(index).then(() => {
-          this.entryPoints.splice(index, 1);
-          this.renderList();
-          updateCurrentCardAddAction(
-            this.addButton,
-            this.actions.currentAddress,
-            this.currentIsListed(),
-          );
-        });
-      });
-    });
-  }
-
-  private currentIsListed(): boolean {
-    return this.entryPoints.some(
-      (entry) => entry.address === this.actions.currentAddress,
     );
   }
 }

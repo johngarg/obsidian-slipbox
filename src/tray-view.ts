@@ -422,13 +422,28 @@ export class TrayRenderer {
       event.stopPropagation();
       void this.actions.runAfterEditing(
         `tray-cycle-pile-${previous ? "previous" : "next"}`,
-        () => this.plugin.updateTray(cyclePileTopCard(
-          this.plugin.tray,
-          pile.id,
-          direction,
-        )),
+        async () => {
+          await this.plugin.updateTray(cyclePileTopCard(
+            this.plugin.tray,
+            pile.id,
+            direction,
+          ));
+          this.focusPileCycleButton(pile.id, direction);
+        },
       );
     });
+  }
+
+  private focusPileCycleButton(pileId: string, direction: -1 | 1): void {
+    if (this.rootEl === null) {
+      return;
+    }
+    const pile = Array.from(this.rootEl.querySelectorAll<HTMLElement>(
+      ".slipbox-tray-pile",
+    )).find((candidate) => candidate.dataset.pileId === pileId);
+    pile?.querySelector<HTMLButtonElement>(
+      `.slipbox-tray-pile-cycle.${direction === -1 ? "is-previous" : "is-next"}`,
+    )?.focus({ preventScroll: true });
   }
 
   private async renderCard(

@@ -1815,11 +1815,6 @@ export class DeckView extends ItemView {
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const position = deckMapCoordinate(activeIndex, cardCount);
     const activeMarker = this.deckMapActiveMarkerEl;
-    const activeCard = this.plugin.index.snapshot.filed[activeIndex];
-    activeMarker?.toggleClass(
-      "is-in-tray",
-      activeCard !== undefined && this.plugin.isFileInTray(activeCard.file),
-    );
     const bookmarkLabel =
       `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
     if (position === null) {

@@ -70,8 +70,9 @@ Use drag and drop to:
 Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu can
 move them to adjacent piles or split them. Pulling a filed card out does not
 change its address, Slipbox filing order, bookmark, or Canvas membership. Its
-filed card is dimmed and its Deck-map marker becomes invisible while it is in a
-working pile; the unchanged map position remains clickable.
+filed card is dimmed in light themes or slightly lightened in dark themes, and
+its Deck-map dot becomes invisible while it is in a working pile. The unchanged
+map position remains clickable, and the current-position marker remains visible.
 
 Right-click a pile for `Return filed cards in this pile`, or right-click empty
 workspace to `Collapse all piles` or `Return all filed cards`. Return actions

@@ -148,7 +148,7 @@
   background: var(--text-muted);
 }
 
-.slipbox-deck-map-marker.is-in-tray {
+.slipbox-deck-map-marker.is-in-tray:not(.is-active) {
   background: transparent;
 }
 
@@ -401,11 +401,11 @@ button.slipbox-tray-pile-cycle {
 }
 
 button.slipbox-tray-pile-cycle.is-previous {
-  left: -31px;
+  left: -5px;
 }
 
 button.slipbox-tray-pile-cycle.is-next {
-  right: -31px;
+  right: -5px;
 }
 
 .slipbox-tray-pile.is-collapsed:hover > .slipbox-tray-pile-cycle,
@@ -823,6 +823,11 @@ button.slipbox-tray-pile-cycle svg {
   background: rgb(0 0 0 / 0.12);
   content: "";
   pointer-events: none;
+}
+
+.theme-dark
+  .slipbox-card.is-in-tray:not(.is-viewed-ghost, .is-inline-editing)::after {
+  background: rgb(255 255 255 / 0.07);
 }
 
 .slipbox-card.is-viewed-ghost {
@@ -1533,7 +1538,7 @@ button.slipbox-card-backlink-overflow:disabled {
     background: CanvasText;
   }
 
-  .slipbox-deck-map-marker.is-in-tray {
+  .slipbox-deck-map-marker.is-in-tray:not(.is-active) {
     background: Canvas;
   }
 

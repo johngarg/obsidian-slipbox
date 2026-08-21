@@ -2215,13 +2215,27 @@ var TrayRenderer = class {
       event.stopPropagation();
       void this.actions.runAfterEditing(
         `tray-cycle-pile-${previous ? "previous" : "next"}`,
-        () => this.plugin.updateTray(cyclePileTopCard(
-          this.plugin.tray,
-          pile.id,
-          direction
-        ))
+        async () => {
+          await this.plugin.updateTray(cyclePileTopCard(
+            this.plugin.tray,
+            pile.id,
+            direction
+          ));
+          this.focusPileCycleButton(pile.id, direction);
+        }
       );
     });
+  }
+  focusPileCycleButton(pileId, direction) {
+    if (this.rootEl === null) {
+      return;
+    }
+    const pile = Array.from(this.rootEl.querySelectorAll(
+      ".slipbox-tray-pile"
+    )).find((candidate) => candidate.dataset.pileId === pileId);
+    pile?.querySelector(
+      `.slipbox-tray-pile-cycle.${direction === -1 ? "is-previous" : "is-next"}`
+    )?.focus({ preventScroll: true });
   }
   async renderCard(parent, pile, card, cardIndex, pileIndex, expanded, filing, viewedPath, isCurrent) {
     const file = this.plugin.index.fileAtPath(card.cardRef);
@@ -4967,11 +4981,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const position = deckMapCoordinate(activeIndex, cardCount);
     const activeMarker = this.deckMapActiveMarkerEl;
-    const activeCard = this.plugin.index.snapshot.filed[activeIndex];
-    activeMarker?.toggleClass(
-      "is-in-tray",
-      activeCard !== void 0 && this.plugin.isFileInTray(activeCard.file)
-    );
     const bookmarkLabel = `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
     if (position === null) {
       if (activeMarker !== null) {

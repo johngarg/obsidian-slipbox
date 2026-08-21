@@ -198,6 +198,14 @@ describe("inline tray filing editor DOM", () => {
       "http://www.w3.org/1999/xhtml",
       "div",
     );
+    const textarea = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "textarea",
+    );
+    const select = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "select",
+    );
 
     assert.equal(shouldSuspendDeckShortcut(
       deck as unknown as EventTarget,
@@ -205,6 +213,14 @@ describe("inline tray filing editor DOM", () => {
     ), true);
     assert.equal(shouldSuspendDeckShortcut(
       input as unknown as EventTarget,
+      false,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      textarea as unknown as EventTarget,
+      false,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      select as unknown as EventTarget,
       false,
     ), true);
     assert.equal(shouldSuspendDeckShortcut(

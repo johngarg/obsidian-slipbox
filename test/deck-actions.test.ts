@@ -41,6 +41,7 @@ describe("Deck action availability", () => {
       filing: false,
     };
     assert.equal(canRunDeckAction("next-card", unavailable), false);
+    assert.equal(canRunDeckAction("forward-ten-cards", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);
     assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
@@ -49,6 +50,8 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
     assert.equal(canRunDeckAction("entry-points", unavailable), true);
+    assert.equal(canRunDeckAction("toggle-toolbar", unavailable), true);
+    assert.equal(canRunDeckAction("toggle-deck-map", unavailable), true);
   });
 
   test("does not expose removed creation actions or reuse the a shortcut", () => {
@@ -71,6 +74,31 @@ describe("Deck action availability", () => {
       (definition) => definition.id === "copy-link",
     );
     assert.deepEqual(copy?.defaultBindings, [{ key: "y", modifiers: [] }]);
+  });
+
+  test("marks held ten-card motion repeatable and prefixes discrete", () => {
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.find((definition) =>
+        definition.id === "forward-ten-cards")?.repeatable,
+      true,
+    );
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.find((definition) =>
+        definition.id === "backward-ten-cards")?.repeatable,
+      true,
+    );
+    for (const action of [
+      "find-address-forward",
+      "find-address-backward",
+      "find-address-first",
+      "pull-into-pile",
+    ]) {
+      assert.equal(
+        DECK_ACTION_DEFINITIONS.find((definition) =>
+          definition.id === action)?.repeatable,
+        false,
+      );
+    }
   });
 
   test("uses concise state-dependent wording in shared card actions", () => {

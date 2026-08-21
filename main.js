@@ -286,6 +286,15 @@ function cardMotionStyle(cardIndex, viewportPosition, cardStep, isActive = false
 function centredViewportPosition(targetIndex, cardCount) {
   return clampViewportPosition(targetIndex, cardCount);
 }
+function deckIndexByDelta(activeIndex, delta, cardCount) {
+  if (cardCount <= 0 || activeIndex < 0 || activeIndex >= cardCount) {
+    return -1;
+  }
+  return Math.max(
+    0,
+    Math.min(cardCount - 1, activeIndex + Math.trunc(delta))
+  );
+}
 
 // src/navigation-history.ts
 var NavigationHistory = class {
@@ -436,11 +445,18 @@ function canRunDeckAction(action, context) {
       return context.hasPreviousCard;
     case "next-card":
       return context.hasNextCard;
+    case "forward-ten-cards":
+    case "backward-ten-cards":
+      return context.hasActiveCard;
     case "centre-card":
     case "open-note":
     case "copy-link":
     case "toggle-tray":
     case "toggle-bookmark":
+    case "find-address-forward":
+    case "find-address-backward":
+    case "find-address-first":
+    case "pull-into-pile":
       return context.hasActiveCard;
     case "first-card":
     case "last-card":
@@ -457,6 +473,8 @@ function canRunDeckAction(action, context) {
       return context.filing;
     case "entry-points":
     case "bookmarks":
+    case "toggle-toolbar":
+    case "toggle-deck-map":
       return true;
   }
 }
@@ -872,13 +890,25 @@ var DECK_ACTION_DEFINITIONS = [
     id: "first-card",
     label: "First card",
     repeatable: false,
-    defaultBindings: [binding("g")]
+    defaultBindings: [binding("0")]
   },
   {
     id: "last-card",
     label: "Last card",
     repeatable: false,
-    defaultBindings: [binding("g", ["Shift"])]
+    defaultBindings: [binding("$", ["Shift"])]
+  },
+  {
+    id: "forward-ten-cards",
+    label: "Move forward ten cards",
+    repeatable: true,
+    defaultBindings: [binding("d", ["Ctrl"])]
+  },
+  {
+    id: "backward-ten-cards",
+    label: "Move backward ten cards",
+    repeatable: true,
+    defaultBindings: [binding("u", ["Ctrl"])]
   },
   {
     id: "open-note",
@@ -898,8 +928,58 @@ var DECK_ACTION_DEFINITIONS = [
     repeatable: false,
     defaultBindings: [binding("b")]
   },
-  { id: "back", label: "Back", repeatable: false, defaultBindings: [] },
-  { id: "forward", label: "Forward", repeatable: false, defaultBindings: [] },
+  {
+    id: "back",
+    label: "Back",
+    repeatable: false,
+    defaultBindings: [binding("h", ["Shift"])]
+  },
+  {
+    id: "forward",
+    label: "Forward",
+    repeatable: false,
+    defaultBindings: [binding("l", ["Shift"])]
+  },
+  {
+    id: "find-address-forward",
+    label: "Find next address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("f")]
+  },
+  {
+    id: "find-address-backward",
+    label: "Find previous address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("f", ["Shift"])]
+  },
+  {
+    id: "find-address-first",
+    label: "Go to first address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("g")]
+  },
+  {
+    id: "pull-into-pile",
+    label: "Pull into numbered pile",
+    description: "Type a one-based pile number, then press Enter.",
+    repeatable: false,
+    defaultBindings: [binding("p", ["Shift"])]
+  },
+  {
+    id: "toggle-toolbar",
+    label: "Toggle toolbar visibility",
+    repeatable: false,
+    defaultBindings: [binding("t")]
+  },
+  {
+    id: "toggle-deck-map",
+    label: "Toggle Deck-map visibility",
+    repeatable: false,
+    defaultBindings: [binding("m")]
+  },
   {
     id: "entry-points",
     label: "Manage entry points",
@@ -949,6 +1029,24 @@ var DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
     definition.defaultBindings
   ])
 );
+var PREVIOUS_DEFAULT_DECK_KEYBINDINGS = {
+  "previous-card": [binding("ArrowLeft"), binding("k")],
+  "next-card": [binding("ArrowRight"), binding("j")],
+  "centre-card": [binding("c")],
+  "first-card": [binding("g")],
+  "last-card": [binding("g", ["Shift"])],
+  "open-note": [binding("o")],
+  "toggle-tray": [binding("p")],
+  "toggle-bookmark": [binding("b")],
+  back: [],
+  forward: [],
+  "entry-points": [],
+  bookmarks: [],
+  problems: [],
+  "confirm-filing": [],
+  "cancel-filing": [],
+  "copy-link": [binding("y")]
+};
 var DEFAULT_SETTINGS = {
   addressProperty: "zettel-id",
   deckOrdering: "natural",
@@ -961,6 +1059,7 @@ var DEFAULT_SETTINGS = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
+  showDeckToolbar: true,
   showDeckMap: true,
   deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS
@@ -999,17 +1098,71 @@ function keyBindingSignature(bindingValue) {
 }
 function formatKeyBinding(bindingValue) {
   const key = bindingValue.key === " " ? "Space" : bindingValue.key;
+  if (bindingValue.modifiers.length === 1 && bindingValue.modifiers[0] === "Shift" && key === "$") {
+    return key;
+  }
   return [...bindingValue.modifiers, key].join("+");
+}
+function keyBindingFromKeyboardEvent(event, isMacOS) {
+  const modifiers = [];
+  const primary = isMacOS ? event.metaKey : event.ctrlKey;
+  if (primary) {
+    modifiers.push("Mod");
+  }
+  if (event.ctrlKey && isMacOS) {
+    modifiers.push("Ctrl");
+  }
+  if (event.metaKey && !isMacOS) {
+    modifiers.push("Meta");
+  }
+  if (event.altKey) {
+    modifiers.push("Alt");
+  }
+  if (event.shiftKey) {
+    modifiers.push("Shift");
+  }
+  return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
+    modifiers,
+    key: event.key
+  };
+}
+function bindingsEqual(left, right) {
+  return left.length === right.length && left.every((candidate, index) => {
+    const expected = right[index];
+    return expected !== void 0 && keyBindingSignature(candidate) === keyBindingSignature(expected);
+  });
+}
+function isCompletePreviousDefaultMap(source) {
+  const previousActions = new Set(Object.keys(PREVIOUS_DEFAULT_DECK_KEYBINDINGS));
+  if (DECK_ACTION_DEFINITIONS.some((definition) => !previousActions.has(definition.id) && Object.prototype.hasOwnProperty.call(source, definition.id))) {
+    return false;
+  }
+  return Object.entries(PREVIOUS_DEFAULT_DECK_KEYBINDINGS).every(([action, expected]) => {
+    const candidate = source[action];
+    if (!Array.isArray(candidate)) {
+      return false;
+    }
+    const normalized = candidate.flatMap((value) => {
+      const result = normalizeKeyBinding(value);
+      return result === null ? [] : [result];
+    });
+    return bindingsEqual(normalized, expected);
+  });
 }
 function normalizeDeckKeybindings(value) {
   const source = isRecord3(value) ? value : {};
+  if (isCompletePreviousDefaultMap(source)) {
+    return DEFAULT_DECK_KEYBINDINGS;
+  }
   const claimed = /* @__PURE__ */ new Set();
   const result = {};
   for (const definition of DECK_ACTION_DEFINITIONS) {
     const candidate = source[definition.id];
-    const rawBindings = Array.isArray(candidate) ? candidate : definition.defaultBindings;
+    if (!Array.isArray(candidate)) {
+      continue;
+    }
     const normalized = [];
-    for (const rawBinding of rawBindings) {
+    for (const rawBinding of candidate) {
       const normalizedBinding = normalizeKeyBinding(rawBinding);
       if (normalizedBinding === null) {
         continue;
@@ -1020,6 +1173,20 @@ function normalizeDeckKeybindings(value) {
       }
       claimed.add(signature);
       normalized.push(normalizedBinding);
+    }
+    result[definition.id] = normalized;
+  }
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    if (result[definition.id] !== void 0) {
+      continue;
+    }
+    const normalized = [];
+    for (const defaultBinding of definition.defaultBindings) {
+      const signature = keyBindingSignature(defaultBinding);
+      if (!claimed.has(signature)) {
+        claimed.add(signature);
+        normalized.push(defaultBinding);
+      }
     }
     result[definition.id] = normalized;
   }
@@ -1057,6 +1224,7 @@ function normalizeSettings(value) {
     useTemplatesForNewNotes: typeof source.useTemplatesForNewNotes === "boolean" ? source.useTemplatesForNewNotes : DEFAULT_SETTINGS.useTemplatesForNewNotes,
     newNoteTemplatePath: typeof source.newNoteTemplatePath === "string" ? source.newNoteTemplatePath.trim() : DEFAULT_SETTINGS.newNoteTemplatePath,
     showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
+    showDeckToolbar: typeof source.showDeckToolbar === "boolean" ? source.showDeckToolbar : DEFAULT_SETTINGS.showDeckToolbar,
     showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
     deckHeaderButtons: normalizeBooleanRecord(
       source.deckHeaderButtons,
@@ -1357,6 +1525,30 @@ function moveCardBetweenPiles(state, cardRef, targetPileId, targetIndex = Number
   let next = removeCard(state, cardRef);
   next = addUniqueCardToPile(next, targetPileId, card, targetIndex);
   return next;
+}
+function placeFiledCardInPileOrdinal(state, cardRef, ordinal) {
+  if (!Number.isInteger(ordinal) || ordinal <= 0 || cardRef === "") {
+    return state;
+  }
+  const target = state.piles[ordinal - 1];
+  if (target === void 0) {
+    return state;
+  }
+  const source = cardPosition(state, cardRef);
+  if (source?.pileId === target.id) {
+    return state;
+  }
+  if (source === null) {
+    return addUniqueCardToPile(state, target.id, {
+      cardRef,
+      kind: "filed"
+    });
+  }
+  const card = state.piles[source.pileIndex]?.cards[source.cardIndex];
+  if (card?.kind !== "filed") {
+    return state;
+  }
+  return moveCardBetweenPiles(state, cardRef, target.id);
 }
 function splitCardIntoNewPile(state, cardRef, newPileId, pileIndex) {
   const source = cardPosition(state, cardRef);
@@ -2435,6 +2627,118 @@ function deckMapIndexAtOffset(offset, railWidth, cardCount) {
   return Math.round(normalized * (cardCount - 1));
 }
 
+// src/deck-commands.ts
+var IDLE_DECK_COMMAND = { kind: "idle" };
+var MODIFIER_KEYS = /* @__PURE__ */ new Set(["Alt", "AltGraph", "Control", "Meta", "Shift"]);
+function installPendingDeckCommandKeyCapture(target, capture) {
+  const listener = (event) => {
+    if (capture.isPending() && capture.isActive() && capture.shouldIgnore?.(event) !== true) {
+      capture.handle(event);
+    }
+  };
+  target.addEventListener("keydown", listener, { capture: true });
+  return () => target.removeEventListener("keydown", listener, { capture: true });
+}
+function firstUnicodeCharacter(value) {
+  return Array.from(value)[0] ?? null;
+}
+function findAddressInitialIndex(cards, activeIndex, initial, mode) {
+  const targetInitial = firstUnicodeCharacter(initial);
+  if (targetInitial === null) {
+    return null;
+  }
+  const start = mode === "absolute" ? 0 : mode === "forward" ? Math.max(0, activeIndex + 1) : Math.min(cards.length - 1, activeIndex - 1);
+  const end = mode === "backward" ? 0 : cards.length - 1;
+  const step = mode === "backward" ? -1 : 1;
+  for (let index = start; mode === "backward" ? index >= end : index <= end; index += step) {
+    const card = cards[index];
+    if (card !== void 0 && firstUnicodeCharacter(card.address) === targetInitial) {
+      return index;
+    }
+  }
+  return null;
+}
+function startAddressCommand(mode) {
+  return { kind: "address", mode };
+}
+function startPileCommand() {
+  return { kind: "pile", digits: "" };
+}
+function advancePendingDeckCommand(state, key) {
+  if (state.kind === "idle") {
+    return { consumed: false, state };
+  }
+  if (MODIFIER_KEYS.has(key)) {
+    return { consumed: false, state };
+  }
+  if (key === "Escape") {
+    return { consumed: true, state: IDLE_DECK_COMMAND, cancelled: true };
+  }
+  if (state.kind === "address") {
+    const initial = firstUnicodeCharacter(key);
+    if (initial === null || Array.from(key).length !== 1) {
+      return { consumed: true, state };
+    }
+    return {
+      consumed: true,
+      state: IDLE_DECK_COMMAND,
+      completion: { kind: "address", mode: state.mode, initial }
+    };
+  }
+  if (/^[0-9]$/.test(key)) {
+    return {
+      consumed: true,
+      state: { kind: "pile", digits: `${state.digits}${key}` }
+    };
+  }
+  if (key === "Backspace") {
+    return {
+      consumed: true,
+      state: { kind: "pile", digits: state.digits.slice(0, -1) }
+    };
+  }
+  if (key === "Enter") {
+    return {
+      consumed: true,
+      state,
+      completion: { kind: "pile", digits: state.digits }
+    };
+  }
+  return { consumed: true, state };
+}
+
+// src/deck-chrome.ts
+var DEFAULT_DECK_CHROME_VISIBILITY = {
+  toolbarOverride: null,
+  deckMapOverride: null
+};
+function toolbarIsVisible(state, showDeckToolbarSetting) {
+  return state.toolbarOverride ?? showDeckToolbarSetting;
+}
+function deckMapIsVisible(state, showDeckMapSetting, cardCount) {
+  return cardCount > 0 && (state.deckMapOverride ?? showDeckMapSetting);
+}
+function toggleToolbarVisibility(state, showDeckToolbarSetting) {
+  return {
+    ...state,
+    toolbarOverride: !(state.toolbarOverride ?? showDeckToolbarSetting)
+  };
+}
+function toggleDeckMapVisibility(state, showDeckMapSetting) {
+  return {
+    ...state,
+    deckMapOverride: !(state.deckMapOverride ?? showDeckMapSetting)
+  };
+}
+function applyDeckChromeVisibility(toolbar, deckMap, state, showDeckToolbarSetting, showDeckMapSetting, cardCount) {
+  if (toolbar !== null) {
+    toolbar.hidden = !toolbarIsVisible(state, showDeckToolbarSetting);
+  }
+  if (deckMap !== null) {
+    deckMap.hidden = !deckMapIsVisible(state, showDeckMapSetting, cardCount);
+  }
+}
+
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "slipbox-deck";
 var RENDER_EDGE_BUFFER = 2;
@@ -2442,7 +2746,14 @@ var LAYOUT_MEASUREMENT_RETRIES = 2;
 var SPACE_RECENTER_DURATION_MS = 180;
 var VIEWPORT_CENTER_DURATION_MS = 180;
 var DECK_MAP_SECTION_LABEL_SPACING = 14;
-var DeckView = class extends import_obsidian3.ItemView {
+var COMMAND_FEEDBACK_DURATION_MS = 1800;
+var PENDING_COMMAND_ACTIONS = /* @__PURE__ */ new Set([
+  "find-address-forward",
+  "find-address-backward",
+  "find-address-first",
+  "pull-into-pile"
+]);
+var DeckView = class _DeckView extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2496,6 +2807,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   backButtonEl = null;
   forwardButtonEl = null;
   bookmarksButtonEl = null;
+  toolbarEl = null;
   deckMapEl = null;
   deckMapRailEl = null;
   deckMapSectionLayerEl = null;
@@ -2510,6 +2822,12 @@ var DeckView = class extends import_obsidian3.ItemView {
   trayRenderer;
   keymapHandlers = [];
   deckKeybindingsSuspended = false;
+  pendingCommand = IDLE_DECK_COMMAND;
+  pendingCommandStartEvent = null;
+  pendingCommandEl = null;
+  pendingCommandFeedback = "";
+  pendingCommandFeedbackTimer = null;
+  chromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -2522,6 +2840,23 @@ var DeckView = class extends import_obsidian3.ItemView {
   async onOpen() {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.register(installPendingDeckCommandKeyCapture(
+      this.contentEl.ownerDocument,
+      {
+        isPending: () => this.pendingCommand.kind !== "idle",
+        isActive: () => this.app.workspace.getActiveViewOfType(_DeckView) === this,
+        shouldIgnore: (event) => {
+          if (event !== this.pendingCommandStartEvent) {
+            return false;
+          }
+          this.pendingCommandStartEvent = null;
+          return true;
+        },
+        handle: (event) => {
+          this.handleDeckCommandContinuation(event);
+        }
+      }
+    ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (handleFilingEscape(
         event,
@@ -2534,7 +2869,7 @@ var DeckView = class extends import_obsidian3.ItemView {
         event.preventDefault();
         this.trayRenderer.focusFilingInputNow();
       }
-    });
+    }, { capture: true });
     this.observeDeckSize();
     await this.refresh();
   }
@@ -2552,6 +2887,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
+    this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
     this.filingPreview = null;
@@ -2564,6 +2900,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -2571,6 +2908,8 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.deckMapSections = [];
     this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
+    this.pendingCommandEl = null;
+    this.pendingCommandStartEvent = null;
     this.history.reset();
   }
   onResize() {
@@ -2641,36 +2980,29 @@ var DeckView = class extends import_obsidian3.ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
-    this.keymapHandlers.push(scope.register(
-      [],
-      "Escape",
-      (event) => handleFilingEscape(
-        event,
-        this.filingFile !== null && !this.filingConfirmationInProgress,
-        () => void this.cancelFiling()
-      )
-    ));
-    if (this.deckKeybindingsSuspended) {
-      return;
-    }
-    for (const definition of DECK_ACTION_DEFINITIONS) {
-      for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
-        const handler = scope.register(
-          [...binding2.modifiers],
-          binding2.key,
-          (event) => this.handleDeckActionKey(
-            event,
-            definition.id,
-            definition.repeatable
-          )
-        );
-        this.keymapHandlers.push(handler);
+    if (!this.deckKeybindingsSuspended) {
+      for (const definition of DECK_ACTION_DEFINITIONS) {
+        for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
+          const handler = scope.register(
+            [...binding2.modifiers],
+            binding2.key,
+            (event) => this.handleDeckActionKey(
+              event,
+              definition.id,
+              definition.repeatable
+            )
+          );
+          this.keymapHandlers.push(handler);
+        }
       }
     }
   }
   setDeckKeybindingsSuspended(suspended) {
     if (this.deckKeybindingsSuspended === suspended) {
       return;
+    }
+    if (suspended) {
+      this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
     this.updateKeybindings();
@@ -2707,6 +3039,12 @@ var DeckView = class extends import_obsidian3.ItemView {
       case "next-card":
         this.moveBy(1);
         break;
+      case "forward-ten-cards":
+        this.moveBy(10);
+        break;
+      case "backward-ten-cards":
+        this.moveBy(-10);
+        break;
       case "centre-card":
         this.centerActiveCard();
         break;
@@ -2741,6 +3079,32 @@ var DeckView = class extends import_obsidian3.ItemView {
         break;
       case "forward":
         void this.goForward();
+        break;
+      case "find-address-forward":
+        this.beginAddressCommand("forward");
+        break;
+      case "find-address-backward":
+        this.beginAddressCommand("backward");
+        break;
+      case "find-address-first":
+        this.beginAddressCommand("absolute");
+        break;
+      case "pull-into-pile":
+        this.beginPileCommand();
+        break;
+      case "toggle-toolbar":
+        this.chromeVisibility = toggleToolbarVisibility(
+          this.chromeVisibility,
+          this.plugin.settings.showDeckToolbar
+        );
+        this.applyChromeVisibility();
+        break;
+      case "toggle-deck-map":
+        this.chromeVisibility = toggleDeckMapVisibility(
+          this.chromeVisibility,
+          this.plugin.settings.showDeckMap
+        );
+        this.applyChromeVisibility();
         break;
       case "entry-points":
         this.plugin.showEntryPoints(this);
@@ -2925,6 +3289,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -2932,11 +3297,14 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.deckMapSections = [];
     this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
+    this.pendingCommandEl = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     this.renderToolbar(shell);
     this.renderDeckMap(shell);
+    this.renderPendingCommandStatus(shell);
+    this.applyChromeVisibility();
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
@@ -2973,6 +3341,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   renderToolbar(shell) {
     const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
+    this.toolbarEl = toolbar;
     const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     (0, import_obsidian3.setIcon)(icon, "archive");
@@ -3042,7 +3411,7 @@ var DeckView = class extends import_obsidian3.ItemView {
   }
   renderDeckMap(shell) {
     const filed = this.plugin.index.snapshot.filed;
-    if (!this.plugin.settings.showDeckMap || filed.length === 0) {
+    if (filed.length === 0) {
       return;
     }
     const map = shell.createDiv({
@@ -3102,6 +3471,123 @@ var DeckView = class extends import_obsidian3.ItemView {
       event.stopPropagation();
       this.runAction(action);
     });
+  }
+  applyChromeVisibility() {
+    applyDeckChromeVisibility(
+      this.toolbarEl,
+      this.deckMapEl,
+      this.chromeVisibility,
+      this.plugin.settings.showDeckToolbar,
+      this.plugin.settings.showDeckMap,
+      this.plugin.index.snapshot.filed.length
+    );
+  }
+  renderPendingCommandStatus(shell) {
+    this.pendingCommandEl = shell.createDiv({
+      cls: "slipbox-pending-command-status",
+      attr: {
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true"
+      }
+    });
+    this.updatePendingCommandStatus();
+  }
+  updatePendingCommandStatus() {
+    const status = this.pendingCommandEl;
+    if (status === null) {
+      return;
+    }
+    let instruction = "";
+    if (this.pendingCommand.kind === "address") {
+      instruction = this.pendingCommand.mode === "forward" ? "Find next: type an address initial \xB7 Esc to cancel" : this.pendingCommand.mode === "backward" ? "Find previous: type an address initial \xB7 Esc to cancel" : "Find from start: type an address initial \xB7 Esc to cancel";
+    } else if (this.pendingCommand.kind === "pile") {
+      const digits = this.pendingCommand.digits === "" ? "\u2026" : this.pendingCommand.digits;
+      instruction = `Pile number: ${digits} \xB7 Enter to confirm \xB7 Esc to cancel`;
+    }
+    const text = this.pendingCommandFeedback || instruction;
+    status.hidden = text === "";
+    status.setText(text);
+  }
+  clearPendingCommand() {
+    if (this.pendingCommandFeedbackTimer !== null) {
+      window.clearTimeout(this.pendingCommandFeedbackTimer);
+      this.pendingCommandFeedbackTimer = null;
+    }
+    this.pendingCommand = IDLE_DECK_COMMAND;
+    this.pendingCommandFeedback = "";
+    this.updatePendingCommandStatus();
+  }
+  showCommandFeedback(message) {
+    if (this.pendingCommandFeedbackTimer !== null) {
+      window.clearTimeout(this.pendingCommandFeedbackTimer);
+    }
+    this.pendingCommandFeedback = message;
+    this.updatePendingCommandStatus();
+    this.pendingCommandFeedbackTimer = window.setTimeout(() => {
+      this.pendingCommandFeedbackTimer = null;
+      this.pendingCommandFeedback = "";
+      this.updatePendingCommandStatus();
+    }, COMMAND_FEEDBACK_DURATION_MS);
+  }
+  beginAddressCommand(mode) {
+    this.pendingCommandStartEvent = null;
+    this.clearPendingCommand();
+    this.pendingCommand = startAddressCommand(mode);
+    this.updatePendingCommandStatus();
+  }
+  beginPileCommand() {
+    this.pendingCommandStartEvent = null;
+    this.clearPendingCommand();
+    this.pendingCommand = startPileCommand();
+    this.updatePendingCommandStatus();
+  }
+  completeAddressCommand(mode, initial) {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const targetIndex = findAddressInitialIndex(
+      filed,
+      activeIndex,
+      initial,
+      mode
+    );
+    const target = targetIndex === null ? void 0 : filed[targetIndex];
+    if (target === void 0) {
+      const position = mode === "forward" ? "later" : mode === "backward" ? "earlier" : "filed";
+      this.showCommandFeedback(`No ${position} card begins with \u201C${initial}\u201D.`);
+      return;
+    }
+    void this.jumpToPath(target.path);
+  }
+  completePileCommand(digits) {
+    const ordinal = Number(digits);
+    const pileCount = this.plugin.tray.piles.length;
+    if (digits === "" || !Number.isSafeInteger(ordinal) || ordinal <= 0 || ordinal > pileCount) {
+      this.pendingCommandFeedback = digits === "" ? "Enter a pile number before confirming." : pileCount === 0 ? "There are no piles." : `Pile ${digits} does not exist.`;
+      this.updatePendingCommandStatus();
+      return;
+    }
+    const card = this.activeCard;
+    if (card === null) {
+      this.clearPendingCommand();
+      this.showCommandFeedback("There is no active filed card.");
+      return;
+    }
+    const source = cardPosition(this.plugin.tray, card.path);
+    const next = placeFiledCardInPileOrdinal(
+      this.plugin.tray,
+      card.path,
+      ordinal
+    );
+    this.clearPendingCommand();
+    if (next === this.plugin.tray) {
+      this.showCommandFeedback(`The active card is already in pile ${ordinal}.`);
+      return;
+    }
+    this.showCommandFeedback(
+      source === null ? `Pulled the active card into pile ${ordinal}.` : `Moved the active card to pile ${ordinal}.`
+    );
+    void this.plugin.updateTray(next);
   }
   updateDeckMapBookmarks(bookmarkedPaths) {
     if (this.deckMapEl === null) {
@@ -3667,10 +4153,7 @@ var DeckView = class extends import_obsidian3.ItemView {
     if (activeIndex < 0) {
       return;
     }
-    const targetIndex = Math.max(
-      0,
-      Math.min(filed.length - 1, activeIndex + delta)
-    );
+    const targetIndex = deckIndexByDelta(activeIndex, delta, filed.length);
     const target = filed[targetIndex];
     if (target === void 0 || target.path === this.activePath) {
       return;
@@ -3775,6 +4258,9 @@ var DeckView = class extends import_obsidian3.ItemView {
     void this.goToPath(target.path);
   }
   handleDeckActionKey(event, action, repeatable = false) {
+    if (this.pendingCommand.kind !== "idle") {
+      return this.handleDeckCommandContinuation(event);
+    }
     if (shouldSuspendDeckShortcut(
       event.target,
       this.trayRenderer.isFilingInputFocused
@@ -3787,8 +4273,55 @@ var DeckView = class extends import_obsidian3.ItemView {
     event.preventDefault();
     if (!event.repeat || repeatable) {
       this.runAction(action);
+      if (!event.repeat && PENDING_COMMAND_ACTIONS.has(action)) {
+        this.pendingCommandStartEvent = event;
+      }
     }
     return true;
+  }
+  handleDeckCommandContinuation(event) {
+    if (event === this.pendingCommandStartEvent) {
+      this.pendingCommandStartEvent = null;
+      return false;
+    }
+    this.pendingCommandStartEvent = null;
+    if (this.pendingCommand.kind !== "idle") {
+      if (shouldSuspendDeckShortcut(
+        event.target,
+        this.trayRenderer.isFilingInputFocused
+      )) {
+        this.clearPendingCommand();
+        return false;
+      }
+      const step = advancePendingDeckCommand(this.pendingCommand, event.key);
+      if (!step.consumed) {
+        return false;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      this.pendingCommand = step.state;
+      this.pendingCommandFeedback = "";
+      this.updatePendingCommandStatus();
+      if ("cancelled" in step) {
+        this.showCommandFeedback("Command cancelled.");
+      } else if ("completion" in step) {
+        if (step.completion.kind === "address") {
+          this.completeAddressCommand(
+            step.completion.mode,
+            step.completion.initial
+          );
+        } else {
+          this.completePileCommand(step.completion.digits);
+        }
+      }
+      return true;
+    }
+    return handleFilingEscape(
+      event,
+      this.filingFile !== null && !this.filingConfirmationInProgress,
+      () => void this.cancelFiling()
+    );
   }
   selectCardWithoutMoving(path) {
     this.cancelViewportCentering();
@@ -4571,6 +5104,12 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         showTitleInDeck: value
       }));
     });
+    new import_obsidian5.Setting(containerEl).setName("Show Deck toolbar").setDesc("Show the navigation, entry-point, bookmark, and spread controls above the Deck.").addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.showDeckToolbar).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        showDeckToolbar: value
+      }));
+    });
     new import_obsidian5.Setting(containerEl).setName("Show Deck map").setDesc("Show a clickable overview of every filed card and bookmark.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showDeckMap).onChange((value) => void this.save({
         ...this.slipbox.settings,
@@ -4754,6 +5293,9 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
   renderShortcutSetting(container, definition) {
     const { id: action, label } = definition;
     const setting = new import_obsidian5.Setting(container).setName(label);
+    if (definition.description !== void 0) {
+      setting.setDesc(definition.description);
+    }
     setting.settingEl.addClass("slipbox-shortcut-setting");
     const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
     for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
@@ -4874,27 +5416,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     });
   }
   bindingFromEvent(event) {
-    const modifiers = [];
-    const primary = import_obsidian5.Platform.isMacOS ? event.metaKey : event.ctrlKey;
-    if (primary) {
-      modifiers.push("Mod");
-    }
-    if (event.ctrlKey && import_obsidian5.Platform.isMacOS) {
-      modifiers.push("Ctrl");
-    }
-    if (event.metaKey && !import_obsidian5.Platform.isMacOS) {
-      modifiers.push("Meta");
-    }
-    if (event.altKey) {
-      modifiers.push("Alt");
-    }
-    if (event.shiftKey) {
-      modifiers.push("Shift");
-    }
-    return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
-      modifiers,
-      key: event.key
-    };
+    return keyBindingFromKeyboardEvent(event, import_obsidian5.Platform.isMacOS);
   }
   redisplayPreservingScroll() {
     const positions = [];
@@ -6129,9 +6651,49 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
     this.registerDeckCommand("previous-card", "Previous card", "previous-card");
     this.registerDeckCommand("next-card", "Next card", "next-card");
+    this.registerDeckCommand(
+      "forward-ten-cards",
+      "Move forward ten cards",
+      "forward-ten-cards"
+    );
+    this.registerDeckCommand(
+      "backward-ten-cards",
+      "Move backward ten cards",
+      "backward-ten-cards"
+    );
     this.registerDeckCommand("centre-active-card", "Centre active card", "centre-card");
     this.registerDeckCommand("first-card", "First card", "first-card");
     this.registerDeckCommand("last-card", "Last card", "last-card");
+    this.registerDeckCommand(
+      "find-next-address-initial",
+      "Find next address initial",
+      "find-address-forward"
+    );
+    this.registerDeckCommand(
+      "find-previous-address-initial",
+      "Find previous address initial",
+      "find-address-backward"
+    );
+    this.registerDeckCommand(
+      "find-first-address-initial",
+      "Go to first address initial",
+      "find-address-first"
+    );
+    this.registerDeckCommand(
+      "pull-into-numbered-pile",
+      "Pull current card into numbered pile",
+      "pull-into-pile"
+    );
+    this.registerDeckCommand(
+      "toggle-toolbar-visibility",
+      "Toggle toolbar visibility",
+      "toggle-toolbar"
+    );
+    this.registerDeckCommand(
+      "toggle-deck-map-visibility",
+      "Toggle Deck-map visibility",
+      "toggle-deck-map"
+    );
     this.addCommand({
       id: "manage-entry-points",
       name: "Manage entry points",

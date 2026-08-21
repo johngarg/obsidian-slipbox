@@ -166,6 +166,39 @@ export function moveCardBetweenPiles(
   return next;
 }
 
+/**
+ * Add or move a filed card to a one-based pile in the current visible order.
+ * Invalid ordinals and same-pile requests preserve object identity.
+ */
+export function placeFiledCardInPileOrdinal(
+  state: TrayState,
+  cardRef: string,
+  ordinal: number,
+): TrayState {
+  if (!Number.isInteger(ordinal) || ordinal <= 0 || cardRef === "") {
+    return state;
+  }
+  const target = state.piles[ordinal - 1];
+  if (target === undefined) {
+    return state;
+  }
+  const source = cardPosition(state, cardRef);
+  if (source?.pileId === target.id) {
+    return state;
+  }
+  if (source === null) {
+    return addUniqueCardToPile(state, target.id, {
+      cardRef,
+      kind: "filed",
+    });
+  }
+  const card = state.piles[source.pileIndex]?.cards[source.cardIndex];
+  if (card?.kind !== "filed") {
+    return state;
+  }
+  return moveCardBetweenPiles(state, cardRef, target.id);
+}
+
 export function splitCardIntoNewPile(
   state: TrayState,
   cardRef: string,

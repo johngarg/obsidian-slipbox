@@ -14,6 +14,8 @@ export type DeckHeaderButton =
 export type DeckAction =
   | "previous-card"
   | "next-card"
+  | "forward-ten-cards"
+  | "backward-ten-cards"
   | "centre-card"
   | "first-card"
   | "last-card"
@@ -23,6 +25,12 @@ export type DeckAction =
   | "toggle-bookmark"
   | "back"
   | "forward"
+  | "find-address-forward"
+  | "find-address-backward"
+  | "find-address-first"
+  | "pull-into-pile"
+  | "toggle-toolbar"
+  | "toggle-deck-map"
   | "entry-points"
   | "bookmarks"
   | "problems"
@@ -39,6 +47,7 @@ export interface DeckKeyBinding {
 export interface DeckActionDefinition {
   readonly id: DeckAction;
   readonly label: string;
+  readonly description?: string;
   readonly repeatable: boolean;
   readonly defaultBindings: readonly DeckKeyBinding[];
 }
@@ -71,13 +80,25 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     id: "first-card",
     label: "First card",
     repeatable: false,
-    defaultBindings: [binding("g")],
+    defaultBindings: [binding("0")],
   },
   {
     id: "last-card",
     label: "Last card",
     repeatable: false,
-    defaultBindings: [binding("g", ["Shift"])],
+    defaultBindings: [binding("$", ["Shift"])],
+  },
+  {
+    id: "forward-ten-cards",
+    label: "Move forward ten cards",
+    repeatable: true,
+    defaultBindings: [binding("d", ["Ctrl"])],
+  },
+  {
+    id: "backward-ten-cards",
+    label: "Move backward ten cards",
+    repeatable: true,
+    defaultBindings: [binding("u", ["Ctrl"])],
   },
   {
     id: "open-note",
@@ -97,8 +118,58 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     repeatable: false,
     defaultBindings: [binding("b")],
   },
-  { id: "back", label: "Back", repeatable: false, defaultBindings: [] },
-  { id: "forward", label: "Forward", repeatable: false, defaultBindings: [] },
+  {
+    id: "back",
+    label: "Back",
+    repeatable: false,
+    defaultBindings: [binding("h", ["Shift"])],
+  },
+  {
+    id: "forward",
+    label: "Forward",
+    repeatable: false,
+    defaultBindings: [binding("l", ["Shift"])],
+  },
+  {
+    id: "find-address-forward",
+    label: "Find next address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("f")],
+  },
+  {
+    id: "find-address-backward",
+    label: "Find previous address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("f", ["Shift"])],
+  },
+  {
+    id: "find-address-first",
+    label: "Go to first address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("g")],
+  },
+  {
+    id: "pull-into-pile",
+    label: "Pull into numbered pile",
+    description: "Type a one-based pile number, then press Enter.",
+    repeatable: false,
+    defaultBindings: [binding("p", ["Shift"])],
+  },
+  {
+    id: "toggle-toolbar",
+    label: "Toggle toolbar visibility",
+    repeatable: false,
+    defaultBindings: [binding("t")],
+  },
+  {
+    id: "toggle-deck-map",
+    label: "Toggle Deck-map visibility",
+    repeatable: false,
+    defaultBindings: [binding("m")],
+  },
   {
     id: "entry-points",
     label: "Manage entry points",
@@ -149,6 +220,7 @@ export interface SlipboxSettings {
   readonly useTemplatesForNewNotes: boolean;
   readonly newNoteTemplatePath: string;
   readonly showTitleInDeck: boolean;
+  readonly showDeckToolbar: boolean;
   readonly showDeckMap: boolean;
   readonly deckHeaderButtons: Readonly<Record<DeckHeaderButton, boolean>>;
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
@@ -168,6 +240,25 @@ export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
   ]),
 ) as Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
 
+const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKeyBinding[]>> = {
+  "previous-card": [binding("ArrowLeft"), binding("k")],
+  "next-card": [binding("ArrowRight"), binding("j")],
+  "centre-card": [binding("c")],
+  "first-card": [binding("g")],
+  "last-card": [binding("g", ["Shift"])],
+  "open-note": [binding("o")],
+  "toggle-tray": [binding("p")],
+  "toggle-bookmark": [binding("b")],
+  back: [],
+  forward: [],
+  "entry-points": [],
+  bookmarks: [],
+  problems: [],
+  "confirm-filing": [],
+  "cancel-filing": [],
+  "copy-link": [binding("y")],
+};
+
 export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "zettel-id",
   deckOrdering: "natural",
@@ -180,6 +271,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
+  showDeckToolbar: true,
   showDeckMap: true,
   deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
@@ -232,23 +324,98 @@ export function keyBindingSignature(bindingValue: DeckKeyBinding): string {
 
 export function formatKeyBinding(bindingValue: DeckKeyBinding): string {
   const key = bindingValue.key === " " ? "Space" : bindingValue.key;
+  if (
+    bindingValue.modifiers.length === 1 &&
+    bindingValue.modifiers[0] === "Shift" &&
+    key === "$"
+  ) {
+    return key;
+  }
   return [...bindingValue.modifiers, key].join("+");
+}
+
+export interface KeyboardBindingEvent {
+  readonly key: string;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly altKey: boolean;
+  readonly shiftKey: boolean;
+}
+
+export function keyBindingFromKeyboardEvent(
+  event: KeyboardBindingEvent,
+  isMacOS: boolean,
+): DeckKeyBinding {
+  const modifiers: KeyModifier[] = [];
+  const primary = isMacOS ? event.metaKey : event.ctrlKey;
+  if (primary) {
+    modifiers.push("Mod");
+  }
+  if (event.ctrlKey && isMacOS) {
+    modifiers.push("Ctrl");
+  }
+  if (event.metaKey && !isMacOS) {
+    modifiers.push("Meta");
+  }
+  if (event.altKey) {
+    modifiers.push("Alt");
+  }
+  if (event.shiftKey) {
+    modifiers.push("Shift");
+  }
+  return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
+    modifiers,
+    key: event.key,
+  };
+}
+
+function bindingsEqual(left: readonly DeckKeyBinding[], right: readonly DeckKeyBinding[]): boolean {
+  return left.length === right.length && left.every((candidate, index) => {
+    const expected = right[index];
+    return expected !== undefined &&
+      keyBindingSignature(candidate) === keyBindingSignature(expected);
+  });
+}
+
+function isCompletePreviousDefaultMap(source: Record<string, unknown>): boolean {
+  const previousActions = new Set(Object.keys(PREVIOUS_DEFAULT_DECK_KEYBINDINGS));
+  if (DECK_ACTION_DEFINITIONS.some((definition) =>
+    !previousActions.has(definition.id) &&
+    Object.prototype.hasOwnProperty.call(source, definition.id))) {
+    return false;
+  }
+  return Object.entries(PREVIOUS_DEFAULT_DECK_KEYBINDINGS).every(([action, expected]) => {
+    const candidate = source[action];
+    if (!Array.isArray(candidate)) {
+      return false;
+    }
+    const normalized = candidate.flatMap((value): DeckKeyBinding[] => {
+      const result = normalizeKeyBinding(value);
+      return result === null ? [] : [result];
+    });
+    return bindingsEqual(normalized, expected);
+  });
 }
 
 export function normalizeDeckKeybindings(
   value: unknown,
 ): Readonly<Record<DeckAction, readonly DeckKeyBinding[]>> {
   const source = isRecord(value) ? value : {};
+  if (isCompletePreviousDefaultMap(source)) {
+    return DEFAULT_DECK_KEYBINDINGS;
+  }
   const claimed = new Set<string>();
   const result = {} as Record<DeckAction, readonly DeckKeyBinding[]>;
 
+  // Existing arrays claim their bindings first so a newly introduced default
+  // can never displace a customized or deliberately retained legacy binding.
   for (const definition of DECK_ACTION_DEFINITIONS) {
     const candidate = source[definition.id];
-    const rawBindings = Array.isArray(candidate)
-      ? candidate
-      : definition.defaultBindings;
+    if (!Array.isArray(candidate)) {
+      continue;
+    }
     const normalized: DeckKeyBinding[] = [];
-    for (const rawBinding of rawBindings) {
+    for (const rawBinding of candidate) {
       const normalizedBinding = normalizeKeyBinding(rawBinding);
       if (normalizedBinding === null) {
         continue;
@@ -259,6 +426,21 @@ export function normalizeDeckKeybindings(
       }
       claimed.add(signature);
       normalized.push(normalizedBinding);
+    }
+    result[definition.id] = normalized;
+  }
+
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    if (result[definition.id] !== undefined) {
+      continue;
+    }
+    const normalized: DeckKeyBinding[] = [];
+    for (const defaultBinding of definition.defaultBindings) {
+      const signature = keyBindingSignature(defaultBinding);
+      if (!claimed.has(signature)) {
+        claimed.add(signature);
+        normalized.push(defaultBinding);
+      }
     }
     result[definition.id] = normalized;
   }
@@ -312,6 +494,10 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
         : DEFAULT_SETTINGS.showTitleInDeck,
+    showDeckToolbar:
+      typeof source.showDeckToolbar === "boolean"
+        ? source.showDeckToolbar
+        : DEFAULT_SETTINGS.showDeckToolbar,
     showDeckMap:
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap

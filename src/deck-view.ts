@@ -20,6 +20,7 @@ import {
   cardStackOrder,
   centredViewportPosition,
   clampViewportPosition,
+  deckIndexByDelta,
 } from "./deck-motion.js";
 import { NavigationHistory } from "./navigation-history.js";
 import type { FiledCard } from "./card-index.js";
@@ -35,7 +36,11 @@ import {
   TrayRenderer,
   type TrayFilingState,
 } from "./tray-view.js";
-import { cardPosition, moveCardWithinPile } from "./tray-state.js";
+import {
+  cardPosition,
+  moveCardWithinPile,
+  placeFiledCardInPileOrdinal,
+} from "./tray-state.js";
 import {
   pathIsAtOrBelow,
   renamePathReference,
@@ -58,6 +63,23 @@ import {
   visibleDeckMapSectionMarkers,
   type DeckMapSectionMarker,
 } from "./deck-map.js";
+import {
+  IDLE_DECK_COMMAND,
+  advancePendingDeckCommand,
+  findAddressInitialIndex,
+  installPendingDeckCommandKeyCapture,
+  startAddressCommand,
+  startPileCommand,
+  type AddressInitialMode,
+  type PendingDeckCommand,
+} from "./deck-commands.js";
+import {
+  DEFAULT_DECK_CHROME_VISIBILITY,
+  applyDeckChromeVisibility,
+  toggleDeckMapVisibility,
+  toggleToolbarVisibility,
+  type DeckChromeVisibility,
+} from "./deck-chrome.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -66,6 +88,13 @@ const LAYOUT_MEASUREMENT_RETRIES = 2;
 const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
 const DECK_MAP_SECTION_LABEL_SPACING = 14;
+const COMMAND_FEEDBACK_DURATION_MS = 1_800;
+const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
+  "find-address-forward",
+  "find-address-backward",
+  "find-address-first",
+  "pull-into-pile",
+]);
 
 export class DeckView extends ItemView {
   private activePath: string | null = null;
@@ -95,6 +124,7 @@ export class DeckView extends ItemView {
   private backButtonEl: HTMLButtonElement | null = null;
   private forwardButtonEl: HTMLButtonElement | null = null;
   private bookmarksButtonEl: HTMLButtonElement | null = null;
+  private toolbarEl: HTMLElement | null = null;
   private deckMapEl: HTMLElement | null = null;
   private deckMapRailEl: HTMLElement | null = null;
   private deckMapSectionLayerEl: HTMLElement | null = null;
@@ -109,6 +139,12 @@ export class DeckView extends ItemView {
   private readonly trayRenderer: TrayRenderer;
   private keymapHandlers: KeymapEventHandler[] = [];
   private deckKeybindingsSuspended = false;
+  private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
+  private pendingCommandStartEvent: KeyboardEvent | null = null;
+  private pendingCommandEl: HTMLElement | null = null;
+  private pendingCommandFeedback = "";
+  private pendingCommandFeedbackTimer: number | null = null;
+  private chromeVisibility: DeckChromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -155,6 +191,23 @@ export class DeckView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.register(installPendingDeckCommandKeyCapture(
+      this.contentEl.ownerDocument,
+      {
+        isPending: () => this.pendingCommand.kind !== "idle",
+        isActive: () => this.app.workspace.getActiveViewOfType(DeckView) === this,
+        shouldIgnore: (event) => {
+          if (event !== this.pendingCommandStartEvent) {
+            return false;
+          }
+          this.pendingCommandStartEvent = null;
+          return true;
+        },
+        handle: (event) => {
+          this.handleDeckCommandContinuation(event);
+        },
+      },
+    ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (handleFilingEscape(
         event,
@@ -172,7 +225,7 @@ export class DeckView extends ItemView {
         event.preventDefault();
         this.trayRenderer.focusFilingInputNow();
       }
-    });
+    }, { capture: true });
     this.observeDeckSize();
     await this.refresh();
   }
@@ -191,6 +244,7 @@ export class DeckView extends ItemView {
     this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
+    this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
     this.filingPreview = null;
@@ -203,6 +257,7 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -210,6 +265,8 @@ export class DeckView extends ItemView {
     this.deckMapSections = [];
     this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
+    this.pendingCommandEl = null;
+    this.pendingCommandStartEvent = null;
     this.history.reset();
   }
 
@@ -294,30 +351,20 @@ export class DeckView extends ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
-    this.keymapHandlers.push(scope.register(
-      [],
-      "Escape",
-      (event) => handleFilingEscape(
-        event,
-        this.filingFile !== null && !this.filingConfirmationInProgress,
-        () => void this.cancelFiling(),
-      ),
-    ));
-    if (this.deckKeybindingsSuspended) {
-      return;
-    }
-    for (const definition of DECK_ACTION_DEFINITIONS) {
-      for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
-        const handler = scope.register(
-          [...binding.modifiers] as Modifier[],
-          binding.key,
-          (event) => this.handleDeckActionKey(
-            event,
-            definition.id,
-            definition.repeatable,
-          ),
-        );
-        this.keymapHandlers.push(handler);
+    if (!this.deckKeybindingsSuspended) {
+      for (const definition of DECK_ACTION_DEFINITIONS) {
+        for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
+          const handler = scope.register(
+            [...binding.modifiers] as Modifier[],
+            binding.key,
+            (event) => this.handleDeckActionKey(
+              event,
+              definition.id,
+              definition.repeatable,
+            ),
+          );
+          this.keymapHandlers.push(handler);
+        }
       }
     }
   }
@@ -325,6 +372,9 @@ export class DeckView extends ItemView {
   private setDeckKeybindingsSuspended(suspended: boolean): void {
     if (this.deckKeybindingsSuspended === suspended) {
       return;
+    }
+    if (suspended) {
+      this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
     this.updateKeybindings();
@@ -367,6 +417,12 @@ export class DeckView extends ItemView {
       case "next-card":
         this.moveBy(1);
         break;
+      case "forward-ten-cards":
+        this.moveBy(10);
+        break;
+      case "backward-ten-cards":
+        this.moveBy(-10);
+        break;
       case "centre-card":
         this.centerActiveCard();
         break;
@@ -401,6 +457,32 @@ export class DeckView extends ItemView {
         break;
       case "forward":
         void this.goForward();
+        break;
+      case "find-address-forward":
+        this.beginAddressCommand("forward");
+        break;
+      case "find-address-backward":
+        this.beginAddressCommand("backward");
+        break;
+      case "find-address-first":
+        this.beginAddressCommand("absolute");
+        break;
+      case "pull-into-pile":
+        this.beginPileCommand();
+        break;
+      case "toggle-toolbar":
+        this.chromeVisibility = toggleToolbarVisibility(
+          this.chromeVisibility,
+          this.plugin.settings.showDeckToolbar,
+        );
+        this.applyChromeVisibility();
+        break;
+      case "toggle-deck-map":
+        this.chromeVisibility = toggleDeckMapVisibility(
+          this.chromeVisibility,
+          this.plugin.settings.showDeckMap,
+        );
+        this.applyChromeVisibility();
         break;
       case "entry-points":
         this.plugin.showEntryPoints(this);
@@ -609,6 +691,7 @@ export class DeckView extends ItemView {
     this.backButtonEl = null;
     this.forwardButtonEl = null;
     this.bookmarksButtonEl = null;
+    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -616,12 +699,15 @@ export class DeckView extends ItemView {
     this.deckMapSections = [];
     this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
+    this.pendingCommandEl = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     this.renderToolbar(shell);
     this.renderDeckMap(shell);
+    this.renderPendingCommandStatus(shell);
+    this.applyChromeVisibility();
 
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
@@ -664,6 +750,7 @@ export class DeckView extends ItemView {
 
   private renderToolbar(shell: HTMLElement): void {
     const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
+    this.toolbarEl = toolbar;
     const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
     const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
     setIcon(icon, "archive");
@@ -741,7 +828,7 @@ export class DeckView extends ItemView {
 
   private renderDeckMap(shell: HTMLElement): void {
     const filed = this.plugin.index.snapshot.filed;
-    if (!this.plugin.settings.showDeckMap || filed.length === 0) {
+    if (filed.length === 0) {
       return;
     }
 
@@ -812,6 +899,154 @@ export class DeckView extends ItemView {
       event.stopPropagation();
       this.runAction(action);
     });
+  }
+
+  private applyChromeVisibility(): void {
+    applyDeckChromeVisibility(
+      this.toolbarEl,
+      this.deckMapEl,
+      this.chromeVisibility,
+      this.plugin.settings.showDeckToolbar,
+      this.plugin.settings.showDeckMap,
+      this.plugin.index.snapshot.filed.length,
+    );
+  }
+
+  private renderPendingCommandStatus(shell: HTMLElement): void {
+    this.pendingCommandEl = shell.createDiv({
+      cls: "slipbox-pending-command-status",
+      attr: {
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true",
+      },
+    });
+    this.updatePendingCommandStatus();
+  }
+
+  private updatePendingCommandStatus(): void {
+    const status = this.pendingCommandEl;
+    if (status === null) {
+      return;
+    }
+    let instruction = "";
+    if (this.pendingCommand.kind === "address") {
+      instruction = this.pendingCommand.mode === "forward"
+        ? "Find next: type an address initial · Esc to cancel"
+        : this.pendingCommand.mode === "backward"
+          ? "Find previous: type an address initial · Esc to cancel"
+          : "Find from start: type an address initial · Esc to cancel";
+    } else if (this.pendingCommand.kind === "pile") {
+      const digits = this.pendingCommand.digits === ""
+        ? "…"
+        : this.pendingCommand.digits;
+      instruction = `Pile number: ${digits} · Enter to confirm · Esc to cancel`;
+    }
+    const text = this.pendingCommandFeedback || instruction;
+    status.hidden = text === "";
+    status.setText(text);
+  }
+
+  private clearPendingCommand(): void {
+    if (this.pendingCommandFeedbackTimer !== null) {
+      window.clearTimeout(this.pendingCommandFeedbackTimer);
+      this.pendingCommandFeedbackTimer = null;
+    }
+    this.pendingCommand = IDLE_DECK_COMMAND;
+    this.pendingCommandFeedback = "";
+    this.updatePendingCommandStatus();
+  }
+
+  private showCommandFeedback(message: string): void {
+    if (this.pendingCommandFeedbackTimer !== null) {
+      window.clearTimeout(this.pendingCommandFeedbackTimer);
+    }
+    this.pendingCommandFeedback = message;
+    this.updatePendingCommandStatus();
+    this.pendingCommandFeedbackTimer = window.setTimeout(() => {
+      this.pendingCommandFeedbackTimer = null;
+      this.pendingCommandFeedback = "";
+      this.updatePendingCommandStatus();
+    }, COMMAND_FEEDBACK_DURATION_MS);
+  }
+
+  private beginAddressCommand(mode: AddressInitialMode): void {
+    this.pendingCommandStartEvent = null;
+    this.clearPendingCommand();
+    this.pendingCommand = startAddressCommand(mode);
+    this.updatePendingCommandStatus();
+  }
+
+  private beginPileCommand(): void {
+    this.pendingCommandStartEvent = null;
+    this.clearPendingCommand();
+    this.pendingCommand = startPileCommand();
+    this.updatePendingCommandStatus();
+  }
+
+  private completeAddressCommand(mode: AddressInitialMode, initial: string): void {
+    const filed = this.plugin.index.snapshot.filed;
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const targetIndex = findAddressInitialIndex(
+      filed,
+      activeIndex,
+      initial,
+      mode,
+    );
+    const target = targetIndex === null ? undefined : filed[targetIndex];
+    if (target === undefined) {
+      const position = mode === "forward"
+        ? "later"
+        : mode === "backward"
+          ? "earlier"
+          : "filed";
+      this.showCommandFeedback(`No ${position} card begins with “${initial}”.`);
+      return;
+    }
+    void this.jumpToPath(target.path);
+  }
+
+  private completePileCommand(digits: string): void {
+    const ordinal = Number(digits);
+    const pileCount = this.plugin.tray.piles.length;
+    if (
+      digits === "" ||
+      !Number.isSafeInteger(ordinal) ||
+      ordinal <= 0 ||
+      ordinal > pileCount
+    ) {
+      this.pendingCommandFeedback = digits === ""
+        ? "Enter a pile number before confirming."
+        : pileCount === 0
+          ? "There are no piles."
+          : `Pile ${digits} does not exist.`;
+      this.updatePendingCommandStatus();
+      return;
+    }
+
+    const card = this.activeCard;
+    if (card === null) {
+      this.clearPendingCommand();
+      this.showCommandFeedback("There is no active filed card.");
+      return;
+    }
+    const source = cardPosition(this.plugin.tray, card.path);
+    const next = placeFiledCardInPileOrdinal(
+      this.plugin.tray,
+      card.path,
+      ordinal,
+    );
+    this.clearPendingCommand();
+    if (next === this.plugin.tray) {
+      this.showCommandFeedback(`The active card is already in pile ${ordinal}.`);
+      return;
+    }
+    this.showCommandFeedback(
+      source === null
+        ? `Pulled the active card into pile ${ordinal}.`
+        : `Moved the active card to pile ${ordinal}.`,
+    );
+    void this.plugin.updateTray(next);
   }
 
   private updateDeckMapBookmarks(bookmarkedPaths: Set<string>): void {
@@ -1454,10 +1689,7 @@ export class DeckView extends ItemView {
     if (activeIndex < 0) {
       return;
     }
-    const targetIndex = Math.max(
-      0,
-      Math.min(filed.length - 1, activeIndex + delta),
-    );
+    const targetIndex = deckIndexByDelta(activeIndex, delta, filed.length);
     const target = filed[targetIndex];
     if (target === undefined || target.path === this.activePath) {
       return;
@@ -1594,6 +1826,9 @@ export class DeckView extends ItemView {
     action: DeckAction,
     repeatable = false,
   ): boolean {
+    if (this.pendingCommand.kind !== "idle") {
+      return this.handleDeckCommandContinuation(event);
+    }
     if (shouldSuspendDeckShortcut(
       event.target,
       this.trayRenderer.isFilingInputFocused,
@@ -1608,8 +1843,57 @@ export class DeckView extends ItemView {
     event.preventDefault();
     if (!event.repeat || repeatable) {
       this.runAction(action);
+      if (!event.repeat && PENDING_COMMAND_ACTIONS.has(action)) {
+        this.pendingCommandStartEvent = event;
+      }
     }
     return true;
+  }
+
+  private handleDeckCommandContinuation(event: KeyboardEvent): boolean {
+    if (event === this.pendingCommandStartEvent) {
+      this.pendingCommandStartEvent = null;
+      return false;
+    }
+    this.pendingCommandStartEvent = null;
+    if (this.pendingCommand.kind !== "idle") {
+      if (shouldSuspendDeckShortcut(
+        event.target,
+        this.trayRenderer.isFilingInputFocused,
+      )) {
+        this.clearPendingCommand();
+        return false;
+      }
+      const step = advancePendingDeckCommand(this.pendingCommand, event.key);
+      if (!step.consumed) {
+        return false;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      this.pendingCommand = step.state;
+      this.pendingCommandFeedback = "";
+      this.updatePendingCommandStatus();
+      if ("cancelled" in step) {
+        this.showCommandFeedback("Command cancelled.");
+      } else if ("completion" in step) {
+        if (step.completion.kind === "address") {
+          this.completeAddressCommand(
+            step.completion.mode,
+            step.completion.initial,
+          );
+        } else {
+          this.completePileCommand(step.completion.digits);
+        }
+      }
+      return true;
+    }
+
+    return handleFilingEscape(
+      event,
+      this.filingFile !== null && !this.filingConfirmationInProgress,
+      () => void this.cancelFiling(),
+    );
   }
 
   private selectCardWithoutMoving(path: string): void {

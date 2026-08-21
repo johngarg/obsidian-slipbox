@@ -940,9 +940,49 @@ export default class SlipboxPlugin extends Plugin {
 
     this.registerDeckCommand("previous-card", "Previous card", "previous-card");
     this.registerDeckCommand("next-card", "Next card", "next-card");
+    this.registerDeckCommand(
+      "forward-ten-cards",
+      "Move forward ten cards",
+      "forward-ten-cards",
+    );
+    this.registerDeckCommand(
+      "backward-ten-cards",
+      "Move backward ten cards",
+      "backward-ten-cards",
+    );
     this.registerDeckCommand("centre-active-card", "Centre active card", "centre-card");
     this.registerDeckCommand("first-card", "First card", "first-card");
     this.registerDeckCommand("last-card", "Last card", "last-card");
+    this.registerDeckCommand(
+      "find-next-address-initial",
+      "Find next address initial",
+      "find-address-forward",
+    );
+    this.registerDeckCommand(
+      "find-previous-address-initial",
+      "Find previous address initial",
+      "find-address-backward",
+    );
+    this.registerDeckCommand(
+      "find-first-address-initial",
+      "Go to first address initial",
+      "find-address-first",
+    );
+    this.registerDeckCommand(
+      "pull-into-numbered-pile",
+      "Pull current card into numbered pile",
+      "pull-into-pile",
+    );
+    this.registerDeckCommand(
+      "toggle-toolbar-visibility",
+      "Toggle toolbar visibility",
+      "toggle-toolbar",
+    );
+    this.registerDeckCommand(
+      "toggle-deck-map-visibility",
+      "Toggle Deck-map visibility",
+      "toggle-deck-map",
+    );
     this.addCommand({
       id: "manage-entry-points",
       name: "Manage entry points",

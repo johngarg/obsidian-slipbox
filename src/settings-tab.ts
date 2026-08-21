@@ -13,13 +13,12 @@ import {
   DEFAULT_DECK_KEYBINDINGS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
+  keyBindingFromKeyboardEvent,
   keyBindingConflict,
   keyBindingSignature,
   normalizeCardSize,
-  normalizeKeyBinding,
   type DeckActionDefinition,
   type DeckKeyBinding,
-  type KeyModifier,
   type SlipboxSettings,
 } from "./settings.js";
 
@@ -91,6 +90,18 @@ export class SlipboxSettingTab extends PluginSettingTab {
           .onChange((value) => void this.save({
             ...this.slipbox.settings,
             showTitleInDeck: value,
+          }));
+      });
+
+    new Setting(containerEl)
+      .setName("Show Deck toolbar")
+      .setDesc("Show the navigation, entry-point, bookmark, and spread controls above the Deck.")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.slipbox.settings.showDeckToolbar)
+          .onChange((value) => void this.save({
+            ...this.slipbox.settings,
+            showDeckToolbar: value,
           }));
       });
 
@@ -376,6 +387,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
   ): void {
     const { id: action, label } = definition;
     const setting = new Setting(container).setName(label);
+    if (definition.description !== undefined) {
+      setting.setDesc(definition.description);
+    }
     setting.settingEl.addClass("slipbox-shortcut-setting");
     const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
     for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
@@ -502,27 +516,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
   }
 
   private bindingFromEvent(event: KeyboardEvent): DeckKeyBinding {
-    const modifiers: KeyModifier[] = [];
-    const primary = Platform.isMacOS ? event.metaKey : event.ctrlKey;
-    if (primary) {
-      modifiers.push("Mod");
-    }
-    if (event.ctrlKey && Platform.isMacOS) {
-      modifiers.push("Ctrl");
-    }
-    if (event.metaKey && !Platform.isMacOS) {
-      modifiers.push("Meta");
-    }
-    if (event.altKey) {
-      modifiers.push("Alt");
-    }
-    if (event.shiftKey) {
-      modifiers.push("Shift");
-    }
-    return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
-      modifiers,
-      key: event.key,
-    };
+    return keyBindingFromKeyboardEvent(event, Platform.isMacOS);
   }
 
   private redisplayPreservingScroll(): void {

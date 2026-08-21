@@ -135,3 +135,18 @@ export function centredViewportPosition(
 ): number {
   return clampViewportPosition(targetIndex, cardCount);
 }
+
+/** Move an integral number of Deck positions and clamp at either boundary. */
+export function deckIndexByDelta(
+  activeIndex: number,
+  delta: number,
+  cardCount: number,
+): number {
+  if (cardCount <= 0 || activeIndex < 0 || activeIndex >= cardCount) {
+    return -1;
+  }
+  return Math.max(
+    0,
+    Math.min(cardCount - 1, activeIndex + Math.trunc(delta)),
+  );
+}

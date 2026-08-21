@@ -34,6 +34,22 @@ export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
+  advancePendingDeckCommand,
+  findAddressInitialIndex,
+  firstUnicodeCharacter,
+  installPendingDeckCommandKeyCapture,
+  startAddressCommand,
+  startPileCommand,
+} from "./deck-commands.js";
+export {
+  DEFAULT_DECK_CHROME_VISIBILITY,
+  applyDeckChromeVisibility,
+  deckMapIsVisible,
+  toolbarIsVisible,
+  toggleDeckMapVisibility,
+  toggleToolbarVisibility,
+} from "./deck-chrome.js";
+export {
   buildDeckMapModel,
   buildDeckMapSectionMarkers,
   deckMapCoordinate,
@@ -44,6 +60,7 @@ export {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
+  keyBindingFromKeyboardEvent,
   keyBindingConflict,
   normalizeDeckKeybindings,
   normalizeFolderPath,
@@ -105,6 +122,7 @@ export {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
+  placeFiledCardInPileOrdinal,
   pruneTrayCards,
   reconcileTray,
   removeCard,
@@ -147,6 +165,13 @@ export type {
 } from "./tray-state.js";
 export type { DeskCardState } from "./desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
+export type {
+  AddressInitialMode,
+  AddressedDeckCard,
+  PendingDeckCommand,
+  PendingDeckCommandStep,
+} from "./deck-commands.js";
+export type { DeckChromeVisibility } from "./deck-chrome.js";
 export type {
   DeckMapMarker,
   DeckMapModel,

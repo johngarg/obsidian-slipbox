@@ -8,6 +8,7 @@ import {
   cardStackOrder,
   centredViewportPosition,
   clampViewportPosition,
+  deckIndexByDelta,
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
@@ -126,5 +127,18 @@ describe("free Deck motion", () => {
     assert.equal(centredViewportPosition(-1, 6), 0);
     assert.equal(centredViewportPosition(6, 6), 5);
     assert.equal(centredViewportPosition(0, 0), 0);
+  });
+
+  test("moves exactly ten Deck positions, clamps, and remains repeatable", () => {
+    assert.equal(deckIndexByDelta(15, 10, 40), 25);
+    assert.equal(deckIndexByDelta(15, -10, 40), 5);
+    assert.equal(deckIndexByDelta(35, 10, 40), 39);
+    assert.equal(deckIndexByDelta(4, -10, 40), 0);
+
+    let active = 2;
+    active = deckIndexByDelta(active, 10, 40);
+    active = deckIndexByDelta(active, 10, 40);
+    active = deckIndexByDelta(active, 10, 40);
+    assert.equal(active, 32);
   });
 });

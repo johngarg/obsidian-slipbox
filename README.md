@@ -151,6 +151,10 @@ configured top-level frontmatter property, with a filename fallback for missing,
 blank, or non-text values. Slipbox card titles are hidden by default. Visible
 titles are centred between the left-aligned address and right-aligned actions.
 
+`Show Deck toolbar` is enabled by default. Disabling it hides the navigation,
+entry-point, bookmark, problem, and spread controls above the Deck while leaving
+their commands and shortcuts available.
+
 `Show Deck map` is enabled by default. The map derives card and bookmark
 positions from the complete configured Deck order and exact file paths. Click a
 dot to jump to that card; the active card is a grey bar, bookmarked cards use
@@ -182,11 +186,36 @@ Obsidian's Templates core plugin.
 | `←` / `k` | Select the previous card |
 | `→` / `j` | Select the next card |
 | `c` | Centre the active card |
-| `g` | Jump to the first card |
-| `G` | Jump to the last card |
+| `b` | Toggle the active-card bookmark |
+| `y` | Copy a link to the active card |
+| `H` | Go Back in Slipbox history |
+| `L` | Go Forward in Slipbox history |
+| `0` | Jump to the first card |
+| `$` | Jump to the last card |
+| `Ctrl+d` | Move forward ten Deck positions |
+| `Ctrl+u` | Move backward ten Deck positions |
 | `o` | Open the active Markdown note |
 | `p` | Pull out or return the active card |
-| `b` | Toggle the active-card bookmark |
+| `f` then a character | Find the next card whose address begins with that character |
+| `F` then a character | Find the previous card whose address begins with that character |
+| `g` then a character | Find the first card from the start whose address begins with that character |
+| `P` then a pile number and `Enter` | Pull or move the active card into that one-based visible pile |
+| `t` | Toggle this Slipbox view's toolbar |
+| `m` | Toggle this Slipbox view's Deck map |
+
+Address-initial searches are case-sensitive, use the first Unicode character of
+the configured address, and do not wrap. `Escape` cancels a pending multi-key
+command. In pile-number mode, digits accumulate, `Backspace` removes the last
+digit, and invalid or nonexistent pile numbers leave the Tray unchanged. `P`
+never returns a filed card to the Deck; lower-case `p` retains that toggle.
+
+The toolbar and Deck-map shortcuts are session-only and independent in each open
+Slipbox view. Each initially follows its global `Show Deck toolbar` or `Show Deck
+map` setting, but `t` and `m` can temporarily override those defaults in the
+active view.
+
+On macOS, `Ctrl+d` and `Ctrl+u` use the literal Control key, not Command. Slipbox
+keeps `Ctrl` distinct from the platform-aware `Mod` modifier in custom bindings.
 
 Every stable Slipbox action can have multiple scoped shortcuts. Changes apply to
 open Slipbox views immediately, and duplicate bindings are rejected. The previous

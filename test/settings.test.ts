@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  DECK_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
+  keyBindingFromKeyboardEvent,
   keyBindingConflict,
+  normalizeDeckKeybindings,
+  normalizeKeyBinding,
   normalizeCardSize,
   normalizeFolderPath,
   normalizeSettings,
@@ -27,6 +31,42 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["copy-link"], [
       { key: "y", modifiers: [] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["back"], [
+      { key: "h", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["forward"], [
+      { key: "l", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["first-card"], [
+      { key: "0", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["last-card"], [
+      { key: "$", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["forward-ten-cards"], [
+      { key: "d", modifiers: ["Ctrl"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["backward-ten-cards"], [
+      { key: "u", modifiers: ["Ctrl"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-forward"], [
+      { key: "f", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-backward"], [
+      { key: "f", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-first"], [
+      { key: "g", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["pull-into-pile"], [
+      { key: "p", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-toolbar"], [
+      { key: "t", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-deck-map"], [
+      { key: "m", modifiers: [] },
+    ]);
     assert.equal(DEFAULT_SETTINGS.deckHeaderButtons["copy-link"], true);
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
@@ -35,6 +75,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
+    assert.equal(DEFAULT_SETTINGS.showDeckToolbar, true);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
   });
 
@@ -51,6 +92,7 @@ describe("Slipbox settings", () => {
       useTemplatesForNewNotes: false,
       newNoteTemplatePath: " Templates/Zettel.md ",
       showTitleInDeck: true,
+      showDeckToolbar: false,
       showDeckMap: false,
       deckHeaderButtons: { bookmark: false, tray: false },
       deckKeybindings: {
@@ -74,6 +116,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
     assert.equal(settings.showTitleInDeck, true);
+    assert.equal(settings.showDeckToolbar, false);
     assert.equal(settings.showDeckMap, false);
     assert.equal(settings.deckHeaderButtons.bookmark, false);
     assert.equal(settings.deckHeaderButtons.tray, false);
@@ -110,7 +153,143 @@ describe("Slipbox settings", () => {
     assert.deepEqual(empty.deckKeybindings["copy-link"], []);
   });
 
-  test("defaults older Deck-map settings on while preserving explicit disablement", () => {
+  test("upgrades the complete previously shipped default map as one unit", () => {
+    const previous = {
+      "previous-card": [
+        { key: "ArrowLeft", modifiers: [] },
+        { key: "k", modifiers: [] },
+      ],
+      "next-card": [
+        { key: "ArrowRight", modifiers: [] },
+        { key: "j", modifiers: [] },
+      ],
+      "centre-card": [{ key: "c", modifiers: [] }],
+      "first-card": [{ key: "g", modifiers: [] }],
+      "last-card": [{ key: "g", modifiers: ["Shift"] }],
+      "open-note": [{ key: "o", modifiers: [] }],
+      "toggle-tray": [{ key: "p", modifiers: [] }],
+      "toggle-bookmark": [{ key: "b", modifiers: [] }],
+      back: [],
+      forward: [],
+      "entry-points": [],
+      bookmarks: [],
+      problems: [],
+      "confirm-filing": [],
+      "cancel-filing": [],
+      "copy-link": [{ key: "y", modifiers: [] }],
+    };
+    assert.deepEqual(normalizeDeckKeybindings(previous), DEFAULT_SETTINGS.deckKeybindings);
+    const withNewCustomization = normalizeDeckKeybindings({
+      ...previous,
+      "toggle-toolbar": [],
+    });
+    assert.deepEqual(withNewCustomization["first-card"], [
+      { key: "g", modifiers: [] },
+    ]);
+    assert.deepEqual(withNewCustomization["toggle-toolbar"], []);
+  });
+
+  test("preserves every non-default legacy array and protects legacy g", () => {
+    const normalized = normalizeDeckKeybindings({
+      "first-card": [{ key: "g", modifiers: [] }],
+      "last-card": [{ key: "g", modifiers: ["Shift"] }],
+      back: [],
+      forward: [{ key: "r", modifiers: ["Alt"] }],
+      "toggle-bookmark": [],
+    });
+    assert.deepEqual(normalized["first-card"], [{ key: "g", modifiers: [] }]);
+    assert.deepEqual(normalized["last-card"], [{ key: "g", modifiers: ["Shift"] }]);
+    assert.deepEqual(normalized.back, []);
+    assert.deepEqual(normalized.forward, [{ key: "r", modifiers: ["Alt"] }]);
+    assert.deepEqual(normalized["toggle-bookmark"], []);
+    assert.deepEqual(normalized["find-address-first"], []);
+    assert.deepEqual(normalized["find-address-backward"], [{
+      key: "f",
+      modifiers: ["Shift"],
+    }]);
+    assert.deepEqual(normalized["toggle-toolbar"], [{ key: "t", modifiers: [] }]);
+  });
+
+  test("supplies missing defaults only when existing bindings do not conflict", () => {
+    const normalized = normalizeDeckKeybindings({
+      "entry-points": [{ key: "t", modifiers: [] }],
+      bookmarks: [{ key: "d", modifiers: ["Ctrl"] }],
+    });
+    assert.deepEqual(normalized["entry-points"], [{ key: "t", modifiers: [] }]);
+    assert.deepEqual(normalized.bookmarks, [{ key: "d", modifiers: ["Ctrl"] }]);
+    assert.deepEqual(normalized["toggle-toolbar"], []);
+    assert.deepEqual(normalized["forward-ten-cards"], []);
+    assert.deepEqual(normalized["backward-ten-cards"], [{
+      key: "u",
+      modifiers: ["Ctrl"],
+    }]);
+  });
+
+  test("normalizes, captures, and displays shifted and literal Ctrl bindings", () => {
+    assert.deepEqual(normalizeKeyBinding({ key: "H", modifiers: ["Shift"] }), {
+      key: "h",
+      modifiers: ["Shift"],
+    });
+    assert.deepEqual(normalizeKeyBinding({ key: "$", modifiers: ["Shift"] }), {
+      key: "$",
+      modifiers: ["Shift"],
+    });
+    assert.equal(formatKeyBinding({ key: "$", modifiers: ["Shift"] }), "$");
+    assert.equal(formatKeyBinding({ key: "h", modifiers: ["Shift"] }), "Shift+h");
+
+    const base = { metaKey: false, altKey: false };
+    assert.deepEqual(keyBindingFromKeyboardEvent({
+      ...base,
+      key: "d",
+      ctrlKey: true,
+      shiftKey: false,
+    }, true), { key: "d", modifiers: ["Ctrl"] });
+    assert.deepEqual(keyBindingFromKeyboardEvent({
+      ...base,
+      key: "d",
+      ctrlKey: false,
+      metaKey: true,
+      shiftKey: false,
+    }, true), { key: "d", modifiers: ["Mod"] });
+    assert.deepEqual(keyBindingFromKeyboardEvent({
+      ...base,
+      key: "$",
+      ctrlKey: false,
+      shiftKey: true,
+    }, true), { key: "$", modifiers: ["Shift"] });
+  });
+
+  test("persists revised bindings and preserves opaque legacy actions", () => {
+    const raw = {
+      deckKeybindings: {
+        "removed-action": [{ key: "q", modifiers: [] }],
+      },
+    };
+    const persisted = settingsForPersistence(raw, DEFAULT_SETTINGS);
+    const bindings = persisted.deckKeybindings as Record<string, unknown>;
+    assert.deepEqual(bindings["removed-action"], [{ key: "q", modifiers: [] }]);
+    assert.deepEqual(bindings["last-card"], [{ key: "$", modifiers: ["Shift"] }]);
+    assert.deepEqual(bindings["forward-ten-cards"], [{ key: "d", modifiers: ["Ctrl"] }]);
+  });
+
+  test("all action resets point at their revised definition defaults", () => {
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      assert.deepEqual(
+        DEFAULT_SETTINGS.deckKeybindings[definition.id],
+        definition.defaultBindings,
+      );
+    }
+  });
+
+  test("defaults older Deck chrome settings on while preserving explicit disablement", () => {
+    assert.equal(normalizeSettings({}).showDeckToolbar, true);
+    assert.equal(normalizeSettings({ showDeckToolbar: "no" }).showDeckToolbar, true);
+    const toolbarDisabled = normalizeSettings({ showDeckToolbar: false });
+    assert.equal(toolbarDisabled.showDeckToolbar, false);
+    assert.equal(
+      settingsForPersistence({}, toolbarDisabled).showDeckToolbar,
+      false,
+    );
     assert.equal(normalizeSettings({}).showDeckMap, true);
     assert.equal(normalizeSettings({ showDeckMap: "no" }).showDeckMap, true);
     const disabled = normalizeSettings({ showDeckMap: false });
@@ -165,6 +344,7 @@ describe("Slipbox settings", () => {
       newNoteTimestampFormat: "   ",
       useTemplatesForNewNotes: "yes",
       newNoteTemplatePath: 42,
+      showDeckToolbar: "yes",
       showDeckMap: "yes",
     });
     assert.equal(settings.addressProperty, "zettel-id");
@@ -176,6 +356,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "");
+    assert.equal(settings.showDeckToolbar, true);
     assert.equal(settings.showDeckMap, true);
   });
 
@@ -196,7 +377,7 @@ describe("Slipbox settings", () => {
     const binding = { key: "g", modifiers: ["Shift"] as const };
     assert.equal(
       keyBindingConflict(DEFAULT_SETTINGS.deckKeybindings, "open-note", binding),
-      "last-card",
+      null,
     );
     assert.equal(
       keyBindingConflict(
@@ -207,5 +388,21 @@ describe("Slipbox settings", () => {
       "copy-link",
     );
     assert.equal(formatKeyBinding(binding), "Shift+g");
+    assert.equal(
+      keyBindingConflict(
+        DEFAULT_SETTINGS.deckKeybindings,
+        "open-note",
+        { key: "g", modifiers: [] },
+      ),
+      "find-address-first",
+    );
+    assert.equal(
+      keyBindingConflict(
+        DEFAULT_SETTINGS.deckKeybindings,
+        "open-note",
+        { key: "d", modifiers: ["Ctrl"] },
+      ),
+      "forward-ten-cards",
+    );
   });
 });

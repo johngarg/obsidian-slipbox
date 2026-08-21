@@ -14,6 +14,7 @@ import {
   moveCardBetweenPiles,
   moveCardWithinPile,
   placeUnfiledCardAtPosition,
+  placeFiledCardInPileOrdinal,
   pruneTrayCards,
   reconcileTray,
   removeCard,
@@ -141,6 +142,52 @@ describe("working piles", () => {
       cards: [filed("A.md"), filed("B.md")],
     }]);
     assert.equal(next.unfiledPileId, null);
+  });
+
+  test("adds a filed card to an existing numbered pile without creating one", () => {
+    const state = tray([filed("A.md")], [filed("B.md")]);
+    const next = placeFiledCardInPileOrdinal(state, "C.md", 2);
+    assert.deepEqual(next.piles.map((pile) => pile.cards), [
+      [filed("A.md")],
+      [filed("B.md"), filed("C.md")],
+    ]);
+    assert.equal(next.piles.length, 2);
+  });
+
+  test("moves a filed card to another numbered pile", () => {
+    const state = tray([filed("A.md"), filed("B.md")], [filed("C.md")]);
+    const next = placeFiledCardInPileOrdinal(state, "A.md", 2);
+    assert.deepEqual(next.piles.map((pile) => pile.cards), [
+      [filed("B.md")],
+      [filed("C.md"), filed("A.md")],
+    ]);
+  });
+
+  test("returns the same state when the card is already in the selected pile", () => {
+    const state = tray([filed("A.md")], [filed("B.md")]);
+    assert.equal(placeFiledCardInPileOrdinal(state, "B.md", 2), state);
+  });
+
+  test("rejects empty, zero, fractional, and nonexistent pile ordinals", () => {
+    const state = tray([filed("A.md")], [filed("B.md")]);
+    assert.equal(placeFiledCardInPileOrdinal(state, "C.md", 0), state);
+    assert.equal(placeFiledCardInPileOrdinal(state, "C.md", -1), state);
+    assert.equal(placeFiledCardInPileOrdinal(state, "C.md", 1.5), state);
+    assert.equal(placeFiledCardInPileOrdinal(state, "C.md", 3), state);
+    assert.equal(placeFiledCardInPileOrdinal(state, "", 1), state);
+  });
+
+  test("resolves pile ordinals from the current reordered pile sequence", () => {
+    const state = reorderPiles(
+      tray([filed("A.md")], [filed("B.md")], [filed("C.md")]),
+      2,
+      0,
+    );
+    assert.deepEqual(state.piles.map((pile) => pile.id), [
+      "pile-3", "pile-1", "pile-2",
+    ]);
+    const next = placeFiledCardInPileOrdinal(state, "D.md", 1);
+    assert.deepEqual(next.piles[0]?.cards, [filed("C.md"), filed("D.md")]);
   });
 
   test("splits a card into a new pile and maintains positions", () => {

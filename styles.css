@@ -59,6 +59,32 @@
   backdrop-filter: blur(12px);
 }
 
+.slipbox-deck-toolbar[hidden],
+.slipbox-deck-map[hidden] {
+  display: none;
+}
+
+.slipbox-pending-command-status {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 270;
+  max-width: min(520px, calc(100% - 28px));
+  padding: 5px 9px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+  box-shadow: var(--shadow-s);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.slipbox-pending-command-status[hidden] {
+  display: none;
+}
+
 .slipbox-deck-map {
   position: relative;
   z-index: 245;

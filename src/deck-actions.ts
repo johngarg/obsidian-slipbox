@@ -25,11 +25,18 @@ export function canRunDeckAction(
       return context.hasPreviousCard;
     case "next-card":
       return context.hasNextCard;
+    case "forward-ten-cards":
+    case "backward-ten-cards":
+      return context.hasActiveCard;
     case "centre-card":
     case "open-note":
     case "copy-link":
     case "toggle-tray":
     case "toggle-bookmark":
+    case "find-address-forward":
+    case "find-address-backward":
+    case "find-address-first":
+    case "pull-into-pile":
       return context.hasActiveCard;
     case "first-card":
     case "last-card":
@@ -46,6 +53,8 @@ export function canRunDeckAction(
       return context.filing;
     case "entry-points":
     case "bookmarks":
+    case "toggle-toolbar":
+    case "toggle-deck-map":
       return true;
   }
 }

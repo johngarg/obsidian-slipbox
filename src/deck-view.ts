@@ -6,6 +6,7 @@ import {
   Scope,
   TFile,
   WorkspaceLeaf,
+  getLinkpath,
   setIcon,
   setTooltip,
   type KeymapEventHandler,
@@ -27,6 +28,10 @@ import { NavigationHistory } from "./navigation-history.js";
 import type { FiledCard } from "./card-index.js";
 import { CardFooterManager } from "./card-footer.js";
 import { cardHeaderTitle } from "./card-title.js";
+import {
+  renderedLinkAction,
+  resolveFiledCardLink,
+} from "./card-links.js";
 import { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 import { MAX_SPREAD, MIN_SPREAD } from "./plugin-state.js";
 import {
@@ -2041,7 +2046,7 @@ export class DeckView extends ItemView {
         if (!(event.target instanceof Element)) {
           return;
         }
-        const link = event.target.closest<HTMLAnchorElement>("a.internal-link");
+        const link = event.target.closest<HTMLAnchorElement>("a");
         const linkPath = link?.dataset.href ?? link?.getAttribute("href") ?? undefined;
         if (link === null || linkPath === undefined || linkPath === "") {
           return;
@@ -2051,22 +2056,28 @@ export class DeckView extends ItemView {
         event.preventDefault();
         event.stopImmediatePropagation();
         void this.runAfterInlineEditing("rendered-link", async () => {
-          if (!internal) {
+          const filed = internal
+            ? resolveFiledCardLink(getLinkpath(linkPath), sourcePath, {
+                resolveFile: (path, source) =>
+                  this.app.metadataCache.getFirstLinkpathDest(path, source),
+                filedPathForFile: (file) =>
+                  this.plugin.index.filedByFile(file)?.path,
+                firstFiledPathAtAddress: (address) =>
+                  this.plugin.index.firstFiledAtAddress(address)?.path,
+              })
+            : undefined;
+          const action = renderedLinkAction(internal, newLeaf, linkPath, filed);
+          if (action.kind === "card") {
+            await this.jumpToPath(action.path);
+          } else if (action.kind === "note") {
+            await this.app.workspace.openLinkText(
+              action.linktext,
+              sourcePath,
+              newLeaf,
+            );
+          } else {
             window.open(link.href, "_blank", "noopener");
-            return;
           }
-          const destination = this.app.metadataCache.getFirstLinkpathDest(
-            linkPath,
-            sourcePath,
-          );
-          const filed = destination === null
-            ? undefined
-            : this.plugin.index.filedByFile(destination);
-          if (filed !== undefined && !newLeaf) {
-            await this.jumpToPath(filed.path);
-            return;
-          }
-          await this.app.workspace.openLinkText(linkPath, sourcePath, newLeaf);
         });
       },
       { capture: true },

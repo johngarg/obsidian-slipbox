@@ -3,12 +3,17 @@ import {
   MarkdownRenderer,
   Menu,
   TFile,
+  getLinkpath,
   setIcon,
   setTooltip,
   type App,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
+import {
+  renderedLinkAction,
+  resolveFiledCardLink,
+} from "./card-links.js";
 import { cardHeaderTitle } from "./card-title.js";
 import {
   attachUnfiledAddressFiling,
@@ -643,11 +648,28 @@ export class TrayRenderer {
       event.stopPropagation();
       const newLeaf = event.metaKey || event.ctrlKey;
       void this.actions.runAfterEditing("tray-rendered-link", async () => {
-        if (internal) {
-          await this.app.workspace.openLinkText(linktext, sourcePath, newLeaf);
-          return;
+        const filed = internal
+          ? resolveFiledCardLink(getLinkpath(linktext), sourcePath, {
+              resolveFile: (path, source) =>
+                this.app.metadataCache.getFirstLinkpathDest(path, source),
+              filedPathForFile: (file) =>
+                this.plugin.index.filedByFile(file)?.path,
+              firstFiledPathAtAddress: (address) =>
+                this.plugin.index.firstFiledAtAddress(address)?.path,
+            })
+          : undefined;
+        const action = renderedLinkAction(internal, newLeaf, linktext, filed);
+        if (action.kind === "card") {
+          await this.actions.jumpToFiledCard(action.path);
+        } else if (action.kind === "note") {
+          await this.app.workspace.openLinkText(
+            action.linktext,
+            sourcePath,
+            newLeaf,
+          );
+        } else {
+          window.open(link.href, "_blank", "noopener");
         }
-        window.open(link.href, "_blank", "noopener");
       });
     }, { capture: true });
   }

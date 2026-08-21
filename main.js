@@ -812,6 +812,37 @@ function resolveCardTitle(basename, frontmatter, settings) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : basename;
 }
 
+// src/card-links.ts
+function resolveFiledCardLink(linkPath, sourcePath, lookup) {
+  const file = lookup.resolveFile(linkPath, sourcePath);
+  if (file !== null) {
+    const path2 = lookup.filedPathForFile(file);
+    return path2 === void 0 ? void 0 : { path: path2, resolvedBy: "file" };
+  }
+  const path = lookup.firstFiledPathAtAddress(linkPath);
+  return path === void 0 ? void 0 : { path, resolvedBy: "address" };
+}
+function renderedLinkAction(internal, newLeaf, linktext, filed) {
+  if (!internal) {
+    return { kind: "external" };
+  }
+  if (!newLeaf && filed !== void 0) {
+    return { kind: "card", path: filed.path };
+  }
+  return {
+    kind: "note",
+    linktext: filed?.resolvedBy === "address" ? filed.path : linktext
+  };
+}
+function generateFiledCardLink(app, file, sourcePath, address) {
+  return app.fileManager.generateMarkdownLink(
+    file,
+    sourcePath,
+    void 0,
+    address
+  );
+}
+
 // src/desk-state.ts
 var DESK_WIDTH = 2400;
 var DESK_HEIGHT = 1600;
@@ -2299,11 +2330,23 @@ var TrayRenderer = class {
       event.stopPropagation();
       const newLeaf = event.metaKey || event.ctrlKey;
       void this.actions.runAfterEditing("tray-rendered-link", async () => {
-        if (internal) {
-          await this.app.workspace.openLinkText(linktext, sourcePath, newLeaf);
-          return;
+        const filed = internal ? resolveFiledCardLink((0, import_obsidian2.getLinkpath)(linktext), sourcePath, {
+          resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
+          filedPathForFile: (file) => this.plugin.index.filedByFile(file)?.path,
+          firstFiledPathAtAddress: (address) => this.plugin.index.firstFiledAtAddress(address)?.path
+        }) : void 0;
+        const action = renderedLinkAction(internal, newLeaf, linktext, filed);
+        if (action.kind === "card") {
+          await this.actions.jumpToFiledCard(action.path);
+        } else if (action.kind === "note") {
+          await this.app.workspace.openLinkText(
+            action.linktext,
+            sourcePath,
+            newLeaf
+          );
+        } else {
+          window.open(link.href, "_blank", "noopener");
         }
-        window.open(link.href, "_blank", "noopener");
       });
     }, { capture: true });
   }
@@ -4890,7 +4933,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         if (!(event.target instanceof Element)) {
           return;
         }
-        const link = event.target.closest("a.internal-link");
+        const link = event.target.closest("a");
         const linkPath = link?.dataset.href ?? link?.getAttribute("href") ?? void 0;
         if (link === null || linkPath === void 0 || linkPath === "") {
           return;
@@ -4900,20 +4943,23 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         event.preventDefault();
         event.stopImmediatePropagation();
         void this.runAfterInlineEditing("rendered-link", async () => {
-          if (!internal) {
+          const filed = internal ? resolveFiledCardLink((0, import_obsidian3.getLinkpath)(linkPath), sourcePath, {
+            resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
+            filedPathForFile: (file) => this.plugin.index.filedByFile(file)?.path,
+            firstFiledPathAtAddress: (address) => this.plugin.index.firstFiledAtAddress(address)?.path
+          }) : void 0;
+          const action = renderedLinkAction(internal, newLeaf, linkPath, filed);
+          if (action.kind === "card") {
+            await this.jumpToPath(action.path);
+          } else if (action.kind === "note") {
+            await this.app.workspace.openLinkText(
+              action.linktext,
+              sourcePath,
+              newLeaf
+            );
+          } else {
             window.open(link.href, "_blank", "noopener");
-            return;
           }
-          const destination = this.app.metadataCache.getFirstLinkpathDest(
-            linkPath,
-            sourcePath
-          );
-          const filed = destination === null ? void 0 : this.plugin.index.filedByFile(destination);
-          if (filed !== void 0 && !newLeaf) {
-            await this.jumpToPath(filed.path);
-            return;
-          }
-          await this.app.workspace.openLinkText(linkPath, sourcePath, newLeaf);
         });
       },
       { capture: true }
@@ -6898,16 +6944,6 @@ var CanvasBridge = class {
 };
 function errorMessage3(error) {
   return error instanceof Error ? error.message : String(error);
-}
-
-// src/card-links.ts
-function generateFiledCardLink(app, file, sourcePath, address) {
-  return app.fileManager.generateMarkdownLink(
-    file,
-    sourcePath,
-    void 0,
-    address
-  );
 }
 
 // src/note-body.ts

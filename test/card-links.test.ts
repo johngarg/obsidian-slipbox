@@ -3,7 +3,12 @@ import { describe, test } from "node:test";
 
 import type { App, TFile } from "obsidian";
 
-import { generateFiledCardLink } from "../src/card-links.js";
+import {
+  generateFiledCardLink,
+  renderedLinkAction,
+  resolveFiledCardLink,
+  type FiledCardLinkLookup,
+} from "../src/card-links.js";
 
 function mockApp(
   result: string,
@@ -45,5 +50,88 @@ describe("generateFiledCardLink", () => {
     );
 
     assert.equal(link, "[A/1](../Cards/Systems.md)");
+  });
+});
+
+describe("rendered card links", () => {
+  const filedFile = { path: "Cards/Filed.md" } as TFile;
+  const ordinaryFile = { path: "Notes/Ordinary.md" } as TFile;
+  const lookup: FiledCardLinkLookup = {
+    resolveFile: (linkPath) => {
+      if (linkPath === "Filed") {
+        return filedFile;
+      }
+      if (linkPath === "Ordinary") {
+        return ordinaryFile;
+      }
+      return null;
+    },
+    filedPathForFile: (file) =>
+      file === filedFile ? filedFile.path : undefined,
+    firstFiledPathAtAddress: (address) =>
+      address === "A/1" ? filedFile.path : undefined,
+  };
+
+  test("resolves filed files and exact address-only links", () => {
+    assert.equal(
+      resolveFiledCardLink("Filed", "Source.md", lookup)?.path,
+      filedFile.path,
+    );
+    assert.deepEqual(
+      resolveFiledCardLink("A/1", "Source.md", lookup),
+      { path: filedFile.path, resolvedBy: "address" },
+    );
+  });
+
+  test("does not replace a resolved ordinary file with an address match", () => {
+    const shadowedLookup: FiledCardLinkLookup = {
+      ...lookup,
+      firstFiledPathAtAddress: () => filedFile.path,
+    };
+    assert.equal(
+      resolveFiledCardLink("Ordinary", "Source.md", shadowedLookup),
+      undefined,
+    );
+  });
+
+  test("keeps plain filed links in Slipbox across Deck and Tray decisions", () => {
+    assert.deepEqual(
+      renderedLinkAction(
+        true,
+        false,
+        "Filed#Section",
+        { path: filedFile.path, resolvedBy: "file" },
+      ),
+      { kind: "card", path: filedFile.path },
+    );
+    assert.deepEqual(
+      renderedLinkAction(
+        true,
+        true,
+        "Filed#Section",
+        { path: filedFile.path, resolvedBy: "file" },
+      ),
+      { kind: "note", linktext: "Filed#Section" },
+    );
+    assert.deepEqual(
+      renderedLinkAction(true, false, "Ordinary", undefined),
+      { kind: "note", linktext: "Ordinary" },
+    );
+    assert.deepEqual(
+      renderedLinkAction(false, false, "https://example.com", undefined),
+      { kind: "external" },
+    );
+  });
+
+  test("opens address-only filed links at their actual file on modified click", () => {
+    assert.deepEqual(
+      renderedLinkAction(
+        true,
+        true,
+        "A/1",
+        { path: filedFile.path, resolvedBy: "address" },
+      ),
+      { kind: "note", linktext: filedFile.path },
+    );
   });
 });

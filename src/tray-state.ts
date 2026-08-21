@@ -275,6 +275,20 @@ export function setPilePosition(
   return { ...state, piles };
 }
 
+export function placeUnfiledCardAtPosition(
+  state: TrayState,
+  cardRef: string,
+  newPileId: string,
+  position: TrayPilePosition,
+): TrayState {
+  const withoutCard = removeCard(state, cardRef);
+  const withPile = createPile(withoutCard, newPileId, [{
+    cardRef,
+    kind: "unfiled",
+  }]);
+  return setPilePosition(withPile, newPileId, position);
+}
+
 export function clearFiledCardsFromPile(
   state: TrayState,
   pileId: string,

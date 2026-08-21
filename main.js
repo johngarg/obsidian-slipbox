@@ -1393,6 +1393,14 @@ function setPilePosition(state, pileId, position) {
   };
   return { ...state, piles };
 }
+function placeUnfiledCardAtPosition(state, cardRef, newPileId, position) {
+  const withoutCard = removeCard(state, cardRef);
+  const withPile = createPile(withoutCard, newPileId, [{
+    cardRef,
+    kind: "unfiled"
+  }]);
+  return setPilePosition(withPile, newPileId, position);
+}
 function clearFiledCardsFromPile(state, pileId) {
   return cleanTray({
     ...state,
@@ -1619,6 +1627,7 @@ var TrayRenderer = class {
       (total, pile) => total + pile.cards.length,
       0
     );
+    this.attachBackgroundMenu(stage, space);
     if (cardCount === 0) {
       return;
     }
@@ -1630,7 +1639,6 @@ var TrayRenderer = class {
       }
     });
     this.rootEl = tray;
-    this.attachBackgroundMenu(stage);
     const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
     const jobs = [];
     state.piles.forEach((pile, pileIndex) => {
@@ -1646,13 +1654,27 @@ var TrayRenderer = class {
     });
     await Promise.all(jobs);
   }
-  attachBackgroundMenu(stage) {
+  attachBackgroundMenu(stage, space) {
     stage.addEventListener("contextmenu", (event) => {
       if (event.target !== stage) {
         return;
       }
       event.preventDefault();
       const menu = import_obsidian2.Menu.forEvent(event);
+      const position = this.positionAtPoint(
+        event.clientX,
+        event.clientY,
+        space,
+        stage
+      );
+      menu.addItem((item) => {
+        item.setTitle("New card").setIcon("file-plus-2").setDisabled(position === null).onClick(() => {
+          if (position !== null) {
+            void this.plugin.createNewCardAtTrayPosition(position);
+          }
+        });
+      });
+      menu.addSeparator();
       menu.addItem((item) => {
         item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => void this.plugin.clearTray());
       });
@@ -2212,9 +2234,10 @@ var TrayRenderer = class {
       dragged.removeClass("slipbox-ignore-pointer-events");
     }
   }
-  positionAtPoint(x, y) {
-    const rect = this.rootEl?.getBoundingClientRect();
-    if (rect === void 0 || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+  positionAtPoint(x, y, coordinateElement = this.rootEl, hitBoundsElement = coordinateElement) {
+    const rect = coordinateElement?.getBoundingClientRect();
+    const hitBounds = hitBoundsElement?.getBoundingClientRect();
+    if (rect === void 0 || hitBounds === void 0 || x < hitBounds.left || x > hitBounds.right || y < hitBounds.top || y > hitBounds.bottom) {
       return null;
     }
     return {
@@ -5867,11 +5890,27 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       }
     });
   }
-  async createNewCard() {
+  async createNewCardAtTrayPosition(position) {
+    await this.createNewCard(position);
+  }
+  async createNewCard(trayPosition) {
     try {
       const file = await this.createCardFile();
       if (file === null) {
         return;
+      }
+      if (trayPosition !== void 0) {
+        await this.waitForCachedAddress(file, "");
+        this.index.refresh();
+        this.reconcileSessionTray();
+        const pileId = this.createTrayPileId();
+        this.tray = placeUnfiledCardAtPosition(
+          this.tray,
+          file.path,
+          pileId,
+          trayPosition
+        );
+        await this.refreshDeckViews();
       }
       this.queueIndexRefresh();
     } catch (error) {

@@ -13,6 +13,7 @@ import {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
+  placeUnfiledCardAtPosition,
   pruneTrayCards,
   reconcileTray,
   removeCard,
@@ -72,6 +73,32 @@ describe("working piles", () => {
       ["A.md"],
       ["B.md"],
     ]);
+  });
+
+  test("places a new unfiled card in its own positioned pile", () => {
+    const state = initialTrayFromUnfiled([
+      unfiled("Existing.md", 1),
+      unfiled("New.md", 2),
+    ], "home");
+    const next = placeUnfiledCardAtPosition(
+      state,
+      "New.md",
+      "placed",
+      { x: 125, y: -48 },
+    );
+
+    assert.deepEqual(next.piles, [
+      {
+        id: "home",
+        cards: [{ cardRef: "Existing.md", kind: "unfiled" }],
+      },
+      {
+        id: "placed",
+        cards: [{ cardRef: "New.md", kind: "unfiled" }],
+        position: { x: 125, y: -48 },
+      },
+    ]);
+    assert.equal(next.unfiledPileId, "home");
   });
 
   test("pulls into a singleton or the expanded pile and toggles back to Deck", () => {

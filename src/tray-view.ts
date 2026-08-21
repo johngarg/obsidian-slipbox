@@ -112,6 +112,7 @@ export class TrayRenderer {
       (total, pile) => total + pile.cards.length,
       0,
     );
+    this.attachBackgroundMenu(stage, space);
     if (cardCount === 0) {
       return;
     }
@@ -124,7 +125,6 @@ export class TrayRenderer {
       },
     });
     this.rootEl = tray;
-    this.attachBackgroundMenu(stage);
 
     const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
     const jobs: Promise<void>[] = [];
@@ -142,13 +142,31 @@ export class TrayRenderer {
     await Promise.all(jobs);
   }
 
-  private attachBackgroundMenu(stage: HTMLElement): void {
+  private attachBackgroundMenu(stage: HTMLElement, space: HTMLElement): void {
     stage.addEventListener("contextmenu", (event) => {
       if (event.target !== stage) {
         return;
       }
       event.preventDefault();
       const menu = Menu.forEvent(event);
+      const position = this.positionAtPoint(
+        event.clientX,
+        event.clientY,
+        space,
+        stage,
+      );
+      menu.addItem((item) => {
+        item
+          .setTitle("New card")
+          .setIcon("file-plus-2")
+          .setDisabled(position === null)
+          .onClick(() => {
+            if (position !== null) {
+              void this.plugin.createNewCardAtTrayPosition(position);
+            }
+          });
+      });
+      menu.addSeparator();
       menu.addItem((item) => {
         item
           .setTitle("Return all filed cards")
@@ -863,12 +881,19 @@ export class TrayRenderer {
     }
   }
 
-  private positionAtPoint(x: number, y: number): TrayPilePosition | null {
-    const rect = this.rootEl?.getBoundingClientRect();
+  private positionAtPoint(
+    x: number,
+    y: number,
+    coordinateElement: HTMLElement | null = this.rootEl,
+    hitBoundsElement: HTMLElement | null = coordinateElement,
+  ): TrayPilePosition | null {
+    const rect = coordinateElement?.getBoundingClientRect();
+    const hitBounds = hitBoundsElement?.getBoundingClientRect();
     if (
       rect === undefined ||
-      x < rect.left || x > rect.right ||
-      y < rect.top || y > rect.bottom
+      hitBounds === undefined ||
+      x < hitBounds.left || x > hitBounds.right ||
+      y < hitBounds.top || y > hitBounds.bottom
     ) {
       return null;
     }

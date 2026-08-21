@@ -68,6 +68,7 @@ import {
   EMPTY_TRAY,
   clearFiledCardsFromPile,
   clearFiledCardsFromTray,
+  placeUnfiledCardAtPosition,
   reconcileTray,
   removeTrayPath,
   renameTrayPath,
@@ -76,6 +77,7 @@ import {
   trayContains,
   trayHasFiledCards,
   type TrayCardCandidate,
+  type TrayPilePosition,
   type TrayState,
 } from "./tray-state.js";
 import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
@@ -998,11 +1000,32 @@ export default class SlipboxPlugin extends Plugin {
     });
   }
 
-  private async createNewCard(): Promise<void> {
+  async createNewCardAtTrayPosition(
+    position: TrayPilePosition,
+  ): Promise<void> {
+    await this.createNewCard(position);
+  }
+
+  private async createNewCard(
+    trayPosition?: TrayPilePosition,
+  ): Promise<void> {
     try {
       const file = await this.createCardFile();
       if (file === null) {
         return;
+      }
+      if (trayPosition !== undefined) {
+        await this.waitForCachedAddress(file, "");
+        this.index.refresh();
+        this.reconcileSessionTray();
+        const pileId = this.createTrayPileId();
+        this.tray = placeUnfiledCardAtPosition(
+          this.tray,
+          file.path,
+          pileId,
+          trayPosition,
+        );
+        await this.refreshDeckViews();
       }
       this.queueIndexRefresh();
     } catch (error) {

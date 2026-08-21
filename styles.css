@@ -841,6 +841,10 @@ button.slipbox-tray-pile-handle svg {
   padding: clamp(20px, 3.2vw, 42px) clamp(22px, 4vw, 58px);
   overflow: auto;
   overscroll-behavior: contain;
+  font-family: var(--font-text);
+  font-size: var(--font-text-size);
+  font-weight: var(--font-normal);
+  line-height: var(--line-height-normal);
   user-select: text;
   cursor: text;
   scrollbar-gutter: stable;
@@ -888,10 +892,10 @@ button.slipbox-tray-pile-handle svg {
   color: var(--text-normal);
   background: var(--background-primary);
   box-shadow: none;
-  font-family: var(--font-text);
-  font-size: var(--font-text-size);
-  font-weight: var(--font-normal);
-  line-height: var(--line-height-normal);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
   text-align: start;
   white-space: pre-wrap;
   overflow-wrap: break-word;

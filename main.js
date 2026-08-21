@@ -2354,23 +2354,6 @@ var TrayRenderer = class {
       });
     }
     if (isViewed) {
-      const ghost = miniature.createEl("button", {
-        cls: "clickable-icon slipbox-card-ghost-control",
-        attr: {
-          type: "button",
-          "aria-label": `Centre viewed card ${title}`
-        }
-      });
-      (0, import_obsidian2.setIcon)(ghost, "search");
-      (0, import_obsidian2.setTooltip)(ghost, "Centre viewed card", {
-        placement: "bottom",
-        delay: 250
-      });
-      ghost.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.actions.focusViewedCard();
-      });
       miniature.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();

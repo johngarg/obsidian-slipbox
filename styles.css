@@ -881,12 +881,6 @@ button.slipbox-tray-pile-cycle svg {
   height: 100%;
 }
 
-.slipbox-tray-card .slipbox-card-ghost-control {
-  width: 36px;
-  height: 36px;
-  padding: 9px;
-}
-
 .slipbox-card-address-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);

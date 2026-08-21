@@ -580,23 +580,6 @@ export class TrayRenderer {
     }
 
     if (isViewed) {
-      const ghost = miniature.createEl("button", {
-        cls: "clickable-icon slipbox-card-ghost-control",
-        attr: {
-          type: "button",
-          "aria-label": `Centre viewed card ${title}`,
-        },
-      });
-      setIcon(ghost, "search");
-      setTooltip(ghost, "Centre viewed card", {
-        placement: "bottom",
-        delay: 250,
-      });
-      ghost.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.actions.focusViewedCard();
-      });
       miniature.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();

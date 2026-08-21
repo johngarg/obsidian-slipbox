@@ -28,6 +28,20 @@ export function dispatchInlineAwareDeckAction(
   return true;
 }
 
+/** Consume Escape before Obsidian's parent Scope can treat it as view navigation. */
+export function consumeInlineEditEscape(
+  event: KeyboardEvent,
+  textarea: HTMLTextAreaElement,
+): boolean {
+  if (event.key !== "Escape" || event.target !== textarea) {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  return true;
+}
+
 export function isInlineEditBodyTarget(
   target: EventTarget | null,
   bodySurface: HTMLElement,

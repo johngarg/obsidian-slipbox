@@ -88,6 +88,7 @@ import {
   type InlineEditOrigin,
 } from "./inline-edit-session.js";
 import {
+  consumeInlineEditEscape,
   dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
@@ -252,22 +253,10 @@ export class DeckView extends ItemView {
       },
     ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
-      const editing = this.inlineEdit;
-      if (
-        editing !== null &&
-        event.target === editing.textarea &&
-        event.key === "Escape"
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        void this.finishInlineEditing("escape").then((saved) => {
-          if (saved) {
-            this.contentEl.focus({ preventScroll: true });
-          }
-        });
+      if (this.handleInlineEditEscape(event)) {
         return;
       }
+      const editing = this.inlineEdit;
       const activeCard = this.activeCard;
       if (isDeckInlineEditEnter(event, this.contentEl, {
         hasActiveCard: activeCard !== null,
@@ -533,6 +522,12 @@ export class DeckView extends ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
+    if (this.inlineEdit !== null) {
+      const escapeHandler = scope.register([], "Escape", (event) => {
+        return this.handleInlineEditEscape(event) ? false : undefined;
+      });
+      this.keymapHandlers.push(escapeHandler);
+    }
     if (!this.deckKeybindingsSuspended) {
       for (const definition of DECK_ACTION_DEFINITIONS) {
         for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
@@ -560,6 +555,22 @@ export class DeckView extends ItemView {
     }
     this.deckKeybindingsSuspended = suspended;
     this.updateKeybindings();
+  }
+
+  private handleInlineEditEscape(event: KeyboardEvent): boolean {
+    const editing = this.inlineEdit;
+    if (
+      editing === null ||
+      !consumeInlineEditEscape(event, editing.textarea)
+    ) {
+      return false;
+    }
+    void this.finishInlineEditing("escape").then((saved) => {
+      if (saved) {
+        this.contentEl.focus({ preventScroll: true });
+      }
+    });
+    return true;
   }
 
   canRunAction(action: DeckAction, target?: FiledCard): boolean {

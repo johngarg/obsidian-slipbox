@@ -3161,6 +3161,15 @@ function dispatchInlineAwareDeckAction(state, runAfterEditing, action) {
   void runAfterEditing(action);
   return true;
 }
+function consumeInlineEditEscape(event, textarea) {
+  if (event.key !== "Escape" || event.target !== textarea) {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  return true;
+}
 function isInlineEditBodyTarget(target, bodySurface) {
   const ElementConstructor = bodySurface.ownerDocument.defaultView?.Element;
   if (ElementConstructor === void 0 || !(target instanceof ElementConstructor) || !bodySurface.contains(target)) {
@@ -3302,18 +3311,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
     ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
-      const editing = this.inlineEdit;
-      if (editing !== null && event.target === editing.textarea && event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        void this.finishInlineEditing("escape").then((saved) => {
-          if (saved) {
-            this.contentEl.focus({ preventScroll: true });
-          }
-        });
+      if (this.handleInlineEditEscape(event)) {
         return;
       }
+      const editing = this.inlineEdit;
       const activeCard = this.activeCard;
       if (isDeckInlineEditEnter(event, this.contentEl, {
         hasActiveCard: activeCard !== null,
@@ -3548,6 +3549,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
+    if (this.inlineEdit !== null) {
+      const escapeHandler = scope.register([], "Escape", (event) => {
+        return this.handleInlineEditEscape(event) ? false : void 0;
+      });
+      this.keymapHandlers.push(escapeHandler);
+    }
     if (!this.deckKeybindingsSuspended) {
       for (const definition of DECK_ACTION_DEFINITIONS) {
         for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
@@ -3574,6 +3581,18 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     }
     this.deckKeybindingsSuspended = suspended;
     this.updateKeybindings();
+  }
+  handleInlineEditEscape(event) {
+    const editing = this.inlineEdit;
+    if (editing === null || !consumeInlineEditEscape(event, editing.textarea)) {
+      return false;
+    }
+    void this.finishInlineEditing("escape").then((saved) => {
+      if (saved) {
+        this.contentEl.focus({ preventScroll: true });
+      }
+    });
+    return true;
   }
   canRunAction(action, target) {
     if (action === "confirm-filing") {

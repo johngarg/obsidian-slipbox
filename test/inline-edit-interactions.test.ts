@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { Window } from "happy-dom";
 
 import {
+  consumeInlineEditEscape,
   dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
@@ -15,6 +16,36 @@ import {
 } from "../src/deck-commands.js";
 
 describe("inline edit entry interactions", () => {
+  test("consumes textarea Escape before later handlers can navigate", () => {
+    const window = new Window();
+    const textarea = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "textarea",
+    );
+    window.document.body.append(textarea);
+    let consumed = false;
+    let laterHandlerRan = false;
+    textarea.addEventListener("keydown", (event) => {
+      consumed = consumeInlineEditEscape(
+        event as unknown as KeyboardEvent,
+        textarea as unknown as HTMLTextAreaElement,
+      );
+    });
+    textarea.addEventListener("keydown", () => {
+      laterHandlerRan = true;
+    });
+    const escape = new window.KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    textarea.dispatchEvent(escape);
+
+    assert.equal(consumed, true);
+    assert.equal(escape.defaultPrevented, true);
+    assert.equal(laterHandlerRan, false);
+  });
+
   test("accepts rendered body text and excludes interactive descendants", () => {
     const window = new Window();
     const create = (tag: string) => window.document.createElementNS(

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { Window } from "happy-dom";
 
 import {
+  InlineEditFinalizationCoordinator,
   InlineEditSessionController,
   InlineEditPathLock,
   runAfterInlineEditing,
@@ -172,6 +174,62 @@ describe("inline edit session controller", () => {
     assert.equal(await state.controller.finish(), true);
     assert.equal(requests[0]?.path, "renamed.md");
     assert.deepEqual(state.flushes, ["renamed.md"]);
+  });
+});
+
+describe("inline edit view finalization", () => {
+  test("coalesces capture and semantic exits through cleanup and rerender", async () => {
+    let releaseSave: (() => void) | undefined;
+    const save = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const coordinator = new InlineEditFinalizationCoordinator();
+    const window = new Window();
+    const target = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    let cleanups = 0;
+    let observedReasons: ReadonlySet<string> = new Set();
+    const finalize = async (reasons: ReadonlySet<string>): Promise<boolean> => {
+      observedReasons = reasons;
+      await save;
+      cleanups += 1;
+      const paragraph = window.document.createElementNS(
+        "http://www.w3.org/1999/xhtml",
+        "p",
+      );
+      paragraph.textContent = "Rendered body";
+      target.append(paragraph);
+      return true;
+    };
+
+    const captureExit = coordinator.finish("outside-pointer", finalize);
+    const semanticExit = coordinator.finish("background-drag", finalize);
+
+    assert.equal(captureExit, semanticExit);
+    releaseSave?.();
+    assert.equal(await captureExit, true);
+    assert.equal(cleanups, 1);
+    assert.equal(target.childElementCount, 1);
+    assert.equal(target.textContent, "Rendered body");
+    assert.deepEqual(
+      [...observedReasons],
+      ["outside-pointer", "background-drag"],
+    );
+  });
+
+  test("allows a fresh finalization attempt after failure", async () => {
+    const coordinator = new InlineEditFinalizationCoordinator();
+    let attempts = 0;
+    const finalize = async (): Promise<boolean> => {
+      attempts += 1;
+      return attempts > 1;
+    };
+
+    assert.equal(await coordinator.finish("outside-pointer", finalize), false);
+    assert.equal(await coordinator.finish("escape", finalize), true);
+    assert.equal(attempts, 2);
   });
 });
 

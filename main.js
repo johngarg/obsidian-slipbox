@@ -2940,6 +2940,29 @@ function applyDeckChromeVisibility(toolbar, deckMap, state, showDeckToolbarSetti
 }
 
 // src/inline-edit-session.ts
+var InlineEditFinalizationCoordinator = class {
+  active = null;
+  finish(reason, finalize) {
+    if (this.active !== null) {
+      this.active.reasons.add(reason);
+      return this.active.promise;
+    }
+    const reasons = /* @__PURE__ */ new Set([reason]);
+    const promise = finalize(reasons);
+    const active = { reasons, promise };
+    this.active = active;
+    void promise.then(
+      () => this.clear(active),
+      () => this.clear(active)
+    );
+    return promise;
+  }
+  clear(active) {
+    if (this.active === active) {
+      this.active = null;
+    }
+  }
+};
 var DEFAULT_DEBOUNCE_MS = 500;
 var InlineEditPathLock = class {
   owners = /* @__PURE__ */ new Map();
@@ -3279,6 +3302,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   pendingCommandFeedbackTimer = null;
   chromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
   inlineEdit = null;
+  inlineEditFinalization = new InlineEditFinalizationCoordinator();
   inlineEditStarting = false;
   renderRefreshDeferred = false;
   getViewType() {
@@ -3836,7 +3860,13 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   handleBookmarksChanged() {
     this.updateBookmarkUi();
   }
-  async finishInlineEditing(reason) {
+  finishInlineEditing(reason) {
+    return this.inlineEditFinalization.finish(
+      reason,
+      (reasons) => this.finishInlineEditingOnce(reasons)
+    );
+  }
+  async finishInlineEditingOnce(reasons) {
     const editing = this.inlineEdit;
     if (editing === null) {
       return true;
@@ -3850,7 +3880,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return false;
     }
     const path = editing.controller.snapshot.path;
-    const shouldSkipRender = reason === "view-close" || reason === "plugin-unload" || reason === "quit";
+    const shouldSkipRender = ["view-close", "plugin-unload", "quit"].some((reason) => reasons.has(reason));
     this.inlineEdit = null;
     this.plugin.releaseInlineEdit(path, this);
     this.setDeckKeybindingsSuspended(false);
@@ -3872,7 +3902,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         await this.trayRenderer.rerenderPath(editing.file);
       }
     }
-    if (reason === "escape") {
+    if (reasons.has("escape")) {
       this.contentEl.focus({ preventScroll: true });
     }
     return true;
@@ -4800,7 +4830,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.renderComponents.set(card.path, component);
     try {
       const body = await this.plugin.index.readBody(card.file);
-      if (version !== this.renderVersion) {
+      if (version !== this.renderVersion || this.renderComponents.get(card.path) !== component) {
         return;
       }
       await import_obsidian3.MarkdownRenderer.render(

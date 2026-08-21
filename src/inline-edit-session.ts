@@ -46,6 +46,42 @@ export interface InlineEditSessionSnapshot {
   readonly conflictRetryable: boolean;
 }
 
+interface ActiveInlineEditFinalization {
+  readonly reasons: Set<string>;
+  readonly promise: Promise<boolean>;
+}
+
+/** Coalesces every caller that is finishing the same mounted editor. */
+export class InlineEditFinalizationCoordinator {
+  private active: ActiveInlineEditFinalization | null = null;
+
+  finish(
+    reason: string,
+    finalize: (reasons: ReadonlySet<string>) => Promise<boolean>,
+  ): Promise<boolean> {
+    if (this.active !== null) {
+      this.active.reasons.add(reason);
+      return this.active.promise;
+    }
+
+    const reasons = new Set([reason]);
+    const promise = finalize(reasons);
+    const active = { reasons, promise };
+    this.active = active;
+    void promise.then(
+      () => this.clear(active),
+      () => this.clear(active),
+    );
+    return promise;
+  }
+
+  private clear(active: ActiveInlineEditFinalization): void {
+    if (this.active === active) {
+      this.active = null;
+    }
+  }
+}
+
 const DEFAULT_DEBOUNCE_MS = 500;
 
 /** Exact-path ownership for independently mounted Slipbox views. */

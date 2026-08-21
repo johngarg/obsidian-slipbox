@@ -82,6 +82,7 @@ import {
   type DeckChromeVisibility,
 } from "./deck-chrome.js";
 import {
+  InlineEditFinalizationCoordinator,
   InlineEditSessionController,
   runAfterInlineEditing,
   type InlineEditFailure,
@@ -181,6 +182,7 @@ export class DeckView extends ItemView {
   private pendingCommandFeedbackTimer: number | null = null;
   private chromeVisibility: DeckChromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
   private inlineEdit: MountedInlineEdit | null = null;
+  private readonly inlineEditFinalization = new InlineEditFinalizationCoordinator();
   private inlineEditStarting = false;
   private renderRefreshDeferred = false;
 
@@ -837,7 +839,16 @@ export class DeckView extends ItemView {
     this.updateBookmarkUi();
   }
 
-  async finishInlineEditing(reason: string): Promise<boolean> {
+  finishInlineEditing(reason: string): Promise<boolean> {
+    return this.inlineEditFinalization.finish(
+      reason,
+      (reasons) => this.finishInlineEditingOnce(reasons),
+    );
+  }
+
+  private async finishInlineEditingOnce(
+    reasons: ReadonlySet<string>,
+  ): Promise<boolean> {
     const editing = this.inlineEdit;
     if (editing === null) {
       return true;
@@ -852,10 +863,8 @@ export class DeckView extends ItemView {
     }
 
     const path = editing.controller.snapshot.path;
-    const shouldSkipRender =
-      reason === "view-close" ||
-      reason === "plugin-unload" ||
-      reason === "quit";
+    const shouldSkipRender = ["view-close", "plugin-unload", "quit"]
+      .some((reason) => reasons.has(reason));
     this.inlineEdit = null;
     this.plugin.releaseInlineEdit(path, this);
     this.setDeckKeybindingsSuspended(false);
@@ -879,7 +888,7 @@ export class DeckView extends ItemView {
         await this.trayRenderer.rerenderPath(editing.file);
       }
     }
-    if (reason === "escape") {
+    if (reasons.has("escape")) {
       this.contentEl.focus({ preventScroll: true });
     }
     return true;
@@ -1968,7 +1977,10 @@ export class DeckView extends ItemView {
     this.renderComponents.set(card.path, component);
     try {
       const body = await this.plugin.index.readBody(card.file);
-      if (version !== this.renderVersion) {
+      if (
+        version !== this.renderVersion ||
+        this.renderComponents.get(card.path) !== component
+      ) {
         return;
       }
       await MarkdownRenderer.render(

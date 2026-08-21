@@ -1824,6 +1824,76 @@ function compareInitialCards(left, right) {
   return right.modifiedTime - left.modifiedTime || left.cardRef.localeCompare(right.cardRef);
 }
 
+// src/pointer-drag.ts
+function beginThresholdPointerDrag(options) {
+  const {
+    captureTarget,
+    pointerId,
+    startX,
+    startY,
+    threshold
+  } = options;
+  const document2 = captureTarget.ownerDocument;
+  let dragging = false;
+  const cleanup = () => {
+    document2.removeEventListener("pointermove", move);
+    document2.removeEventListener("pointerup", finish);
+    document2.removeEventListener("pointercancel", cancel);
+  };
+  const releaseCapture = () => {
+    if (captureTarget.hasPointerCapture(pointerId)) {
+      captureTarget.releasePointerCapture(pointerId);
+    }
+  };
+  const move = (event) => {
+    if (event.pointerId !== pointerId) {
+      return;
+    }
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    if (!dragging) {
+      if (Math.hypot(deltaX, deltaY) < Math.max(0, threshold)) {
+        return;
+      }
+      try {
+        captureTarget.setPointerCapture(pointerId);
+      } catch {
+        cleanup();
+        options.onCancel();
+        return;
+      }
+      dragging = true;
+      options.onDragStart();
+    }
+    event.preventDefault();
+    options.onDragMove(event, deltaX, deltaY);
+  };
+  const finish = (event) => {
+    if (event.pointerId !== pointerId) {
+      return;
+    }
+    cleanup();
+    releaseCapture();
+    if (!dragging) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    options.onDrop(event);
+  };
+  const cancel = (event) => {
+    if (event.pointerId !== pointerId) {
+      return;
+    }
+    cleanup();
+    releaseCapture();
+    options.onCancel();
+  };
+  document2.addEventListener("pointermove", move);
+  document2.addEventListener("pointerup", finish);
+  document2.addEventListener("pointercancel", cancel);
+}
+
 // src/tray-view.ts
 var DRAG_THRESHOLD_PX = 5;
 var DEFAULT_PILE_VERTICAL_STEP_PX = 42;
@@ -2464,56 +2534,33 @@ var TrayRenderer = class {
       const startY = event.clientY;
       const pointerId = event.pointerId;
       this.startPointerActionAfterEditing(event, "tray-card-drag", () => {
-        let dragging = false;
-        try {
-          element.setPointerCapture(pointerId);
-        } catch {
-          return;
-        }
-        const move = (moveEvent) => {
-          const dx = moveEvent.clientX - startX;
-          const dy = moveEvent.clientY - startY;
-          if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-            return;
-          }
-          dragging = true;
-          moveEvent.preventDefault();
-          element.addClass("is-dragging");
-          element.style.translate = `${dx}px ${dy}px`;
-          this.rootEl?.addClass("is-dragging-card");
-          this.updateCardDropCues(moveEvent, pile.id, element);
-        };
-        const finish = (upEvent) => {
-          element.removeEventListener("pointermove", move);
-          element.removeEventListener("pointerup", finish);
-          element.removeEventListener("pointercancel", cancel);
-          if (element.hasPointerCapture(pointerId)) {
-            element.releasePointerCapture(pointerId);
-          }
-          if (!dragging) {
-            return;
-          }
-          upEvent.preventDefault();
-          upEvent.stopPropagation();
-          this.suppressClickUntil = performance.now() + 400;
-          const next = this.cardDropState(
-            card.cardRef,
-            upEvent.clientX,
-            upEvent.clientY,
-            element
-          );
-          this.clearDropCues();
-          void this.plugin.updateTray(next);
-        };
-        const cancel = () => {
-          element.removeEventListener("pointermove", move);
-          element.removeEventListener("pointerup", finish);
-          element.removeEventListener("pointercancel", cancel);
-          this.clearDropCues();
-        };
-        element.addEventListener("pointermove", move);
-        element.addEventListener("pointerup", finish);
-        element.addEventListener("pointercancel", cancel);
+        beginThresholdPointerDrag({
+          captureTarget: element,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => {
+            element.addClass("is-dragging");
+            this.rootEl?.addClass("is-dragging-card");
+          },
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updateCardDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = performance.now() + 400;
+            const next = this.cardDropState(
+              card.cardRef,
+              upEvent.clientX,
+              upEvent.clientY,
+              element
+            );
+            this.clearDropCues();
+            void this.plugin.updateTray(next);
+          },
+          onCancel: () => this.clearDropCues()
+        });
       });
     });
   }
@@ -2526,60 +2573,37 @@ var TrayRenderer = class {
       const startY = event.clientY;
       const pointerId = event.pointerId;
       this.startPointerActionAfterEditing(event, "tray-pile-drag", () => {
-        let dragging = false;
-        try {
-          dragSurface.setPointerCapture(pointerId);
-        } catch {
-          return;
-        }
-        const move = (moveEvent) => {
-          const dx = moveEvent.clientX - startX;
-          const dy = moveEvent.clientY - startY;
-          if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-            return;
+        beginThresholdPointerDrag({
+          captureTarget: dragSurface,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => element.addClass("is-dragging"),
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updatePileDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = performance.now() + 400;
+            const next = this.pileDropState(
+              pile.id,
+              upEvent.clientX,
+              upEvent.clientY,
+              element,
+              {
+                x: position.x + upEvent.clientX - startX,
+                y: position.y + upEvent.clientY - startY
+              }
+            );
+            this.clearDropCues();
+            void this.plugin.updateTray(next);
+          },
+          onCancel: () => {
+            element.setCssProps({ translate: "" });
+            this.clearDropCues();
           }
-          dragging = true;
-          moveEvent.preventDefault();
-          element.addClass("is-dragging");
-          element.style.translate = `${dx}px ${dy}px`;
-          this.updatePileDropCues(moveEvent, pile.id, element);
-        };
-        const finish = (upEvent) => {
-          dragSurface.removeEventListener("pointermove", move);
-          dragSurface.removeEventListener("pointerup", finish);
-          dragSurface.removeEventListener("pointercancel", cancel);
-          if (dragSurface.hasPointerCapture(pointerId)) {
-            dragSurface.releasePointerCapture(pointerId);
-          }
-          if (!dragging) {
-            return;
-          }
-          upEvent.preventDefault();
-          upEvent.stopPropagation();
-          this.suppressClickUntil = performance.now() + 400;
-          const next = this.pileDropState(
-            pile.id,
-            upEvent.clientX,
-            upEvent.clientY,
-            element,
-            {
-              x: position.x + upEvent.clientX - startX,
-              y: position.y + upEvent.clientY - startY
-            }
-          );
-          this.clearDropCues();
-          void this.plugin.updateTray(next);
-        };
-        const cancel = () => {
-          dragSurface.removeEventListener("pointermove", move);
-          dragSurface.removeEventListener("pointerup", finish);
-          dragSurface.removeEventListener("pointercancel", cancel);
-          element.setCssProps({ translate: "" });
-          this.clearDropCues();
-        };
-        dragSurface.addEventListener("pointermove", move);
-        dragSurface.addEventListener("pointerup", finish);
-        dragSurface.addEventListener("pointercancel", cancel);
+        });
       });
     });
   }

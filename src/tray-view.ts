@@ -36,6 +36,7 @@ import {
   type TrayPilePosition,
   type TrayState,
 } from "./tray-state.js";
+import { beginThresholdPointerDrag } from "./pointer-drag.js";
 
 const DRAG_THRESHOLD_PX = 5;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
@@ -840,57 +841,33 @@ export class TrayRenderer {
       const startY = event.clientY;
       const pointerId = event.pointerId;
       this.startPointerActionAfterEditing(event, "tray-card-drag", () => {
-        let dragging = false;
-        try {
-          element.setPointerCapture(pointerId);
-        } catch {
-          return;
-        }
-
-        const move = (moveEvent: PointerEvent): void => {
-          const dx = moveEvent.clientX - startX;
-          const dy = moveEvent.clientY - startY;
-          if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-            return;
-          }
-          dragging = true;
-          moveEvent.preventDefault();
-          element.addClass("is-dragging");
-          element.style.translate = `${dx}px ${dy}px`;
-          this.rootEl?.addClass("is-dragging-card");
-          this.updateCardDropCues(moveEvent, pile.id, element);
-        };
-        const finish = (upEvent: PointerEvent): void => {
-          element.removeEventListener("pointermove", move);
-          element.removeEventListener("pointerup", finish);
-          element.removeEventListener("pointercancel", cancel);
-          if (element.hasPointerCapture(pointerId)) {
-            element.releasePointerCapture(pointerId);
-          }
-          if (!dragging) {
-            return;
-          }
-          upEvent.preventDefault();
-          upEvent.stopPropagation();
-          this.suppressClickUntil = performance.now() + 400;
-          const next = this.cardDropState(
-            card.cardRef,
-            upEvent.clientX,
-            upEvent.clientY,
-            element,
-          );
-          this.clearDropCues();
-          void this.plugin.updateTray(next);
-        };
-        const cancel = (): void => {
-          element.removeEventListener("pointermove", move);
-          element.removeEventListener("pointerup", finish);
-          element.removeEventListener("pointercancel", cancel);
-          this.clearDropCues();
-        };
-        element.addEventListener("pointermove", move);
-        element.addEventListener("pointerup", finish);
-        element.addEventListener("pointercancel", cancel);
+        beginThresholdPointerDrag({
+          captureTarget: element,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => {
+            element.addClass("is-dragging");
+            this.rootEl?.addClass("is-dragging-card");
+          },
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updateCardDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = performance.now() + 400;
+            const next = this.cardDropState(
+              card.cardRef,
+              upEvent.clientX,
+              upEvent.clientY,
+              element,
+            );
+            this.clearDropCues();
+            void this.plugin.updateTray(next);
+          },
+          onCancel: () => this.clearDropCues(),
+        });
       });
     });
   }
@@ -916,60 +893,37 @@ export class TrayRenderer {
       const startY = event.clientY;
       const pointerId = event.pointerId;
       this.startPointerActionAfterEditing(event, "tray-pile-drag", () => {
-        let dragging = false;
-        try {
-          dragSurface.setPointerCapture(pointerId);
-        } catch {
-          return;
-        }
-        const move = (moveEvent: PointerEvent): void => {
-          const dx = moveEvent.clientX - startX;
-          const dy = moveEvent.clientY - startY;
-          if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-            return;
-          }
-          dragging = true;
-          moveEvent.preventDefault();
-          element.addClass("is-dragging");
-          element.style.translate = `${dx}px ${dy}px`;
-          this.updatePileDropCues(moveEvent, pile.id, element);
-        };
-        const finish = (upEvent: PointerEvent): void => {
-          dragSurface.removeEventListener("pointermove", move);
-          dragSurface.removeEventListener("pointerup", finish);
-          dragSurface.removeEventListener("pointercancel", cancel);
-          if (dragSurface.hasPointerCapture(pointerId)) {
-            dragSurface.releasePointerCapture(pointerId);
-          }
-          if (!dragging) {
-            return;
-          }
-          upEvent.preventDefault();
-          upEvent.stopPropagation();
-          this.suppressClickUntil = performance.now() + 400;
-          const next = this.pileDropState(
-            pile.id,
-            upEvent.clientX,
-            upEvent.clientY,
-            element,
-            {
-              x: position.x + upEvent.clientX - startX,
-              y: position.y + upEvent.clientY - startY,
-            },
-          );
-          this.clearDropCues();
-          void this.plugin.updateTray(next);
-        };
-        const cancel = (): void => {
-          dragSurface.removeEventListener("pointermove", move);
-          dragSurface.removeEventListener("pointerup", finish);
-          dragSurface.removeEventListener("pointercancel", cancel);
-          element.setCssProps({ translate: "" });
-          this.clearDropCues();
-        };
-        dragSurface.addEventListener("pointermove", move);
-        dragSurface.addEventListener("pointerup", finish);
-        dragSurface.addEventListener("pointercancel", cancel);
+        beginThresholdPointerDrag({
+          captureTarget: dragSurface,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => element.addClass("is-dragging"),
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updatePileDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = performance.now() + 400;
+            const next = this.pileDropState(
+              pile.id,
+              upEvent.clientX,
+              upEvent.clientY,
+              element,
+              {
+                x: position.x + upEvent.clientX - startX,
+                y: position.y + upEvent.clientY - startY,
+              },
+            );
+            this.clearDropCues();
+            void this.plugin.updateTray(next);
+          },
+          onCancel: () => {
+            element.setCssProps({ translate: "" });
+            this.clearDropCues();
+          },
+        });
       });
     });
   }

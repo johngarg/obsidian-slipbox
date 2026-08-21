@@ -9,6 +9,7 @@ import {
   centredViewportPosition,
   clampViewportPosition,
   deckIndexByDelta,
+  stationarySelectionOffset,
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
@@ -24,6 +25,22 @@ describe("free Deck motion", () => {
 
     assert.ok(cardStackOrder(2, 2) > cardStackOrder(1, 2));
     assert.ok(cardStackOrder(1, 2) > cardStackOrder(0, 2));
+  });
+
+  test("selects inactive cards without moving the physical viewport", () => {
+    const previousIndex = 4;
+    const previousOffset = -1.25;
+    const previousPosition = previousIndex + previousOffset;
+    const nextOffset = stationarySelectionOffset(
+      previousIndex,
+      2,
+      previousOffset,
+    );
+    assert.equal(2 + nextOffset, previousPosition);
+    assert.equal(
+      stationarySelectionOffset(previousIndex, previousIndex, previousOffset),
+      previousOffset,
+    );
   });
 
   test("chooses the nearest off-screen bookmark on each side", () => {

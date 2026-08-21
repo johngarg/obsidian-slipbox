@@ -21,6 +21,7 @@ import {
   centredViewportPosition,
   clampViewportPosition,
   deckIndexByDelta,
+  stationarySelectionOffset,
 } from "./deck-motion.js";
 import { NavigationHistory } from "./navigation-history.js";
 import type { FiledCard } from "./card-index.js";
@@ -80,6 +81,16 @@ import {
   toggleToolbarVisibility,
   type DeckChromeVisibility,
 } from "./deck-chrome.js";
+import {
+  InlineEditSessionController,
+  runAfterInlineEditing,
+  type InlineEditFailure,
+  type InlineEditOrigin,
+} from "./inline-edit-session.js";
+import {
+  isDeckInlineEditEnter,
+  isInlineEditBodyTarget,
+} from "./inline-edit-interactions.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -95,6 +106,28 @@ const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
   "find-address-first",
   "pull-into-pile",
 ]);
+let inlineEditStatusSequence = 0;
+
+interface DeckPresentationSnapshot {
+  readonly activePath: string | null;
+  readonly viewportOffset: number;
+  readonly spaceOffsetX: number;
+  readonly spaceOffsetY: number;
+  readonly focusedElement: HTMLElement | null;
+}
+
+interface MountedInlineEdit {
+  readonly controller: InlineEditSessionController;
+  file: TFile;
+  readonly origin: InlineEditOrigin;
+  readonly textarea: HTMLTextAreaElement;
+  readonly statusEl: HTMLElement;
+  readonly bodyEl: HTMLElement;
+  readonly cardEl: HTMLElement;
+  readonly overlayEl: HTMLElement | null;
+  readonly renderedScrollTop: number;
+  readonly presentationSnapshot: DeckPresentationSnapshot | null;
+}
 
 export class DeckView extends ItemView {
   private activePath: string | null = null;
@@ -107,7 +140,7 @@ export class DeckView extends ItemView {
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
-  private renderComponents: Component[] = [];
+  private renderComponents = new Map<string, Component>();
   private cardScrollPositions = new Map<string, number>();
   private viewportOffset = 0;
   private pointerLastX: number | null = null;
@@ -145,6 +178,9 @@ export class DeckView extends ItemView {
   private pendingCommandFeedback = "";
   private pendingCommandFeedbackTimer: number | null = null;
   private chromeVisibility: DeckChromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
+  private inlineEdit: MountedInlineEdit | null = null;
+  private inlineEditStarting = false;
+  private renderRefreshDeferred = false;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -157,6 +193,9 @@ export class DeckView extends ItemView {
       hoverSource: DECK_VIEW_TYPE,
       isInTray: (file) => this.plugin.isFileInTray(file),
       toggleTray: (file) => this.plugin.toggleFileInTray(file),
+      runAfterEditing: (reason, action) => {
+        void this.runAfterInlineEditing(reason, action);
+      },
     });
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
@@ -168,6 +207,9 @@ export class DeckView extends ItemView {
       previewFilingPlacement: () => void this.previewFilingPlacement(),
       filingInputFocusChanged: (focused) =>
         this.setDeckKeybindingsSuspended(focused),
+      beginInlineEditing: (file) => this.beginTrayInlineEditing(file),
+      runAfterEditing: (reason, action) =>
+        this.runAfterInlineEditing(reason, action),
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
@@ -209,6 +251,37 @@ export class DeckView extends ItemView {
       },
     ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
+      const editing = this.inlineEdit;
+      if (
+        editing !== null &&
+        event.target === editing.textarea &&
+        event.key === "Escape"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void this.finishInlineEditing("escape").then((saved) => {
+          if (saved) {
+            this.contentEl.focus({ preventScroll: true });
+          }
+        });
+        return;
+      }
+      const activeCard = this.activeCard;
+      if (isDeckInlineEditEnter(event, this.contentEl, {
+        hasActiveCard: activeCard !== null,
+        editing: editing !== null,
+        starting: this.inlineEditStarting,
+        filing: this.filingFile !== null,
+        pendingCommand: this.pendingCommand.kind !== "idle",
+      })) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeCard !== null) {
+          void this.beginDeckInlineEditing(activeCard.file, "deck");
+        }
+        return;
+      }
       if (handleFilingEscape(
         event,
         this.filingFile !== null && !this.filingConfirmationInProgress,
@@ -226,11 +299,80 @@ export class DeckView extends ItemView {
         this.trayRenderer.focusFilingInputNow();
       }
     }, { capture: true });
+    this.registerDomEvent(
+      this.contentEl.ownerDocument,
+      "pointerdown",
+      (event) => this.handleInlineEditPointerDown(event),
+      { capture: true },
+    );
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (this.inlineEdit !== null && leaf !== this.leaf) {
+          void this.finishInlineEditing("active-leaf-change");
+        }
+      }),
+    );
+    this.registerEvent(
+      this.app.workspace.on("file-open", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("file-open");
+        }
+      }),
+    );
+    this.registerEvent(
+      this.app.workspace.on("window-open", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("popout-window-open");
+        }
+      }),
+    );
+    this.registerEvent(
+      this.app.workspace.on("window-close", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("popout-window-close");
+        }
+      }),
+    );
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (ownerWindow !== null) {
+      this.registerDomEvent(ownerWindow, "blur", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("window-blur");
+        }
+      });
+    }
+    this.registerDomEvent(this.contentEl.ownerDocument, "visibilitychange", () => {
+      if (
+        this.inlineEdit !== null &&
+        this.contentEl.ownerDocument.visibilityState === "hidden"
+      ) {
+        void this.finishInlineEditing("view-hidden");
+      }
+    });
     this.observeDeckSize();
     await this.refresh();
+    await this.restoreDetachedInlineEdit();
   }
 
   async onClose(): Promise<void> {
+    const saved = await this.finishInlineEditing("view-close");
+    if (!saved && this.inlineEdit !== null) {
+      const editing = this.inlineEdit;
+      editing.controller.cancelDebounce();
+      this.plugin.retainDetachedInlineEdit(
+        editing.controller.snapshot,
+        editing.file,
+        {
+          selectionStart: editing.textarea.selectionStart,
+          selectionEnd: editing.textarea.selectionEnd,
+          textareaScrollTop: editing.textarea.scrollTop,
+          renderedScrollTop: editing.renderedScrollTop,
+        },
+      );
+      this.plugin.releaseInlineEdit(editing.controller.snapshot.path, this);
+      this.inlineEdit = null;
+      this.setDeckKeybindingsSuspended(false);
+    }
     this.cancelViewportCentering();
     this.cancelSpaceRecentering();
     this.cardFooters.clear();
@@ -296,6 +438,36 @@ export class DeckView extends ItemView {
   }
 
   handlePathRename(oldPath: string, newPath: string): void {
+    const editing = this.inlineEdit;
+    const editingPath = editing?.controller.snapshot.path ?? null;
+    const renamedEditingPath = editingPath === null
+      ? null
+      : renamePathReference(editingPath, oldPath, newPath);
+    if (
+      editing !== null &&
+      editingPath !== null &&
+      renamedEditingPath !== null &&
+      renamedEditingPath !== editingPath
+    ) {
+      if (!this.plugin.renameInlineEdit(editingPath, renamedEditingPath, this)) {
+        editing.controller.markConflict(
+          "The renamed path is already being edited in another Slipbox view.",
+        );
+        this.applyInlineEditFailure(editing.controller.snapshot.failure);
+      } else {
+        editing.controller.renamePath(renamedEditingPath);
+        const renamed = this.plugin.index.fileAtPath(renamedEditingPath);
+        if (renamed !== undefined) {
+          editing.file = renamed;
+        }
+        editing.cardEl.dataset.path = renamedEditingPath;
+        const component = this.renderComponents.get(editingPath);
+        if (component !== undefined) {
+          this.renderComponents.delete(editingPath);
+          this.renderComponents.set(renamedEditingPath, component);
+        }
+      }
+    }
     if (this.activePath !== null) {
       this.activePath = renamePathReference(this.activePath, oldPath, newPath);
     }
@@ -319,9 +491,18 @@ export class DeckView extends ItemView {
   }
 
   handlePathDeletion(deletedPath: string): void {
+    const editingPath = this.inlineEdit?.controller.snapshot.path ?? null;
+    if (editingPath !== null && pathIsAtOrBelow(editingPath, deletedPath)) {
+      this.inlineEdit?.controller.markConflict(
+        "The card was deleted while it was being edited. Your draft was kept.",
+        true,
+      );
+      this.applyInlineEditFailure(this.inlineEdit?.controller.snapshot.failure ?? null);
+    }
     if (
       this.activePath !== null &&
-      pathIsAtOrBelow(this.activePath, deletedPath)
+      pathIsAtOrBelow(this.activePath, deletedPath) &&
+      this.activePath !== editingPath
     ) {
       this.activePath = null;
     }
@@ -410,6 +591,14 @@ export class DeckView extends ItemView {
       return false;
     }
     const card = target ?? this.activeCard;
+    void this.runAfterInlineEditing(
+      `deck-action:${action}`,
+      () => this.performAction(action, card),
+    );
+    return true;
+  }
+
+  private performAction(action: DeckAction, card: FiledCard | null): void {
     switch (action) {
       case "previous-card":
         this.moveBy(-1);
@@ -497,10 +686,13 @@ export class DeckView extends ItemView {
         void this.cancelFiling();
         break;
     }
-    return true;
   }
 
   async refresh(): Promise<void> {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
     const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
     this.cancelViewportCentering();
     this.recalculateFilingPreview();
@@ -627,6 +819,444 @@ export class DeckView extends ItemView {
     this.updateBookmarkUi();
   }
 
+  async finishInlineEditing(reason: string): Promise<boolean> {
+    const editing = this.inlineEdit;
+    if (editing === null) {
+      return true;
+    }
+    const saved = await editing.controller.finish();
+    if (!saved) {
+      this.applyInlineEditFailure(editing.controller.snapshot.failure);
+      if (this.app.workspace.getActiveViewOfType(DeckView) === this) {
+        editing.textarea.focus({ preventScroll: true });
+      }
+      return false;
+    }
+
+    const path = editing.controller.snapshot.path;
+    const shouldSkipRender =
+      reason === "view-close" ||
+      reason === "plugin-unload" ||
+      reason === "quit";
+    this.inlineEdit = null;
+    this.plugin.releaseInlineEdit(path, this);
+    this.setDeckKeybindingsSuspended(false);
+    editing.cardEl.removeClass("is-inline-editing");
+    editing.bodyEl.removeClasses([
+      "is-inline-editing",
+      "has-inline-edit-error",
+    ]);
+
+    if (editing.overlayEl !== null) {
+      editing.overlayEl.remove();
+      this.restoreDeckPresentation(editing.presentationSnapshot);
+    }
+
+    if (!shouldSkipRender) {
+      if (this.renderRefreshDeferred) {
+        this.renderRefreshDeferred = false;
+        await this.refresh();
+      } else {
+        await this.rerenderEditedPath(editing.file, editing.bodyEl, editing.renderedScrollTop);
+        await this.trayRenderer.rerenderPath(editing.file);
+      }
+    }
+    if (reason === "escape") {
+      this.contentEl.focus({ preventScroll: true });
+    }
+    return true;
+  }
+
+  async runAfterInlineEditing(
+    reason: string,
+    action: () => void | Promise<void>,
+  ): Promise<boolean> {
+    return runAfterInlineEditing(
+      () => this.finishInlineEditing(reason),
+      action,
+    );
+  }
+
+  private async beginTrayInlineEditing(file: TFile): Promise<void> {
+    const filed = this.plugin.index.filedByFile(file);
+    if (filed !== undefined) {
+      if (!(await this.runAfterInlineEditing(
+        "tray-promote-for-editing",
+        () => this.jumpToPath(filed.path),
+      ))) {
+        return;
+      }
+      await this.beginDeckInlineEditing(file, "tray");
+      return;
+    }
+    await this.beginInlineEditing(file, "tray", null);
+  }
+
+  private async beginDeckInlineEditing(
+    file: TFile,
+    origin: InlineEditOrigin,
+    bodySurface?: HTMLElement,
+  ): Promise<void> {
+    const surface = bodySurface ?? this.cardBodyForPath(file.path);
+    if (surface === null) {
+      new Notice("The card is outside the current render window.");
+      return;
+    }
+    await this.beginInlineEditing(file, origin, surface);
+  }
+
+  private async beginInlineEditing(
+    file: TFile,
+    origin: InlineEditOrigin,
+    bodySurface: HTMLElement | null,
+    restored?: {
+      readonly baseBody: string;
+      readonly draft: string;
+      readonly conflictMessage: string | null;
+      readonly conflictRetryable: boolean;
+      readonly selectionStart: number;
+      readonly selectionEnd: number;
+      readonly textareaScrollTop: number;
+      readonly renderedScrollTop: number;
+    },
+  ): Promise<void> {
+    if (this.filingFile !== null) {
+      new Notice("Finish filing before editing a card body.");
+      return;
+    }
+    if (this.inlineEditStarting) {
+      return;
+    }
+    if (this.inlineEdit !== null) {
+      if (this.inlineEdit.controller.snapshot.path === file.path) {
+        this.inlineEdit.textarea.focus({ preventScroll: true });
+        return;
+      }
+      if (!(await this.finishInlineEditing("start-another-editor"))) {
+        return;
+      }
+    }
+    if (!this.plugin.acquireInlineEdit(file.path, this)) {
+      return;
+    }
+
+    this.inlineEditStarting = true;
+    try {
+      const prepared = restored === undefined
+        ? await this.plugin.prepareInlineEdit(file)
+        : { file, body: restored.baseBody };
+      const mounted = this.mountInlineEditing(
+        prepared.file,
+        origin,
+        prepared.body,
+        bodySurface,
+        restored?.renderedScrollTop,
+      );
+      this.inlineEdit = mounted;
+      if (restored !== undefined && restored.draft !== restored.baseBody) {
+        mounted.textarea.value = restored.draft;
+        mounted.controller.updateDraft(restored.draft);
+      }
+      if (restored !== undefined) {
+        mounted.textarea.scrollTop = restored.textareaScrollTop;
+      }
+      if (restored?.conflictMessage !== null && restored?.conflictMessage !== undefined) {
+        mounted.controller.markConflict(
+          restored.conflictMessage,
+          restored.conflictRetryable,
+        );
+        this.applyInlineEditFailure(mounted.controller.snapshot.failure);
+      }
+      this.setDeckKeybindingsSuspended(true);
+      window.requestAnimationFrame(() => {
+        if (this.inlineEdit === mounted) {
+          mounted.textarea.focus({ preventScroll: true });
+          mounted.textarea.setSelectionRange(
+            restored?.selectionStart ?? mounted.textarea.value.length,
+            restored?.selectionEnd ?? mounted.textarea.value.length,
+          );
+          if (restored !== undefined) {
+            mounted.textarea.scrollTop = restored.textareaScrollTop;
+          }
+        }
+      });
+    } catch (error) {
+      this.plugin.releaseInlineEdit(file.path, this);
+      new Notice(`Could not start inline editing: ${errorMessage(error)}`);
+    } finally {
+      this.inlineEditStarting = false;
+    }
+  }
+
+  private mountInlineEditing(
+    file: TFile,
+    origin: InlineEditOrigin,
+    baseBody: string,
+    requestedBodySurface: HTMLElement | null,
+    restoredRenderedScrollTop?: number,
+  ): MountedInlineEdit {
+    let bodyEl = requestedBodySurface;
+    let cardEl = bodyEl?.closest<HTMLElement>(".slipbox-card") ?? null;
+    let overlayEl: HTMLElement | null = null;
+    let presentationSnapshot: DeckPresentationSnapshot | null = null;
+
+    if (bodyEl === null || cardEl === null) {
+      presentationSnapshot = this.deckPresentationSnapshot();
+      this.cancelViewportCentering();
+      this.cancelSpaceRecentering();
+      const overlay = this.renderUnfiledInlineOverlay(file);
+      overlayEl = overlay.overlay;
+      cardEl = overlay.card;
+      bodyEl = overlay.body;
+    }
+
+    const renderedScrollTop = restoredRenderedScrollTop ?? bodyEl.scrollTop;
+    this.renderComponents.get(file.path)?.unload();
+    this.renderComponents.delete(file.path);
+    bodyEl.empty();
+    bodyEl.removeClass("markdown-rendered");
+    bodyEl.addClass("is-inline-editing");
+    cardEl.addClass("is-inline-editing");
+    const textarea = bodyEl.createEl("textarea", {
+      cls: "slipbox-inline-editor",
+      attr: {
+        "aria-label": `Edit raw Markdown for ${this.plugin.cardTitle(file)}`,
+        spellcheck: "true",
+      },
+    });
+    textarea.value = baseBody;
+    const statusId = `slipbox-inline-edit-status-${++inlineEditStatusSequence}`;
+    textarea.setAttr("aria-errormessage", statusId);
+    const statusEl = bodyEl.createDiv({
+      cls: "slipbox-inline-edit-status",
+      attr: {
+        id: statusId,
+        role: "status",
+        "aria-live": "assertive",
+      },
+    });
+    statusEl.hidden = true;
+
+    const controller = new InlineEditSessionController(
+      file.path,
+      origin,
+      baseBody,
+      {
+        commit: async (request) => {
+          const result = await this.plugin.commitInlineEdit(request);
+          if (result.status === "saved" && !request.final) {
+            const latestFile = this.plugin.index.fileAtPath(request.path) ?? file;
+            await this.trayRenderer.rerenderPath(latestFile);
+          }
+          return result;
+        },
+        flushOpenViews: (path) => this.plugin.flushOpenTextViews(path),
+        schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        cancelScheduled: (handle) => window.clearTimeout(handle as number),
+        reportFailure: (failure) => this.reportInlineEditFailure(failure),
+      },
+    );
+    textarea.addEventListener("input", () => {
+      controller.updateDraft(textarea.value);
+      if (controller.snapshot.phase !== "conflict") {
+        bodyEl.removeClass("has-inline-edit-error");
+        textarea.removeAttribute("aria-invalid");
+        statusEl.hidden = true;
+        statusEl.setText("");
+      }
+    });
+    textarea.addEventListener("pointerdown", (event) => event.stopPropagation());
+    textarea.addEventListener("click", (event) => event.stopPropagation());
+
+    return {
+      controller,
+      file,
+      origin,
+      textarea,
+      statusEl,
+      bodyEl,
+      cardEl,
+      overlayEl,
+      renderedScrollTop,
+      presentationSnapshot,
+    };
+  }
+
+  private renderUnfiledInlineOverlay(file: TFile): {
+    readonly overlay: HTMLElement;
+    readonly card: HTMLElement;
+    readonly body: HTMLElement;
+  } {
+    const stage = this.stageEl;
+    if (stage === null) {
+      throw new Error("The Deck stage is unavailable");
+    }
+    const overlay = stage.createDiv({ cls: "slipbox-inline-edit-overlay" });
+    const card = overlay.createDiv({
+      cls: "slipbox-card slipbox-inline-edit-overlay-card is-active",
+      attr: {
+        "aria-label": `Unfiled · ${this.plugin.cardTitle(file)}`,
+      },
+    });
+    card.dataset.path = file.path;
+    const frame = card.createDiv({ cls: "slipbox-card-frame" });
+    const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
+    const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
+    identity.createSpan({ cls: "slipbox-card-address", text: "unfiled" });
+    const title = cardHeaderTitle(
+      this.plugin.cardTitle(file),
+      this.plugin.settings.showTitleInDeck,
+    );
+    if (title !== null) {
+      identity.createSpan({ cls: "slipbox-card-header-title", text: title });
+    }
+    const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+    this.renderCardAction(
+      actions,
+      "archive-restore",
+      "slipbox-card-file",
+      "File",
+      () => {
+        void this.runAfterInlineEditing(
+          "overlay-file-card",
+          () => this.startFiling(file),
+        );
+        return true;
+      },
+    );
+    this.renderCardAction(
+      actions,
+      "file-pen-line",
+      "slipbox-card-open",
+      "Open",
+      () => {
+        void this.runAfterInlineEditing(
+          "overlay-open-note",
+          () => this.plugin.openMarkdownFile(file),
+        );
+        return true;
+      },
+    );
+    const body = frame.createDiv({ cls: "slipbox-card-scroll" });
+    return { overlay, card, body };
+  }
+
+  private handleInlineEditPointerDown(event: PointerEvent): void {
+    const editing = this.inlineEdit;
+    if (editing === null || !(event.target instanceof Element)) {
+      return;
+    }
+    if (editing.textarea.contains(event.target)) {
+      return;
+    }
+    if (
+      editing.cardEl.contains(event.target) &&
+      event.target.closest("a, button, input, select, [contenteditable='true']") === null
+    ) {
+      return;
+    }
+    void this.finishInlineEditing("outside-pointer");
+  }
+
+  private reportInlineEditFailure(failure: InlineEditFailure): void {
+    this.applyInlineEditFailure(failure);
+    const detail = failure.error === undefined
+      ? failure.message
+      : `${failure.message} ${errorMessage(failure.error)}`;
+    new Notice(`${detail} Your draft remains in the card and can be copied.`);
+  }
+
+  private applyInlineEditFailure(failure: InlineEditFailure | null): void {
+    const editing = this.inlineEdit;
+    if (editing === null || failure === null) {
+      return;
+    }
+    editing.bodyEl.addClass("has-inline-edit-error");
+    editing.textarea.setAttr("aria-invalid", "true");
+    editing.statusEl.setText(failure.message);
+    editing.statusEl.hidden = false;
+  }
+
+  private cardBodyForPath(path: string): HTMLElement | null {
+    const escaped = CSS.escape(path);
+    return this.spaceEl?.querySelector<HTMLElement>(
+      `.slipbox-card[data-path="${escaped}"] .slipbox-card-scroll`,
+    ) ?? null;
+  }
+
+  private async rerenderEditedPath(
+    file: TFile,
+    target: HTMLElement,
+    scrollTop: number,
+  ): Promise<void> {
+    if (!target.isConnected) {
+      return;
+    }
+    target.empty();
+    target.removeClasses(["is-inline-editing", "has-inline-edit-error"]);
+    target.addClass("markdown-rendered");
+    const filed = this.plugin.index.filedByFile(file);
+    if (filed === undefined) {
+      return;
+    }
+    this.cardScrollPositions.set(file.path, scrollTop);
+    await this.renderMarkdownCard(filed, target, this.renderVersion);
+    target.scrollTop = scrollTop;
+  }
+
+  private deckPresentationSnapshot(): DeckPresentationSnapshot {
+    const focused = this.contentEl.ownerDocument.activeElement;
+    return {
+      activePath: this.activePath,
+      viewportOffset: this.viewportOffset,
+      spaceOffsetX: this.spaceOffsetX,
+      spaceOffsetY: this.spaceOffsetY,
+      focusedElement: focused instanceof HTMLElement ? focused : null,
+    };
+  }
+
+  private restoreDeckPresentation(snapshot: DeckPresentationSnapshot | null): void {
+    if (snapshot === null) {
+      return;
+    }
+    this.activePath = snapshot.activePath;
+    this.viewportOffset = snapshot.viewportOffset;
+    this.spaceOffsetX = snapshot.spaceOffsetX;
+    this.spaceOffsetY = snapshot.spaceOffsetY;
+    this.applySpaceOffset();
+    this.positionCards();
+    if (snapshot.focusedElement?.isConnected) {
+      snapshot.focusedElement.focus({ preventScroll: true });
+    }
+  }
+
+  private async restoreDetachedInlineEdit(): Promise<void> {
+    const draft = this.plugin.takeDetachedInlineEdit();
+    if (draft === null) {
+      return;
+    }
+    const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
+    const filed = this.plugin.index.filedByFile(file);
+    let bodySurface: HTMLElement | null = null;
+    if (filed !== undefined) {
+      await this.jumpToPath(filed.path);
+      bodySurface = this.cardBodyForPath(file.path);
+    }
+    await this.beginInlineEditing(file, draft.origin, bodySurface, {
+      baseBody: draft.baseBody,
+      draft: draft.draft,
+      conflictMessage: draft.conflictMessage,
+      conflictRetryable: draft.conflictRetryable,
+      selectionStart: draft.selectionStart,
+      selectionEnd: draft.selectionEnd,
+      textareaScrollTop: draft.textareaScrollTop,
+      renderedScrollTop: draft.renderedScrollTop,
+    });
+    if (this.inlineEdit?.controller.snapshot.path !== draft.path) {
+      this.plugin.returnDetachedInlineEdit(draft);
+    }
+  }
+
   private async navigateToPath(path: string): Promise<boolean> {
     const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
@@ -656,6 +1286,10 @@ export class DeckView extends ItemView {
   }
 
   private async renderDeck(focusFilingInput = true): Promise<void> {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
     const version = ++this.renderVersion;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
@@ -788,13 +1422,21 @@ export class DeckView extends ItemView {
       },
     });
     slider.addEventListener("input", () => {
-      this.plugin.setSpread(Number(slider.value));
-      this.positionCards();
-      if (this.stageEl !== null) {
-        this.renderBookmarkEdgeTabs(this.stageEl);
-      }
+      const spread = Number(slider.value);
+      void this.runAfterInlineEditing("spread-input", () => {
+        this.plugin.setSpread(spread);
+        this.positionCards();
+        if (this.stageEl !== null) {
+          this.renderBookmarkEdgeTabs(this.stageEl);
+        }
+      });
     });
-    slider.addEventListener("change", () => void this.renderDeck());
+    slider.addEventListener("change", () => {
+      void this.runAfterInlineEditing(
+        "spread-change",
+        () => this.renderDeck(),
+      );
+    });
   }
 
   private renderDeckMap(shell: HTMLElement): void {
@@ -850,7 +1492,10 @@ export class DeckView extends ItemView {
       );
       const target = targetIndex === null ? undefined : cards[targetIndex];
       if (target !== undefined && target.path !== this.activePath) {
-        void this.jumpToPath(target.path);
+        void this.runAfterInlineEditing(
+          "deck-map-jump",
+          () => this.jumpToPath(target.path),
+        );
       }
     });
     map.addEventListener("keydown", (event) => {
@@ -1213,6 +1858,19 @@ export class DeckView extends ItemView {
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
+      scroll.addEventListener("dblclick", (event) => {
+        if (!isInlineEditBodyTarget(event.target, scroll)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        void this.runAfterInlineEditing("body-double-click", async () => {
+          if (card.path !== this.activePath) {
+            this.selectCardWithoutMoving(card.path);
+          }
+          await this.beginDeckInlineEditing(card.file, "deck", scroll);
+        });
+      });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),
@@ -1247,7 +1905,10 @@ export class DeckView extends ItemView {
         }
         event.preventDefault();
         event.stopPropagation();
-        this.selectCardWithoutMoving(card.path);
+        void this.runAfterInlineEditing(
+          "select-card",
+          () => this.selectCardWithoutMoving(card.path),
+        );
       });
     }
 
@@ -1283,9 +1944,10 @@ export class DeckView extends ItemView {
     target: HTMLElement,
     version: number,
   ): Promise<void> {
+    this.renderComponents.get(card.path)?.unload();
     const component = new Component();
     component.load();
-    this.renderComponents.push(component);
+    this.renderComponents.set(card.path, component);
     try {
       const body = await this.plugin.index.readBody(card.file);
       if (version !== this.renderVersion) {
@@ -1353,20 +2015,28 @@ export class DeckView extends ItemView {
         if (link === null || linkPath === undefined || linkPath === "") {
           return;
         }
-        const destination = this.app.metadataCache.getFirstLinkpathDest(
-          linkPath,
-          sourcePath,
-        );
-        if (destination === null) {
-          return;
-        }
-        const filed = this.plugin.index.filedByFile(destination);
-        if (filed === undefined) {
-          return;
-        }
+        const internal = link.matches(".internal-link");
+        const newLeaf = event.metaKey || event.ctrlKey;
         event.preventDefault();
         event.stopImmediatePropagation();
-        void this.jumpToPath(filed.path);
+        void this.runAfterInlineEditing("rendered-link", async () => {
+          if (!internal) {
+            window.open(link.href, "_blank", "noopener");
+            return;
+          }
+          const destination = this.app.metadataCache.getFirstLinkpathDest(
+            linkPath,
+            sourcePath,
+          );
+          const filed = destination === null
+            ? undefined
+            : this.plugin.index.filedByFile(destination);
+          if (filed !== undefined && !newLeaf) {
+            await this.jumpToPath(filed.path);
+            return;
+          }
+          await this.app.workspace.openLinkText(linkPath, sourcePath, newLeaf);
+        });
       },
       { capture: true },
     );
@@ -1544,7 +2214,12 @@ export class DeckView extends ItemView {
           "aria-label": `Jump to bookmark ${card.address}`,
         },
       });
-      tab.addEventListener("click", () => void this.jumpToPath(card.path));
+      tab.addEventListener("click", () => {
+        void this.runAfterInlineEditing(
+          "bookmark-edge-jump",
+          () => this.jumpToPath(card.path),
+        );
+      });
     }
   }
 
@@ -1557,7 +2232,11 @@ export class DeckView extends ItemView {
         }
         event.preventDefault();
         const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
-        this.moveViewportByPixels(event.deltaX * scale);
+        const delta = event.deltaX * scale;
+        void this.runAfterInlineEditing(
+          "horizontal-wheel",
+          () => this.moveViewportByPixels(delta),
+        );
       },
       { passive: false },
     );
@@ -1566,13 +2245,24 @@ export class DeckView extends ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
-      this.cancelViewportCentering();
-      this.cancelSpaceRecentering();
-      this.pointerLastX = event.clientX;
-      this.pointerLastY = event.clientY;
-      stage.setPointerCapture(event.pointerId);
-      stage.addClass("is-dragging");
-      this.contentEl.focus({ preventScroll: true });
+      const begin = (): void => {
+        if ((event.buttons & 1) === 0) {
+          return;
+        }
+        this.cancelViewportCentering();
+        this.cancelSpaceRecentering();
+        this.pointerLastX = event.clientX;
+        this.pointerLastY = event.clientY;
+        stage.setPointerCapture(event.pointerId);
+        stage.addClass("is-dragging");
+        this.contentEl.focus({ preventScroll: true });
+      };
+      if (this.inlineEdit === null) {
+        begin();
+      } else {
+        event.preventDefault();
+        void this.runAfterInlineEditing("background-drag", begin);
+      }
     });
     stage.addEventListener("pointermove", (event) => {
       if (this.pointerLastX === null || this.pointerLastY === null) {
@@ -1875,11 +2565,12 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const viewportPosition = previousActiveIndex < 0
-      ? targetIndex
-      : this.viewportPosition(previousActiveIndex);
     this.activePath = path;
-    this.viewportOffset = viewportPosition - targetIndex;
+    this.viewportOffset = stationarySelectionOffset(
+      previousActiveIndex,
+      targetIndex,
+      this.viewportOffset,
+    );
     this.history.replaceCurrent(path);
     this.positionCards();
     this.updateActiveUi();
@@ -2088,6 +2779,10 @@ export class DeckView extends ItemView {
   }
 
   private queueRenderWindowRefresh(): void {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
     if (
       this.renderRefreshPending ||
       this.pointerLastX !== null
@@ -2151,10 +2846,10 @@ export class DeckView extends ItemView {
   }
 
   private unloadRenderComponents(): void {
-    for (const component of this.renderComponents) {
+    for (const component of this.renderComponents.values()) {
       component.unload();
     }
-    this.renderComponents = [];
+    this.renderComponents.clear();
   }
 
   private reconcileScrollPositions(): void {

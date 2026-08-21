@@ -1,5 +1,5 @@
 import type { App, TFile } from "obsidian";
-import { TFile as ObsidianFile } from "obsidian";
+import { TFile as ObsidianFile, getFrontMatterInfo } from "obsidian";
 
 import {
   buildFiledCardLookups,
@@ -132,7 +132,6 @@ export class CardIndex {
   /** Read only the note body, excluding the YAML frontmatter block. */
   async readBody(file: TFile): Promise<string> {
     const source = await this.app.vault.cachedRead(file);
-    const position = this.app.metadataCache.getFileCache(file)?.frontmatterPosition;
-    return position === undefined ? source : source.slice(position.end.offset);
+    return source.slice(getFrontMatterInfo(source).contentStart);
   }
 }

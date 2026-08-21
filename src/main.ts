@@ -6,6 +6,8 @@ import {
   TAbstractFile,
   TFile,
   TFolder,
+  TextFileView,
+  getFrontMatterInfo,
   moment,
   normalizePath,
   stringifyYaml,
@@ -82,12 +84,24 @@ import {
 import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
 import { normalizeCanvasPath } from "./canvas-layout.js";
 import { generateFiledCardLink } from "./card-links.js";
-import { pathIsAtOrBelow } from "./path-reference.js";
+import { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 import {
   createFilingPreview,
   filingPlacementMatches,
   type FilingPreview,
 } from "./filing-preview.js";
+import {
+  InlineEditPathLock,
+  type InlineEditCommitRequest,
+  type InlineEditCommitResult,
+  type InlineEditOrigin,
+  type InlineEditSessionSnapshot,
+} from "./inline-edit-session.js";
+import {
+  NoteBodyConflictError,
+  replaceNoteBodyIfUnchanged,
+  splitNoteBody,
+} from "./note-body.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -107,6 +121,32 @@ export interface TemplatesInfo {
   readonly files: readonly TFile[];
 }
 
+export interface InlineEditStartData {
+  readonly file: TFile;
+  readonly body: string;
+}
+
+export interface DetachedInlineEditDraft {
+  readonly path: string;
+  readonly file: TFile;
+  readonly origin: InlineEditOrigin;
+  readonly baseBody: string;
+  readonly draft: string;
+  readonly conflictMessage: string | null;
+  readonly conflictRetryable: boolean;
+  readonly selectionStart: number;
+  readonly selectionEnd: number;
+  readonly textareaScrollTop: number;
+  readonly renderedScrollTop: number;
+}
+
+interface DetachedInlineEditPresentation {
+  readonly selectionStart: number;
+  readonly selectionEnd: number;
+  readonly textareaScrollTop: number;
+  readonly renderedScrollTop: number;
+}
+
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
   settings: SlipboxSettings = DEFAULT_SETTINGS;
@@ -120,6 +160,11 @@ export default class SlipboxPlugin extends Plugin {
   private persistQueue: Promise<void> = Promise.resolve();
   private trayPileSequence = 0;
   private rawSettings: unknown = {};
+  private readonly inlineEditOwners = new InlineEditPathLock<DeckView>();
+  private readonly detachedInlineEditDrafts = new Map<
+    string,
+    DetachedInlineEditDraft
+  >();
 
   async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
@@ -144,6 +189,11 @@ export default class SlipboxPlugin extends Plugin {
       display: "Slipbox",
       defaultMod: false,
     });
+    this.registerEvent(
+      this.app.workspace.on("quit", (tasks) => {
+        tasks.addPromise(this.finishInlineEdits("quit"));
+      }),
+    );
 
     this.addRibbonIcon("archive", "Open Slipbox", () => {
       void this.openDeck();
@@ -160,6 +210,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   onunload(): void {
+    void this.finishInlineEdits("plugin-unload");
     if (this.indexRefreshTimer !== null) {
       window.clearTimeout(this.indexRefreshTimer);
     }
@@ -203,6 +254,137 @@ export default class SlipboxPlugin extends Plugin {
 
   openMarkdownFile(file: TFile): Promise<void> {
     return this.app.workspace.getLeaf("tab").openFile(file);
+  }
+
+  acquireInlineEdit(path: string, owner: DeckView): boolean {
+    const existing = this.inlineEditOwners.ownerAt(path);
+    if (existing === owner) {
+      return true;
+    }
+    if (existing !== undefined) {
+      new Notice("This card is already being edited in another Slipbox view.");
+      void this.app.workspace.revealLeaf(existing.leaf);
+      return false;
+    }
+    if (this.detachedInlineEditDrafts.has(path)) {
+      new Notice(
+        "This card has an inline draft waiting to be restored in Slipbox.",
+      );
+      return false;
+    }
+    return this.inlineEditOwners.acquire(path, owner);
+  }
+
+  releaseInlineEdit(path: string, owner: DeckView): void {
+    this.inlineEditOwners.release(path, owner);
+  }
+
+  renameInlineEdit(
+    oldPath: string,
+    newPath: string,
+    owner: DeckView,
+  ): boolean {
+    return this.inlineEditOwners.rename(oldPath, newPath, owner);
+  }
+
+  async prepareInlineEdit(file: TFile): Promise<InlineEditStartData> {
+    await this.flushOpenTextViews(file.path);
+    const latest = this.app.vault.getAbstractFileByPath(file.path);
+    if (!(latest instanceof TFile)) {
+      throw new Error("The card no longer exists.");
+    }
+    const source = await this.app.vault.read(latest);
+    const body = splitNoteBody(
+      source,
+      getFrontMatterInfo(source).contentStart,
+    ).body;
+    return { file: latest, body };
+  }
+
+  async commitInlineEdit(
+    request: InlineEditCommitRequest,
+  ): Promise<InlineEditCommitResult> {
+    const file = this.app.vault.getAbstractFileByPath(request.path);
+    if (!(file instanceof TFile)) {
+      return {
+        status: "conflict",
+        message: "The card was deleted while it was being edited.",
+      };
+    }
+    try {
+      await this.app.vault.process(file, (latest) => {
+        const contentStart = getFrontMatterInfo(latest).contentStart;
+        return replaceNoteBodyIfUnchanged(
+          latest,
+          contentStart,
+          request.baseBody,
+          request.draft,
+        );
+      });
+    } catch (error) {
+      if (error instanceof NoteBodyConflictError) {
+        return {
+          status: "conflict",
+          message: "The note body changed elsewhere. Your inline draft was kept.",
+        };
+      }
+      throw error;
+    }
+    return { status: "saved" };
+  }
+
+  async flushOpenTextViews(path: string): Promise<void> {
+    const saves: Promise<void>[] = [];
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (view instanceof TextFileView && view.file?.path === path) {
+        saves.push(view.save());
+      }
+    });
+    await Promise.all(saves);
+  }
+
+  retainDetachedInlineEdit(
+    snapshot: InlineEditSessionSnapshot,
+    file: TFile,
+    presentation: DetachedInlineEditPresentation,
+  ): void {
+    this.detachedInlineEditDrafts.set(snapshot.path, {
+      path: snapshot.path,
+      file,
+      origin: snapshot.origin,
+      baseBody: snapshot.baseBody,
+      draft: snapshot.draft,
+      conflictMessage: snapshot.failure?.kind === "conflict"
+        ? snapshot.failure.message
+        : null,
+      conflictRetryable: snapshot.conflictRetryable,
+      ...presentation,
+    });
+  }
+
+  takeDetachedInlineEdit(): DetachedInlineEditDraft | null {
+    for (const [path, draft] of this.detachedInlineEditDrafts) {
+      if (this.inlineEditOwners.ownerAt(path) !== undefined) {
+        continue;
+      }
+      this.detachedInlineEditDrafts.delete(path);
+      return draft;
+    }
+    return null;
+  }
+
+  returnDetachedInlineEdit(draft: DetachedInlineEditDraft): void {
+    this.detachedInlineEditDrafts.set(draft.path, draft);
+  }
+
+  private async finishInlineEdits(reason: string): Promise<void> {
+    const owners = this.inlineEditOwners.ownerSet();
+    await Promise.all(
+      [...owners].map(async (owner) => {
+        await owner.finishInlineEditing(reason);
+      }),
+    );
   }
 
   cardTitle(file: TFile): string {
@@ -282,13 +464,23 @@ export default class SlipboxPlugin extends Plugin {
     const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
+    const run = (reason: string, action: () => void | Promise<void>): void => {
+      if (leaf.view instanceof DeckView) {
+        void leaf.view.runAfterInlineEditing(reason, action);
+      } else {
+        void action();
+      }
+    };
 
     menu.addItem((item) => {
       item
         .setTitle(`Open ${title}`)
         .setIcon("file-pen-line")
         .setSection("slipbox-card")
-        .onClick(() => void this.openMarkdownFile(file));
+        .onClick(() => run(
+          "card-menu-open-note",
+          () => this.openMarkdownFile(file),
+        ));
     });
     menu.addItem((item) => {
       item
@@ -298,7 +490,10 @@ export default class SlipboxPlugin extends Plugin {
         .setDisabled(address === null)
         .onClick(() => {
           if (address !== null) {
-            void this.toggleBookmark(file.path);
+            run(
+              "card-menu-toggle-bookmark",
+              () => this.toggleBookmark(file.path),
+            );
           }
         });
     });
@@ -310,7 +505,10 @@ export default class SlipboxPlugin extends Plugin {
         .setDisabled(address === null)
         .onClick(() => {
           if (address !== null) {
-            void this.toggleFileInTray(file);
+            run(
+              "card-menu-toggle-tray",
+              () => this.toggleFileInTray(file),
+            );
           }
         });
     });
@@ -320,7 +518,10 @@ export default class SlipboxPlugin extends Plugin {
         .setIcon("trash-2")
         .setWarning(true)
         .setSection("slipbox-card-danger")
-        .onClick(() => void this.deleteCard(file));
+        .onClick(() => run(
+          "card-menu-delete",
+          () => this.deleteCard(file),
+        ));
     });
 
     // Obsidian supplies its canonical Reveal file in navigation action along
@@ -768,7 +969,15 @@ export default class SlipboxPlugin extends Plugin {
           return available;
         }
         if (available) {
-          void this.clearTray();
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck === null) {
+            void this.clearTray();
+          } else {
+            void deck.runAfterInlineEditing(
+              "command-clear-tray",
+              () => this.clearTray(),
+            );
+          }
         }
         return available;
       },
@@ -873,7 +1082,12 @@ export default class SlipboxPlugin extends Plugin {
           return available;
         }
         if (card !== undefined) {
-          void this.copyCardLink(card);
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck === null) {
+            void this.copyCardLink(card);
+          } else {
+            deck.runAction("copy-link", card);
+          }
         }
         return available;
       },
@@ -1407,6 +1621,16 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private handleDeletedFile(file: TAbstractFile): void {
+    for (const [path, draft] of this.detachedInlineEditDrafts) {
+      if (pathIsAtOrBelow(path, file.path)) {
+        this.detachedInlineEditDrafts.set(path, {
+          ...draft,
+          conflictMessage:
+            "The card was deleted while it was being edited. Your draft was kept.",
+          conflictRetryable: true,
+        });
+      }
+    }
     this.tray = removeTrayPath(this.tray, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
@@ -1436,6 +1660,23 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
+    for (const [path, draft] of [...this.detachedInlineEditDrafts]) {
+      const renamedPath = renamePathReference(path, oldPath, file.path);
+      if (renamedPath === path) {
+        continue;
+      }
+      this.detachedInlineEditDrafts.delete(path);
+      const collision = this.detachedInlineEditDrafts.has(renamedPath) ||
+        this.inlineEditOwners.ownerAt(renamedPath) !== undefined;
+      this.detachedInlineEditDrafts.set(renamedPath, {
+        ...draft,
+        path: renamedPath,
+        conflictMessage: collision
+          ? "The renamed path is already held by another inline-edit session."
+          : draft.conflictMessage,
+        conflictRetryable: collision ? false : draft.conflictRetryable,
+      });
+    }
     this.tray = renameTrayPath(this.tray, oldPath, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {

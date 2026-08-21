@@ -38,6 +38,7 @@ const DEFAULT_PILE_DECK_CLEARANCE_PX = 24;
 const PILE_BASE_Y_RATIO = 0.31;
 const PILE_BASE_Y_OFFSET_PX = 126;
 const PILE_CARD_HALF_HEIGHT_PX = 58;
+const TRAY_SINGLE_CLICK_DELAY_MS = 320;
 
 export interface TrayViewActions {
   jumpToFiledCard(path: string): Promise<void>;
@@ -48,6 +49,11 @@ export interface TrayViewActions {
   cancelFiling(): void;
   previewFilingPlacement(): void;
   filingInputFocusChanged(focused: boolean): void;
+  beginInlineEditing(file: TFile): Promise<void>;
+  runAfterEditing(
+    reason: string,
+    action: () => void | Promise<void>,
+  ): Promise<boolean>;
 }
 
 export interface TrayFilingState extends InlineFilingEditorState {
@@ -55,10 +61,12 @@ export interface TrayFilingState extends InlineFilingEditorState {
 }
 
 export class TrayRenderer {
-  private components: Component[] = [];
+  private components = new Map<string, Component>();
+  private previews = new Map<string, HTMLElement>();
   private rootEl: HTMLElement | null = null;
   private filingEditor: InlineFilingEditorElements | null = null;
   private suppressClickUntil = 0;
+  private pendingCardClickTimer: number | null = null;
 
   constructor(
     private readonly app: App,
@@ -67,13 +75,18 @@ export class TrayRenderer {
   ) {}
 
   clear(): void {
+    if (this.pendingCardClickTimer !== null) {
+      window.clearTimeout(this.pendingCardClickTimer);
+      this.pendingCardClickTimer = null;
+    }
     if (this.filingEditor !== null) {
       this.actions.filingInputFocusChanged(false);
     }
-    for (const component of this.components) {
+    for (const component of this.components.values()) {
       component.unload();
     }
-    this.components = [];
+    this.components.clear();
+    this.previews.clear();
     this.rootEl = null;
     this.filingEditor = null;
   }
@@ -103,6 +116,30 @@ export class TrayRenderer {
   updateFilingState(state: TrayFilingState): void {
     if (this.filingEditor !== null) {
       updateInlineFilingEditor(this.filingEditor, state);
+    }
+  }
+
+  async rerenderPath(file: TFile): Promise<void> {
+    const preview = this.previews.get(file.path);
+    if (preview === undefined) {
+      return;
+    }
+    this.components.get(file.path)?.unload();
+    const component = new Component();
+    component.load();
+    this.components.set(file.path, component);
+    preview.empty();
+    preview.addClass("markdown-rendered");
+    try {
+      await MarkdownRenderer.render(
+        this.app,
+        await this.plugin.index.readBody(file),
+        preview,
+        file.path,
+        component,
+      );
+    } catch {
+      preview.setText("Preview unavailable");
     }
   }
 
@@ -167,7 +204,10 @@ export class TrayRenderer {
           .setDisabled(position === null)
           .onClick(() => {
             if (position !== null) {
-              void this.plugin.createNewCardAtTrayPosition(position);
+              void this.actions.runAfterEditing(
+                "tray-new-card",
+                () => this.plugin.createNewCardAtTrayPosition(position),
+              );
             }
           });
       });
@@ -177,7 +217,10 @@ export class TrayRenderer {
           .setTitle("Return all filed cards")
           .setIcon("eraser")
           .setDisabled(!trayHasFiledCards(this.plugin.tray))
-          .onClick(() => void this.plugin.clearTray());
+          .onClick(() => this.actions.runAfterEditing(
+            "tray-return-all",
+            () => this.plugin.clearTray(),
+          ));
       });
       menu.showAtMouseEvent(event);
     });
@@ -237,7 +280,10 @@ export class TrayRenderer {
         if (performance.now() < this.suppressClickUntil) {
           return;
         }
-        void this.plugin.setTrayPileExpanded(pile.id, false);
+        void this.actions.runAfterEditing(
+          "tray-collapse-pile",
+          () => this.plugin.setTrayPileExpanded(pile.id, false),
+        );
       });
       dragSurface = handle;
     }
@@ -275,7 +321,10 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
+      void this.actions.runAfterEditing(
+        "tray-toggle-pile",
+        () => this.plugin.setTrayPileExpanded(pile.id, !expanded),
+      );
     });
     pileEl.addEventListener("keydown", (event) => {
       if (
@@ -285,7 +334,10 @@ export class TrayRenderer {
         return;
       }
       event.preventDefault();
-      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
+      void this.actions.runAfterEditing(
+        "tray-toggle-pile-key",
+        () => this.plugin.setTrayPileExpanded(pile.id, !expanded),
+      );
     });
     pileEl.addEventListener("contextmenu", (event) => {
       if (
@@ -370,7 +422,10 @@ export class TrayRenderer {
         delay: 350,
       });
       attachUnfiledAddressFiling(addressEl, () => {
-        void this.actions.beginFiling(file);
+        void this.actions.runAfterEditing(
+          "tray-address-filing",
+          () => this.actions.beginFiling(file),
+        );
       });
     }
     const headerTitle = cardHeaderTitle(
@@ -390,7 +445,10 @@ export class TrayRenderer {
         fileButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.actions.beginFiling(file);
+          void this.actions.runAfterEditing(
+            "tray-file-card",
+            () => this.actions.beginFiling(file),
+          );
         });
       } else {
         const returnButton = trayIconButton(
@@ -401,23 +459,43 @@ export class TrayRenderer {
         returnButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.plugin.toggleFileInTray(file);
+          void this.actions.runAfterEditing(
+            "tray-return-card",
+            () => this.plugin.toggleFileInTray(file),
+          );
         });
       }
       const open = trayIconButton(controls, "file-pen-line", "Open");
       open.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.openMarkdownFile(file);
+        void this.actions.runAfterEditing(
+          "tray-open-note",
+          () => this.plugin.openMarkdownFile(file),
+        );
       });
     }
 
     const preview = miniature.createDiv({
       cls: "slipbox-tray-card-preview markdown-rendered",
     });
+    this.previews.set(file.path, preview);
+    preview.addEventListener("dblclick", (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("a, button, input, textarea, select, [contenteditable='true']") !== null
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.cancelPendingCardClick();
+      void this.actions.beginInlineEditing(file);
+    });
+    this.attachPreviewLinkInteractions(preview, file.path);
     const component = new Component();
     component.load();
-    this.components.push(component);
+    this.components.set(file.path, component);
     try {
       const body = await this.plugin.index.readBody(file);
       if (isCurrent()) {
@@ -445,10 +523,34 @@ export class TrayRenderer {
       ) {
         return;
       }
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".slipbox-tray-card-preview") !== null
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.scheduleCardClick(() => {
+          if (!expanded) {
+            void this.actions.runAfterEditing(
+              "tray-expand-pile",
+              () => this.plugin.setTrayPileExpanded(pile.id, true),
+            );
+          } else if (filed !== undefined) {
+            void this.actions.runAfterEditing(
+              "tray-jump-filed-card",
+              () => this.actions.jumpToFiledCard(filed.path),
+            );
+          }
+        });
+        return;
+      }
       if (!expanded) {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.setTrayPileExpanded(pile.id, true);
+        void this.actions.runAfterEditing(
+          "tray-expand-pile",
+          () => this.plugin.setTrayPileExpanded(pile.id, true),
+        );
         return;
       }
       if (filed === undefined) {
@@ -456,22 +558,31 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.actions.jumpToFiledCard(filed.path);
+      void this.actions.runAfterEditing(
+        "tray-jump-filed-card",
+        () => this.actions.jumpToFiledCard(filed.path),
+      );
     });
     miniature.addEventListener("keydown", (event) => {
       if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.moveCardBy(
-          card.cardRef,
-          event.key === "ArrowLeft" ? -1 : 1,
+        void this.actions.runAfterEditing(
+          "tray-move-card-key",
+          () => this.actions.moveCardBy(
+            card.cardRef,
+            event.key === "ArrowLeft" ? -1 : 1,
+          ),
         );
         return;
       }
       if (event.key === "Enter" && filed !== undefined) {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.jumpToFiledCard(filed.path);
+        void this.actions.runAfterEditing(
+          "tray-jump-filed-card-key",
+          () => this.actions.jumpToFiledCard(filed.path),
+        );
       }
     });
     miniature.addEventListener("contextmenu", (event) => {
@@ -511,6 +622,36 @@ export class TrayRenderer {
     });
   }
 
+  private attachPreviewLinkInteractions(
+    preview: HTMLElement,
+    sourcePath: string,
+  ): void {
+    preview.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const link = event.target.closest<HTMLAnchorElement>("a");
+      if (link === null) {
+        return;
+      }
+      const internal = link.matches(".internal-link");
+      const linktext = link.dataset.href ?? link.getAttribute("href") ?? "";
+      if (linktext === "") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const newLeaf = event.metaKey || event.ctrlKey;
+      void this.actions.runAfterEditing("tray-rendered-link", async () => {
+        if (internal) {
+          await this.app.workspace.openLinkText(linktext, sourcePath, newLeaf);
+          return;
+        }
+        window.open(link.href, "_blank", "noopener");
+      });
+    }, { capture: true });
+  }
+
   private showPileMenu(
     event: MouseEvent,
     pile: TrayPile,
@@ -528,19 +669,28 @@ export class TrayRenderer {
         .setTitle("Lay out pile on active Canvas")
         .setIcon("layout-dashboard")
         .setDisabled(!this.plugin.hasActiveCanvas())
-        .onClick(() => void this.plugin.layOutTrayPileOnActiveCanvas(pile.id));
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-layout-active-canvas",
+          () => this.plugin.layOutTrayPileOnActiveCanvas(pile.id),
+        ));
     });
     menu.addItem((item) => {
       item
         .setTitle("Lay out pile on Canvas…")
         .setIcon("layout-template")
-        .onClick(() => void this.plugin.layOutTrayPileOnCanvas(pile.id));
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-layout-canvas",
+          () => this.plugin.layOutTrayPileOnCanvas(pile.id),
+        ));
     });
     menu.addItem((item) => {
       item
         .setTitle("Create Canvas from pile…")
         .setIcon("file-plus-2")
-        .onClick(() => void this.plugin.createCanvasFromTrayPile(pile.id));
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-create-canvas",
+          () => this.plugin.createCanvasFromTrayPile(pile.id),
+        ));
     });
     menu.addSeparator();
     menu.addItem((item) => {
@@ -548,7 +698,10 @@ export class TrayRenderer {
         .setTitle("Return filed cards in this pile")
         .setIcon("eraser")
         .setDisabled(!pile.cards.some((card) => card.kind === "filed"))
-        .onClick(() => void this.plugin.clearTrayPile(pile.id));
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-return-pile",
+          () => this.plugin.clearTrayPile(pile.id),
+        ));
     });
     menu.showAtMouseEvent(event);
   }
@@ -571,11 +724,10 @@ export class TrayRenderer {
         .onClick(() => {
           const target = state.piles[position.pileIndex - 1];
           if (target !== undefined) {
-            void this.moveAndFocus(moveCardBetweenPiles(
-              state,
+            this.moveAndFocus(
+              moveCardBetweenPiles(state, card.cardRef, target.id),
               card.cardRef,
-              target.id,
-            ), card.cardRef);
+            );
           }
         });
     });
@@ -587,11 +739,10 @@ export class TrayRenderer {
         .onClick(() => {
           const target = state.piles[position.pileIndex + 1];
           if (target !== undefined) {
-            void this.moveAndFocus(moveCardBetweenPiles(
-              state,
+            this.moveAndFocus(
+              moveCardBetweenPiles(state, card.cardRef, target.id),
               card.cardRef,
-              target.id,
-            ), card.cardRef);
+            );
           }
         });
     });
@@ -604,10 +755,13 @@ export class TrayRenderer {
           const newPileId = this.plugin.createTrayPileId();
           const origin = pile.position ?? defaultPilePosition(position.pileIndex);
           const split = splitCardIntoNewPile(state, card.cardRef, newPileId);
-          void this.moveAndFocus(setPilePosition(split, newPileId, {
-            x: origin.x + 38,
-            y: origin.y + 38,
-          }), card.cardRef);
+          this.moveAndFocus(
+            setPilePosition(split, newPileId, {
+              x: origin.x + 38,
+              y: origin.y + 38,
+            }),
+            card.cardRef,
+          );
         });
     });
     menu.showAtMouseEvent(event);
@@ -622,14 +776,20 @@ export class TrayRenderer {
       item
         .setTitle("Open")
         .setIcon("file-pen-line")
-        .onClick(() => void this.plugin.openMarkdownFile(file));
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-menu-open-note",
+          () => this.plugin.openMarkdownFile(file),
+        ));
     });
     if (card.kind === "unfiled") {
       menu.addItem((item) => {
         item
           .setTitle("File")
           .setIcon("archive-restore")
-          .onClick(() => void this.actions.beginFiling(file));
+          .onClick(() => this.actions.runAfterEditing(
+            "tray-menu-file-card",
+            () => this.actions.beginFiling(file),
+          ));
       });
     }
     return true;
@@ -656,54 +816,60 @@ export class TrayRenderer {
       }
       const startX = event.clientX;
       const startY = event.clientY;
-      let dragging = false;
       const pointerId = event.pointerId;
-      element.setPointerCapture(pointerId);
+      this.startPointerActionAfterEditing(event, "tray-card-drag", () => {
+        let dragging = false;
+        try {
+          element.setPointerCapture(pointerId);
+        } catch {
+          return;
+        }
 
-      const move = (moveEvent: PointerEvent): void => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-          return;
-        }
-        dragging = true;
-        moveEvent.preventDefault();
-        element.addClass("is-dragging");
-        element.style.translate = `${dx}px ${dy}px`;
-        this.rootEl?.addClass("is-dragging-card");
-        this.updateCardDropCues(moveEvent, pile.id, element);
-      };
-      const finish = (upEvent: PointerEvent): void => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
-        if (element.hasPointerCapture(pointerId)) {
-          element.releasePointerCapture(pointerId);
-        }
-        if (!dragging) {
-          return;
-        }
-        upEvent.preventDefault();
-        upEvent.stopPropagation();
-        this.suppressClickUntil = performance.now() + 400;
-        const next = this.cardDropState(
-          card.cardRef,
-          upEvent.clientX,
-          upEvent.clientY,
-          element,
-        );
-        this.clearDropCues();
-        void this.plugin.updateTray(next);
-      };
-      const cancel = (): void => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
-        this.clearDropCues();
-      };
-      element.addEventListener("pointermove", move);
-      element.addEventListener("pointerup", finish);
-      element.addEventListener("pointercancel", cancel);
+        const move = (moveEvent: PointerEvent): void => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+            return;
+          }
+          dragging = true;
+          moveEvent.preventDefault();
+          element.addClass("is-dragging");
+          element.style.translate = `${dx}px ${dy}px`;
+          this.rootEl?.addClass("is-dragging-card");
+          this.updateCardDropCues(moveEvent, pile.id, element);
+        };
+        const finish = (upEvent: PointerEvent): void => {
+          element.removeEventListener("pointermove", move);
+          element.removeEventListener("pointerup", finish);
+          element.removeEventListener("pointercancel", cancel);
+          if (element.hasPointerCapture(pointerId)) {
+            element.releasePointerCapture(pointerId);
+          }
+          if (!dragging) {
+            return;
+          }
+          upEvent.preventDefault();
+          upEvent.stopPropagation();
+          this.suppressClickUntil = performance.now() + 400;
+          const next = this.cardDropState(
+            card.cardRef,
+            upEvent.clientX,
+            upEvent.clientY,
+            element,
+          );
+          this.clearDropCues();
+          void this.plugin.updateTray(next);
+        };
+        const cancel = (): void => {
+          element.removeEventListener("pointermove", move);
+          element.removeEventListener("pointerup", finish);
+          element.removeEventListener("pointercancel", cancel);
+          this.clearDropCues();
+        };
+        element.addEventListener("pointermove", move);
+        element.addEventListener("pointerup", finish);
+        element.addEventListener("pointercancel", cancel);
+      });
     });
   }
 
@@ -726,57 +892,63 @@ export class TrayRenderer {
       }
       const startX = event.clientX;
       const startY = event.clientY;
-      let dragging = false;
       const pointerId = event.pointerId;
-      dragSurface.setPointerCapture(pointerId);
-      const move = (moveEvent: PointerEvent): void => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+      this.startPointerActionAfterEditing(event, "tray-pile-drag", () => {
+        let dragging = false;
+        try {
+          dragSurface.setPointerCapture(pointerId);
+        } catch {
           return;
         }
-        dragging = true;
-        moveEvent.preventDefault();
-        element.addClass("is-dragging");
-        element.style.translate = `${dx}px ${dy}px`;
-        this.updatePileDropCues(moveEvent, pile.id, element);
-      };
-      const finish = (upEvent: PointerEvent): void => {
-        dragSurface.removeEventListener("pointermove", move);
-        dragSurface.removeEventListener("pointerup", finish);
-        dragSurface.removeEventListener("pointercancel", cancel);
-        if (dragSurface.hasPointerCapture(pointerId)) {
-          dragSurface.releasePointerCapture(pointerId);
-        }
-        if (!dragging) {
-          return;
-        }
-        upEvent.preventDefault();
-        upEvent.stopPropagation();
-        this.suppressClickUntil = performance.now() + 400;
-        const next = this.pileDropState(
-          pile.id,
-          upEvent.clientX,
-          upEvent.clientY,
-          element,
-          {
-            x: position.x + upEvent.clientX - startX,
-            y: position.y + upEvent.clientY - startY,
-          },
-        );
-        this.clearDropCues();
-        void this.plugin.updateTray(next);
-      };
-      const cancel = (): void => {
-        dragSurface.removeEventListener("pointermove", move);
-        dragSurface.removeEventListener("pointerup", finish);
-        dragSurface.removeEventListener("pointercancel", cancel);
-        element.setCssProps({ translate: "" });
-        this.clearDropCues();
-      };
-      dragSurface.addEventListener("pointermove", move);
-      dragSurface.addEventListener("pointerup", finish);
-      dragSurface.addEventListener("pointercancel", cancel);
+        const move = (moveEvent: PointerEvent): void => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
+            return;
+          }
+          dragging = true;
+          moveEvent.preventDefault();
+          element.addClass("is-dragging");
+          element.style.translate = `${dx}px ${dy}px`;
+          this.updatePileDropCues(moveEvent, pile.id, element);
+        };
+        const finish = (upEvent: PointerEvent): void => {
+          dragSurface.removeEventListener("pointermove", move);
+          dragSurface.removeEventListener("pointerup", finish);
+          dragSurface.removeEventListener("pointercancel", cancel);
+          if (dragSurface.hasPointerCapture(pointerId)) {
+            dragSurface.releasePointerCapture(pointerId);
+          }
+          if (!dragging) {
+            return;
+          }
+          upEvent.preventDefault();
+          upEvent.stopPropagation();
+          this.suppressClickUntil = performance.now() + 400;
+          const next = this.pileDropState(
+            pile.id,
+            upEvent.clientX,
+            upEvent.clientY,
+            element,
+            {
+              x: position.x + upEvent.clientX - startX,
+              y: position.y + upEvent.clientY - startY,
+            },
+          );
+          this.clearDropCues();
+          void this.plugin.updateTray(next);
+        };
+        const cancel = (): void => {
+          dragSurface.removeEventListener("pointermove", move);
+          dragSurface.removeEventListener("pointerup", finish);
+          dragSurface.removeEventListener("pointercancel", cancel);
+          element.setCssProps({ translate: "" });
+          this.clearDropCues();
+        };
+        dragSurface.addEventListener("pointermove", move);
+        dragSurface.addEventListener("pointerup", finish);
+        dragSurface.addEventListener("pointercancel", cancel);
+      });
     });
   }
 
@@ -941,14 +1113,64 @@ export class TrayRenderer {
     this.rootEl?.removeClass("is-dragging-card");
   }
 
-  private async moveAndFocus(nextState: TrayState, cardRef: string) {
-    await this.plugin.updateTray(nextState);
-    window.requestAnimationFrame(() => {
-      const escaped = CSS.escape(cardRef);
-      this.rootEl
-        ?.querySelector<HTMLElement>(`.slipbox-tray-card[data-card-ref="${escaped}"]`)
-        ?.focus({ preventScroll: true });
+  private moveAndFocus(nextState: TrayState, cardRef: string): void {
+    void this.actions.runAfterEditing("tray-menu-move-card", async () => {
+      await this.plugin.updateTray(nextState);
+      window.requestAnimationFrame(() => {
+        const escaped = CSS.escape(cardRef);
+        this.rootEl
+          ?.querySelector<HTMLElement>(`.slipbox-tray-card[data-card-ref="${escaped}"]`)
+          ?.focus({ preventScroll: true });
+      });
     });
+  }
+
+  private scheduleCardClick(action: () => void): void {
+    this.cancelPendingCardClick();
+    this.pendingCardClickTimer = window.setTimeout(() => {
+      this.pendingCardClickTimer = null;
+      action();
+    }, TRAY_SINGLE_CLICK_DELAY_MS);
+  }
+
+  private startPointerActionAfterEditing(
+    event: PointerEvent,
+    reason: string,
+    action: () => void,
+  ): void {
+    const document = event.currentTarget instanceof Node
+      ? event.currentTarget.ownerDocument
+      : null;
+    if (document === null) {
+      return;
+    }
+    const pointerId = event.pointerId;
+    let pointerActive = true;
+    const cleanup = (): void => {
+      document.removeEventListener("pointerup", released, true);
+      document.removeEventListener("pointercancel", released, true);
+    };
+    const released = (releasedEvent: PointerEvent): void => {
+      if (releasedEvent.pointerId === pointerId) {
+        pointerActive = false;
+        cleanup();
+      }
+    };
+    document.addEventListener("pointerup", released, true);
+    document.addEventListener("pointercancel", released, true);
+    void this.actions.runAfterEditing(reason, () => {
+      cleanup();
+      if (pointerActive) {
+        action();
+      }
+    }).finally(cleanup);
+  }
+
+  private cancelPendingCardClick(): void {
+    if (this.pendingCardClickTimer !== null) {
+      window.clearTimeout(this.pendingCardClickTimer);
+      this.pendingCardClickTimer = null;
+    }
   }
 }
 

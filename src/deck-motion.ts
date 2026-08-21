@@ -20,6 +20,18 @@ export interface BookmarkEdgeTargets {
   readonly right: number | null;
 }
 
+/** Keep the physical viewport fixed while changing the selected card. */
+export function stationarySelectionOffset(
+  previousActiveIndex: number,
+  targetIndex: number,
+  currentViewportOffset: number,
+): number {
+  const viewportPosition = previousActiveIndex < 0
+    ? targetIndex
+    : previousActiveIndex + currentViewportOffset;
+  return viewportPosition - targetIndex;
+}
+
 /** Select the nearest off-screen bookmark on each side of the Deck. */
 export function bookmarkEdgeTargets(
   bookmarkIndices: readonly number[],

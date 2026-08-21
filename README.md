@@ -75,6 +75,29 @@ cards; unfiled cards remain, and empty piles disappear. Inline filing leaves the
 source card in its existing pile and leaves every pile visible. Successful
 filing removes only the newly filed card from its former pile.
 
+## Inline card editing
+
+Double-click the body of a card to edit its raw Markdown in place. With the
+Slipbox workspace focused, `Enter` edits the active filed card. `Escape`, an
+outside Slipbox action, navigation, a view change, or closing Slipbox saves the
+latest draft before editing ends. Typing also saves after 500 ms of inactivity.
+Links, card controls, headers, footers, and filing/address fields keep their
+normal behavior instead of opening the editor.
+
+Filed cards in working piles are promoted to their corresponding main Slipbox
+card for editing. Unfiled cards open in a centred overlay with the configured
+main-card size; closing it restores the prior Slipbox position and focus without
+changing pile geometry or order.
+
+Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
+so comments, key order, spacing, and line endings remain byte-for-byte intact,
+including frontmatter-only changes made by another editor. Slipbox flushes open
+Markdown views before editing and before the final save, serializes autosaves,
+and refuses to overwrite a body that changed elsewhere. A conflict or write
+failure keeps the textarea and draft available for copying or retrying and
+cancels the pending Slipbox action. Draft recovery lasts only while the plugin
+remains loaded; it is intentionally not persisted across reloads or crashes.
+
 ## Canvas integration
 
 Right-click a pile to choose:
@@ -104,8 +127,8 @@ longer exist.
 
 ## Other features
 
-- Read-only rendered Markdown cards with internal scrolling and fixed backlink
-  footers.
+- Rendered Markdown cards with raw-Markdown inline editing, internal scrolling,
+  and fixed backlink footers.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
 - A subtle ordinal Deck map with one dot per filed card, accent-coloured

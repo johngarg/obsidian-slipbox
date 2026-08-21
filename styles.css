@@ -148,6 +148,10 @@
   background: var(--text-muted);
 }
 
+.slipbox-deck-map-marker.is-in-tray {
+  background: transparent;
+}
+
 .slipbox-deck-map-section {
   position: absolute;
   top: 12px;
@@ -368,6 +372,57 @@ button.slipbox-tray-pile-handle svg {
 
 .slipbox-tray-pile.is-dragging > button.slipbox-tray-pile-handle {
   cursor: grabbing;
+}
+
+button.slipbox-tray-pile-cycle {
+  position: absolute;
+  top: 50%;
+  z-index: 42;
+  display: inline-flex;
+  width: 30px;
+  height: 42px;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+  box-shadow: var(--shadow-s);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+button.slipbox-tray-pile-cycle.is-previous {
+  left: -31px;
+}
+
+button.slipbox-tray-pile-cycle.is-next {
+  right: -31px;
+}
+
+.slipbox-tray-pile.is-collapsed:hover > .slipbox-tray-pile-cycle,
+.slipbox-tray-pile.is-collapsed:focus-within > .slipbox-tray-pile-cycle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+button.slipbox-tray-pile-cycle:hover,
+button.slipbox-tray-pile-cycle:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+button.slipbox-tray-pile-cycle svg {
+  width: 16px;
+  height: 16px;
 }
 
 .slipbox-tray-pile-count {
@@ -660,12 +715,11 @@ button.slipbox-tray-pile-handle svg {
 }
 
 .slipbox-tray-card-actions {
-  position: absolute;
-  top: 30px;
-  right: 4px;
-  z-index: 5;
   display: flex;
-  gap: 2px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  margin: -3px -3px -3px auto;
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -676,12 +730,18 @@ button.slipbox-tray-pile-handle svg {
 }
 
 .slipbox-tray-card-action {
-  width: 23px;
-  height: 23px;
+  width: 22px;
+  height: 22px;
   padding: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.slipbox-tray-card-action:hover,
+.slipbox-tray-card-action:focus-visible {
   color: var(--text-normal);
-  background: color-mix(in srgb, var(--background-primary) 90%, transparent);
-  box-shadow: var(--shadow-s);
+  background: var(--background-modifier-hover);
 }
 
 .slipbox-tray-card-action svg {
@@ -753,6 +813,16 @@ button.slipbox-tray-pile-handle svg {
     0 2px 7px rgb(0 0 0 / 0.14),
     0 18px 52px rgb(0 0 0 / 0.18);
   cursor: default;
+}
+
+.slipbox-card.is-in-tray:not(.is-viewed-ghost, .is-inline-editing)::after {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: calc(var(--slipbox-card-radius) - 1px);
+  background: rgb(0 0 0 / 0.12);
+  content: "";
+  pointer-events: none;
 }
 
 .slipbox-card.is-viewed-ghost {
@@ -1461,6 +1531,10 @@ button.slipbox-card-backlink-overflow:disabled {
 
   .slipbox-deck-map-marker.is-active {
     background: CanvasText;
+  }
+
+  .slipbox-deck-map-marker.is-in-tray {
+    background: Canvas;
   }
 
   .slipbox-deck-map-section {

@@ -138,6 +138,34 @@ export function moveCardWithinPile(
   return cleanTray({ ...state, piles });
 }
 
+/** Rotate a pile so its previous or next card becomes the visible top card. */
+export function cyclePileTopCard(
+  state: TrayState,
+  pileId: string,
+  direction: -1 | 1,
+): TrayState {
+  const pileIndex = state.piles.findIndex((pile) => pile.id === pileId);
+  const pile = state.piles[pileIndex];
+  if (pile === undefined || pile.cards.length < 2) {
+    return state;
+  }
+  const cards = [...pile.cards];
+  if (direction === 1) {
+    const top = cards.shift();
+    if (top !== undefined) {
+      cards.push(top);
+    }
+  } else {
+    const previous = cards.pop();
+    if (previous !== undefined) {
+      cards.unshift(previous);
+    }
+  }
+  const piles = [...state.piles];
+  piles[pileIndex] = { ...pile, cards };
+  return { ...state, piles };
+}
+
 export function moveCardBetweenPiles(
   state: TrayState,
   cardRef: string,
@@ -480,6 +508,12 @@ export function setPileExpanded(
     ...state,
     expandedPileIds: expanded ? [...withoutPile, pileId] : withoutPile,
   };
+}
+
+export function collapseAllPiles(state: TrayState): TrayState {
+  return state.expandedPileIds.length === 0
+    ? state
+    : { ...state, expandedPileIds: [] };
 }
 
 export function trayContains(state: TrayState, cardRef: string): boolean {

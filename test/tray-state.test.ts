@@ -5,9 +5,11 @@ import {
   EMPTY_TRAY,
   addUniqueCardToPile,
   cardPosition,
+  collapseAllPiles,
   clearFiledCardsFromPile,
   clearFiledCardsFromTray,
   createPile,
+  cyclePileTopCard,
   initialTrayFromUnfiled,
   insertionIndexForPoint,
   mergePiles,
@@ -126,12 +128,37 @@ describe("working piles", () => {
     assert.deepEqual(state.expandedPileIds, []);
   });
 
+  test("collapses every expanded pile at once", () => {
+    let state = tray([filed("A.md")], [filed("B.md")]);
+    assert.equal(collapseAllPiles(state), state);
+    state = setPileExpanded(state, "pile-1", true);
+    state = setPileExpanded(state, "pile-2", true);
+    const collapsed = collapseAllPiles(state);
+    assert.deepEqual(collapsed.expandedPileIds, []);
+    assert.equal(collapsed.piles, state.piles);
+  });
+
   test("moves cards in both directions within a pile", () => {
     const state = tray([filed("A.md"), filed("B.md"), filed("C.md")]);
     const right = moveCardWithinPile(state, "pile-1", 0, 2);
     assert.deepEqual(right.piles[0]?.cards.map((card) => card.cardRef), ["B.md", "C.md", "A.md"]);
     const left = moveCardWithinPile(right, "pile-1", 2, 0);
     assert.deepEqual(left.piles[0]?.cards.map((card) => card.cardRef), ["A.md", "B.md", "C.md"]);
+  });
+
+  test("cycles the visible top card in either direction", () => {
+    const state = tray([filed("A.md"), filed("B.md"), filed("C.md")]);
+    const next = cyclePileTopCard(state, "pile-1", 1);
+    assert.deepEqual(next.piles[0]?.cards.map((card) => card.cardRef), [
+      "B.md", "C.md", "A.md",
+    ]);
+    const previous = cyclePileTopCard(next, "pile-1", -1);
+    assert.deepEqual(previous.piles[0]?.cards.map((card) => card.cardRef), [
+      "A.md", "B.md", "C.md",
+    ]);
+    assert.equal(cyclePileTopCard(state, "missing", 1), state);
+    const singleton = tray([filed("Only.md")]);
+    assert.equal(cyclePileTopCard(singleton, "pile-1", 1), singleton);
   });
 
   test("moves cards between piles and removes an emptied source", () => {

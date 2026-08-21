@@ -1540,6 +1540,11 @@ export class DeckView extends ItemView {
       const marker = markerLayer.createSpan({
         cls: "slipbox-deck-map-marker",
       });
+      const card = filed[index];
+      marker.toggleClass(
+        "is-in-tray",
+        card !== undefined && this.plugin.isFileInTray(card.file),
+      );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
         String(deckMapCoordinate(index, filed.length) ?? 0),
@@ -1761,6 +1766,11 @@ export class DeckView extends ItemView {
       const marker = layer.createSpan({
         cls: "slipbox-deck-map-marker is-bookmarked",
       });
+      const card = this.plugin.index.filedByPath(path);
+      marker.toggleClass(
+        "is-in-tray",
+        card !== undefined && this.plugin.isFileInTray(card.file),
+      );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
         String(position),
@@ -1805,6 +1815,11 @@ export class DeckView extends ItemView {
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const position = deckMapCoordinate(activeIndex, cardCount);
     const activeMarker = this.deckMapActiveMarkerEl;
+    const activeCard = this.plugin.index.snapshot.filed[activeIndex];
+    activeMarker?.toggleClass(
+      "is-in-tray",
+      activeCard !== undefined && this.plugin.isFileInTray(activeCard.file),
+    );
     const bookmarkLabel =
       `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
     if (position === null) {
@@ -1875,8 +1890,11 @@ export class DeckView extends ItemView {
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
+      cardEl.toggleClass("is-in-tray", isInTray);
       const title = this.plugin.cardTitle(card.file);
-      const cardLabel = `${card.address} · ${title}`;
+      const cardLabel = `${card.address} · ${title}${
+        isInTray ? "; pulled out into a working pile" : ""
+      }`;
       cardEl.setAttr("aria-label", cardLabel);
       setTooltip(cardEl, cardLabel, {
         placement: "bottom",

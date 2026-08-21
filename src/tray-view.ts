@@ -24,6 +24,8 @@ import {
 } from "./filing-editor.js";
 import {
   cardPosition,
+  collapseAllPiles,
+  cyclePileTopCard,
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
@@ -224,6 +226,16 @@ export class TrayRenderer {
       menu.addSeparator();
       menu.addItem((item) => {
         item
+          .setTitle("Collapse all piles")
+          .setIcon("minimize-2")
+          .setDisabled(this.plugin.tray.expandedPileIds.length === 0)
+          .onClick(() => this.actions.runAfterEditing(
+            "tray-collapse-all-piles",
+            () => this.plugin.updateTray(collapseAllPiles(this.plugin.tray)),
+          ));
+      });
+      menu.addItem((item) => {
+        item
           .setTitle("Return all filed cards")
           .setIcon("eraser")
           .setDisabled(!trayHasFiledCards(this.plugin.tray))
@@ -263,6 +275,10 @@ export class TrayRenderer {
     pileEl.setAttr("aria-expanded", String(expanded));
     if (!expanded) {
       this.renderStackLayers(pileEl, pile);
+      if (pile.cards.length > 1) {
+        this.renderPileCycleButton(pileEl, pile, pileIndex, -1);
+        this.renderPileCycleButton(pileEl, pile, pileIndex, 1);
+      }
     }
     pileEl.createSpan({
       cls: "slipbox-tray-pile-count",
@@ -382,6 +398,39 @@ export class TrayRenderer {
     return jobs;
   }
 
+  private renderPileCycleButton(
+    parent: HTMLElement,
+    pile: TrayPile,
+    pileIndex: number,
+    direction: -1 | 1,
+  ): void {
+    const previous = direction === -1;
+    const label = `${previous ? "Previous" : "Next"} card in pile ${pileIndex + 1}`;
+    const button = parent.createEl("button", {
+      cls: `clickable-icon slipbox-tray-pile-cycle ${
+        previous ? "is-previous" : "is-next"
+      }`,
+      attr: { type: "button", "aria-label": label },
+    });
+    setIcon(button, previous ? "chevron-left" : "chevron-right");
+    setTooltip(button, label, {
+      placement: previous ? "left" : "right",
+      delay: 250,
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.actions.runAfterEditing(
+        `tray-cycle-pile-${previous ? "previous" : "next"}`,
+        () => this.plugin.updateTray(cyclePileTopCard(
+          this.plugin.tray,
+          pile.id,
+          direction,
+        )),
+      );
+    });
+  }
+
   private async renderCard(
     parent: HTMLElement,
     pile: TrayPile,
@@ -471,8 +520,8 @@ export class TrayRenderer {
         text: headerTitle,
       });
     }
-    const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
     if (!isFilingSource && !isViewed) {
+      const controls = identity.createDiv({ cls: "slipbox-tray-card-actions" });
       const view = trayIconButton(controls, "search", "View");
       view.addEventListener("click", (event) => {
         event.preventDefault();

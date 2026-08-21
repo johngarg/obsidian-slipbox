@@ -45,12 +45,14 @@ Piles are anonymous and float directly beside the filed cards in the same
 workspace. Their initial positions form a compact vertical stack immediately
 above the filed cards, and collapsed piles can be dragged anywhere. A collapsed
 pile shows its readable top card and count, with the slightly varied corners of
-the cards beneath it exposed. Click the pile itself to expand its ordered,
-gently tilted card miniatures directly onto the workspace—there is no panel,
-expanded-pile box, or disclosure control. An expanded pile has a small handle
-to its upper left: click it to collapse the pile, or drag it to move the complete
-expanded row. Piles expand and collapse independently, so several can remain
-open at once.
+the cards beneath it exposed. Hover a multi-card pile and use the side arrows to
+cycle its top card without opening it. Click the pile itself to expand its
+ordered, gently tilted card miniatures directly onto the workspace—there is no
+panel, expanded-pile box, or disclosure control. An expanded pile has a small
+handle to its upper left: click it to collapse the pile, or drag it to move the
+complete expanded row. Piles expand and collapse independently, so several can
+remain open at once. Card actions appear in each miniature's header, matching
+the filed-card controls.
 
 Drag empty background to pan the whole workspace, including both filed cards
 and piles. This makes overlapped or off-centre piles reachable without changing
@@ -67,13 +69,16 @@ Use drag and drop to:
 
 Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu can
 move them to adjacent piles or split them. Pulling a filed card out does not
-change its address, Slipbox filing order, bookmark, or Canvas membership.
+change its address, Slipbox filing order, bookmark, or Canvas membership. Its
+filed card is dimmed and its Deck-map marker becomes invisible while it is in a
+working pile; the unchanged map position remains clickable.
 
 Right-click a pile for `Return filed cards in this pile`, or right-click empty
-workspace for `Return all filed cards`. Both return only manually pulled filed
-cards; unfiled cards remain, and empty piles disappear. Inline filing leaves the
-source card in its existing pile and leaves every pile visible. Successful
-filing removes only the newly filed card from its former pile.
+workspace to `Collapse all piles` or `Return all filed cards`. Return actions
+affect only manually pulled filed cards; unfiled cards remain, and empty piles
+disappear. Inline filing leaves the source card in its existing pile and leaves
+every pile visible. Successful filing removes only the newly filed card from its
+former pile.
 
 ## Inline card editing
 

@@ -1539,6 +1539,28 @@ function moveCardWithinPile(state, pileId, fromIndex, toIndex) {
   piles[pileIndex] = { ...pile, cards };
   return cleanTray({ ...state, piles });
 }
+function cyclePileTopCard(state, pileId, direction) {
+  const pileIndex = state.piles.findIndex((pile2) => pile2.id === pileId);
+  const pile = state.piles[pileIndex];
+  if (pile === void 0 || pile.cards.length < 2) {
+    return state;
+  }
+  const cards = [...pile.cards];
+  if (direction === 1) {
+    const top = cards.shift();
+    if (top !== void 0) {
+      cards.push(top);
+    }
+  } else {
+    const previous = cards.pop();
+    if (previous !== void 0) {
+      cards.unshift(previous);
+    }
+  }
+  const piles = [...state.piles];
+  piles[pileIndex] = { ...pile, cards };
+  return { ...state, piles };
+}
 function moveCardBetweenPiles(state, cardRef, targetPileId, targetIndex = Number.POSITIVE_INFINITY) {
   const source = cardPosition(state, cardRef);
   const targetPile = state.piles.find((pile) => pile.id === targetPileId);
@@ -1756,6 +1778,9 @@ function setPileExpanded(state, pileId, expanded) {
     ...state,
     expandedPileIds: expanded ? [...withoutPile, pileId] : withoutPile
   };
+}
+function collapseAllPiles(state) {
+  return state.expandedPileIds.length === 0 ? state : { ...state, expandedPileIds: [] };
 }
 function trayContains(state, cardRef) {
   return state.piles.some((pile) => pile.cards.some((card) => card.cardRef === cardRef));
@@ -2035,6 +2060,12 @@ var TrayRenderer = class {
       });
       menu.addSeparator();
       menu.addItem((item) => {
+        item.setTitle("Collapse all piles").setIcon("minimize-2").setDisabled(this.plugin.tray.expandedPileIds.length === 0).onClick(() => this.actions.runAfterEditing(
+          "tray-collapse-all-piles",
+          () => this.plugin.updateTray(collapseAllPiles(this.plugin.tray))
+        ));
+      });
+      menu.addItem((item) => {
         item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => this.actions.runAfterEditing(
           "tray-return-all",
           () => this.plugin.clearTray()
@@ -2058,6 +2089,10 @@ var TrayRenderer = class {
     pileEl.setAttr("aria-expanded", String(expanded));
     if (!expanded) {
       this.renderStackLayers(pileEl, pile);
+      if (pile.cards.length > 1) {
+        this.renderPileCycleButton(pileEl, pile, pileIndex, -1);
+        this.renderPileCycleButton(pileEl, pile, pileIndex, 1);
+      }
     }
     pileEl.createSpan({
       cls: "slipbox-tray-pile-count",
@@ -2163,6 +2198,31 @@ var TrayRenderer = class {
     this.attachPileDragging(pileEl, dragSurface, pile, position);
     return jobs;
   }
+  renderPileCycleButton(parent, pile, pileIndex, direction) {
+    const previous = direction === -1;
+    const label = `${previous ? "Previous" : "Next"} card in pile ${pileIndex + 1}`;
+    const button = parent.createEl("button", {
+      cls: `clickable-icon slipbox-tray-pile-cycle ${previous ? "is-previous" : "is-next"}`,
+      attr: { type: "button", "aria-label": label }
+    });
+    (0, import_obsidian2.setIcon)(button, previous ? "chevron-left" : "chevron-right");
+    (0, import_obsidian2.setTooltip)(button, label, {
+      placement: previous ? "left" : "right",
+      delay: 250
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.actions.runAfterEditing(
+        `tray-cycle-pile-${previous ? "previous" : "next"}`,
+        () => this.plugin.updateTray(cyclePileTopCard(
+          this.plugin.tray,
+          pile.id,
+          direction
+        ))
+      );
+    });
+  }
   async renderCard(parent, pile, card, cardIndex, pileIndex, expanded, filing, viewedPath, isCurrent) {
     const file = this.plugin.index.fileAtPath(card.cardRef);
     if (!(file instanceof import_obsidian2.TFile)) {
@@ -2236,8 +2296,8 @@ var TrayRenderer = class {
         text: headerTitle
       });
     }
-    const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
     if (!isFilingSource && !isViewed) {
+      const controls = identity.createDiv({ cls: "slipbox-tray-card-actions" });
       const view = trayIconButton(controls, "search", "View");
       view.addEventListener("click", (event) => {
         event.preventDefault();
@@ -4677,6 +4737,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       const marker = markerLayer.createSpan({
         cls: "slipbox-deck-map-marker"
       });
+      const card = filed[index];
+      marker.toggleClass(
+        "is-in-tray",
+        card !== void 0 && this.plugin.isFileInTray(card.file)
+      );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
         String(deckMapCoordinate(index, filed.length) ?? 0)
@@ -4856,6 +4921,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       const marker = layer.createSpan({
         cls: "slipbox-deck-map-marker is-bookmarked"
       });
+      const card = this.plugin.index.filedByPath(path);
+      marker.toggleClass(
+        "is-in-tray",
+        card !== void 0 && this.plugin.isFileInTray(card.file)
+      );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
         String(position)
@@ -4897,6 +4967,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const position = deckMapCoordinate(activeIndex, cardCount);
     const activeMarker = this.deckMapActiveMarkerEl;
+    const activeCard = this.plugin.index.snapshot.filed[activeIndex];
+    activeMarker?.toggleClass(
+      "is-in-tray",
+      activeCard !== void 0 && this.plugin.isFileInTray(activeCard.file)
+    );
     const bookmarkLabel = `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
     if (position === null) {
       if (activeMarker !== null) {
@@ -4955,8 +5030,9 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== void 0;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
+      cardEl.toggleClass("is-in-tray", isInTray);
       const title = this.plugin.cardTitle(card.file);
-      const cardLabel = `${card.address} \xB7 ${title}`;
+      const cardLabel = `${card.address} \xB7 ${title}${isInTray ? "; pulled out into a working pile" : ""}`;
       cardEl.setAttr("aria-label", cardLabel);
       (0, import_obsidian3.setTooltip)(cardEl, cardLabel, {
         placement: "bottom",

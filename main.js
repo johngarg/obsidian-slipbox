@@ -3202,6 +3202,12 @@ function isInlineEditBodyTarget(target, bodySurface) {
     "a, button, input, textarea, select, [contenteditable='true'], .slipbox-card-address-row, .slipbox-card-footer"
   ) === null;
 }
+function shouldNavigateDeckFromWheel(event, inlineEditor) {
+  if (inlineEditor !== null && event.composedPath().includes(inlineEditor)) {
+    return false;
+  }
+  return Math.abs(event.deltaX) > Math.abs(event.deltaY);
+}
 function isDeckInlineEditEnter(event, deck, state) {
   return event.target === deck && event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && state.hasActiveCard && !state.editing && !state.starting && !state.filing && !state.pendingCommand;
 }
@@ -5076,7 +5082,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     stage.addEventListener(
       "wheel",
       (event) => {
-        if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+        if (!shouldNavigateDeckFromWheel(event, this.inlineEdit?.textarea ?? null)) {
           return;
         }
         event.preventDefault();

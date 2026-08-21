@@ -7,6 +7,7 @@ import {
   dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
+  shouldNavigateDeckFromWheel,
 } from "../src/inline-edit-interactions.js";
 import {
   advancePendingDeckCommand,
@@ -123,6 +124,61 @@ describe("inline edit entry interactions", () => {
       deck as unknown as HTMLElement,
       ready,
     ), false);
+  });
+
+  test("keeps textarea wheel gestures native while retaining Deck navigation", () => {
+    const window = new Window();
+    const stage = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const textarea = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "textarea",
+    );
+    stage.append(textarea);
+    window.document.body.append(stage);
+    let navigations = 0;
+    stage.addEventListener("wheel", (event) => {
+      if (!shouldNavigateDeckFromWheel(
+        event as unknown as WheelEvent,
+        textarea as unknown as HTMLTextAreaElement,
+      )) {
+        return;
+      }
+      event.preventDefault();
+      navigations += 1;
+    });
+
+    const editorWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -80,
+      deltaY: 12,
+    });
+    textarea.dispatchEvent(editorWheel);
+    assert.equal(navigations, 0);
+    assert.equal(editorWheel.defaultPrevented, false);
+
+    const deckWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -80,
+      deltaY: 12,
+    });
+    stage.dispatchEvent(deckWheel);
+    assert.equal(navigations, 1);
+    assert.equal(deckWheel.defaultPrevented, true);
+
+    const verticalDeckWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: 12,
+      deltaY: -80,
+    });
+    stage.dispatchEvent(verticalDeckWheel);
+    assert.equal(navigations, 1);
+    assert.equal(verticalDeckWheel.defaultPrevented, false);
   });
 });
 

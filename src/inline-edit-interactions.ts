@@ -60,6 +60,20 @@ export function isInlineEditBodyTarget(
   ) === null;
 }
 
+/** Keep every wheel gesture originating in the editor away from Deck navigation. */
+export function shouldNavigateDeckFromWheel(
+  event: WheelEvent,
+  inlineEditor: HTMLTextAreaElement | null,
+): boolean {
+  if (
+    inlineEditor !== null &&
+    event.composedPath().includes(inlineEditor)
+  ) {
+    return false;
+  }
+  return Math.abs(event.deltaX) > Math.abs(event.deltaY);
+}
+
 export function isDeckInlineEditEnter(
   event: KeyboardEvent,
   deck: HTMLElement,

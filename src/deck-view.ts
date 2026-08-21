@@ -93,6 +93,7 @@ import {
   dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
+  shouldNavigateDeckFromWheel,
 } from "./inline-edit-interactions.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
@@ -2257,7 +2258,7 @@ export class DeckView extends ItemView {
     stage.addEventListener(
       "wheel",
       (event) => {
-        if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+        if (!shouldNavigateDeckFromWheel(event, this.inlineEdit?.textarea ?? null)) {
           return;
         }
         event.preventDefault();

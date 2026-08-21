@@ -88,6 +88,7 @@ import {
   type InlineEditOrigin,
 } from "./inline-edit-session.js";
 import {
+  dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
 } from "./inline-edit-interactions.js";
@@ -591,11 +592,17 @@ export class DeckView extends ItemView {
       return false;
     }
     const card = target ?? this.activeCard;
-    void this.runAfterInlineEditing(
-      `deck-action:${action}`,
+    return dispatchInlineAwareDeckAction(
+      {
+        editing: this.inlineEdit !== null,
+        starting: this.inlineEditStarting,
+      },
+      (semanticAction) => this.runAfterInlineEditing(
+        `deck-action:${action}`,
+        semanticAction,
+      ),
       () => this.performAction(action, card),
     );
-    return true;
   }
 
   private performAction(action: DeckAction, card: FiledCard | null): void {

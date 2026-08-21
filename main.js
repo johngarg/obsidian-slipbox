@@ -3150,6 +3150,17 @@ async function runAfterInlineEditing(finish, action) {
 }
 
 // src/inline-edit-interactions.ts
+function dispatchInlineAwareDeckAction(state, runAfterEditing, action) {
+  if (state.starting) {
+    return false;
+  }
+  if (!state.editing) {
+    action();
+    return true;
+  }
+  void runAfterEditing(action);
+  return true;
+}
 function isInlineEditBodyTarget(target, bodySurface) {
   const ElementConstructor = bodySurface.ownerDocument.defaultView?.Element;
   if (ElementConstructor === void 0 || !(target instanceof ElementConstructor) || !bodySurface.contains(target)) {
@@ -3589,11 +3600,17 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return false;
     }
     const card = target ?? this.activeCard;
-    void this.runAfterInlineEditing(
-      `deck-action:${action}`,
+    return dispatchInlineAwareDeckAction(
+      {
+        editing: this.inlineEdit !== null,
+        starting: this.inlineEditStarting
+      },
+      (semanticAction) => this.runAfterInlineEditing(
+        `deck-action:${action}`,
+        semanticAction
+      ),
       () => this.performAction(action, card)
     );
-    return true;
   }
   performAction(action, card) {
     switch (action) {

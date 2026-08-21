@@ -3,9 +3,16 @@ import { describe, test } from "node:test";
 import { Window } from "happy-dom";
 
 import {
+  dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
 } from "../src/inline-edit-interactions.js";
+import {
+  advancePendingDeckCommand,
+  IDLE_DECK_COMMAND,
+  startAddressCommand,
+  type PendingDeckCommand,
+} from "../src/deck-commands.js";
 
 describe("inline edit entry interactions", () => {
   test("accepts rendered body text and excludes interactive descendants", () => {
@@ -85,5 +92,68 @@ describe("inline edit entry interactions", () => {
       deck as unknown as HTMLElement,
       ready,
     ), false);
+  });
+});
+
+describe("inline-aware Deck action dispatch", () => {
+  test("starts g and f prefix commands synchronously before recording their events", () => {
+    for (const fixture of [
+      { prefix: "g", mode: "absolute" as const, initial: "f" },
+      { prefix: "f", mode: "forward" as const, initial: "g" },
+    ]) {
+      let pending: PendingDeckCommand = IDLE_DECK_COMMAND;
+      const prefixEvent = { key: fixture.prefix };
+      let pendingStartEvent: typeof prefixEvent | null = null;
+
+      const accepted = dispatchInlineAwareDeckAction(
+        { editing: false, starting: false },
+        async () => true,
+        () => {
+          pendingStartEvent = null;
+          pending = startAddressCommand(fixture.mode);
+        },
+      );
+      pendingStartEvent = prefixEvent;
+
+      assert.equal(accepted, true);
+      assert.deepEqual(pending, { kind: "address", mode: fixture.mode });
+      assert.equal(pendingStartEvent, prefixEvent);
+      const continuation = advancePendingDeckCommand(pending, fixture.initial);
+      assert.deepEqual(
+        "completion" in continuation ? continuation.completion : null,
+        { kind: "address", mode: fixture.mode, initial: fixture.initial },
+      );
+    }
+  });
+
+  test("gates only a mounted editor and blocks actions during startup", async () => {
+    const events: string[] = [];
+    let release: (() => void) | undefined;
+    const saving = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runAfterEditing = async (action: () => void): Promise<boolean> => {
+      events.push("save");
+      await saving;
+      action();
+      return true;
+    };
+
+    assert.equal(dispatchInlineAwareDeckAction(
+      { editing: true, starting: false },
+      runAfterEditing,
+      () => events.push("action"),
+    ), true);
+    assert.deepEqual(events, ["save"]);
+    release?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(events, ["save", "action"]);
+
+    assert.equal(dispatchInlineAwareDeckAction(
+      { editing: false, starting: true },
+      runAfterEditing,
+      () => events.push("starting-action"),
+    ), false);
+    assert.deepEqual(events, ["save", "action"]);
   });
 });

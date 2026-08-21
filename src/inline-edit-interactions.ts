@@ -6,6 +6,28 @@ export interface DeckInlineEditEnterState {
   readonly pendingCommand: boolean;
 }
 
+export interface InlineAwareDeckActionState {
+  readonly editing: boolean;
+  readonly starting: boolean;
+}
+
+/** Preserve synchronous Deck actions unless a mounted editor must be flushed. */
+export function dispatchInlineAwareDeckAction(
+  state: InlineAwareDeckActionState,
+  runAfterEditing: (action: () => void) => Promise<boolean>,
+  action: () => void,
+): boolean {
+  if (state.starting) {
+    return false;
+  }
+  if (!state.editing) {
+    action();
+    return true;
+  }
+  void runAfterEditing(action);
+  return true;
+}
+
 export function isInlineEditBodyTarget(
   target: EventTarget | null,
   bodySurface: HTMLElement,

@@ -25,6 +25,7 @@ export {
   initialFilingAddress,
 } from "./filing-preview.js";
 export {
+  attachUnfiledAddressFiling,
   renderInlineFilingEditor,
   updateInlineFilingEditor,
 } from "./filing-editor.js";

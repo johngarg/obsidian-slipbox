@@ -10,6 +10,7 @@ import {
 
 import type SlipboxPlugin from "./main.js";
 import {
+  attachUnfiledAddressFiling,
   renderInlineFilingEditor,
   updateInlineFilingEditor,
   type InlineFilingEditorElements,
@@ -343,10 +344,7 @@ export class TrayRenderer {
         placement: "bottom",
         delay: 350,
       });
-      addressEl.addEventListener("click", (event) => event.stopPropagation());
-      addressEl.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
+      attachUnfiledAddressFiling(addressEl, () => {
         void this.actions.beginFiling(file);
       });
     }

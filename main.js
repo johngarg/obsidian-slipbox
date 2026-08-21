@@ -1134,6 +1134,15 @@ var HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 function createHtmlElement(document2, tag) {
   return document2.createElementNS(HTML_NAMESPACE, tag);
 }
+function attachUnfiledAddressFiling(address, beginFiling) {
+  address.addEventListener("pointerdown", (event) => event.stopPropagation());
+  address.addEventListener("click", (event) => event.stopPropagation());
+  address.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    beginFiling();
+  });
+}
 function renderInlineFilingEditor(addressSlot, card, state, actions) {
   addressSlot.replaceChildren();
   addressSlot.classList.add("is-editing");
@@ -1779,10 +1788,7 @@ var TrayRenderer = class {
         placement: "bottom",
         delay: 350
       });
-      addressEl.addEventListener("click", (event) => event.stopPropagation());
-      addressEl.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
+      attachUnfiledAddressFiling(addressEl, () => {
         void this.actions.beginFiling(file);
       });
     }

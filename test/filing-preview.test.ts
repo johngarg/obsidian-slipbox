@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { Window } from "happy-dom";
 
 import {
+  attachUnfiledAddressFiling,
   cardComparatorFor,
   createFilingPreview,
   filingPlacementMatches,
@@ -183,6 +184,42 @@ describe("filing placement preview", () => {
 });
 
 describe("inline tray filing editor DOM", () => {
+  test("keeps unfiled-address pointer events away from tray dragging", () => {
+    const window = new Window();
+    const parent = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const address = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "span",
+    );
+    parent.append(address);
+    window.document.body.append(parent);
+
+    const bubbled: string[] = [];
+    let beginCount = 0;
+    parent.addEventListener("pointerdown", () => bubbled.push("pointerdown"));
+    parent.addEventListener("click", () => bubbled.push("click"));
+    parent.addEventListener("dblclick", () => bubbled.push("dblclick"));
+    attachUnfiledAddressFiling(
+      address as unknown as HTMLElement,
+      () => beginCount += 1,
+    );
+
+    address.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true }));
+    address.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    const doubleClick = new window.MouseEvent("dblclick", {
+      bubbles: true,
+      cancelable: true,
+    });
+    address.dispatchEvent(doubleClick);
+
+    assert.deepEqual(bubbled, []);
+    assert.equal(beginCount, 1);
+    assert.equal(doubleClick.defaultPrevented, true);
+  });
+
   test("renders inline, updates feedback, and dispatches filing controls", () => {
     const window = new Window();
     const happyCard = window.document.createElementNS(

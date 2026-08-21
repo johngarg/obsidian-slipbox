@@ -28,6 +28,21 @@ function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
   return document.createElementNS(HTML_NAMESPACE, tag) as HTMLElementTagNameMap[K];
 }
 
+export function attachUnfiledAddressFiling(
+  address: HTMLElement,
+  beginFiling: () => void,
+): void {
+  // Tray cards and collapsed piles begin dragging on pointerdown. Keep the
+  // pointer sequence on the address so the browser can deliver its dblclick.
+  address.addEventListener("pointerdown", (event) => event.stopPropagation());
+  address.addEventListener("click", (event) => event.stopPropagation());
+  address.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    beginFiling();
+  });
+}
+
 export function renderInlineFilingEditor(
   addressSlot: HTMLElement,
   card: HTMLElement,

@@ -57,6 +57,24 @@ export function handleFilingEscape(
   return true;
 }
 
+export function shouldSuspendDeckShortcut(
+  eventTarget: EventTarget | null,
+  filingInputFocused: boolean,
+): boolean {
+  if (filingInputFocused) {
+    return true;
+  }
+  if (eventTarget === null || typeof eventTarget !== "object") {
+    return false;
+  }
+  const target = eventTarget as Partial<HTMLElement>;
+  const tagName = target.tagName?.toLowerCase();
+  return tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    target.isContentEditable === true;
+}
+
 export function renderInlineFilingEditor(
   addressSlot: HTMLElement,
   card: HTMLElement,

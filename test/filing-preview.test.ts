@@ -12,7 +12,10 @@ import {
   renderInlineFilingEditor,
   updateInlineFilingEditor,
 } from "../src/index.js";
-import { handleFilingEscape } from "../src/filing-editor.js";
+import {
+  handleFilingEscape,
+  shouldSuspendDeckShortcut,
+} from "../src/filing-editor.js";
 
 const filed = [
   { address: "A/2", path: "one.md" },
@@ -185,6 +188,37 @@ describe("filing placement preview", () => {
 });
 
 describe("inline tray filing editor DOM", () => {
+  test("suspends Deck letter shortcuts while the filing input has focus", () => {
+    const window = new Window();
+    const input = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "input",
+    );
+    const deck = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+
+    assert.equal(shouldSuspendDeckShortcut(
+      deck as unknown as EventTarget,
+      true,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      input as unknown as EventTarget,
+      false,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      deck as unknown as EventTarget,
+      false,
+    ), false);
+
+    deck.contentEditable = "true";
+    assert.equal(shouldSuspendDeckShortcut(
+      deck as unknown as EventTarget,
+      false,
+    ), true);
+  });
+
   test("cancels filing from Escape outside the address input", () => {
     const window = new Window();
     let cancelCount = 0;

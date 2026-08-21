@@ -45,7 +45,10 @@ import {
   initialFilingAddress,
   type FilingPreview,
 } from "./filing-preview.js";
-import { handleFilingEscape } from "./filing-editor.js";
+import {
+  handleFilingEscape,
+  shouldSuspendDeckShortcut,
+} from "./filing-editor.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -1367,13 +1370,10 @@ export class DeckView extends ItemView {
     action: DeckAction,
     repeatable = false,
   ): boolean {
-    const target = event.target;
-    if (
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      (target instanceof HTMLElement && target.isContentEditable)
-    ) {
+    if (shouldSuspendDeckShortcut(
+      event.target,
+      this.trayRenderer.isFilingInputFocused,
+    )) {
       return false;
     }
 

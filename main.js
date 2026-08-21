@@ -1152,6 +1152,17 @@ function handleFilingEscape(event, filingCanBeCancelled, cancelFiling) {
   cancelFiling();
   return true;
 }
+function shouldSuspendDeckShortcut(eventTarget, filingInputFocused) {
+  if (filingInputFocused) {
+    return true;
+  }
+  if (eventTarget === null || typeof eventTarget !== "object") {
+    return false;
+  }
+  const target = eventTarget;
+  const tagName = target.tagName?.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable === true;
+}
 function renderInlineFilingEditor(addressSlot, card, state, actions) {
   addressSlot.replaceChildren();
   addressSlot.classList.add("is-editing");
@@ -3449,8 +3460,10 @@ var DeckView = class extends import_obsidian3.ItemView {
     void this.goToPath(target.path);
   }
   handleDeckActionKey(event, action, repeatable = false) {
-    const target = event.target;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable) {
+    if (shouldSuspendDeckShortcut(
+      event.target,
+      this.trayRenderer.isFilingInputFocused
+    )) {
       return false;
     }
     if (!this.canRunAction(action)) {

@@ -3,10 +3,13 @@ import { describe, test } from "node:test";
 import { Window } from "happy-dom";
 
 import {
-  consumeInlineEditEscape,
+  consumeDeckEscape,
   dispatchInlineAwareDeckAction,
   isDeckInlineEditEnter,
   isInlineEditBodyTarget,
+  isViewedCardCenterKey,
+  isViewedCardToggleKey,
+  resolveDeckEscapeAction,
   shouldNavigateDeckFromWheel,
 } from "../src/inline-edit-interactions.js";
 import {
@@ -17,34 +20,87 @@ import {
 } from "../src/deck-commands.js";
 
 describe("inline edit entry interactions", () => {
-  test("consumes textarea Escape before later handlers can navigate", () => {
+  test("contains repeated Escape presses inside the active Slipbox view", () => {
     const window = new Window();
+    const deck = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
     const textarea = window.document.createElementNS(
       "http://www.w3.org/1999/xhtml",
       "textarea",
     );
-    window.document.body.append(textarea);
-    let consumed = false;
-    let laterHandlerRan = false;
-    textarea.addEventListener("keydown", (event) => {
-      consumed = consumeInlineEditEscape(
+    deck.append(textarea);
+    window.document.body.append(deck);
+    let editing = true;
+    const actions: string[] = [];
+    let parentNavigationCount = 0;
+    deck.addEventListener("keydown", (event) => {
+      const action = resolveDeckEscapeAction(
         event as unknown as KeyboardEvent,
-        textarea as unknown as HTMLTextAreaElement,
+        { editing, pendingCommand: false, filing: false },
       );
+      if (action === null) {
+        return;
+      }
+      consumeDeckEscape(event as unknown as KeyboardEvent);
+      actions.push(action);
+      if (action === "finish-editing") {
+        editing = false;
+      }
+    }, { capture: true });
+    window.document.addEventListener("keydown", () => {
+      parentNavigationCount += 1;
     });
-    textarea.addEventListener("keydown", () => {
-      laterHandlerRan = true;
-    });
-    const escape = new window.KeyboardEvent("keydown", {
-      key: "Escape",
-      bubbles: true,
-      cancelable: true,
-    });
-    textarea.dispatchEvent(escape);
 
-    assert.equal(consumed, true);
-    assert.equal(escape.defaultPrevented, true);
-    assert.equal(laterHandlerRan, false);
+    const dispatchEscape = (target: typeof deck) => {
+      const escape = new window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(escape);
+      return escape;
+    };
+    const editorEscape = dispatchEscape(textarea);
+    const postEditEscape = dispatchEscape(deck);
+
+    assert.deepEqual(actions, ["finish-editing", "contain"]);
+    assert.equal(editorEscape.defaultPrevented, true);
+    assert.equal(postEditEscape.defaultPrevented, true);
+    assert.equal(parentNavigationCount, 0);
+  });
+
+  test("resolves Slipbox-local Escape modes before the containment fallback", () => {
+    const window = new Window();
+    const escape = new window.KeyboardEvent("keydown", { key: "Escape" });
+    const event = escape as unknown as KeyboardEvent;
+
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: true,
+      pendingCommand: true,
+      filing: true,
+    }), "finish-editing");
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: false,
+      pendingCommand: true,
+      filing: true,
+    }), "cancel-pending-command");
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: false,
+      pendingCommand: false,
+      filing: true,
+    }), "cancel-filing");
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: false,
+      pendingCommand: false,
+      filing: false,
+    }), "contain");
+    const enter = new window.KeyboardEvent("keydown", { key: "Enter" });
+    assert.equal(resolveDeckEscapeAction(
+      enter as unknown as KeyboardEvent,
+      { editing: false, pendingCommand: false, filing: false },
+    ), null);
   });
 
   test("accepts rendered body text and excludes interactive descendants", () => {
@@ -179,6 +235,81 @@ describe("inline edit entry interactions", () => {
     stage.dispatchEvent(verticalDeckWheel);
     assert.equal(navigations, 1);
     assert.equal(verticalDeckWheel.defaultPrevented, false);
+  });
+
+  test("keeps c focus-local while v puts back a viewed card view-wide", () => {
+    const window = new Window();
+    const createDiv = () => window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const card = createDiv();
+    const body = card.appendChild(createDiv());
+    const outside = createDiv();
+    window.document.body.append(card, outside);
+    const event = new window.KeyboardEvent("keydown", { key: "c" });
+    Object.defineProperty(event, "target", { value: body });
+
+    assert.equal(isViewedCardCenterKey(
+      event as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      false,
+    ), true);
+    assert.equal(isViewedCardCenterKey(
+      event as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      true,
+    ), false);
+
+    const outsideEvent = new window.KeyboardEvent("keydown", { key: "c" });
+    Object.defineProperty(outsideEvent, "target", { value: outside });
+    assert.equal(isViewedCardCenterKey(
+      outsideEvent as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      false,
+    ), false);
+
+    const shifted = new window.KeyboardEvent("keydown", {
+      key: "C",
+      shiftKey: true,
+    });
+    Object.defineProperty(shifted, "target", { value: body });
+    assert.equal(isViewedCardCenterKey(
+      shifted as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      false,
+    ), false);
+
+    const toggle = new window.KeyboardEvent("keydown", { key: "v" });
+    Object.defineProperty(toggle, "target", { value: outside });
+    const readyToPutBack = {
+      viewedCardOpen: true,
+      editing: false,
+      starting: false,
+      filing: false,
+      pendingCommand: false,
+      editableTarget: false,
+    };
+    assert.equal(isViewedCardToggleKey(
+      toggle as unknown as KeyboardEvent,
+      readyToPutBack,
+    ), true);
+    for (const blocker of [
+      "editing",
+      "starting",
+      "filing",
+      "pendingCommand",
+      "editableTarget",
+    ] as const) {
+      assert.equal(isViewedCardToggleKey(
+        toggle as unknown as KeyboardEvent,
+        { ...readyToPutBack, [blocker]: true },
+      ), false);
+    }
+    assert.equal(isViewedCardToggleKey(
+      toggle as unknown as KeyboardEvent,
+      { ...readyToPutBack, viewedCardOpen: false },
+    ), false);
   });
 });
 

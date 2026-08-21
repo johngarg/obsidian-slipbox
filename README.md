@@ -84,10 +84,15 @@ latest draft before editing ends. Typing also saves after 500 ms of inactivity.
 Links, card controls, headers, footers, and filing/address fields keep their
 normal behavior instead of opening the editor.
 
-Filed cards in working piles are promoted to their corresponding main Slipbox
-card for editing. Unfiled cards open in a centred overlay with the configured
-main-card size; closing it restores the prior Slipbox position and focus without
-changing pile geometry or order.
+Double-clicking a working-pile card first brings it into a single movable viewed
+card, then starts editing. The `View` action brings it closer without editing.
+Its original Tray position becomes a muted magnifying-glass placeholder; a
+filed card's Deck position does the same. Clicking away saves and ends editing
+but leaves the viewed card open, so the Deck can still be browsed behind it.
+Drag the viewed card by its header, use `c` while it owns focus to centre it,
+and press `v` anywhere in the active Slipbox view—or choose `Put back`—when
+finished. Only one card can be viewed per Slipbox view. Filing an unfiled viewed
+card puts it back before opening its existing inline filing control.
 
 Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
 so comments, key order, spacing, and line endings remain byte-for-byte intact,
@@ -205,7 +210,8 @@ Obsidian's Templates core plugin.
 | --- | --- |
 | `←` / `k` | Select the previous card |
 | `→` / `j` | Select the next card |
-| `c` | Centre the active card |
+| `c` | Centre the active card, or the viewed card while it owns focus |
+| `v` | View the focused working card, or put back the currently viewed card |
 | `b` | Toggle the active-card bookmark |
 | `y` | Copy a link to the active card |
 | `H` | Go Back in Slipbox history |

@@ -485,6 +485,23 @@ button.slipbox-tray-pile-handle svg {
   cursor: pointer;
 }
 
+.slipbox-tray-card.is-viewed-ghost {
+  border-style: dashed;
+  border-color: var(--background-modifier-border-hover);
+  background: color-mix(
+    in srgb,
+    var(--background-secondary) 82%,
+    var(--background-primary)
+  );
+  box-shadow: 0 5px 14px rgb(0 0 0 / 0.08);
+  cursor: pointer;
+}
+
+.slipbox-tray-card.is-viewed-ghost .slipbox-tray-card-identity {
+  opacity: 0.48;
+  background: transparent;
+}
+
 .slipbox-tray-card:focus-visible {
   border-color: var(--interactive-accent);
   box-shadow:
@@ -738,6 +755,61 @@ button.slipbox-tray-pile-handle svg {
   cursor: default;
 }
 
+.slipbox-card.is-viewed-ghost {
+  border-style: dashed;
+  border-color: var(--background-modifier-border-hover);
+  background: color-mix(
+    in srgb,
+    var(--background-secondary) 82%,
+    var(--background-primary)
+  );
+  box-shadow: 0 7px 22px rgb(0 0 0 / 0.08);
+  cursor: pointer;
+}
+
+.slipbox-card.is-viewed-ghost.is-active {
+  border-color: var(--background-modifier-border-hover);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--text-muted) 14%, transparent),
+    0 7px 22px rgb(0 0 0 / 0.08);
+}
+
+.slipbox-card-ghost-control {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: inline-flex;
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 26%, transparent);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--background-primary) 46%, transparent);
+  opacity: 0.68;
+  transform: translate(-50%, -50%);
+}
+
+.slipbox-card-ghost-control:hover,
+.slipbox-card-ghost-control:focus-visible {
+  color: var(--text-normal);
+  opacity: 1;
+}
+
+.slipbox-card-ghost-control svg {
+  width: 100%;
+  height: 100%;
+}
+
+.slipbox-tray-card .slipbox-card-ghost-control {
+  width: 36px;
+  height: 36px;
+  padding: 9px;
+}
+
 .slipbox-card-address-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
@@ -936,24 +1008,51 @@ button.slipbox-tray-pile-handle svg {
   box-shadow: inset 0 0 0 2px var(--text-error);
 }
 
-.slipbox-inline-edit-overlay {
+.slipbox-viewed-card-layer {
   position: absolute;
   inset: 0;
   z-index: 244;
   pointer-events: none;
 }
 
-.slipbox-inline-edit-overlay-card {
+.slipbox-card.slipbox-viewed-card {
   top: 50%;
   left: 50%;
   width: var(--slipbox-main-card-width);
   max-height: calc(100% - 54px);
+  z-index: 1;
   pointer-events: auto;
+  cursor: default;
+  transform:
+    translate(-50%, -50%)
+    translate(
+      var(--slipbox-viewed-card-x, 0px),
+      var(--slipbox-viewed-card-y, 0px)
+    );
+  transition: box-shadow 120ms ease, border-color 120ms ease;
 }
 
-.slipbox-deck-stage.has-tray .slipbox-inline-edit-overlay-card {
+.slipbox-deck-stage.has-tray .slipbox-card.slipbox-viewed-card {
   top: 50%;
   max-height: calc(100% - 54px);
+}
+
+.slipbox-card.slipbox-viewed-card:focus {
+  outline: none;
+}
+
+.slipbox-viewed-card-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.slipbox-viewed-card.is-dragging,
+.slipbox-viewed-card.is-dragging .slipbox-viewed-card-drag-handle {
+  cursor: grabbing;
+}
+
+.slipbox-viewed-card.is-dragging {
+  transition: none;
 }
 
 .slipbox-card-scroll.markdown-rendered > :first-child {
@@ -961,7 +1060,7 @@ button.slipbox-tray-pile-handle svg {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .slipbox-inline-edit-overlay-card,
+  .slipbox-viewed-card,
   .slipbox-card.is-inline-editing {
     transition: none;
   }

@@ -55,7 +55,9 @@ export interface TrayViewActions {
   cancelFiling(): void;
   previewFilingPlacement(): void;
   filingInputFocusChanged(focused: boolean): void;
-  beginInlineEditing(file: TFile): Promise<void>;
+  viewCard(file: TFile, editImmediately: boolean): Promise<void>;
+  focusViewedCard(): void;
+  putBackViewedCard(): Promise<void>;
   runAfterEditing(
     reason: string,
     action: () => void | Promise<void>,
@@ -153,6 +155,7 @@ export class TrayRenderer {
     stage: HTMLElement,
     space: HTMLElement,
     filing: TrayFilingState | null,
+    viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {
     const state = this.plugin.tray;
@@ -184,6 +187,7 @@ export class TrayRenderer {
         pile.position ?? defaultPilePosition(pileIndex),
         state.expandedPileIds.includes(pile.id),
         filing,
+        viewedPath,
         isCurrent,
       ));
     });
@@ -239,6 +243,7 @@ export class TrayRenderer {
     position: TrayPilePosition,
     expanded: boolean,
     filing: TrayFilingState | null,
+    viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void>[] {
     const pileEl = parent.createDiv({
@@ -303,6 +308,7 @@ export class TrayRenderer {
       pileIndex,
       expanded,
       filing,
+      viewedPath,
       isCurrent,
     ));
 
@@ -333,10 +339,26 @@ export class TrayRenderer {
       );
     });
     pileEl.addEventListener("keydown", (event) => {
-      if (
-        event.target !== pileEl ||
-        (event.key !== "Enter" && event.key !== " ")
-      ) {
+      if (event.target !== pileEl) {
+        return;
+      }
+      if (isPlainKey(event, "v")) {
+        const topCard = pile.cards[0];
+        const file = topCard === undefined
+          ? undefined
+          : this.plugin.index.fileAtPath(topCard.cardRef);
+        if (file !== undefined) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (viewedPath === file.path) {
+            void this.actions.putBackViewedCard();
+          } else {
+            void this.actions.viewCard(file, false);
+          }
+        }
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") {
         return;
       }
       event.preventDefault();
@@ -368,6 +390,7 @@ export class TrayRenderer {
     pileIndex: number,
     expanded: boolean,
     filing: TrayFilingState | null,
+    viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {
     const file = this.plugin.index.fileAtPath(card.cardRef);
@@ -377,14 +400,17 @@ export class TrayRenderer {
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? "unfiled";
     const title = this.plugin.cardTitle(file);
+    const isViewed = viewedPath === card.cardRef;
     const miniature = parent.createDiv({
       cls: "slipbox-tray-card",
       attr: {
         "data-card-ref": card.cardRef,
-        role: filed === undefined ? "group" : "button",
-        "aria-label": `${address}, ${title}; card ${cardIndex + 1} of ${
-          pile.cards.length
-        } in pile ${pileIndex + 1}`,
+        role: isViewed || filed !== undefined ? "button" : "group",
+        "aria-label": isViewed
+          ? `${address}, ${title}; viewed card placeholder. Activate to centre the viewed card.`
+          : `${address}, ${title}; card ${cardIndex + 1} of ${
+              pile.cards.length
+            } in pile ${pileIndex + 1}`,
       },
     });
     const jitter = trayStackJitter(card.cardRef, cardIndex);
@@ -395,6 +421,7 @@ export class TrayRenderer {
     miniature.tabIndex = expanded ? 0 : -1;
     miniature.toggleClass("is-filed", filed !== undefined);
     miniature.toggleClass("is-unfiled", filed === undefined);
+    miniature.toggleClass("is-viewed-ghost", isViewed);
     const isFilingSource = filing?.sourcePath === card.cardRef;
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
@@ -445,7 +472,13 @@ export class TrayRenderer {
       });
     }
     const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
-    if (!isFilingSource) {
+    if (!isFilingSource && !isViewed) {
+      const view = trayIconButton(controls, "search", "View");
+      view.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.actions.viewCard(file, false);
+      });
       if (filed === undefined) {
         const fileButton = trayIconButton(controls, "archive-restore", "File");
         fileButton.addEventListener("click", (event) => {
@@ -482,6 +515,56 @@ export class TrayRenderer {
       });
     }
 
+    if (isViewed) {
+      const ghost = miniature.createEl("button", {
+        cls: "clickable-icon slipbox-card-ghost-control",
+        attr: {
+          type: "button",
+          "aria-label": `Centre viewed card ${title}`,
+        },
+      });
+      setIcon(ghost, "search");
+      setTooltip(ghost, "Centre viewed card", {
+        placement: "bottom",
+        delay: 250,
+      });
+      ghost.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.actions.focusViewedCard();
+      });
+      miniature.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.cancelPendingCardClick();
+        this.actions.focusViewedCard();
+      });
+      miniature.addEventListener("keydown", (event) => {
+        if (isPlainKey(event, "v")) {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.actions.putBackViewedCard();
+          return;
+        }
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        this.actions.focusViewedCard();
+      });
+      miniature.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (expanded) {
+          this.showCardMenu(event, pile, card);
+        } else {
+          this.showPileMenu(event, pile, card);
+        }
+      });
+      return;
+    }
+
     const preview = miniature.createDiv({
       cls: "slipbox-tray-card-preview markdown-rendered",
     });
@@ -496,7 +579,7 @@ export class TrayRenderer {
       event.preventDefault();
       event.stopPropagation();
       this.cancelPendingCardClick();
-      void this.actions.beginInlineEditing(file);
+      void this.actions.viewCard(file, true);
     });
     this.attachPreviewLinkInteractions(preview, file.path);
     const component = new Component();
@@ -570,6 +653,12 @@ export class TrayRenderer {
       );
     });
     miniature.addEventListener("keydown", (event) => {
+      if (isPlainKey(event, "v")) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.actions.viewCard(file, false);
+        return;
+      }
       if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault();
         event.stopPropagation();
@@ -795,6 +884,12 @@ export class TrayRenderer {
     if (file === undefined) {
       return false;
     }
+    menu.addItem((item) => {
+      item
+        .setTitle("View")
+        .setIcon("search")
+        .onClick(() => this.actions.viewCard(file, false));
+    });
     menu.addItem((item) => {
       item
         .setTitle("Open")
@@ -1186,4 +1281,12 @@ function trayIconButton(
   setTooltip(button, label, { placement: "bottom", delay: 250 });
   button.addEventListener("pointerdown", (event) => event.stopPropagation());
   return button;
+}
+
+function isPlainKey(event: KeyboardEvent, key: string): boolean {
+  return event.key === key &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey;
 }

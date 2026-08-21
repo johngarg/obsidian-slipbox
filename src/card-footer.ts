@@ -6,7 +6,7 @@ import {
   type WorkspaceLeaf,
 } from "obsidian";
 
-import { fitBacklinkPrefix } from "./backlinks.js";
+import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { trayToggleLabel } from "./deck-actions.js";
 import type { FiledCard } from "./card-index.js";
 
@@ -16,6 +16,10 @@ export interface CardFooterEnvironment {
   readonly hoverSource: string;
   readonly isInTray: (file: TFile) => boolean;
   readonly toggleTray: (file: TFile) => void | Promise<void>;
+  readonly runAfterEditing: (
+    reason: string,
+    action: () => void | Promise<void>,
+  ) => void;
 }
 
 export interface CardFooterRenderOptions {
@@ -34,6 +38,8 @@ interface RenderedFooter extends CardFooterRenderOptions {
   interactive: boolean;
   fitKey: string | null;
 }
+
+const BACKLINK_MEASUREMENT_LIMIT = 64;
 
 /** Shared, view-agnostic renderer for the fixed card backlink footer. */
 export class CardFooterManager {
@@ -73,12 +79,14 @@ export class CardFooterManager {
         cls: "slipbox-card-footer-measure",
         attr: { "aria-hidden": "true" },
       });
-      const measureItems = options.backlinks.map((backlink) =>
+      const measureItems = options.backlinks
+        .slice(0, BACKLINK_MEASUREMENT_LIMIT)
+        .map((backlink) =>
         measure.createSpan({
           cls: "slipbox-card-backlink",
           text: backlink.address,
         }),
-      );
+        );
       const measureSeparator = measure.createSpan({
         cls: "slipbox-card-backlink-separator",
         text: "·",
@@ -175,9 +183,10 @@ export class CardFooterManager {
       return;
     }
 
-    const fit = fitBacklinkPrefix(
+    const fit = fitMeasuredBacklinkPrefix(
       content.clientWidth,
       measureItems.map((item) => item.getBoundingClientRect().width),
+      entry.backlinks.length,
       measureSeparator.getBoundingClientRect().width,
       (hiddenCount) => {
         measureOverflow.setText(`+${hiddenCount}`);
@@ -221,7 +230,9 @@ export class CardFooterManager {
         event.preventDefault();
         event.stopPropagation();
         if (entry.interactive) {
-          this.showOverflowMenu(entry, overflow, fit.visibleCount);
+          this.environment.runAfterEditing("backlink-overflow", () => {
+            this.showOverflowMenu(entry, overflow, fit.visibleCount);
+          });
         }
       });
     }
@@ -302,16 +313,18 @@ export class CardFooterManager {
       return;
     }
     const newLeaf = Keymap.isModEvent(event);
-    if (newLeaf) {
-      void this.environment.app.workspace.openLinkText(
-        linktext,
-        entry.sourcePath,
-        newLeaf,
-      );
-      return;
-    }
-    this.closeOverflowMenu();
-    void entry.activate(backlink);
+    this.environment.runAfterEditing("backlink", async () => {
+      if (newLeaf) {
+        await this.environment.app.workspace.openLinkText(
+          linktext,
+          entry.sourcePath,
+          newLeaf,
+        );
+        return;
+      }
+      this.closeOverflowMenu();
+      await entry.activate(backlink);
+    });
   }
 
   private showOverflowMenu(
@@ -358,7 +371,10 @@ export class CardFooterManager {
       item
         .setTitle(trayToggleLabel(inTray))
         .setIcon(inTray ? "undo-2" : "inbox")
-        .onClick(() => void this.environment.toggleTray(backlink.file));
+        .onClick(() => this.environment.runAfterEditing(
+          "backlink-tray-toggle",
+          () => this.environment.toggleTray(backlink.file),
+        ));
     });
     this.environment.app.workspace.trigger(
       "file-menu",

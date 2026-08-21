@@ -1,0 +1,377 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { Window } from "happy-dom";
+
+import {
+  consumeDeckEscape,
+  dispatchInlineAwareDeckAction,
+  isDeckInlineEditEnter,
+  isInlineEditBodyTarget,
+  isViewedCardCenterKey,
+  isViewedCardToggleKey,
+  resolveDeckEscapeAction,
+  shouldNavigateDeckFromWheel,
+} from "../src/inline-edit-interactions.js";
+import {
+  advancePendingDeckCommand,
+  IDLE_DECK_COMMAND,
+  startAddressCommand,
+  type PendingDeckCommand,
+} from "../src/deck-commands.js";
+
+describe("inline edit entry interactions", () => {
+  test("contains repeated Escape presses inside the active Slipbox view", () => {
+    const window = new Window();
+    const deck = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const textarea = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "textarea",
+    );
+    deck.append(textarea);
+    window.document.body.append(deck);
+    let editing = true;
+    const actions: string[] = [];
+    let parentNavigationCount = 0;
+    deck.addEventListener("keydown", (event) => {
+      const action = resolveDeckEscapeAction(
+        event as unknown as KeyboardEvent,
+        { editing, pendingCommand: false, filing: false },
+      );
+      if (action === null) {
+        return;
+      }
+      consumeDeckEscape(event as unknown as KeyboardEvent);
+      actions.push(action);
+      if (action === "finish-editing") {
+        editing = false;
+      }
+    }, { capture: true });
+    window.document.addEventListener("keydown", () => {
+      parentNavigationCount += 1;
+    });
+
+    const dispatchEscape = (target: typeof deck) => {
+      const escape = new window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(escape);
+      return escape;
+    };
+    const editorEscape = dispatchEscape(textarea);
+    const postEditEscape = dispatchEscape(deck);
+
+    assert.deepEqual(actions, ["finish-editing", "contain"]);
+    assert.equal(editorEscape.defaultPrevented, true);
+    assert.equal(postEditEscape.defaultPrevented, true);
+    assert.equal(parentNavigationCount, 0);
+  });
+
+  test("resolves Slipbox-local Escape modes before the containment fallback", () => {
+    const window = new Window();
+    const escape = new window.KeyboardEvent("keydown", { key: "Escape" });
+    const event = escape as unknown as KeyboardEvent;
+
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: true,
+      pendingCommand: true,
+      filing: true,
+    }), "finish-editing");
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: false,
+      pendingCommand: true,
+      filing: true,
+    }), "cancel-pending-command");
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: false,
+      pendingCommand: false,
+      filing: true,
+    }), "cancel-filing");
+    assert.equal(resolveDeckEscapeAction(event, {
+      editing: false,
+      pendingCommand: false,
+      filing: false,
+    }), "contain");
+    const enter = new window.KeyboardEvent("keydown", { key: "Enter" });
+    assert.equal(resolveDeckEscapeAction(
+      enter as unknown as KeyboardEvent,
+      { editing: false, pendingCommand: false, filing: false },
+    ), null);
+  });
+
+  test("accepts rendered body text and excludes interactive descendants", () => {
+    const window = new Window();
+    const create = (tag: string) => window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      tag,
+    );
+    const body = create("div");
+    const paragraph = body.appendChild(create("p"));
+    const link = body.appendChild(create("a"));
+    const button = body.appendChild(create("button"));
+    const input = body.appendChild(create("input"));
+    const editable = body.appendChild(create("span"));
+    (editable as unknown as HTMLElement).contentEditable = "true";
+    const outside = create("p");
+
+    const htmlBody = body as unknown as HTMLElement;
+    assert.equal(isInlineEditBodyTarget(paragraph as unknown as EventTarget, htmlBody), true);
+    assert.equal(isInlineEditBodyTarget(body as unknown as EventTarget, htmlBody), true);
+    assert.equal(isInlineEditBodyTarget(link as unknown as EventTarget, htmlBody), false);
+    assert.equal(isInlineEditBodyTarget(button as unknown as EventTarget, htmlBody), false);
+    assert.equal(isInlineEditBodyTarget(input as unknown as EventTarget, htmlBody), false);
+    assert.equal(isInlineEditBodyTarget(editable as unknown as EventTarget, htmlBody), false);
+    assert.equal(isInlineEditBodyTarget(outside as unknown as EventTarget, htmlBody), false);
+  });
+
+  test("enters only from an unmodified Enter owned by an idle Deck", () => {
+    const window = new Window();
+    const deck = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const child = deck.appendChild(window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "button",
+    ));
+    const ready = {
+      hasActiveCard: true,
+      editing: false,
+      starting: false,
+      filing: false,
+      pendingCommand: false,
+    };
+    const enter = new window.KeyboardEvent("keydown", { key: "Enter" });
+    Object.defineProperty(enter, "target", { value: deck });
+    assert.equal(isDeckInlineEditEnter(
+      enter as unknown as KeyboardEvent,
+      deck as unknown as HTMLElement,
+      ready,
+    ), true);
+
+    const childEnter = new window.KeyboardEvent("keydown", { key: "Enter" });
+    Object.defineProperty(childEnter, "target", { value: child });
+    assert.equal(isDeckInlineEditEnter(
+      childEnter as unknown as KeyboardEvent,
+      deck as unknown as HTMLElement,
+      ready,
+    ), false);
+    assert.equal(isDeckInlineEditEnter(
+      enter as unknown as KeyboardEvent,
+      deck as unknown as HTMLElement,
+      { ...ready, pendingCommand: true },
+    ), false);
+    assert.equal(isDeckInlineEditEnter(
+      enter as unknown as KeyboardEvent,
+      deck as unknown as HTMLElement,
+      { ...ready, editing: true },
+    ), false);
+    const shifted = new window.KeyboardEvent("keydown", {
+      key: "Enter",
+      shiftKey: true,
+    });
+    Object.defineProperty(shifted, "target", { value: deck });
+    assert.equal(isDeckInlineEditEnter(
+      shifted as unknown as KeyboardEvent,
+      deck as unknown as HTMLElement,
+      ready,
+    ), false);
+  });
+
+  test("keeps textarea wheel gestures native while retaining Deck navigation", () => {
+    const window = new Window();
+    const stage = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const textarea = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "textarea",
+    );
+    stage.append(textarea);
+    window.document.body.append(stage);
+    let navigations = 0;
+    stage.addEventListener("wheel", (event) => {
+      if (!shouldNavigateDeckFromWheel(
+        event as unknown as WheelEvent,
+        textarea as unknown as HTMLTextAreaElement,
+      )) {
+        return;
+      }
+      event.preventDefault();
+      navigations += 1;
+    });
+
+    const editorWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -80,
+      deltaY: 12,
+    });
+    textarea.dispatchEvent(editorWheel);
+    assert.equal(navigations, 0);
+    assert.equal(editorWheel.defaultPrevented, false);
+
+    const deckWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -80,
+      deltaY: 12,
+    });
+    stage.dispatchEvent(deckWheel);
+    assert.equal(navigations, 1);
+    assert.equal(deckWheel.defaultPrevented, true);
+
+    const verticalDeckWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: 12,
+      deltaY: -80,
+    });
+    stage.dispatchEvent(verticalDeckWheel);
+    assert.equal(navigations, 1);
+    assert.equal(verticalDeckWheel.defaultPrevented, false);
+  });
+
+  test("keeps c focus-local while v puts back a viewed card view-wide", () => {
+    const window = new Window();
+    const createDiv = () => window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const card = createDiv();
+    const body = card.appendChild(createDiv());
+    const outside = createDiv();
+    window.document.body.append(card, outside);
+    const event = new window.KeyboardEvent("keydown", { key: "c" });
+    Object.defineProperty(event, "target", { value: body });
+
+    assert.equal(isViewedCardCenterKey(
+      event as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      false,
+    ), true);
+    assert.equal(isViewedCardCenterKey(
+      event as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      true,
+    ), false);
+
+    const outsideEvent = new window.KeyboardEvent("keydown", { key: "c" });
+    Object.defineProperty(outsideEvent, "target", { value: outside });
+    assert.equal(isViewedCardCenterKey(
+      outsideEvent as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      false,
+    ), false);
+
+    const shifted = new window.KeyboardEvent("keydown", {
+      key: "C",
+      shiftKey: true,
+    });
+    Object.defineProperty(shifted, "target", { value: body });
+    assert.equal(isViewedCardCenterKey(
+      shifted as unknown as KeyboardEvent,
+      card as unknown as HTMLElement,
+      false,
+    ), false);
+
+    const toggle = new window.KeyboardEvent("keydown", { key: "v" });
+    Object.defineProperty(toggle, "target", { value: outside });
+    const readyToPutBack = {
+      viewedCardOpen: true,
+      editing: false,
+      starting: false,
+      filing: false,
+      pendingCommand: false,
+      editableTarget: false,
+    };
+    assert.equal(isViewedCardToggleKey(
+      toggle as unknown as KeyboardEvent,
+      readyToPutBack,
+    ), true);
+    for (const blocker of [
+      "editing",
+      "starting",
+      "filing",
+      "pendingCommand",
+      "editableTarget",
+    ] as const) {
+      assert.equal(isViewedCardToggleKey(
+        toggle as unknown as KeyboardEvent,
+        { ...readyToPutBack, [blocker]: true },
+      ), false);
+    }
+    assert.equal(isViewedCardToggleKey(
+      toggle as unknown as KeyboardEvent,
+      { ...readyToPutBack, viewedCardOpen: false },
+    ), false);
+  });
+});
+
+describe("inline-aware Deck action dispatch", () => {
+  test("starts g and f prefix commands synchronously before recording their events", () => {
+    for (const fixture of [
+      { prefix: "g", mode: "absolute" as const, initial: "f" },
+      { prefix: "f", mode: "forward" as const, initial: "g" },
+    ]) {
+      let pending: PendingDeckCommand = IDLE_DECK_COMMAND;
+      const prefixEvent = { key: fixture.prefix };
+      let pendingStartEvent: typeof prefixEvent | null = null;
+
+      const accepted = dispatchInlineAwareDeckAction(
+        { editing: false, starting: false },
+        async () => true,
+        () => {
+          pendingStartEvent = null;
+          pending = startAddressCommand(fixture.mode);
+        },
+      );
+      pendingStartEvent = prefixEvent;
+
+      assert.equal(accepted, true);
+      assert.deepEqual(pending, { kind: "address", mode: fixture.mode });
+      assert.equal(pendingStartEvent, prefixEvent);
+      const continuation = advancePendingDeckCommand(pending, fixture.initial);
+      assert.deepEqual(
+        "completion" in continuation ? continuation.completion : null,
+        { kind: "address", mode: fixture.mode, initial: fixture.initial },
+      );
+    }
+  });
+
+  test("gates only a mounted editor and blocks actions during startup", async () => {
+    const events: string[] = [];
+    let release: (() => void) | undefined;
+    const saving = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runAfterEditing = async (action: () => void): Promise<boolean> => {
+      events.push("save");
+      await saving;
+      action();
+      return true;
+    };
+
+    assert.equal(dispatchInlineAwareDeckAction(
+      { editing: true, starting: false },
+      runAfterEditing,
+      () => events.push("action"),
+    ), true);
+    assert.deepEqual(events, ["save"]);
+    release?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(events, ["save", "action"]);
+
+    assert.equal(dispatchInlineAwareDeckAction(
+      { editing: false, starting: true },
+      runAfterEditing,
+      () => events.push("starting-action"),
+    ), false);
+    assert.deepEqual(events, ["save", "action"]);
+  });
+});

@@ -30,6 +30,8 @@ export {
   updateInlineFilingEditor,
 } from "./filing-editor.js";
 export { generateFiledCardLink } from "./card-links.js";
+export { replaceNoteBody, splitNoteBody } from "./note-body.js";
+export type { NoteBodyParts } from "./note-body.js";
 export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
@@ -54,6 +56,7 @@ export {
   buildDeckMapSectionMarkers,
   deckMapCoordinate,
   deckMapIndexAtOffset,
+  sampleDeckMapIndices,
   visibleDeckMapSectionMarkers,
 } from "./deck-map.js";
 export {
@@ -69,6 +72,7 @@ export {
 } from "./settings.js";
 export {
   fitBacklinkPrefix,
+  fitMeasuredBacklinkPrefix,
   indexFiledBacklinks,
 } from "./backlinks.js";
 

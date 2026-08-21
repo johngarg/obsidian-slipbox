@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   fitBacklinkPrefix,
+  fitMeasuredBacklinkPrefix,
   indexFiledBacklinks,
 } from "../src/backlinks.js";
 import {
@@ -173,5 +174,16 @@ describe("backlink footer fitting", () => {
     assert.deepEqual(omitted, ["18/2a", "44/123456789abcdef", "91/4c"]);
     assert.deepEqual([...shown, ...omitted], addresses);
     assert.equal(new Set(omitted).size, omitted.length);
+  });
+
+  it("fits a bounded measured prefix while counting an unmeasured tail", () => {
+    assert.deepEqual(
+      fitMeasuredBacklinkPrefix(50, [10, 10], 100_000, 2, overflow),
+      { visibleCount: 1, hiddenCount: 99_999 },
+    );
+    assert.deepEqual(
+      fitMeasuredBacklinkPrefix(100, [10, 10], 100_000, 2, overflow),
+      { visibleCount: 2, hiddenCount: 99_998 },
+    );
   });
 });

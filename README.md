@@ -75,6 +75,34 @@ cards; unfiled cards remain, and empty piles disappear. Inline filing leaves the
 source card in its existing pile and leaves every pile visible. Successful
 filing removes only the newly filed card from its former pile.
 
+## Inline card editing
+
+Double-click the body of a card to edit its raw Markdown in place. With the
+Slipbox workspace focused, `Enter` edits the active filed card. `Escape`, an
+outside Slipbox action, navigation, a view change, or closing Slipbox saves the
+latest draft before editing ends. Typing also saves after 500 ms of inactivity.
+Links, card controls, headers, footers, and filing/address fields keep their
+normal behavior instead of opening the editor.
+
+Double-clicking a working-pile card first brings it into a single movable viewed
+card, then starts editing. The `View` action brings it closer without editing.
+Its original Tray position becomes a muted magnifying-glass placeholder; a
+filed card's Deck position does the same. Clicking away saves and ends editing
+but leaves the viewed card open, so the Deck can still be browsed behind it.
+Drag the viewed card by its header, use `c` while it owns focus to centre it,
+and press `v` anywhere in the active Slipbox view—or choose `Put back`—when
+finished. Only one card can be viewed per Slipbox view. Filing an unfiled viewed
+card puts it back before opening its existing inline filing control.
+
+Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
+so comments, key order, spacing, and line endings remain byte-for-byte intact,
+including frontmatter-only changes made by another editor. Slipbox flushes open
+Markdown views before editing and before the final save, serializes autosaves,
+and refuses to overwrite a body that changed elsewhere. A conflict or write
+failure keeps the textarea and draft available for copying or retrying and
+cancels the pending Slipbox action. Draft recovery lasts only while the plugin
+remains loaded; it is intentionally not persisted across reloads or crashes.
+
 ## Canvas integration
 
 Right-click a pile to choose:
@@ -104,8 +132,8 @@ longer exist.
 
 ## Other features
 
-- Read-only rendered Markdown cards with internal scrolling and fixed backlink
-  footers.
+- Rendered Markdown cards with raw-Markdown inline editing, internal scrolling,
+  and fixed backlink footers.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
 - A subtle ordinal Deck map with one dot per filed card, accent-coloured
@@ -182,7 +210,8 @@ Obsidian's Templates core plugin.
 | --- | --- |
 | `←` / `k` | Select the previous card |
 | `→` / `j` | Select the next card |
-| `c` | Centre the active card |
+| `c` | Centre the active card, or the viewed card while it owns focus |
+| `v` | View the focused working card, or put back the currently viewed card |
 | `b` | Toggle the active-card bookmark |
 | `y` | Copy a link to the active card |
 | `H` | Go Back in Slipbox history |
@@ -294,3 +323,13 @@ npm run check
 `npm run build` produces `main.js`. The installable plugin consists of
 `manifest.json`, `main.js`, and `styles.css`. Tests use Node's built-in runner,
 and strict TypeScript checks the complete plugin.
+
+For repeatable large-vault profiling, generate a standalone synthetic vault:
+
+```sh
+npm run generate:scale-vault -- --notes 25000 --output /tmp/SlipboxScaleVault
+```
+
+The generator refuses to write into a non-empty directory, installs the current
+plugin bundle into the fixture, and creates a deterministic mix of filed cards,
+unfiled cards, ordinary notes, resolved-link traffic, and a high-backlink hub.

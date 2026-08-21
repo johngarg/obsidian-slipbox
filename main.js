@@ -228,6 +228,10 @@ var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
 function cardStackOrder(cardIndex, activeIndex) {
   return cardIndex === activeIndex ? 220 : 100 - Math.abs(cardIndex - activeIndex);
 }
+function stationarySelectionOffset(previousActiveIndex, targetIndex, currentViewportOffset) {
+  const viewportPosition = previousActiveIndex < 0 ? targetIndex : previousActiveIndex + currentViewportOffset;
+  return viewportPosition - targetIndex;
+}
 function bookmarkEdgeTargets(bookmarkIndices, viewportPosition, cardStep, stageWidth, cardWidth) {
   if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
     return { left: null, right: null };
@@ -410,29 +414,28 @@ function indexFiledBacklinks(filed, resolvedLinks) {
   }
   return sourcesByTarget;
 }
-function fitBacklinkPrefix(availableWidth, itemWidths, separatorWidth, overflowWidth) {
+function fitMeasuredBacklinkPrefix(availableWidth, itemWidths, totalCount, separatorWidth, overflowWidth) {
   const widths = itemWidths.map((width) => Math.max(0, width));
   const available = Math.max(0, availableWidth);
   const separator = Math.max(0, separatorWidth);
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + separator * Math.max(0, widths.length - 1);
-  if (totalWidth <= available) {
-    return { visibleCount: widths.length, hiddenCount: 0 };
-  }
-  let prefixWidth = totalWidth;
-  for (let visibleCount = widths.length - 1; visibleCount >= 0; visibleCount -= 1) {
-    const removedIndex = visibleCount;
-    const removedWidth = widths[removedIndex] ?? 0;
-    prefixWidth -= removedWidth;
-    if (visibleCount > 0) {
-      prefixWidth -= separator;
-    }
-    const hiddenCount = widths.length - visibleCount;
-    const widthWithOverflow = prefixWidth + (visibleCount > 0 ? separator : 0) + Math.max(0, overflowWidth(hiddenCount));
+  const count = Number.isInteger(totalCount) ? Math.max(widths.length, totalCount) : widths.length;
+  let bestVisibleCount = 0;
+  let prefixWidth = 0;
+  for (let visibleCount = 0; visibleCount <= widths.length; visibleCount += 1) {
+    const hiddenCount = count - visibleCount;
+    const widthWithOverflow = prefixWidth + (hiddenCount > 0 && visibleCount > 0 ? separator : 0) + (hiddenCount > 0 ? Math.max(0, overflowWidth(hiddenCount)) : 0);
     if (widthWithOverflow <= available) {
-      return { visibleCount, hiddenCount };
+      bestVisibleCount = visibleCount;
+    }
+    const nextWidth = widths[visibleCount];
+    if (nextWidth !== void 0) {
+      prefixWidth += (visibleCount > 0 ? separator : 0) + nextWidth;
     }
   }
-  return { visibleCount: 0, hiddenCount: widths.length };
+  return {
+    visibleCount: bestVisibleCount,
+    hiddenCount: count - bestVisibleCount
+  };
 }
 
 // src/deck-actions.ts
@@ -479,6 +482,7 @@ function canRunDeckAction(action, context) {
 }
 
 // src/card-footer.ts
+var BACKLINK_MEASUREMENT_LIMIT = 64;
 var CardFooterManager = class {
   constructor(environment) {
     this.environment = environment;
@@ -514,7 +518,7 @@ var CardFooterManager = class {
         cls: "slipbox-card-footer-measure",
         attr: { "aria-hidden": "true" }
       });
-      const measureItems = options.backlinks.map(
+      const measureItems = options.backlinks.slice(0, BACKLINK_MEASUREMENT_LIMIT).map(
         (backlink) => measure.createSpan({
           cls: "slipbox-card-backlink",
           text: backlink.address
@@ -604,9 +608,10 @@ var CardFooterManager = class {
     if (content === null || measureSeparator === null || measureOverflow === null || content.clientWidth <= 0) {
       return;
     }
-    const fit = fitBacklinkPrefix(
+    const fit = fitMeasuredBacklinkPrefix(
       content.clientWidth,
       measureItems.map((item) => item.getBoundingClientRect().width),
+      entry.backlinks.length,
       measureSeparator.getBoundingClientRect().width,
       (hiddenCount) => {
         measureOverflow.setText(`+${hiddenCount}`);
@@ -646,7 +651,9 @@ var CardFooterManager = class {
         event.preventDefault();
         event.stopPropagation();
         if (entry.interactive) {
-          this.showOverflowMenu(entry, overflow, fit.visibleCount);
+          this.environment.runAfterEditing("backlink-overflow", () => {
+            this.showOverflowMenu(entry, overflow, fit.visibleCount);
+          });
         }
       });
     }
@@ -713,16 +720,18 @@ var CardFooterManager = class {
       return;
     }
     const newLeaf = import_obsidian.Keymap.isModEvent(event);
-    if (newLeaf) {
-      void this.environment.app.workspace.openLinkText(
-        linktext,
-        entry.sourcePath,
-        newLeaf
-      );
-      return;
-    }
-    this.closeOverflowMenu();
-    void entry.activate(backlink);
+    this.environment.runAfterEditing("backlink", async () => {
+      if (newLeaf) {
+        await this.environment.app.workspace.openLinkText(
+          linktext,
+          entry.sourcePath,
+          newLeaf
+        );
+        return;
+      }
+      this.closeOverflowMenu();
+      await entry.activate(backlink);
+    });
   }
   showOverflowMenu(entry, button, visibleCount) {
     this.closeOverflowMenu();
@@ -757,7 +766,10 @@ var CardFooterManager = class {
     const inTray = this.environment.isInTray(backlink.file);
     const menu = import_obsidian.Menu.forEvent(event);
     menu.addItem((item) => {
-      item.setTitle(trayToggleLabel(inTray)).setIcon(inTray ? "undo-2" : "inbox").onClick(() => void this.environment.toggleTray(backlink.file));
+      item.setTitle(trayToggleLabel(inTray)).setIcon(inTray ? "undo-2" : "inbox").onClick(() => this.environment.runAfterEditing(
+        "backlink-tray-toggle",
+        () => this.environment.toggleTray(backlink.file)
+      ));
     });
     this.environment.app.workspace.trigger(
       "file-menu",
@@ -799,6 +811,37 @@ function resolveCardTitle(basename, frontmatter, settings) {
   }
   const value = frontmatter?.[settings.titleProperty];
   return typeof value === "string" && value.trim() !== "" ? value.trim() : basename;
+}
+
+// src/card-links.ts
+function resolveFiledCardLink(linkPath, sourcePath, lookup) {
+  const file = lookup.resolveFile(linkPath, sourcePath);
+  if (file !== null) {
+    const path2 = lookup.filedPathForFile(file);
+    return path2 === void 0 ? void 0 : { path: path2, resolvedBy: "file" };
+  }
+  const path = lookup.firstFiledPathAtAddress(linkPath);
+  return path === void 0 ? void 0 : { path, resolvedBy: "address" };
+}
+function renderedLinkAction(internal, newLeaf, linktext, filed) {
+  if (!internal) {
+    return { kind: "external" };
+  }
+  if (!newLeaf && filed !== void 0) {
+    return { kind: "card", path: filed.path };
+  }
+  return {
+    kind: "note",
+    linktext: filed?.resolvedBy === "address" ? filed.path : linktext
+  };
+}
+function generateFiledCardLink(app, file, sourcePath, address) {
+  return app.fileManager.generateMarkdownLink(
+    file,
+    sourcePath,
+    void 0,
+    address
+  );
 }
 
 // src/desk-state.ts
@@ -1781,6 +1824,76 @@ function compareInitialCards(left, right) {
   return right.modifiedTime - left.modifiedTime || left.cardRef.localeCompare(right.cardRef);
 }
 
+// src/pointer-drag.ts
+function beginThresholdPointerDrag(options) {
+  const {
+    captureTarget,
+    pointerId,
+    startX,
+    startY,
+    threshold
+  } = options;
+  const document2 = captureTarget.ownerDocument;
+  let dragging = false;
+  const cleanup = () => {
+    document2.removeEventListener("pointermove", move);
+    document2.removeEventListener("pointerup", finish);
+    document2.removeEventListener("pointercancel", cancel);
+  };
+  const releaseCapture = () => {
+    if (captureTarget.hasPointerCapture(pointerId)) {
+      captureTarget.releasePointerCapture(pointerId);
+    }
+  };
+  const move = (event) => {
+    if (event.pointerId !== pointerId) {
+      return;
+    }
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    if (!dragging) {
+      if (Math.hypot(deltaX, deltaY) < Math.max(0, threshold)) {
+        return;
+      }
+      try {
+        captureTarget.setPointerCapture(pointerId);
+      } catch {
+        cleanup();
+        options.onCancel();
+        return;
+      }
+      dragging = true;
+      options.onDragStart();
+    }
+    event.preventDefault();
+    options.onDragMove(event, deltaX, deltaY);
+  };
+  const finish = (event) => {
+    if (event.pointerId !== pointerId) {
+      return;
+    }
+    cleanup();
+    releaseCapture();
+    if (!dragging) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    options.onDrop(event);
+  };
+  const cancel = (event) => {
+    if (event.pointerId !== pointerId) {
+      return;
+    }
+    cleanup();
+    releaseCapture();
+    options.onCancel();
+  };
+  document2.addEventListener("pointermove", move);
+  document2.addEventListener("pointerup", finish);
+  document2.addEventListener("pointercancel", cancel);
+}
+
 // src/tray-view.ts
 var DRAG_THRESHOLD_PX = 5;
 var DEFAULT_PILE_VERTICAL_STEP_PX = 42;
@@ -1788,24 +1901,32 @@ var DEFAULT_PILE_DECK_CLEARANCE_PX = 24;
 var PILE_BASE_Y_RATIO = 0.31;
 var PILE_BASE_Y_OFFSET_PX = 126;
 var PILE_CARD_HALF_HEIGHT_PX = 58;
+var TRAY_SINGLE_CLICK_DELAY_MS = 320;
 var TrayRenderer = class {
   constructor(app, plugin, actions) {
     this.app = app;
     this.plugin = plugin;
     this.actions = actions;
   }
-  components = [];
+  components = /* @__PURE__ */ new Map();
+  previews = /* @__PURE__ */ new Map();
   rootEl = null;
   filingEditor = null;
   suppressClickUntil = 0;
+  pendingCardClickTimer = null;
   clear() {
+    if (this.pendingCardClickTimer !== null) {
+      window.clearTimeout(this.pendingCardClickTimer);
+      this.pendingCardClickTimer = null;
+    }
     if (this.filingEditor !== null) {
       this.actions.filingInputFocusChanged(false);
     }
-    for (const component of this.components) {
+    for (const component of this.components.values()) {
       component.unload();
     }
-    this.components = [];
+    this.components.clear();
+    this.previews.clear();
     this.rootEl = null;
     this.filingEditor = null;
   }
@@ -1832,7 +1953,30 @@ var TrayRenderer = class {
       updateInlineFilingEditor(this.filingEditor, state);
     }
   }
-  async render(stage, space, filing, isCurrent) {
+  async rerenderPath(file) {
+    const preview = this.previews.get(file.path);
+    if (preview === void 0) {
+      return;
+    }
+    this.components.get(file.path)?.unload();
+    const component = new import_obsidian2.Component();
+    component.load();
+    this.components.set(file.path, component);
+    preview.empty();
+    preview.addClass("markdown-rendered");
+    try {
+      await import_obsidian2.MarkdownRenderer.render(
+        this.app,
+        await this.plugin.index.readBody(file),
+        preview,
+        file.path,
+        component
+      );
+    } catch {
+      preview.setText("Preview unavailable");
+    }
+  }
+  async render(stage, space, filing, viewedPath, isCurrent) {
     const state = this.plugin.tray;
     const cardCount = state.piles.reduce(
       (total, pile) => total + pile.cards.length,
@@ -1860,6 +2004,7 @@ var TrayRenderer = class {
         pile.position ?? defaultPilePosition(pileIndex),
         state.expandedPileIds.includes(pile.id),
         filing,
+        viewedPath,
         isCurrent
       ));
     });
@@ -1881,18 +2026,24 @@ var TrayRenderer = class {
       menu.addItem((item) => {
         item.setTitle("New card").setIcon("file-plus-2").setDisabled(position === null).onClick(() => {
           if (position !== null) {
-            void this.plugin.createNewCardAtTrayPosition(position);
+            void this.actions.runAfterEditing(
+              "tray-new-card",
+              () => this.plugin.createNewCardAtTrayPosition(position)
+            );
           }
         });
       });
       menu.addSeparator();
       menu.addItem((item) => {
-        item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => void this.plugin.clearTray());
+        item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => this.actions.runAfterEditing(
+          "tray-return-all",
+          () => this.plugin.clearTray()
+        ));
       });
       menu.showAtMouseEvent(event);
     });
   }
-  renderPile(parent, pile, pileIndex, position, expanded, filing, isCurrent) {
+  renderPile(parent, pile, pileIndex, position, expanded, filing, viewedPath, isCurrent) {
     const pileEl = parent.createDiv({
       cls: `slipbox-tray-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
       attr: {
@@ -1935,7 +2086,10 @@ var TrayRenderer = class {
         if (performance.now() < this.suppressClickUntil) {
           return;
         }
-        void this.plugin.setTrayPileExpanded(pile.id, false);
+        void this.actions.runAfterEditing(
+          "tray-collapse-pile",
+          () => this.plugin.setTrayPileExpanded(pile.id, false)
+        );
       });
       dragSurface = handle;
     }
@@ -1949,6 +2103,7 @@ var TrayRenderer = class {
       pileIndex,
       expanded,
       filing,
+      viewedPath,
       isCurrent
     ));
     pileEl.addEventListener("click", (event) => {
@@ -1965,14 +2120,37 @@ var TrayRenderer = class {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
+      void this.actions.runAfterEditing(
+        "tray-toggle-pile",
+        () => this.plugin.setTrayPileExpanded(pile.id, !expanded)
+      );
     });
     pileEl.addEventListener("keydown", (event) => {
-      if (event.target !== pileEl || event.key !== "Enter" && event.key !== " ") {
+      if (event.target !== pileEl) {
+        return;
+      }
+      if (isPlainKey(event, "v")) {
+        const topCard = pile.cards[0];
+        const file = topCard === void 0 ? void 0 : this.plugin.index.fileAtPath(topCard.cardRef);
+        if (file !== void 0) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (viewedPath === file.path) {
+            void this.actions.putBackViewedCard();
+          } else {
+            void this.actions.viewCard(file, false);
+          }
+        }
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") {
         return;
       }
       event.preventDefault();
-      void this.plugin.setTrayPileExpanded(pile.id, !expanded);
+      void this.actions.runAfterEditing(
+        "tray-toggle-pile-key",
+        () => this.plugin.setTrayPileExpanded(pile.id, !expanded)
+      );
     });
     pileEl.addEventListener("contextmenu", (event) => {
       if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select") !== null) {
@@ -1985,7 +2163,7 @@ var TrayRenderer = class {
     this.attachPileDragging(pileEl, dragSurface, pile, position);
     return jobs;
   }
-  async renderCard(parent, pile, card, cardIndex, pileIndex, expanded, filing, isCurrent) {
+  async renderCard(parent, pile, card, cardIndex, pileIndex, expanded, filing, viewedPath, isCurrent) {
     const file = this.plugin.index.fileAtPath(card.cardRef);
     if (!(file instanceof import_obsidian2.TFile)) {
       return;
@@ -1993,12 +2171,13 @@ var TrayRenderer = class {
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? "unfiled";
     const title = this.plugin.cardTitle(file);
+    const isViewed = viewedPath === card.cardRef;
     const miniature = parent.createDiv({
       cls: "slipbox-tray-card",
       attr: {
         "data-card-ref": card.cardRef,
-        role: filed === void 0 ? "group" : "button",
-        "aria-label": `${address}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
+        role: isViewed || filed !== void 0 ? "button" : "group",
+        "aria-label": isViewed ? `${address}, ${title}; viewed card placeholder. Activate to centre the viewed card.` : `${address}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
       }
     });
     const jitter = trayStackJitter(card.cardRef, cardIndex);
@@ -2009,6 +2188,7 @@ var TrayRenderer = class {
     miniature.tabIndex = expanded ? 0 : -1;
     miniature.toggleClass("is-filed", filed !== void 0);
     miniature.toggleClass("is-unfiled", filed === void 0);
+    miniature.toggleClass("is-viewed-ghost", isViewed);
     const isFilingSource = filing?.sourcePath === card.cardRef;
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
@@ -2040,7 +2220,10 @@ var TrayRenderer = class {
         delay: 350
       });
       attachUnfiledAddressFiling(addressEl, () => {
-        void this.actions.beginFiling(file);
+        void this.actions.runAfterEditing(
+          "tray-address-filing",
+          () => this.actions.beginFiling(file)
+        );
       });
     }
     const headerTitle = cardHeaderTitle(
@@ -2054,13 +2237,22 @@ var TrayRenderer = class {
       });
     }
     const controls = miniature.createDiv({ cls: "slipbox-tray-card-actions" });
-    if (!isFilingSource) {
+    if (!isFilingSource && !isViewed) {
+      const view = trayIconButton(controls, "search", "View");
+      view.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.actions.viewCard(file, false);
+      });
       if (filed === void 0) {
         const fileButton = trayIconButton(controls, "archive-restore", "File");
         fileButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.actions.beginFiling(file);
+          void this.actions.runAfterEditing(
+            "tray-file-card",
+            () => this.actions.beginFiling(file)
+          );
         });
       } else {
         const returnButton = trayIconButton(
@@ -2071,22 +2263,88 @@ var TrayRenderer = class {
         returnButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.plugin.toggleFileInTray(file);
+          void this.actions.runAfterEditing(
+            "tray-return-card",
+            () => this.plugin.toggleFileInTray(file)
+          );
         });
       }
       const open = trayIconButton(controls, "file-pen-line", "Open");
       open.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.openMarkdownFile(file);
+        void this.actions.runAfterEditing(
+          "tray-open-note",
+          () => this.plugin.openMarkdownFile(file)
+        );
       });
+    }
+    if (isViewed) {
+      const ghost = miniature.createEl("button", {
+        cls: "clickable-icon slipbox-card-ghost-control",
+        attr: {
+          type: "button",
+          "aria-label": `Centre viewed card ${title}`
+        }
+      });
+      (0, import_obsidian2.setIcon)(ghost, "search");
+      (0, import_obsidian2.setTooltip)(ghost, "Centre viewed card", {
+        placement: "bottom",
+        delay: 250
+      });
+      ghost.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.actions.focusViewedCard();
+      });
+      miniature.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.cancelPendingCardClick();
+        this.actions.focusViewedCard();
+      });
+      miniature.addEventListener("keydown", (event) => {
+        if (isPlainKey(event, "v")) {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.actions.putBackViewedCard();
+          return;
+        }
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        this.actions.focusViewedCard();
+      });
+      miniature.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (expanded) {
+          this.showCardMenu(event, pile, card);
+        } else {
+          this.showPileMenu(event, pile, card);
+        }
+      });
+      return;
     }
     const preview = miniature.createDiv({
       cls: "slipbox-tray-card-preview markdown-rendered"
     });
+    this.previews.set(file.path, preview);
+    preview.addEventListener("dblclick", (event) => {
+      if (event.target instanceof Element && event.target.closest("a, button, input, textarea, select, [contenteditable='true']") !== null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.cancelPendingCardClick();
+      void this.actions.viewCard(file, true);
+    });
+    this.attachPreviewLinkInteractions(preview, file.path);
     const component = new import_obsidian2.Component();
     component.load();
-    this.components.push(component);
+    this.components.set(file.path, component);
     try {
       const body = await this.plugin.index.readBody(file);
       if (isCurrent()) {
@@ -2110,10 +2368,31 @@ var TrayRenderer = class {
       if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select") !== null) {
         return;
       }
+      if (event.target instanceof Element && event.target.closest(".slipbox-tray-card-preview") !== null) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.scheduleCardClick(() => {
+          if (!expanded) {
+            void this.actions.runAfterEditing(
+              "tray-expand-pile",
+              () => this.plugin.setTrayPileExpanded(pile.id, true)
+            );
+          } else if (filed !== void 0) {
+            void this.actions.runAfterEditing(
+              "tray-jump-filed-card",
+              () => this.actions.jumpToFiledCard(filed.path)
+            );
+          }
+        });
+        return;
+      }
       if (!expanded) {
         event.preventDefault();
         event.stopPropagation();
-        void this.plugin.setTrayPileExpanded(pile.id, true);
+        void this.actions.runAfterEditing(
+          "tray-expand-pile",
+          () => this.plugin.setTrayPileExpanded(pile.id, true)
+        );
         return;
       }
       if (filed === void 0) {
@@ -2121,22 +2400,37 @@ var TrayRenderer = class {
       }
       event.preventDefault();
       event.stopPropagation();
-      void this.actions.jumpToFiledCard(filed.path);
+      void this.actions.runAfterEditing(
+        "tray-jump-filed-card",
+        () => this.actions.jumpToFiledCard(filed.path)
+      );
     });
     miniature.addEventListener("keydown", (event) => {
+      if (isPlainKey(event, "v")) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.actions.viewCard(file, false);
+        return;
+      }
       if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.moveCardBy(
-          card.cardRef,
-          event.key === "ArrowLeft" ? -1 : 1
+        void this.actions.runAfterEditing(
+          "tray-move-card-key",
+          () => this.actions.moveCardBy(
+            card.cardRef,
+            event.key === "ArrowLeft" ? -1 : 1
+          )
         );
         return;
       }
       if (event.key === "Enter" && filed !== void 0) {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.jumpToFiledCard(filed.path);
+        void this.actions.runAfterEditing(
+          "tray-jump-filed-card-key",
+          () => this.actions.jumpToFiledCard(filed.path)
+        );
       }
     });
     miniature.addEventListener("contextmenu", (event) => {
@@ -2171,23 +2465,73 @@ var TrayRenderer = class {
       );
     });
   }
+  attachPreviewLinkInteractions(preview, sourcePath) {
+    preview.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const link = event.target.closest("a");
+      if (link === null) {
+        return;
+      }
+      const internal = link.matches(".internal-link");
+      const linktext = link.dataset.href ?? link.getAttribute("href") ?? "";
+      if (linktext === "") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const newLeaf = event.metaKey || event.ctrlKey;
+      void this.actions.runAfterEditing("tray-rendered-link", async () => {
+        const filed = internal ? resolveFiledCardLink((0, import_obsidian2.getLinkpath)(linktext), sourcePath, {
+          resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
+          filedPathForFile: (file) => this.plugin.index.filedByFile(file)?.path,
+          firstFiledPathAtAddress: (address) => this.plugin.index.firstFiledAtAddress(address)?.path
+        }) : void 0;
+        const action = renderedLinkAction(internal, newLeaf, linktext, filed);
+        if (action.kind === "card") {
+          await this.actions.jumpToFiledCard(action.path);
+        } else if (action.kind === "note") {
+          await this.app.workspace.openLinkText(
+            action.linktext,
+            sourcePath,
+            newLeaf
+          );
+        } else {
+          window.open(link.href, "_blank", "noopener");
+        }
+      });
+    }, { capture: true });
+  }
   showPileMenu(event, pile, visibleCard) {
     const menu = import_obsidian2.Menu.forEvent(event);
     if (visibleCard !== void 0 && this.addCardFileMenuItems(menu, visibleCard)) {
       menu.addSeparator();
     }
     menu.addItem((item) => {
-      item.setTitle("Lay out pile on active Canvas").setIcon("layout-dashboard").setDisabled(!this.plugin.hasActiveCanvas()).onClick(() => void this.plugin.layOutTrayPileOnActiveCanvas(pile.id));
+      item.setTitle("Lay out pile on active Canvas").setIcon("layout-dashboard").setDisabled(!this.plugin.hasActiveCanvas()).onClick(() => this.actions.runAfterEditing(
+        "tray-layout-active-canvas",
+        () => this.plugin.layOutTrayPileOnActiveCanvas(pile.id)
+      ));
     });
     menu.addItem((item) => {
-      item.setTitle("Lay out pile on Canvas\u2026").setIcon("layout-template").onClick(() => void this.plugin.layOutTrayPileOnCanvas(pile.id));
+      item.setTitle("Lay out pile on Canvas\u2026").setIcon("layout-template").onClick(() => this.actions.runAfterEditing(
+        "tray-layout-canvas",
+        () => this.plugin.layOutTrayPileOnCanvas(pile.id)
+      ));
     });
     menu.addItem((item) => {
-      item.setTitle("Create Canvas from pile\u2026").setIcon("file-plus-2").onClick(() => void this.plugin.createCanvasFromTrayPile(pile.id));
+      item.setTitle("Create Canvas from pile\u2026").setIcon("file-plus-2").onClick(() => this.actions.runAfterEditing(
+        "tray-create-canvas",
+        () => this.plugin.createCanvasFromTrayPile(pile.id)
+      ));
     });
     menu.addSeparator();
     menu.addItem((item) => {
-      item.setTitle("Return filed cards in this pile").setIcon("eraser").setDisabled(!pile.cards.some((card) => card.kind === "filed")).onClick(() => void this.plugin.clearTrayPile(pile.id));
+      item.setTitle("Return filed cards in this pile").setIcon("eraser").setDisabled(!pile.cards.some((card) => card.kind === "filed")).onClick(() => this.actions.runAfterEditing(
+        "tray-return-pile",
+        () => this.plugin.clearTrayPile(pile.id)
+      ));
     });
     menu.showAtMouseEvent(event);
   }
@@ -2205,11 +2549,10 @@ var TrayRenderer = class {
       item.setTitle("Move to previous pile").setIcon("arrow-left").setDisabled(position.pileIndex <= 0).onClick(() => {
         const target = state.piles[position.pileIndex - 1];
         if (target !== void 0) {
-          void this.moveAndFocus(moveCardBetweenPiles(
-            state,
-            card.cardRef,
-            target.id
-          ), card.cardRef);
+          this.moveAndFocus(
+            moveCardBetweenPiles(state, card.cardRef, target.id),
+            card.cardRef
+          );
         }
       });
     });
@@ -2217,11 +2560,10 @@ var TrayRenderer = class {
       item.setTitle("Move to next pile").setIcon("arrow-right").setDisabled(position.pileIndex >= state.piles.length - 1).onClick(() => {
         const target = state.piles[position.pileIndex + 1];
         if (target !== void 0) {
-          void this.moveAndFocus(moveCardBetweenPiles(
-            state,
-            card.cardRef,
-            target.id
-          ), card.cardRef);
+          this.moveAndFocus(
+            moveCardBetweenPiles(state, card.cardRef, target.id),
+            card.cardRef
+          );
         }
       });
     });
@@ -2230,10 +2572,13 @@ var TrayRenderer = class {
         const newPileId = this.plugin.createTrayPileId();
         const origin = pile.position ?? defaultPilePosition(position.pileIndex);
         const split = splitCardIntoNewPile(state, card.cardRef, newPileId);
-        void this.moveAndFocus(setPilePosition(split, newPileId, {
-          x: origin.x + 38,
-          y: origin.y + 38
-        }), card.cardRef);
+        this.moveAndFocus(
+          setPilePosition(split, newPileId, {
+            x: origin.x + 38,
+            y: origin.y + 38
+          }),
+          card.cardRef
+        );
       });
     });
     menu.showAtMouseEvent(event);
@@ -2244,11 +2589,20 @@ var TrayRenderer = class {
       return false;
     }
     menu.addItem((item) => {
-      item.setTitle("Open").setIcon("file-pen-line").onClick(() => void this.plugin.openMarkdownFile(file));
+      item.setTitle("View").setIcon("search").onClick(() => this.actions.viewCard(file, false));
+    });
+    menu.addItem((item) => {
+      item.setTitle("Open").setIcon("file-pen-line").onClick(() => this.actions.runAfterEditing(
+        "tray-menu-open-note",
+        () => this.plugin.openMarkdownFile(file)
+      ));
     });
     if (card.kind === "unfiled") {
       menu.addItem((item) => {
-        item.setTitle("File").setIcon("archive-restore").onClick(() => void this.actions.beginFiling(file));
+        item.setTitle("File").setIcon("archive-restore").onClick(() => this.actions.runAfterEditing(
+          "tray-menu-file-card",
+          () => this.actions.beginFiling(file)
+        ));
       });
     }
     return true;
@@ -2263,53 +2617,36 @@ var TrayRenderer = class {
       }
       const startX = event.clientX;
       const startY = event.clientY;
-      let dragging = false;
       const pointerId = event.pointerId;
-      element.setPointerCapture(pointerId);
-      const move = (moveEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-          return;
-        }
-        dragging = true;
-        moveEvent.preventDefault();
-        element.addClass("is-dragging");
-        element.style.translate = `${dx}px ${dy}px`;
-        this.rootEl?.addClass("is-dragging-card");
-        this.updateCardDropCues(moveEvent, pile.id, element);
-      };
-      const finish = (upEvent) => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
-        if (element.hasPointerCapture(pointerId)) {
-          element.releasePointerCapture(pointerId);
-        }
-        if (!dragging) {
-          return;
-        }
-        upEvent.preventDefault();
-        upEvent.stopPropagation();
-        this.suppressClickUntil = performance.now() + 400;
-        const next = this.cardDropState(
-          card.cardRef,
-          upEvent.clientX,
-          upEvent.clientY,
-          element
-        );
-        this.clearDropCues();
-        void this.plugin.updateTray(next);
-      };
-      const cancel = () => {
-        element.removeEventListener("pointermove", move);
-        element.removeEventListener("pointerup", finish);
-        element.removeEventListener("pointercancel", cancel);
-        this.clearDropCues();
-      };
-      element.addEventListener("pointermove", move);
-      element.addEventListener("pointerup", finish);
-      element.addEventListener("pointercancel", cancel);
+      this.startPointerActionAfterEditing(event, "tray-card-drag", () => {
+        beginThresholdPointerDrag({
+          captureTarget: element,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => {
+            element.addClass("is-dragging");
+            this.rootEl?.addClass("is-dragging-card");
+          },
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updateCardDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = performance.now() + 400;
+            const next = this.cardDropState(
+              card.cardRef,
+              upEvent.clientX,
+              upEvent.clientY,
+              element
+            );
+            this.clearDropCues();
+            void this.plugin.updateTray(next);
+          },
+          onCancel: () => this.clearDropCues()
+        });
+      });
     });
   }
   attachPileDragging(element, dragSurface, pile, position) {
@@ -2319,57 +2656,40 @@ var TrayRenderer = class {
       }
       const startX = event.clientX;
       const startY = event.clientY;
-      let dragging = false;
       const pointerId = event.pointerId;
-      dragSurface.setPointerCapture(pointerId);
-      const move = (moveEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        if (!dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-          return;
-        }
-        dragging = true;
-        moveEvent.preventDefault();
-        element.addClass("is-dragging");
-        element.style.translate = `${dx}px ${dy}px`;
-        this.updatePileDropCues(moveEvent, pile.id, element);
-      };
-      const finish = (upEvent) => {
-        dragSurface.removeEventListener("pointermove", move);
-        dragSurface.removeEventListener("pointerup", finish);
-        dragSurface.removeEventListener("pointercancel", cancel);
-        if (dragSurface.hasPointerCapture(pointerId)) {
-          dragSurface.releasePointerCapture(pointerId);
-        }
-        if (!dragging) {
-          return;
-        }
-        upEvent.preventDefault();
-        upEvent.stopPropagation();
-        this.suppressClickUntil = performance.now() + 400;
-        const next = this.pileDropState(
-          pile.id,
-          upEvent.clientX,
-          upEvent.clientY,
-          element,
-          {
-            x: position.x + upEvent.clientX - startX,
-            y: position.y + upEvent.clientY - startY
+      this.startPointerActionAfterEditing(event, "tray-pile-drag", () => {
+        beginThresholdPointerDrag({
+          captureTarget: dragSurface,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => element.addClass("is-dragging"),
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updatePileDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = performance.now() + 400;
+            const next = this.pileDropState(
+              pile.id,
+              upEvent.clientX,
+              upEvent.clientY,
+              element,
+              {
+                x: position.x + upEvent.clientX - startX,
+                y: position.y + upEvent.clientY - startY
+              }
+            );
+            this.clearDropCues();
+            void this.plugin.updateTray(next);
+          },
+          onCancel: () => {
+            element.setCssProps({ translate: "" });
+            this.clearDropCues();
           }
-        );
-        this.clearDropCues();
-        void this.plugin.updateTray(next);
-      };
-      const cancel = () => {
-        dragSurface.removeEventListener("pointermove", move);
-        dragSurface.removeEventListener("pointerup", finish);
-        dragSurface.removeEventListener("pointercancel", cancel);
-        element.setCssProps({ translate: "" });
-        this.clearDropCues();
-      };
-      dragSurface.addEventListener("pointermove", move);
-      dragSurface.addEventListener("pointerup", finish);
-      dragSurface.addEventListener("pointercancel", cancel);
+        });
+      });
     });
   }
   cardDropState(cardRef, x, y, dragged) {
@@ -2484,12 +2804,53 @@ var TrayRenderer = class {
     });
     this.rootEl?.removeClass("is-dragging-card");
   }
-  async moveAndFocus(nextState, cardRef) {
-    await this.plugin.updateTray(nextState);
-    window.requestAnimationFrame(() => {
-      const escaped = CSS.escape(cardRef);
-      this.rootEl?.querySelector(`.slipbox-tray-card[data-card-ref="${escaped}"]`)?.focus({ preventScroll: true });
+  moveAndFocus(nextState, cardRef) {
+    void this.actions.runAfterEditing("tray-menu-move-card", async () => {
+      await this.plugin.updateTray(nextState);
+      window.requestAnimationFrame(() => {
+        const escaped = CSS.escape(cardRef);
+        this.rootEl?.querySelector(`.slipbox-tray-card[data-card-ref="${escaped}"]`)?.focus({ preventScroll: true });
+      });
     });
+  }
+  scheduleCardClick(action) {
+    this.cancelPendingCardClick();
+    this.pendingCardClickTimer = window.setTimeout(() => {
+      this.pendingCardClickTimer = null;
+      action();
+    }, TRAY_SINGLE_CLICK_DELAY_MS);
+  }
+  startPointerActionAfterEditing(event, reason, action) {
+    const document2 = event.currentTarget instanceof Node ? event.currentTarget.ownerDocument : null;
+    if (document2 === null) {
+      return;
+    }
+    const pointerId = event.pointerId;
+    let pointerActive = true;
+    const cleanup = () => {
+      document2.removeEventListener("pointerup", released, true);
+      document2.removeEventListener("pointercancel", released, true);
+    };
+    const released = (releasedEvent) => {
+      if (releasedEvent.pointerId === pointerId) {
+        pointerActive = false;
+        cleanup();
+      }
+    };
+    document2.addEventListener("pointerup", released, true);
+    document2.addEventListener("pointercancel", released, true);
+    void this.actions.runAfterEditing(reason, () => {
+      cleanup();
+      if (pointerActive) {
+        action();
+      }
+    }).finally(cleanup);
+  }
+  cancelPendingCardClick() {
+    if (this.pendingCardClickTimer !== null) {
+      window.clearTimeout(this.pendingCardClickTimer);
+      this.pendingCardClickTimer = null;
+    }
   }
 };
 function defaultPilePosition(pileIndex) {
@@ -2513,6 +2874,9 @@ function trayIconButton(parent, icon, label) {
   (0, import_obsidian2.setTooltip)(button, label, { placement: "bottom", delay: 250 });
   button.addEventListener("pointerdown", (event) => event.stopPropagation());
   return button;
+}
+function isPlainKey(event, key) {
+  return event.key === key && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 }
 
 // src/filing-preview.ts
@@ -2564,19 +2928,21 @@ function deckMapCoordinate(index, cardCount) {
   }
   return cardCount === 1 ? 0.5 : index / (cardCount - 1);
 }
-function buildDeckMapModel(orderedFiledPaths, activePath, bookmarkedPaths) {
-  const cardCount = orderedFiledPaths.length;
-  const bookmarked = new Set(bookmarkedPaths);
-  const markers = orderedFiledPaths.map((path, index) => ({
-    path,
-    ordinal: index + 1,
-    position: deckMapCoordinate(index, cardCount) ?? 0
-  }));
-  return {
-    cardCount,
-    active: activePath === null ? null : markers.find((marker) => marker.path === activePath) ?? null,
-    bookmarks: markers.filter((marker) => bookmarked.has(marker.path))
-  };
+function sampleDeckMapIndices(cardCount, markerBudget) {
+  if (!Number.isInteger(cardCount) || !Number.isInteger(markerBudget) || cardCount <= 0 || markerBudget <= 0) {
+    return [];
+  }
+  const sampleCount = Math.min(cardCount, markerBudget);
+  if (sampleCount === cardCount) {
+    return Array.from({ length: cardCount }, (_, index) => index);
+  }
+  if (sampleCount === 1) {
+    return [Math.floor((cardCount - 1) / 2)];
+  }
+  return Array.from(
+    { length: sampleCount },
+    (_, index) => Math.round(index * (cardCount - 1) / (sampleCount - 1))
+  );
 }
 function buildDeckMapSectionMarkers(orderedFiledCards) {
   const sections = [];
@@ -2731,6 +3097,333 @@ function applyDeckChromeVisibility(toolbar, deckMap, state, showDeckToolbarSetti
   }
 }
 
+// src/inline-edit-session.ts
+var InlineEditFinalizationCoordinator = class {
+  active = null;
+  finish(reason, finalize) {
+    if (this.active !== null) {
+      this.active.reasons.add(reason);
+      return this.active.promise;
+    }
+    const reasons = /* @__PURE__ */ new Set([reason]);
+    const promise = finalize(reasons);
+    const active = { reasons, promise };
+    this.active = active;
+    void promise.then(
+      () => this.clear(active),
+      () => this.clear(active)
+    );
+    return promise;
+  }
+  clear(active) {
+    if (this.active === active) {
+      this.active = null;
+    }
+  }
+};
+var DEFAULT_DEBOUNCE_MS = 500;
+var InlineEditPathLock = class {
+  owners = /* @__PURE__ */ new Map();
+  ownerAt(path) {
+    return this.owners.get(path);
+  }
+  acquire(path, owner) {
+    const existing = this.owners.get(path);
+    if (existing !== void 0 && existing !== owner) {
+      return false;
+    }
+    this.owners.set(path, owner);
+    return true;
+  }
+  release(path, owner) {
+    if (this.owners.get(path) === owner) {
+      this.owners.delete(path);
+    }
+  }
+  rename(oldPath, newPath, owner) {
+    if (this.owners.get(oldPath) !== owner) {
+      return false;
+    }
+    const collision = this.owners.get(newPath);
+    if (collision !== void 0 && collision !== owner) {
+      return false;
+    }
+    this.owners.delete(oldPath);
+    this.owners.set(newPath, owner);
+    return true;
+  }
+  ownerSet() {
+    return new Set(this.owners.values());
+  }
+};
+var InlineEditSessionController = class {
+  constructor(path, origin, body, environment) {
+    this.origin = origin;
+    this.environment = environment;
+    this.pathValue = path;
+    this.baseBodyValue = body;
+    this.draftValue = body;
+  }
+  baseBodyValue;
+  draftValue;
+  pathValue;
+  versionValue = 0;
+  committedVersionValue = 0;
+  phaseValue = "editing";
+  failureValue = null;
+  conflictRetryableValue = false;
+  debounceHandle = null;
+  writeTail = Promise.resolve();
+  finishPromise = null;
+  get snapshot() {
+    return {
+      path: this.pathValue,
+      origin: this.origin,
+      baseBody: this.baseBodyValue,
+      draft: this.draftValue,
+      version: this.versionValue,
+      committedVersion: this.committedVersionValue,
+      phase: this.phaseValue,
+      failure: this.failureValue,
+      conflictRetryable: this.conflictRetryableValue
+    };
+  }
+  updateDraft(draft) {
+    if (this.phaseValue === "closed") {
+      return;
+    }
+    if (draft === this.draftValue) {
+      return;
+    }
+    this.draftValue = draft;
+    this.versionValue += 1;
+    if (this.phaseValue !== "conflict") {
+      this.phaseValue = "editing";
+      this.failureValue = null;
+      if (this.finishPromise === null) {
+        this.scheduleDebouncedCommit();
+      }
+    }
+  }
+  renamePath(path) {
+    if (this.phaseValue !== "closed") {
+      this.pathValue = path;
+    }
+  }
+  markConflict(message, retryable = false) {
+    if (this.phaseValue === "closed") {
+      return;
+    }
+    this.clearDebounce();
+    const failure = { kind: "conflict", message };
+    this.phaseValue = "conflict";
+    this.failureValue = failure;
+    this.conflictRetryableValue = retryable;
+    this.environment.reportFailure(failure);
+  }
+  finish() {
+    if (this.phaseValue === "closed") {
+      return Promise.resolve(true);
+    }
+    if (this.finishPromise !== null) {
+      return this.finishPromise;
+    }
+    this.clearDebounce();
+    const pending = this.finishLatestDraft();
+    this.finishPromise = pending;
+    void pending.finally(() => {
+      if (this.finishPromise === pending && this.phaseValue !== "closed") {
+        this.finishPromise = null;
+      }
+    });
+    return pending;
+  }
+  cancelDebounce() {
+    this.clearDebounce();
+  }
+  scheduleDebouncedCommit() {
+    this.clearDebounce();
+    this.debounceHandle = this.environment.schedule(() => {
+      this.debounceHandle = null;
+      void this.enqueueCommit(false);
+    }, this.environment.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+  }
+  clearDebounce() {
+    if (this.debounceHandle === null) {
+      return;
+    }
+    this.environment.cancelScheduled(this.debounceHandle);
+    this.debounceHandle = null;
+  }
+  async finishLatestDraft() {
+    await this.writeTail;
+    if (this.phaseValue === "conflict" && !this.conflictRetryableValue) {
+      return false;
+    }
+    try {
+      await this.environment.flushOpenViews(this.pathValue);
+    } catch (error) {
+      return this.handleWriteFailure("Could not save the open Markdown view.", error);
+    }
+    while (this.phaseValue !== "closed") {
+      const targetVersion = this.versionValue;
+      const saved = await this.enqueueCommit(true);
+      if (!saved) {
+        return false;
+      }
+      if (this.versionValue === targetVersion) {
+        this.phaseValue = "closed";
+        this.failureValue = null;
+        return true;
+      }
+    }
+    return true;
+  }
+  enqueueCommit(final) {
+    const version = this.versionValue;
+    const draft = this.draftValue;
+    const operation = this.writeTail.then(async () => {
+      if (this.phaseValue === "closed" || this.phaseValue === "conflict" && (!final || !this.conflictRetryableValue)) {
+        return this.phaseValue === "closed";
+      }
+      this.phaseValue = "saving";
+      let result;
+      try {
+        result = await this.environment.commit({
+          path: this.pathValue,
+          baseBody: this.baseBodyValue,
+          draft,
+          version,
+          final
+        });
+      } catch (error) {
+        return this.handleWriteFailure("Could not save the inline draft.", error);
+      }
+      if (result.status === "conflict") {
+        this.markConflict(result.message, true);
+        return false;
+      }
+      this.baseBodyValue = draft;
+      this.committedVersionValue = Math.max(this.committedVersionValue, version);
+      this.failureValue = null;
+      this.conflictRetryableValue = false;
+      this.phaseValue = "editing";
+      return true;
+    });
+    this.writeTail = operation.then(() => void 0, () => void 0);
+    return operation;
+  }
+  handleWriteFailure(message, error) {
+    const failure = { kind: "write", message, error };
+    this.phaseValue = "editing";
+    this.failureValue = failure;
+    this.conflictRetryableValue = false;
+    this.environment.reportFailure(failure);
+    return false;
+  }
+};
+async function runAfterInlineEditing(finish, action) {
+  if (!await finish()) {
+    return false;
+  }
+  await action();
+  return true;
+}
+
+// src/inline-edit-interactions.ts
+function dispatchInlineAwareDeckAction(state, runAfterEditing, action) {
+  if (state.starting) {
+    return false;
+  }
+  if (!state.editing) {
+    action();
+    return true;
+  }
+  void runAfterEditing(action);
+  return true;
+}
+function resolveDeckEscapeAction(event, state) {
+  if (event.key !== "Escape") {
+    return null;
+  }
+  if (state.editing) {
+    return "finish-editing";
+  }
+  if (state.pendingCommand) {
+    return "cancel-pending-command";
+  }
+  if (state.filing) {
+    return "cancel-filing";
+  }
+  return "contain";
+}
+function consumeDeckEscape(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+}
+function isInlineEditBodyTarget(target, bodySurface) {
+  const ElementConstructor = bodySurface.ownerDocument.defaultView?.Element;
+  if (ElementConstructor === void 0 || !(target instanceof ElementConstructor) || !bodySurface.contains(target)) {
+    return false;
+  }
+  return target.closest(
+    "a, button, input, textarea, select, [contenteditable='true'], .slipbox-card-address-row, .slipbox-card-footer"
+  ) === null;
+}
+function shouldNavigateDeckFromWheel(event, inlineEditor) {
+  if (inlineEditor !== null && event.composedPath().includes(inlineEditor)) {
+    return false;
+  }
+  return Math.abs(event.deltaX) > Math.abs(event.deltaY);
+}
+function isDeckInlineEditEnter(event, deck, state) {
+  return event.target === deck && event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && state.hasActiveCard && !state.editing && !state.starting && !state.filing && !state.pendingCommand;
+}
+function isViewedCardCenterKey(event, viewedCard, editing) {
+  if (viewedCard === null || editing || event.key !== "c" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return false;
+  }
+  const NodeConstructor = viewedCard.ownerDocument.defaultView?.Node;
+  return NodeConstructor !== void 0 && event.target instanceof NodeConstructor && viewedCard.contains(event.target);
+}
+function isViewedCardToggleKey(event, state) {
+  return state.viewedCardOpen && !state.editing && !state.starting && !state.filing && !state.pendingCommand && !state.editableTarget && event.key === "v" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+}
+
+// src/viewed-card.ts
+function createViewedCardState(path) {
+  return { path, x: 0, y: 0, scrollTop: 0 };
+}
+function centerViewedCardState(state) {
+  return { ...state, x: 0, y: 0 };
+}
+function moveViewedCardState(state, x, y, bounds) {
+  const margin = Math.max(0, bounds.margin ?? 16);
+  const maxX = Math.max(
+    0,
+    (Math.max(0, bounds.stageWidth) - Math.max(0, bounds.cardWidth)) / 2 - margin
+  );
+  const maxY = Math.max(
+    0,
+    (Math.max(0, bounds.stageHeight) - Math.max(0, bounds.cardHeight)) / 2 - margin
+  );
+  return {
+    ...state,
+    x: clamp(x, -maxX, maxX),
+    y: clamp(y, -maxY, maxY)
+  };
+}
+function scrollViewedCardState(state, scrollTop) {
+  return { ...state, scrollTop: Math.max(0, scrollTop) };
+}
+function renameViewedCardState(state, path) {
+  return path === state.path ? state : { ...state, path };
+}
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "slipbox-deck";
 var RENDER_EDGE_BUFFER = 2;
@@ -2738,13 +3431,16 @@ var LAYOUT_MEASUREMENT_RETRIES = 2;
 var SPACE_RECENTER_DURATION_MS = 180;
 var VIEWPORT_CENTER_DURATION_MS = 180;
 var DECK_MAP_SECTION_LABEL_SPACING = 14;
+var DECK_MAP_MARKER_BUDGET = 512;
 var COMMAND_FEEDBACK_DURATION_MS = 1800;
+var VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
 var PENDING_COMMAND_ACTIONS = /* @__PURE__ */ new Set([
   "find-address-forward",
   "find-address-backward",
   "find-address-first",
   "pull-into-pile"
 ]);
+var inlineEditStatusSequence = 0;
 var DeckView = class _DeckView extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -2754,7 +3450,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
       isInTray: (file) => this.plugin.isFileInTray(file),
-      toggleTray: (file) => this.plugin.toggleFileInTray(file)
+      toggleTray: (file) => this.plugin.toggleFileInTray(file),
+      runAfterEditing: (reason, action) => {
+        void this.runAfterInlineEditing(reason, action);
+      }
     });
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
@@ -2764,7 +3463,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       confirmFiling: () => void this.confirmFiling(),
       cancelFiling: () => void this.cancelFiling(),
       previewFilingPlacement: () => void this.previewFilingPlacement(),
-      filingInputFocusChanged: (focused) => this.setDeckKeybindingsSuspended(focused)
+      filingInputFocusChanged: (focused) => this.setDeckKeybindingsSuspended(focused),
+      viewCard: (file, editImmediately) => this.viewTrayCard(file, editImmediately),
+      focusViewedCard: () => this.focusViewedCard(),
+      putBackViewedCard: () => this.putBackViewedCard(),
+      runAfterEditing: (reason, action) => this.runAfterInlineEditing(reason, action)
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout())
@@ -2782,7 +3485,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   stageEl = null;
   spaceEl = null;
   renderedCards = [];
-  renderComponents = [];
+  renderComponents = /* @__PURE__ */ new Map();
   cardScrollPositions = /* @__PURE__ */ new Map();
   viewportOffset = 0;
   pointerLastX = null;
@@ -2803,9 +3506,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   deckMapEl = null;
   deckMapRailEl = null;
   deckMapSectionLayerEl = null;
-  deckMapMarkerEls = /* @__PURE__ */ new Map();
+  deckMapBookmarkLayerEl = null;
+  deckMapActiveMarkerEl = null;
+  deckMapBookmarkMarkerEls = /* @__PURE__ */ new Map();
   deckMapSections = [];
-  deckMapActivePath = null;
   deckMapBookmarkCount = 0;
   resizeObserver = null;
   positioningFrame = null;
@@ -2820,6 +3524,13 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   pendingCommandFeedback = "";
   pendingCommandFeedbackTimer = null;
   chromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
+  inlineEdit = null;
+  inlineEditFinalization = new InlineEditFinalizationCoordinator();
+  inlineEditStarting = false;
+  renderRefreshDeferred = false;
+  viewedCard = null;
+  viewedCardEl = null;
+  viewedCardBodyEl = null;
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -2850,11 +3561,32 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
     ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
-      if (handleFilingEscape(
-        event,
-        this.filingFile !== null && !this.filingConfirmationInProgress,
-        () => void this.cancelFiling()
-      )) {
+      if (this.handleDeckEscape(event)) {
+        return;
+      }
+      if (this.handleViewedCardToggle(event)) {
+        return;
+      }
+      if (isViewedCardCenterKey(event, this.viewedCardEl, this.inlineEdit !== null)) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.centerViewedCard();
+        return;
+      }
+      const editing = this.inlineEdit;
+      const activeCard = this.activeCard;
+      if (isDeckInlineEditEnter(event, this.contentEl, {
+        hasActiveCard: activeCard !== null,
+        editing: editing !== null,
+        starting: this.inlineEditStarting,
+        filing: this.filingFile !== null,
+        pendingCommand: this.pendingCommand.kind !== "idle"
+      })) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (activeCard !== null) {
+          void this.beginDeckInlineEditing(activeCard.file, "deck");
+        }
         return;
       }
       if (this.filingFile !== null && event.key === "Tab" && event.shiftKey && event.target !== this.trayRenderer.filingInput) {
@@ -2862,10 +3594,76 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         this.trayRenderer.focusFilingInputNow();
       }
     }, { capture: true });
+    this.registerDomEvent(
+      this.contentEl.ownerDocument,
+      "pointerdown",
+      (event) => this.handleInlineEditPointerDown(event),
+      { capture: true }
+    );
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (this.inlineEdit !== null && leaf !== this.leaf) {
+          void this.finishInlineEditing("active-leaf-change");
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on("file-open", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("file-open");
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on("window-open", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("popout-window-open");
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on("window-close", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("popout-window-close");
+        }
+      })
+    );
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (ownerWindow !== null) {
+      this.registerDomEvent(ownerWindow, "blur", () => {
+        if (this.inlineEdit !== null) {
+          void this.finishInlineEditing("window-blur");
+        }
+      });
+    }
+    this.registerDomEvent(this.contentEl.ownerDocument, "visibilitychange", () => {
+      if (this.inlineEdit !== null && this.contentEl.ownerDocument.visibilityState === "hidden") {
+        void this.finishInlineEditing("view-hidden");
+      }
+    });
     this.observeDeckSize();
     await this.refresh();
+    await this.restoreDetachedInlineEdit();
   }
   async onClose() {
+    const saved = await this.finishInlineEditing("view-close");
+    if (!saved && this.inlineEdit !== null) {
+      const editing = this.inlineEdit;
+      editing.controller.cancelDebounce();
+      this.plugin.retainDetachedInlineEdit(
+        editing.controller.snapshot,
+        editing.file,
+        {
+          selectionStart: editing.textarea.selectionStart,
+          selectionEnd: editing.textarea.selectionEnd,
+          textareaScrollTop: editing.textarea.scrollTop,
+          renderedScrollTop: editing.renderedScrollTop
+        }
+      );
+      this.plugin.releaseInlineEdit(editing.controller.snapshot.path, this);
+      this.inlineEdit = null;
+      this.setDeckKeybindingsSuspended(false);
+    }
     this.cancelViewportCentering();
     this.cancelSpaceRecentering();
     this.cardFooters.clear();
@@ -2886,6 +3684,9 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.filingConfirmationInProgress = false;
     this.stageEl = null;
     this.spaceEl = null;
+    this.viewedCard = null;
+    this.viewedCardEl = null;
+    this.viewedCardBodyEl = null;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
@@ -2896,9 +3697,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
-    this.deckMapMarkerEls.clear();
+    this.deckMapBookmarkLayerEl = null;
+    this.deckMapActiveMarkerEl = null;
+    this.deckMapBookmarkMarkerEls.clear();
     this.deckMapSections = [];
-    this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
     this.pendingCommandEl = null;
     this.pendingCommandStartEvent = null;
@@ -2908,6 +3710,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
     this.updateDeckMapSectionLabels();
+    this.constrainViewedCard();
   }
   get activeCard() {
     if (this.activePath === null) {
@@ -2925,6 +3728,29 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     return this.history.canForward();
   }
   handlePathRename(oldPath, newPath) {
+    const editing = this.inlineEdit;
+    const editingPath = editing?.controller.snapshot.path ?? null;
+    const renamedEditingPath = editingPath === null ? null : renamePathReference(editingPath, oldPath, newPath);
+    if (editing !== null && editingPath !== null && renamedEditingPath !== null && renamedEditingPath !== editingPath) {
+      if (!this.plugin.renameInlineEdit(editingPath, renamedEditingPath, this)) {
+        editing.controller.markConflict(
+          "The renamed path is already being edited in another Slipbox view."
+        );
+        this.applyInlineEditFailure(editing.controller.snapshot.failure);
+      } else {
+        editing.controller.renamePath(renamedEditingPath);
+        const renamed = this.plugin.index.fileAtPath(renamedEditingPath);
+        if (renamed !== void 0) {
+          editing.file = renamed;
+        }
+        editing.cardEl.dataset.path = renamedEditingPath;
+        const component = this.renderComponents.get(editingPath);
+        if (component !== void 0) {
+          this.renderComponents.delete(editingPath);
+          this.renderComponents.set(renamedEditingPath, component);
+        }
+      }
+    }
     if (this.activePath !== null) {
       this.activePath = renamePathReference(this.activePath, oldPath, newPath);
     }
@@ -2945,9 +3771,32 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       );
       this.recalculateFilingPreview();
     }
+    const viewed = this.viewedCard;
+    if (viewed !== null) {
+      const renamedPath = renamePathReference(viewed.path, oldPath, newPath);
+      if (renamedPath !== viewed.path) {
+        this.viewedCard = renameViewedCardState(viewed, renamedPath);
+        if (this.viewedCardEl !== null) {
+          this.viewedCardEl.dataset.path = renamedPath;
+        }
+        const component = this.renderComponents.get(viewed.path);
+        if (component !== void 0) {
+          this.renderComponents.delete(viewed.path);
+          this.renderComponents.set(renamedPath, component);
+        }
+      }
+    }
   }
   handlePathDeletion(deletedPath) {
-    if (this.activePath !== null && pathIsAtOrBelow(this.activePath, deletedPath)) {
+    const editingPath = this.inlineEdit?.controller.snapshot.path ?? null;
+    if (editingPath !== null && pathIsAtOrBelow(editingPath, deletedPath)) {
+      this.inlineEdit?.controller.markConflict(
+        "The card was deleted while it was being edited. Your draft was kept.",
+        true
+      );
+      this.applyInlineEditFailure(this.inlineEdit?.controller.snapshot.failure ?? null);
+    }
+    if (this.activePath !== null && pathIsAtOrBelow(this.activePath, deletedPath) && this.activePath !== editingPath) {
       this.activePath = null;
     }
     this.history.transform(
@@ -2962,6 +3811,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       this.clearFilingPlacement();
       this.filingMessage = "The source card no longer exists.";
     }
+    if (this.viewedCard !== null && pathIsAtOrBelow(this.viewedCard.path, deletedPath) && this.viewedCard.path !== editingPath) {
+      this.viewedCard = null;
+      this.viewedCardEl = null;
+      this.viewedCardBodyEl = null;
+    }
   }
   updateKeybindings() {
     const scope = this.scope;
@@ -2972,6 +3826,14 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
+    const escapeHandler = scope.register([], "Escape", (event) => {
+      return this.handleDeckEscape(event) ? false : void 0;
+    });
+    this.keymapHandlers.push(escapeHandler);
+    const viewedCardToggleHandler = scope.register([], "v", (event) => {
+      return this.handleViewedCardToggle(event) ? false : void 0;
+    });
+    this.keymapHandlers.push(viewedCardToggleHandler);
     if (!this.deckKeybindingsSuspended) {
       for (const definition of DECK_ACTION_DEFINITIONS) {
         for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
@@ -2999,6 +3861,51 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.deckKeybindingsSuspended = suspended;
     this.updateKeybindings();
   }
+  handleDeckEscape(event) {
+    if (this.app.workspace.getActiveViewOfType(_DeckView) !== this) {
+      return false;
+    }
+    const action = resolveDeckEscapeAction(event, {
+      editing: this.inlineEdit !== null,
+      pendingCommand: this.pendingCommand.kind !== "idle",
+      filing: this.filingFile !== null && !this.filingConfirmationInProgress
+    });
+    if (action === null) {
+      return false;
+    }
+    consumeDeckEscape(event);
+    if (action === "finish-editing") {
+      void this.finishInlineEditing("escape");
+    } else if (action === "cancel-pending-command") {
+      this.handleDeckCommandContinuation(event);
+    } else if (action === "cancel-filing") {
+      void this.cancelFiling();
+    }
+    return true;
+  }
+  handleViewedCardToggle(event) {
+    if (this.app.workspace.getActiveViewOfType(_DeckView) !== this) {
+      return false;
+    }
+    if (!isViewedCardToggleKey(event, {
+      viewedCardOpen: this.viewedCard !== null,
+      editing: this.inlineEdit !== null,
+      starting: this.inlineEditStarting,
+      filing: this.filingFile !== null,
+      pendingCommand: this.pendingCommand.kind !== "idle",
+      editableTarget: shouldSuspendDeckShortcut(
+        event.target,
+        this.trayRenderer.isFilingInputFocused
+      )
+    })) {
+      return false;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    void this.putBackViewedCard();
+    return true;
+  }
   canRunAction(action, target) {
     if (action === "confirm-filing") {
       return this.filingFile !== null && this.filingPreview !== null && !this.filingConfirmationInProgress;
@@ -3024,6 +3931,19 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return false;
     }
     const card = target ?? this.activeCard;
+    return dispatchInlineAwareDeckAction(
+      {
+        editing: this.inlineEdit !== null,
+        starting: this.inlineEditStarting
+      },
+      (semanticAction) => this.runAfterInlineEditing(
+        `deck-action:${action}`,
+        semanticAction
+      ),
+      () => this.performAction(action, card)
+    );
+  }
+  performAction(action, card) {
     switch (action) {
       case "previous-card":
         this.moveBy(-1);
@@ -3111,9 +4031,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         void this.cancelFiling();
         break;
     }
-    return true;
   }
   async refresh() {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
     const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
     this.cancelViewportCentering();
     this.recalculateFilingPreview();
@@ -3225,6 +4148,325 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   handleBookmarksChanged() {
     this.updateBookmarkUi();
   }
+  finishInlineEditing(reason) {
+    return this.inlineEditFinalization.finish(
+      reason,
+      (reasons) => this.finishInlineEditingOnce(reasons)
+    );
+  }
+  async finishInlineEditingOnce(reasons) {
+    const editing = this.inlineEdit;
+    if (editing === null) {
+      return true;
+    }
+    const saved = await editing.controller.finish();
+    if (!saved) {
+      this.applyInlineEditFailure(editing.controller.snapshot.failure);
+      if (this.app.workspace.getActiveViewOfType(_DeckView) === this) {
+        editing.textarea.focus({ preventScroll: true });
+      }
+      return false;
+    }
+    const path = editing.controller.snapshot.path;
+    const shouldSkipRender = ["view-close", "plugin-unload", "quit"].some((reason) => reasons.has(reason));
+    this.inlineEdit = null;
+    this.plugin.releaseInlineEdit(path, this);
+    this.setDeckKeybindingsSuspended(false);
+    editing.cardEl.removeClass("is-inline-editing");
+    editing.bodyEl.removeClasses([
+      "is-inline-editing",
+      "has-inline-edit-error"
+    ]);
+    if (!shouldSkipRender) {
+      if (this.renderRefreshDeferred) {
+        this.renderRefreshDeferred = false;
+        await this.refresh();
+      } else {
+        await this.rerenderEditedPath(editing.file, editing.bodyEl, editing.renderedScrollTop);
+        await this.trayRenderer.rerenderPath(editing.file);
+      }
+    }
+    if (reasons.has("escape")) {
+      if (this.viewedCard?.path === path && this.viewedCardEl !== null) {
+        this.viewedCardEl.focus({ preventScroll: true });
+      } else {
+        this.contentEl.focus({ preventScroll: true });
+      }
+    }
+    return true;
+  }
+  async runAfterInlineEditing(reason, action) {
+    return runAfterInlineEditing(
+      () => this.finishInlineEditing(reason),
+      action
+    );
+  }
+  async viewTrayCard(file, editImmediately) {
+    if (this.filingFile !== null) {
+      new import_obsidian3.Notice("Finish filing before viewing another card.");
+      return;
+    }
+    if (this.viewedCard?.path !== file.path) {
+      const viewed = await this.runAfterInlineEditing(
+        "view-tray-card",
+        async () => {
+          this.rememberViewedCardScroll();
+          this.viewedCard = createViewedCardState(file.path);
+          await this.renderDeck(false);
+        }
+      );
+      if (!viewed) {
+        return;
+      }
+    }
+    this.focusViewedCard();
+    if (editImmediately && this.viewedCardBodyEl !== null) {
+      await this.beginInlineEditing(file, "tray", this.viewedCardBodyEl);
+    }
+  }
+  async putBackViewedCard() {
+    if (this.viewedCard === null) {
+      return;
+    }
+    await this.runAfterInlineEditing("put-back-viewed-card", async () => {
+      this.viewedCard = null;
+      this.viewedCardEl = null;
+      this.viewedCardBodyEl = null;
+      await this.renderDeck(false);
+      this.contentEl.focus({ preventScroll: true });
+    });
+  }
+  async beginDeckInlineEditing(file, origin, bodySurface) {
+    const surface = bodySurface ?? this.cardBodyForPath(file.path);
+    if (surface === null) {
+      new import_obsidian3.Notice("The card is outside the current render window.");
+      return;
+    }
+    await this.beginInlineEditing(file, origin, surface);
+  }
+  async beginInlineEditing(file, origin, bodySurface, restored) {
+    if (this.filingFile !== null) {
+      new import_obsidian3.Notice("Finish filing before editing a card body.");
+      return;
+    }
+    if (this.inlineEditStarting) {
+      return;
+    }
+    if (this.inlineEdit !== null) {
+      if (this.inlineEdit.controller.snapshot.path === file.path) {
+        this.inlineEdit.textarea.focus({ preventScroll: true });
+        return;
+      }
+      if (!await this.finishInlineEditing("start-another-editor")) {
+        return;
+      }
+    }
+    if (!this.plugin.acquireInlineEdit(file.path, this)) {
+      return;
+    }
+    this.inlineEditStarting = true;
+    try {
+      const prepared = restored === void 0 ? await this.plugin.prepareInlineEdit(file) : { file, body: restored.baseBody };
+      const mounted = this.mountInlineEditing(
+        prepared.file,
+        origin,
+        prepared.body,
+        bodySurface,
+        restored?.renderedScrollTop
+      );
+      this.inlineEdit = mounted;
+      if (restored !== void 0 && restored.draft !== restored.baseBody) {
+        mounted.textarea.value = restored.draft;
+        mounted.controller.updateDraft(restored.draft);
+      }
+      if (restored !== void 0) {
+        mounted.textarea.scrollTop = restored.textareaScrollTop;
+      }
+      if (restored?.conflictMessage !== null && restored?.conflictMessage !== void 0) {
+        mounted.controller.markConflict(
+          restored.conflictMessage,
+          restored.conflictRetryable
+        );
+        this.applyInlineEditFailure(mounted.controller.snapshot.failure);
+      }
+      this.setDeckKeybindingsSuspended(true);
+      window.requestAnimationFrame(() => {
+        if (this.inlineEdit === mounted) {
+          mounted.textarea.focus({ preventScroll: true });
+          mounted.textarea.setSelectionRange(
+            restored?.selectionStart ?? mounted.textarea.value.length,
+            restored?.selectionEnd ?? mounted.textarea.value.length
+          );
+          if (restored !== void 0) {
+            mounted.textarea.scrollTop = restored.textareaScrollTop;
+          }
+        }
+      });
+    } catch (error) {
+      this.plugin.releaseInlineEdit(file.path, this);
+      new import_obsidian3.Notice(`Could not start inline editing: ${errorMessage(error)}`);
+    } finally {
+      this.inlineEditStarting = false;
+    }
+  }
+  mountInlineEditing(file, origin, baseBody, requestedBodySurface, restoredRenderedScrollTop) {
+    const bodyEl = requestedBodySurface;
+    const cardEl = bodyEl?.closest(".slipbox-card") ?? null;
+    if (bodyEl === null || cardEl === null) {
+      throw new Error("The card surface is unavailable");
+    }
+    const renderedScrollTop = restoredRenderedScrollTop ?? bodyEl.scrollTop;
+    this.renderComponents.get(file.path)?.unload();
+    this.renderComponents.delete(file.path);
+    bodyEl.empty();
+    bodyEl.removeClass("markdown-rendered");
+    bodyEl.addClass("is-inline-editing");
+    cardEl.addClass("is-inline-editing");
+    const textarea = bodyEl.createEl("textarea", {
+      cls: "slipbox-inline-editor",
+      attr: {
+        "aria-label": `Edit raw Markdown for ${this.plugin.cardTitle(file)}`,
+        spellcheck: "true"
+      }
+    });
+    textarea.value = baseBody;
+    const statusId = `slipbox-inline-edit-status-${++inlineEditStatusSequence}`;
+    textarea.setAttr("aria-errormessage", statusId);
+    const statusEl = bodyEl.createDiv({
+      cls: "slipbox-inline-edit-status",
+      attr: {
+        id: statusId,
+        role: "status",
+        "aria-live": "assertive"
+      }
+    });
+    statusEl.hidden = true;
+    const controller = new InlineEditSessionController(
+      file.path,
+      origin,
+      baseBody,
+      {
+        commit: async (request) => {
+          const result = await this.plugin.commitInlineEdit(request);
+          if (result.status === "saved" && !request.final) {
+            const latestFile = this.plugin.index.fileAtPath(request.path) ?? file;
+            await this.trayRenderer.rerenderPath(latestFile);
+          }
+          return result;
+        },
+        flushOpenViews: (path) => this.plugin.flushOpenTextViews(path),
+        schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        cancelScheduled: (handle) => window.clearTimeout(handle),
+        reportFailure: (failure) => this.reportInlineEditFailure(failure)
+      }
+    );
+    textarea.addEventListener("input", () => {
+      controller.updateDraft(textarea.value);
+      if (controller.snapshot.phase !== "conflict") {
+        bodyEl.removeClass("has-inline-edit-error");
+        textarea.removeAttribute("aria-invalid");
+        statusEl.hidden = true;
+        statusEl.setText("");
+      }
+    });
+    textarea.addEventListener("pointerdown", (event) => event.stopPropagation());
+    textarea.addEventListener("click", (event) => event.stopPropagation());
+    return {
+      controller,
+      file,
+      origin,
+      textarea,
+      statusEl,
+      bodyEl,
+      cardEl,
+      renderedScrollTop
+    };
+  }
+  handleInlineEditPointerDown(event) {
+    const editing = this.inlineEdit;
+    if (editing === null || !(event.target instanceof Element)) {
+      return;
+    }
+    if (editing.textarea.contains(event.target)) {
+      return;
+    }
+    if (editing.cardEl.contains(event.target) && event.target.closest("a, button, input, select, [contenteditable='true']") === null) {
+      return;
+    }
+    void this.finishInlineEditing("outside-pointer");
+  }
+  reportInlineEditFailure(failure) {
+    this.applyInlineEditFailure(failure);
+    const detail = failure.error === void 0 ? failure.message : `${failure.message} ${errorMessage(failure.error)}`;
+    new import_obsidian3.Notice(`${detail} Your draft remains in the card and can be copied.`);
+  }
+  applyInlineEditFailure(failure) {
+    const editing = this.inlineEdit;
+    if (editing === null || failure === null) {
+      return;
+    }
+    editing.bodyEl.addClass("has-inline-edit-error");
+    editing.textarea.setAttr("aria-invalid", "true");
+    editing.statusEl.setText(failure.message);
+    editing.statusEl.hidden = false;
+  }
+  cardBodyForPath(path) {
+    const escaped = CSS.escape(path);
+    return this.spaceEl?.querySelector(
+      `.slipbox-card[data-path="${escaped}"] .slipbox-card-scroll`
+    ) ?? null;
+  }
+  async rerenderEditedPath(file, target, scrollTop) {
+    if (!target.isConnected) {
+      return;
+    }
+    target.empty();
+    target.removeClasses(["is-inline-editing", "has-inline-edit-error"]);
+    target.addClass("markdown-rendered");
+    if (this.viewedCard?.path === file.path && target.closest(".slipbox-viewed-card") !== null) {
+      this.viewedCard = scrollViewedCardState(this.viewedCard, scrollTop);
+      await this.renderViewedMarkdownCard(file, target, this.renderVersion);
+      target.scrollTop = scrollTop;
+      return;
+    }
+    const filed = this.plugin.index.filedByFile(file);
+    if (filed === void 0) {
+      return;
+    }
+    this.cardScrollPositions.set(file.path, scrollTop);
+    await this.renderMarkdownCard(filed, target, this.renderVersion);
+    target.scrollTop = scrollTop;
+  }
+  async restoreDetachedInlineEdit() {
+    const draft = this.plugin.takeDetachedInlineEdit();
+    if (draft === null) {
+      return;
+    }
+    const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
+    const filed = this.plugin.index.filedByFile(file);
+    let bodySurface = null;
+    if (draft.origin === "tray") {
+      this.viewedCard = createViewedCardState(draft.path);
+      await this.renderDeck(false);
+      bodySurface = this.viewedCardBodyEl;
+    } else if (filed !== void 0) {
+      await this.jumpToPath(filed.path);
+      bodySurface = this.cardBodyForPath(file.path);
+    }
+    await this.beginInlineEditing(file, draft.origin, bodySurface, {
+      baseBody: draft.baseBody,
+      draft: draft.draft,
+      conflictMessage: draft.conflictMessage,
+      conflictRetryable: draft.conflictRetryable,
+      selectionStart: draft.selectionStart,
+      selectionEnd: draft.selectionEnd,
+      textareaScrollTop: draft.textareaScrollTop,
+      renderedScrollTop: draft.renderedScrollTop
+    });
+    if (this.inlineEdit?.controller.snapshot.path !== draft.path) {
+      this.plugin.returnDetachedInlineEdit(draft);
+    }
+  }
   async navigateToPath(path) {
     const targetIndex = this.plugin.index.filedIndexForPath(path);
     if (targetIndex < 0) {
@@ -3250,8 +4492,16 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.activePath = filed[0]?.path ?? null;
   }
   async renderDeck(focusFilingInput = true) {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
     const version = ++this.renderVersion;
     this.rememberScrollPositions();
+    this.rememberViewedCardScroll();
+    if (this.viewedCard !== null && this.plugin.index.fileAtPath(this.viewedCard.path) === void 0) {
+      this.viewedCard = null;
+    }
     this.unloadRenderComponents();
     this.cardFooters.clear();
     this.trayRenderer.clear();
@@ -3264,11 +4514,14 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
-    this.deckMapMarkerEls.clear();
+    this.deckMapBookmarkLayerEl = null;
+    this.deckMapActiveMarkerEl = null;
+    this.deckMapBookmarkMarkerEls.clear();
     this.deckMapSections = [];
-    this.deckMapActivePath = null;
     this.deckMapBookmarkCount = 0;
     this.pendingCommandEl = null;
+    this.viewedCardEl = null;
+    this.viewedCardBodyEl = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
@@ -3286,6 +4539,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       stage,
       space,
       this.currentTrayFilingState(),
+      this.viewedCard?.path ?? null,
       () => version === this.renderVersion
     );
     const filed = this.plugin.index.snapshot.filed;
@@ -3299,6 +4553,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return;
     }
     await trayJob;
+    if (version !== this.renderVersion) {
+      return;
+    }
+    await this.renderViewedCard(stage, version);
     if (version !== this.renderVersion) {
       return;
     }
@@ -3369,13 +4627,21 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
     });
     slider.addEventListener("input", () => {
-      this.plugin.setSpread(Number(slider.value));
-      this.positionCards();
-      if (this.stageEl !== null) {
-        this.renderBookmarkEdgeTabs(this.stageEl);
-      }
+      const spread = Number(slider.value);
+      void this.runAfterInlineEditing("spread-input", () => {
+        this.plugin.setSpread(spread);
+        this.positionCards();
+        if (this.stageEl !== null) {
+          this.renderBookmarkEdgeTabs(this.stageEl);
+        }
+      });
     });
-    slider.addEventListener("change", () => void this.renderDeck());
+    slider.addEventListener("change", () => {
+      void this.runAfterInlineEditing(
+        "spread-change",
+        () => this.renderDeck()
+      );
+    });
   }
   renderDeckMap(shell) {
     const filed = this.plugin.index.snapshot.filed;
@@ -3404,7 +4670,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     });
     this.deckMapEl = map;
     this.deckMapRailEl = rail;
-    for (const [index, card] of filed.entries()) {
+    for (const index of sampleDeckMapIndices(
+      filed.length,
+      DECK_MAP_MARKER_BUDGET
+    )) {
       const marker = markerLayer.createSpan({
         cls: "slipbox-deck-map-marker"
       });
@@ -3412,8 +4681,16 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         "--slipbox-deck-map-position",
         String(deckMapCoordinate(index, filed.length) ?? 0)
       );
-      this.deckMapMarkerEls.set(card.path, marker);
     }
+    this.deckMapBookmarkLayerEl = rail.createDiv({
+      cls: "slipbox-deck-map-markers"
+    });
+    const activeLayer = rail.createDiv({
+      cls: "slipbox-deck-map-markers"
+    });
+    this.deckMapActiveMarkerEl = activeLayer.createSpan({
+      cls: "slipbox-deck-map-marker is-active is-hidden"
+    });
     this.deckMapSections = buildDeckMapSectionMarkers(filed);
     this.updateDeckMapBookmarks(this.bookmarkedPaths());
     this.updateDeckMapSectionLabels();
@@ -3427,7 +4704,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       );
       const target = targetIndex === null ? void 0 : cards[targetIndex];
       if (target !== void 0 && target.path !== this.activePath) {
-        void this.jumpToPath(target.path);
+        void this.runAfterInlineEditing(
+          "deck-map-jump",
+          () => this.jumpToPath(target.path)
+        );
       }
     });
     map.addEventListener("keydown", (event) => {
@@ -3558,21 +4838,31 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     void this.plugin.updateTray(next);
   }
   updateDeckMapBookmarks(bookmarkedPaths) {
-    if (this.deckMapEl === null) {
+    const layer = this.deckMapBookmarkLayerEl;
+    if (this.deckMapEl === null || layer === null) {
       return;
     }
-    const model = buildDeckMapModel(
-      this.plugin.index.snapshot.filed.map((card) => card.path),
-      this.activePath,
-      bookmarkedPaths
-    );
-    const resolvedBookmarks = new Set(
-      model.bookmarks.map((marker) => marker.path)
-    );
-    for (const [path, marker] of this.deckMapMarkerEls) {
-      marker.toggleClass("is-bookmarked", resolvedBookmarks.has(path));
+    for (const marker of this.deckMapBookmarkMarkerEls.values()) {
+      marker.remove();
     }
-    this.deckMapBookmarkCount = model.bookmarks.length;
+    this.deckMapBookmarkMarkerEls.clear();
+    const cardCount = this.plugin.index.snapshot.filed.length;
+    for (const path of bookmarkedPaths) {
+      const index = this.plugin.index.filedIndexForPath(path);
+      const position = deckMapCoordinate(index, cardCount);
+      if (position === null) {
+        continue;
+      }
+      const marker = layer.createSpan({
+        cls: "slipbox-deck-map-marker is-bookmarked"
+      });
+      marker.style.setProperty(
+        "--slipbox-deck-map-position",
+        String(position)
+      );
+      this.deckMapBookmarkMarkerEls.set(path, marker);
+    }
+    this.deckMapBookmarkCount = this.deckMapBookmarkMarkerEls.size;
     this.updateDeckMapActiveUi();
   }
   updateDeckMapSectionLabels() {
@@ -3606,12 +4896,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const cardCount = this.plugin.index.snapshot.filed.length;
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
     const position = deckMapCoordinate(activeIndex, cardCount);
+    const activeMarker = this.deckMapActiveMarkerEl;
     const bookmarkLabel = `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
-    if (this.deckMapActivePath !== null) {
-      this.deckMapMarkerEls.get(this.deckMapActivePath)?.removeClass("is-active");
-    }
     if (position === null) {
-      this.deckMapActivePath = null;
+      if (activeMarker !== null) {
+        activeMarker.addClass("is-hidden");
+      }
       map.removeAttribute("aria-valuenow");
       map.setAttr(
         "aria-valuetext",
@@ -3619,9 +4909,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       );
       return;
     }
-    this.deckMapActivePath = this.activePath;
-    if (this.activePath !== null) {
-      this.deckMapMarkerEls.get(this.activePath)?.addClass("is-active");
+    if (activeMarker !== null) {
+      activeMarker.removeClass("is-hidden");
+      activeMarker.style.setProperty(
+        "--slipbox-deck-map-position",
+        String(position)
+      );
     }
     const summary = `Card ${activeIndex + 1} of ${cardCount}; ${bookmarkLabel}`;
     map.setAttr("aria-valuenow", String(activeIndex + 1));
@@ -3657,6 +4950,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       cardEl.dataset.filedIndex = String(filedIndex);
       cardEl.dataset.path = card.path;
       cardEl.toggleClass("is-active", filedIndex === activeIndex);
+      const isViewed = this.viewedCard?.path === card.path;
+      cardEl.toggleClass("is-viewed-ghost", isViewed);
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== void 0;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
@@ -3671,6 +4966,44 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         cardStackOrder(filedIndex, focusDisplayIndex)
       );
       this.renderedCards.push(cardEl);
+      if (isViewed) {
+        cardEl.setAttr(
+          "aria-label",
+          `${card.address} \xB7 ${title}; viewed card placeholder. Activate to centre the viewed card.`
+        );
+        const ghost = cardEl.createEl("button", {
+          cls: "clickable-icon slipbox-card-ghost-control",
+          attr: {
+            type: "button",
+            "aria-label": `Centre viewed card ${title}`
+          }
+        });
+        (0, import_obsidian3.setIcon)(ghost, "search");
+        (0, import_obsidian3.setTooltip)(ghost, "Centre viewed card", {
+          placement: "bottom",
+          delay: 250
+        });
+        ghost.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.focusViewedCard();
+        });
+        cardEl.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.focusViewedCard();
+        });
+        cardEl.addEventListener("contextmenu", (event) => {
+          this.plugin.showCardContextMenu(
+            event,
+            card.file,
+            card.address,
+            DECK_VIEW_TYPE,
+            this.leaf
+          );
+        });
+        continue;
+      }
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
@@ -3730,6 +5063,19 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
+      scroll.addEventListener("dblclick", (event) => {
+        if (!isInlineEditBodyTarget(event.target, scroll)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        void this.runAfterInlineEditing("body-double-click", async () => {
+          if (card.path !== this.activePath) {
+            this.selectCardWithoutMoving(card.path);
+          }
+          await this.beginDeckInlineEditing(card.file, "deck", scroll);
+        });
+      });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),
@@ -3760,11 +5106,268 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         }
         event.preventDefault();
         event.stopPropagation();
-        this.selectCardWithoutMoving(card.path);
+        void this.runAfterInlineEditing(
+          "select-card",
+          () => this.selectCardWithoutMoving(card.path)
+        );
       });
     }
     this.positionCards();
     await Promise.all(jobs);
+  }
+  async renderViewedCard(stage, version) {
+    const state = this.viewedCard;
+    if (state === null) {
+      return;
+    }
+    const file = this.plugin.index.fileAtPath(state.path);
+    if (file === void 0) {
+      this.viewedCard = null;
+      return;
+    }
+    const filed = this.plugin.index.filedByFile(file);
+    const address = filed?.address ?? "unfiled";
+    const title = this.plugin.cardTitle(file);
+    const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
+    const card = layer.createDiv({
+      cls: "slipbox-card slipbox-viewed-card is-active",
+      attr: {
+        role: "group",
+        tabindex: "0",
+        "aria-label": `Viewed card ${address} \xB7 ${title}`
+      }
+    });
+    card.dataset.path = file.path;
+    card.toggleClass("is-bookmarked", filed !== void 0 && this.plugin.bookmarkAtPath(filed.path) !== void 0);
+    this.viewedCardEl = card;
+    this.applyViewedCardPosition();
+    const frame = card.createDiv({ cls: "slipbox-card-frame" });
+    const addressRow = frame.createDiv({
+      cls: "slipbox-card-address-row slipbox-viewed-card-drag-handle"
+    });
+    (0, import_obsidian3.setTooltip)(addressRow, "Drag to move viewed card", {
+      placement: "top",
+      delay: 500
+    });
+    const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
+    identity.createSpan({ cls: "slipbox-card-address", text: address });
+    const headerTitle = cardHeaderTitle(
+      title,
+      this.plugin.settings.showTitleInDeck
+    );
+    if (headerTitle !== null) {
+      identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
+    }
+    const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+    this.renderCardAction(
+      actions,
+      "focus",
+      "slipbox-viewed-card-centre",
+      "Centre viewed card (c)",
+      () => {
+        this.centerViewedCard();
+        return true;
+      }
+    );
+    if (filed === void 0) {
+      this.renderCardAction(
+        actions,
+        "archive-restore",
+        "slipbox-card-file",
+        "File",
+        () => {
+          void this.beginFilingViewedCard(file);
+          return true;
+        }
+      );
+    }
+    this.renderCardAction(
+      actions,
+      "file-pen-line",
+      "slipbox-card-open",
+      "Open",
+      () => {
+        void this.runAfterInlineEditing(
+          "viewed-open-note",
+          () => this.plugin.openMarkdownFile(file)
+        );
+        return true;
+      }
+    );
+    this.renderCardAction(
+      actions,
+      "minimize-2",
+      "slipbox-viewed-card-put-back",
+      "Put back",
+      () => {
+        void this.putBackViewedCard();
+        return true;
+      }
+    );
+    const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
+    body.scrollTop = state.scrollTop;
+    body.addEventListener("scroll", () => {
+      if (this.viewedCard?.path === file.path) {
+        this.viewedCard = scrollViewedCardState(this.viewedCard, body.scrollTop);
+      }
+    }, { passive: true });
+    body.addEventListener("dblclick", (event) => {
+      if (!isInlineEditBodyTarget(event.target, body)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void this.beginInlineEditing(file, "tray", body);
+    });
+    this.viewedCardBodyEl = body;
+    if (filed !== void 0) {
+      this.cardFooters.render(frame, {
+        sourcePath: filed.path,
+        backlinks: this.plugin.index.backlinksForPath(filed.path),
+        interactive: true,
+        activate: (backlink) => this.jumpToPath(backlink.path)
+      });
+    }
+    card.addEventListener("contextmenu", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest("a, button, input, textarea, select") !== null) {
+        return;
+      }
+      this.plugin.showCardContextMenu(
+        event,
+        file,
+        filed?.address ?? null,
+        DECK_VIEW_TYPE,
+        this.leaf
+      );
+    });
+    this.attachViewedCardDragging(addressRow, card);
+    await this.renderViewedMarkdownCard(file, body, version);
+    if (version !== this.renderVersion || this.viewedCardEl !== card) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      if (this.viewedCardEl === card) {
+        this.constrainViewedCard();
+      }
+    });
+  }
+  async renderViewedMarkdownCard(file, target, version) {
+    this.renderComponents.get(file.path)?.unload();
+    const component = new import_obsidian3.Component();
+    component.load();
+    this.renderComponents.set(file.path, component);
+    try {
+      const body = await this.plugin.index.readBody(file);
+      if (version !== this.renderVersion || this.viewedCard?.path !== file.path || this.renderComponents.get(file.path) !== component) {
+        return;
+      }
+      await import_obsidian3.MarkdownRenderer.render(
+        this.app,
+        body,
+        target,
+        file.path,
+        component
+      );
+      this.attachInternalLinkInteractions(target, file.path);
+      target.scrollTop = this.viewedCard.scrollTop;
+    } catch (error) {
+      target.createEl("p", {
+        cls: "slipbox-render-error",
+        text: `Could not render this card: ${errorMessage(error)}`
+      });
+    }
+  }
+  attachViewedCardDragging(handle, card) {
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target instanceof Element && event.target.closest("button, a, input, textarea, select") !== null) {
+        return;
+      }
+      const startState = this.viewedCard;
+      if (startState === null) {
+        return;
+      }
+      card.focus({ preventScroll: true });
+      beginThresholdPointerDrag({
+        captureTarget: handle,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        threshold: VIEWED_CARD_DRAG_THRESHOLD_PX,
+        onDragStart: () => card.addClass("is-dragging"),
+        onDragMove: (_moveEvent, dx, dy) => {
+          if (this.viewedCard?.path !== startState.path) {
+            return;
+          }
+          this.viewedCard = moveViewedCardState(
+            this.viewedCard,
+            startState.x + dx,
+            startState.y + dy,
+            this.viewedCardBounds(card)
+          );
+          this.applyViewedCardPosition();
+        },
+        onDrop: () => card.removeClass("is-dragging"),
+        onCancel: () => {
+          card.removeClass("is-dragging");
+          if (this.viewedCard?.path === startState.path) {
+            this.viewedCard = startState;
+            this.applyViewedCardPosition();
+          }
+        }
+      });
+    });
+  }
+  viewedCardBounds(card) {
+    const stage = this.stageEl;
+    return {
+      stageWidth: stage?.clientWidth ?? 0,
+      stageHeight: stage?.clientHeight ?? 0,
+      cardWidth: card.offsetWidth,
+      cardHeight: card.offsetHeight
+    };
+  }
+  applyViewedCardPosition() {
+    const state = this.viewedCard;
+    const card = this.viewedCardEl;
+    if (state === null || card === null) {
+      return;
+    }
+    card.style.setProperty("--slipbox-viewed-card-x", `${state.x}px`);
+    card.style.setProperty("--slipbox-viewed-card-y", `${state.y}px`);
+  }
+  constrainViewedCard() {
+    const state = this.viewedCard;
+    const card = this.viewedCardEl;
+    if (state === null || card === null) {
+      return;
+    }
+    this.viewedCard = moveViewedCardState(
+      state,
+      state.x,
+      state.y,
+      this.viewedCardBounds(card)
+    );
+    this.applyViewedCardPosition();
+  }
+  centerViewedCard() {
+    if (this.viewedCard === null) {
+      return;
+    }
+    this.viewedCard = centerViewedCardState(this.viewedCard);
+    this.applyViewedCardPosition();
+    this.viewedCardEl?.focus({ preventScroll: true });
+  }
+  focusViewedCard() {
+    this.centerViewedCard();
+  }
+  async beginFilingViewedCard(file) {
+    await this.runAfterInlineEditing("viewed-file-card", async () => {
+      this.viewedCard = null;
+      this.viewedCardEl = null;
+      this.viewedCardBodyEl = null;
+      await this.startFiling(file);
+    });
   }
   renderCardAction(parent, icon, className, label, action) {
     const button = parent.createEl("button", {
@@ -3782,12 +5385,13 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     return button;
   }
   async renderMarkdownCard(card, target, version) {
+    this.renderComponents.get(card.path)?.unload();
     const component = new import_obsidian3.Component();
     component.load();
-    this.renderComponents.push(component);
+    this.renderComponents.set(card.path, component);
     try {
       const body = await this.plugin.index.readBody(card.file);
-      if (version !== this.renderVersion) {
+      if (version !== this.renderVersion || this.renderComponents.get(card.path) !== component) {
         return;
       }
       await import_obsidian3.MarkdownRenderer.render(
@@ -3841,25 +5445,34 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         if (!(event.target instanceof Element)) {
           return;
         }
-        const link = event.target.closest("a.internal-link");
+        const link = event.target.closest("a");
         const linkPath = link?.dataset.href ?? link?.getAttribute("href") ?? void 0;
         if (link === null || linkPath === void 0 || linkPath === "") {
           return;
         }
-        const destination = this.app.metadataCache.getFirstLinkpathDest(
-          linkPath,
-          sourcePath
-        );
-        if (destination === null) {
-          return;
-        }
-        const filed = this.plugin.index.filedByFile(destination);
-        if (filed === void 0) {
-          return;
-        }
+        const internal = link.matches(".internal-link");
+        const newLeaf = event.metaKey || event.ctrlKey;
         event.preventDefault();
         event.stopImmediatePropagation();
-        void this.jumpToPath(filed.path);
+        void this.runAfterInlineEditing("rendered-link", async () => {
+          const filed = internal ? resolveFiledCardLink((0, import_obsidian3.getLinkpath)(linkPath), sourcePath, {
+            resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
+            filedPathForFile: (file) => this.plugin.index.filedByFile(file)?.path,
+            firstFiledPathAtAddress: (address) => this.plugin.index.firstFiledAtAddress(address)?.path
+          }) : void 0;
+          const action = renderedLinkAction(internal, newLeaf, linkPath, filed);
+          if (action.kind === "card") {
+            await this.jumpToPath(action.path);
+          } else if (action.kind === "note") {
+            await this.app.workspace.openLinkText(
+              action.linktext,
+              sourcePath,
+              newLeaf
+            );
+          } else {
+            window.open(link.href, "_blank", "noopener");
+          }
+        });
       },
       { capture: true }
     );
@@ -4015,19 +5628,28 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
           "aria-label": `Jump to bookmark ${card.address}`
         }
       });
-      tab.addEventListener("click", () => void this.jumpToPath(card.path));
+      tab.addEventListener("click", () => {
+        void this.runAfterInlineEditing(
+          "bookmark-edge-jump",
+          () => this.jumpToPath(card.path)
+        );
+      });
     }
   }
   attachBrowsingEvents(stage) {
     stage.addEventListener(
       "wheel",
       (event) => {
-        if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+        if (!shouldNavigateDeckFromWheel(event, this.inlineEdit?.textarea ?? null)) {
           return;
         }
         event.preventDefault();
         const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
-        this.moveViewportByPixels(event.deltaX * scale);
+        const delta = event.deltaX * scale;
+        void this.runAfterInlineEditing(
+          "horizontal-wheel",
+          () => this.moveViewportByPixels(delta)
+        );
       },
       { passive: false }
     );
@@ -4035,13 +5657,24 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       if (event.target !== stage || event.button !== 0) {
         return;
       }
-      this.cancelViewportCentering();
-      this.cancelSpaceRecentering();
-      this.pointerLastX = event.clientX;
-      this.pointerLastY = event.clientY;
-      stage.setPointerCapture(event.pointerId);
-      stage.addClass("is-dragging");
-      this.contentEl.focus({ preventScroll: true });
+      const begin = () => {
+        if ((event.buttons & 1) === 0) {
+          return;
+        }
+        this.cancelViewportCentering();
+        this.cancelSpaceRecentering();
+        this.pointerLastX = event.clientX;
+        this.pointerLastY = event.clientY;
+        stage.setPointerCapture(event.pointerId);
+        stage.addClass("is-dragging");
+        this.contentEl.focus({ preventScroll: true });
+      };
+      if (this.inlineEdit === null) {
+        begin();
+      } else {
+        event.preventDefault();
+        void this.runAfterInlineEditing("background-drag", begin);
+      }
     });
     stage.addEventListener("pointermove", (event) => {
       if (this.pointerLastX === null || this.pointerLastY === null) {
@@ -4285,11 +5918,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
       return true;
     }
-    return handleFilingEscape(
-      event,
-      this.filingFile !== null && !this.filingConfirmationInProgress,
-      () => void this.cancelFiling()
-    );
+    return false;
   }
   selectCardWithoutMoving(path) {
     this.cancelViewportCentering();
@@ -4298,9 +5927,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     if (targetIndex < 0) {
       return;
     }
-    const viewportPosition = previousActiveIndex < 0 ? targetIndex : this.viewportPosition(previousActiveIndex);
     this.activePath = path;
-    this.viewportOffset = viewportPosition - targetIndex;
+    this.viewportOffset = stationarySelectionOffset(
+      previousActiveIndex,
+      targetIndex,
+      this.viewportOffset
+    );
     this.history.replaceCurrent(path);
     this.positionCards();
     this.updateActiveUi();
@@ -4481,6 +6113,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.viewportOffset = position - activeIndex;
   }
   queueRenderWindowRefresh() {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
     if (this.renderRefreshPending || this.pointerLastX !== null) {
       return;
     }
@@ -4531,11 +6167,19 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
     }
   }
+  rememberViewedCardScroll() {
+    if (this.viewedCard !== null && this.viewedCardBodyEl !== null) {
+      this.viewedCard = scrollViewedCardState(
+        this.viewedCard,
+        this.viewedCardBodyEl.scrollTop
+      );
+    }
+  }
   unloadRenderComponents() {
-    for (const component of this.renderComponents) {
+    for (const component of this.renderComponents.values()) {
       component.unload();
     }
-    this.renderComponents = [];
+    this.renderComponents.clear();
   }
   reconcileScrollPositions() {
     const availablePaths = new Set(
@@ -5550,8 +7194,7 @@ var CardIndex = class {
   /** Read only the note body, excluding the YAML frontmatter block. */
   async readBody(file) {
     const source = await this.app.vault.cachedRead(file);
-    const position = this.app.metadataCache.getFileCache(file)?.frontmatterPosition;
-    return position === void 0 ? source : source.slice(position.end.offset);
+    return source.slice((0, import_obsidian6.getFrontMatterInfo)(source).contentStart);
   }
 };
 
@@ -5819,14 +7462,28 @@ function errorMessage3(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// src/card-links.ts
-function generateFiledCardLink(app, file, sourcePath, address) {
-  return app.fileManager.generateMarkdownLink(
-    file,
-    sourcePath,
-    void 0,
-    address
-  );
+// src/note-body.ts
+var NoteBodyConflictError = class extends Error {
+  constructor() {
+    super("The note body changed outside the inline editor");
+    this.name = "NoteBodyConflictError";
+  }
+};
+function splitNoteBody(source, contentStart) {
+  if (!Number.isSafeInteger(contentStart) || contentStart < 0 || contentStart > source.length) {
+    throw new RangeError("The note body offset is outside the source text");
+  }
+  return {
+    prefix: source.slice(0, contentStart),
+    body: source.slice(contentStart)
+  };
+}
+function replaceNoteBodyIfUnchanged(source, contentStart, expectedBody, body) {
+  const latest = splitNoteBody(source, contentStart);
+  if (latest.body !== expectedBody) {
+    throw new NoteBodyConflictError();
+  }
+  return latest.prefix + body;
 }
 
 // src/main.ts
@@ -5842,6 +7499,8 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   persistQueue = Promise.resolve();
   trayPileSequence = 0;
   rawSettings = {};
+  inlineEditOwners = new InlineEditPathLock();
+  detachedInlineEditDrafts = /* @__PURE__ */ new Map();
   async onload() {
     const loadedData = await this.loadData();
     const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
@@ -5864,6 +7523,11 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       display: "Slipbox",
       defaultMod: false
     });
+    this.registerEvent(
+      this.app.workspace.on("quit", (tasks) => {
+        tasks.addPromise(this.finishInlineEdits("quit"));
+      })
+    );
     this.addRibbonIcon("archive", "Open Slipbox", () => {
       void this.openDeck();
     });
@@ -5877,6 +7541,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
   }
   onunload() {
+    void this.finishInlineEdits("plugin-unload");
     if (this.indexRefreshTimer !== null) {
       window.clearTimeout(this.indexRefreshTimer);
     }
@@ -5916,6 +7581,115 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   }
   openMarkdownFile(file) {
     return this.app.workspace.getLeaf("tab").openFile(file);
+  }
+  acquireInlineEdit(path, owner) {
+    const existing = this.inlineEditOwners.ownerAt(path);
+    if (existing === owner) {
+      return true;
+    }
+    if (existing !== void 0) {
+      new import_obsidian8.Notice("This card is already being edited in another Slipbox view.");
+      void this.app.workspace.revealLeaf(existing.leaf);
+      return false;
+    }
+    if (this.detachedInlineEditDrafts.has(path)) {
+      new import_obsidian8.Notice(
+        "This card has an inline draft waiting to be restored in Slipbox."
+      );
+      return false;
+    }
+    return this.inlineEditOwners.acquire(path, owner);
+  }
+  releaseInlineEdit(path, owner) {
+    this.inlineEditOwners.release(path, owner);
+  }
+  renameInlineEdit(oldPath, newPath, owner) {
+    return this.inlineEditOwners.rename(oldPath, newPath, owner);
+  }
+  async prepareInlineEdit(file) {
+    await this.flushOpenTextViews(file.path);
+    const latest = this.app.vault.getAbstractFileByPath(file.path);
+    if (!(latest instanceof import_obsidian8.TFile)) {
+      throw new Error("The card no longer exists.");
+    }
+    const source = await this.app.vault.read(latest);
+    const body = splitNoteBody(
+      source,
+      (0, import_obsidian8.getFrontMatterInfo)(source).contentStart
+    ).body;
+    return { file: latest, body };
+  }
+  async commitInlineEdit(request) {
+    const file = this.app.vault.getAbstractFileByPath(request.path);
+    if (!(file instanceof import_obsidian8.TFile)) {
+      return {
+        status: "conflict",
+        message: "The card was deleted while it was being edited."
+      };
+    }
+    try {
+      await this.app.vault.process(file, (latest) => {
+        const contentStart = (0, import_obsidian8.getFrontMatterInfo)(latest).contentStart;
+        return replaceNoteBodyIfUnchanged(
+          latest,
+          contentStart,
+          request.baseBody,
+          request.draft
+        );
+      });
+    } catch (error) {
+      if (error instanceof NoteBodyConflictError) {
+        return {
+          status: "conflict",
+          message: "The note body changed elsewhere. Your inline draft was kept."
+        };
+      }
+      throw error;
+    }
+    return { status: "saved" };
+  }
+  async flushOpenTextViews(path) {
+    const saves = [];
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (view instanceof import_obsidian8.TextFileView && view.file?.path === path) {
+        saves.push(view.save());
+      }
+    });
+    await Promise.all(saves);
+  }
+  retainDetachedInlineEdit(snapshot, file, presentation) {
+    this.detachedInlineEditDrafts.set(snapshot.path, {
+      path: snapshot.path,
+      file,
+      origin: snapshot.origin,
+      baseBody: snapshot.baseBody,
+      draft: snapshot.draft,
+      conflictMessage: snapshot.failure?.kind === "conflict" ? snapshot.failure.message : null,
+      conflictRetryable: snapshot.conflictRetryable,
+      ...presentation
+    });
+  }
+  takeDetachedInlineEdit() {
+    for (const [path, draft] of this.detachedInlineEditDrafts) {
+      if (this.inlineEditOwners.ownerAt(path) !== void 0) {
+        continue;
+      }
+      this.detachedInlineEditDrafts.delete(path);
+      return draft;
+    }
+    return null;
+  }
+  returnDetachedInlineEdit(draft) {
+    this.detachedInlineEditDrafts.set(draft.path, draft);
+  }
+  async finishInlineEdits(reason) {
+    const owners = this.inlineEditOwners.ownerSet();
+    await Promise.all(
+      [...owners].map(async (owner) => {
+        await owner.finishInlineEditing(reason);
+      })
+    );
   }
   cardTitle(file) {
     return resolveCardTitle(
@@ -5974,25 +7748,44 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = import_obsidian8.Menu.forEvent(event);
+    const run = (reason, action) => {
+      if (leaf.view instanceof DeckView) {
+        void leaf.view.runAfterInlineEditing(reason, action);
+      } else {
+        void action();
+      }
+    };
     menu.addItem((item) => {
-      item.setTitle(`Open ${title}`).setIcon("file-pen-line").setSection("slipbox-card").onClick(() => void this.openMarkdownFile(file));
+      item.setTitle(`Open ${title}`).setIcon("file-pen-line").setSection("slipbox-card").onClick(() => run(
+        "card-menu-open-note",
+        () => this.openMarkdownFile(file)
+      ));
     });
     menu.addItem((item) => {
       item.setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark").setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus").setSection("slipbox-card").setDisabled(address === null).onClick(() => {
         if (address !== null) {
-          void this.toggleBookmark(file.path);
+          run(
+            "card-menu-toggle-bookmark",
+            () => this.toggleBookmark(file.path)
+          );
         }
       });
     });
     menu.addItem((item) => {
       item.setTitle(trayToggleLabel(isInTray)).setIcon(isInTray ? "undo-2" : "inbox").setSection("slipbox-card").setDisabled(address === null).onClick(() => {
         if (address !== null) {
-          void this.toggleFileInTray(file);
+          run(
+            "card-menu-toggle-tray",
+            () => this.toggleFileInTray(file)
+          );
         }
       });
     });
     menu.addItem((item) => {
-      item.setTitle(`Delete ${title}`).setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => void this.deleteCard(file));
+      item.setTitle(`Delete ${title}`).setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => run(
+        "card-menu-delete",
+        () => this.deleteCard(file)
+      ));
     });
     this.app.workspace.trigger("file-menu", menu, file, source, leaf);
     menu.showAtMouseEvent(event);
@@ -6381,7 +8174,15 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
           return available;
         }
         if (available) {
-          void this.clearTray();
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck === null) {
+            void this.clearTray();
+          } else {
+            void deck.runAfterInlineEditing(
+              "command-clear-tray",
+              () => this.clearTray()
+            );
+          }
         }
         return available;
       }
@@ -6480,7 +8281,12 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
           return available;
         }
         if (card !== void 0) {
-          void this.copyCardLink(card);
+          const deck = this.app.workspace.getActiveViewOfType(DeckView);
+          if (deck === null) {
+            void this.copyCardLink(card);
+          } else {
+            deck.runAction("copy-link", card);
+          }
         }
         return available;
       }
@@ -6936,6 +8742,15 @@ ${frontmatter}---
     });
   }
   handleDeletedFile(file) {
+    for (const [path, draft] of this.detachedInlineEditDrafts) {
+      if (pathIsAtOrBelow(path, file.path)) {
+        this.detachedInlineEditDrafts.set(path, {
+          ...draft,
+          conflictMessage: "The card was deleted while it was being edited. Your draft was kept.",
+          conflictRetryable: true
+        });
+      }
+    }
     this.tray = removeTrayPath(this.tray, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
@@ -6961,6 +8776,20 @@ ${frontmatter}---
     this.queueIndexRefresh();
   }
   handleRenamedFile(file, oldPath) {
+    for (const [path, draft] of [...this.detachedInlineEditDrafts]) {
+      const renamedPath = renamePathReference(path, oldPath, file.path);
+      if (renamedPath === path) {
+        continue;
+      }
+      this.detachedInlineEditDrafts.delete(path);
+      const collision = this.detachedInlineEditDrafts.has(renamedPath) || this.inlineEditOwners.ownerAt(renamedPath) !== void 0;
+      this.detachedInlineEditDrafts.set(renamedPath, {
+        ...draft,
+        path: renamedPath,
+        conflictMessage: collision ? "The renamed path is already held by another inline-edit session." : draft.conflictMessage,
+        conflictRetryable: collision ? false : draft.conflictRetryable
+      });
+    }
     this.tray = renameTrayPath(this.tray, oldPath, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {

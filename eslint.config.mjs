@@ -22,7 +22,11 @@ export default defineConfig(
       },
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["eslint.config.mjs", "manifest.json"],
+          allowDefaultProject: [
+            "eslint.config.mjs",
+            "manifest.json",
+            "scripts/*.mjs",
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
         extraFileExtensions: [".json"],
@@ -30,6 +34,19 @@ export default defineConfig(
     },
   },
   ...obsidianmd.configs.recommended,
+  {
+    files: ["scripts/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-console": "off",
+      "obsidianmd/hardcoded-config-path": "off",
+      "obsidianmd/rule-custom-message": "off",
+    },
+  },
   {
     files: ["src/**/*.ts"],
     rules: {

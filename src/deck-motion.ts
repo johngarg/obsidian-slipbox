@@ -20,6 +20,25 @@ export interface BookmarkEdgeTargets {
   readonly right: number | null;
 }
 
+/** Select the closest bookmark before or after the active Deck position. */
+export function adjacentBookmarkIndex(
+  bookmarkIndices: readonly number[],
+  activeIndex: number,
+  direction: -1 | 1,
+): number | null {
+  let target: number | null = null;
+  for (const index of bookmarkIndices) {
+    if (direction < 0) {
+      if (index < activeIndex && (target === null || index > target)) {
+        target = index;
+      }
+    } else if (index > activeIndex && (target === null || index < target)) {
+      target = index;
+    }
+  }
+  return target;
+}
+
 /** Keep the physical viewport fixed while changing the selected card. */
 export function stationarySelectionOffset(
   previousActiveIndex: number,

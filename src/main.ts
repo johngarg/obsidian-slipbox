@@ -1096,6 +1096,16 @@ export default class SlipboxPlugin extends Plugin {
     this.registerDeckCommand("previous-card", "Previous card", "previous-card");
     this.registerDeckCommand("next-card", "Next card", "next-card");
     this.registerDeckCommand(
+      "previous-bookmark",
+      "Jump to previous bookmark",
+      "previous-bookmark",
+    );
+    this.registerDeckCommand(
+      "next-bookmark",
+      "Jump to next bookmark",
+      "next-bookmark",
+    );
+    this.registerDeckCommand(
       "forward-ten-cards",
       "Move forward ten cards",
       "forward-ten-cards",

@@ -22,6 +22,12 @@ describe("Slipbox settings", () => {
       { key: "ArrowLeft", modifiers: [] },
       { key: "k", modifiers: [] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["previous-bookmark"], [
+      { key: "[", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["next-bookmark"], [
+      { key: "]", modifiers: [] },
+    ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["open-note"], [
       { key: "o", modifiers: [] },
     ]);

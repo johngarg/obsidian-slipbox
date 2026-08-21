@@ -16,6 +16,7 @@ import {
 import type SlipboxPlugin from "./main.js";
 import {
   activeIndexForViewport,
+  adjacentBookmarkIndex,
   bookmarkEdgeTargets,
   cardMotionStyle,
   cardStackOrder,
@@ -670,10 +671,21 @@ export class DeckView extends ItemView {
     const activeIndex = active === null
       ? -1
       : this.plugin.index.filedIndexForPath(active.path);
+    const needsBookmarkTarget =
+      action === "previous-bookmark" || action === "next-bookmark";
+    const bookmarkIndices = needsBookmarkTarget && activeIndex >= 0
+      ? this.bookmarkIndices()
+      : [];
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
       hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
+      hasPreviousBookmark:
+        action === "previous-bookmark" &&
+        adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
+      hasNextBookmark:
+        action === "next-bookmark" &&
+        adjacentBookmarkIndex(bookmarkIndices, activeIndex, 1) !== null,
       canGoBack: this.history.canBack(),
       canGoForward: this.history.canForward(),
       hasProblems: this.plugin.index.snapshot.issues.length > 0,
@@ -706,6 +718,12 @@ export class DeckView extends ItemView {
         break;
       case "next-card":
         this.moveBy(1);
+        break;
+      case "previous-bookmark":
+        this.jumpToAdjacentBookmark(-1);
+        break;
+      case "next-bookmark":
+        this.jumpToAdjacentBookmark(1);
         break;
       case "forward-ten-cards":
         this.moveBy(10);
@@ -874,6 +892,21 @@ export class DeckView extends ItemView {
     this.history.jump(path);
     await this.navigateToPath(path);
     this.updateHistoryControls();
+  }
+
+  private jumpToAdjacentBookmark(direction: -1 | 1): void {
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const targetIndex = adjacentBookmarkIndex(
+      this.bookmarkIndices(),
+      activeIndex,
+      direction,
+    );
+    const target = targetIndex === null
+      ? undefined
+      : this.plugin.index.snapshot.filed[targetIndex];
+    if (target !== undefined) {
+      void this.jumpToPath(target.path);
+    }
   }
 
   async goBack(): Promise<void> {
@@ -3140,6 +3173,13 @@ export class DeckView extends ItemView {
         "path" in bookmark ? [bookmark.path] : []
       ),
     );
+  }
+
+  private bookmarkIndices(): number[] {
+    return [...this.bookmarkedPaths()].flatMap((path) => {
+      const index = this.plugin.index.filedIndexForPath(path);
+      return index < 0 ? [] : [index];
+    });
   }
 
   private updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()): void {

@@ -216,6 +216,8 @@ Obsidian's Templates core plugin.
 | --- | --- |
 | `←` / `k` | Select the previous card |
 | `→` / `j` | Select the next card |
+| `[` | Jump to the closest bookmark to the left |
+| `]` | Jump to the closest bookmark to the right |
 | `c` | Centre the active card, or the viewed card while it owns focus |
 | `v` | View the focused working card, or put back the currently viewed card |
 | `b` | Toggle the active-card bookmark |

@@ -228,6 +228,19 @@ var DEFAULT_ACTIVE_HYSTERESIS = 0.06;
 function cardStackOrder(cardIndex, activeIndex) {
   return cardIndex === activeIndex ? 220 : 100 - Math.abs(cardIndex - activeIndex);
 }
+function adjacentBookmarkIndex(bookmarkIndices, activeIndex, direction) {
+  let target = null;
+  for (const index of bookmarkIndices) {
+    if (direction < 0) {
+      if (index < activeIndex && (target === null || index > target)) {
+        target = index;
+      }
+    } else if (index > activeIndex && (target === null || index < target)) {
+      target = index;
+    }
+  }
+  return target;
+}
 function stationarySelectionOffset(previousActiveIndex, targetIndex, currentViewportOffset) {
   const viewportPosition = previousActiveIndex < 0 ? targetIndex : previousActiveIndex + currentViewportOffset;
   return viewportPosition - targetIndex;
@@ -448,6 +461,10 @@ function canRunDeckAction(action, context) {
       return context.hasPreviousCard;
     case "next-card":
       return context.hasNextCard;
+    case "previous-bookmark":
+      return context.hasPreviousBookmark;
+    case "next-bookmark":
+      return context.hasNextBookmark;
     case "forward-ten-cards":
     case "backward-ten-cards":
       return context.hasActiveCard;
@@ -921,6 +938,18 @@ var DECK_ACTION_DEFINITIONS = [
     label: "Next card",
     repeatable: true,
     defaultBindings: [binding("ArrowRight"), binding("j")]
+  },
+  {
+    id: "previous-bookmark",
+    label: "Previous bookmark",
+    repeatable: false,
+    defaultBindings: [binding("[")]
+  },
+  {
+    id: "next-bookmark",
+    label: "Next bookmark",
+    repeatable: false,
+    defaultBindings: [binding("]")]
   },
   {
     id: "centre-card",
@@ -3973,10 +4002,14 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const filed = this.plugin.index.snapshot.filed;
     const active = target ?? this.activeCard;
     const activeIndex = active === null ? -1 : this.plugin.index.filedIndexForPath(active.path);
+    const needsBookmarkTarget = action === "previous-bookmark" || action === "next-bookmark";
+    const bookmarkIndices = needsBookmarkTarget && activeIndex >= 0 ? this.bookmarkIndices() : [];
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
       hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
+      hasPreviousBookmark: action === "previous-bookmark" && adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
+      hasNextBookmark: action === "next-bookmark" && adjacentBookmarkIndex(bookmarkIndices, activeIndex, 1) !== null,
       canGoBack: this.history.canBack(),
       canGoForward: this.history.canForward(),
       hasProblems: this.plugin.index.snapshot.issues.length > 0,
@@ -4007,6 +4040,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         break;
       case "next-card":
         this.moveBy(1);
+        break;
+      case "previous-bookmark":
+        this.jumpToAdjacentBookmark(-1);
+        break;
+      case "next-bookmark":
+        this.jumpToAdjacentBookmark(1);
         break;
       case "forward-ten-cards":
         this.moveBy(10);
@@ -4165,6 +4204,18 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.history.jump(path);
     await this.navigateToPath(path);
     this.updateHistoryControls();
+  }
+  jumpToAdjacentBookmark(direction) {
+    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const targetIndex = adjacentBookmarkIndex(
+      this.bookmarkIndices(),
+      activeIndex,
+      direction
+    );
+    const target = targetIndex === null ? void 0 : this.plugin.index.snapshot.filed[targetIndex];
+    if (target !== void 0) {
+      void this.jumpToPath(target.path);
+    }
   }
   async goBack() {
     const path = this.history.back();
@@ -6111,6 +6162,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         (bookmark) => "path" in bookmark ? [bookmark.path] : []
       )
     );
+  }
+  bookmarkIndices() {
+    return [...this.bookmarkedPaths()].flatMap((path) => {
+      const index = this.plugin.index.filedIndexForPath(path);
+      return index < 0 ? [] : [index];
+    });
   }
   updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()) {
     const bookmarkCount = bookmarkedPaths.size;
@@ -8351,6 +8408,16 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
     this.registerDeckCommand("previous-card", "Previous card", "previous-card");
     this.registerDeckCommand("next-card", "Next card", "next-card");
+    this.registerDeckCommand(
+      "previous-bookmark",
+      "Jump to previous bookmark",
+      "previous-bookmark"
+    );
+    this.registerDeckCommand(
+      "next-bookmark",
+      "Jump to next bookmark",
+      "next-bookmark"
+    );
     this.registerDeckCommand(
       "forward-ten-cards",
       "Move forward ten cards",

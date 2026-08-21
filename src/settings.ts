@@ -14,6 +14,8 @@ export type DeckHeaderButton =
 export type DeckAction =
   | "previous-card"
   | "next-card"
+  | "previous-bookmark"
+  | "next-bookmark"
   | "forward-ten-cards"
   | "backward-ten-cards"
   | "centre-card"
@@ -68,6 +70,18 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
     label: "Next card",
     repeatable: true,
     defaultBindings: [binding("ArrowRight"), binding("j")],
+  },
+  {
+    id: "previous-bookmark",
+    label: "Previous bookmark",
+    repeatable: false,
+    defaultBindings: [binding("[")],
+  },
+  {
+    id: "next-bookmark",
+    label: "Next bookmark",
+    repeatable: false,
+    defaultBindings: [binding("]")],
   },
   {
     id: "centre-card",

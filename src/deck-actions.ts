@@ -4,6 +4,8 @@ export interface DeckActionContext {
   readonly hasActiveCard: boolean;
   readonly hasPreviousCard: boolean;
   readonly hasNextCard: boolean;
+  readonly hasPreviousBookmark: boolean;
+  readonly hasNextBookmark: boolean;
   readonly canGoBack: boolean;
   readonly canGoForward: boolean;
   readonly hasProblems: boolean;
@@ -25,6 +27,10 @@ export function canRunDeckAction(
       return context.hasPreviousCard;
     case "next-card":
       return context.hasNextCard;
+    case "previous-bookmark":
+      return context.hasPreviousBookmark;
+    case "next-bookmark":
+      return context.hasNextBookmark;
     case "forward-ten-cards":
     case "backward-ten-cards":
       return context.hasActiveCard;

@@ -12,6 +12,8 @@ const READY: DeckActionContext = {
   hasActiveCard: true,
   hasPreviousCard: true,
   hasNextCard: true,
+  hasPreviousBookmark: true,
+  hasNextBookmark: true,
   canGoBack: true,
   canGoForward: true,
   hasProblems: true,
@@ -21,6 +23,8 @@ const READY: DeckActionContext = {
 describe("Deck action availability", () => {
   test("enables stable actions when their context is available", () => {
     assert.equal(canRunDeckAction("previous-card", READY), true);
+    assert.equal(canRunDeckAction("previous-bookmark", READY), true);
+    assert.equal(canRunDeckAction("next-bookmark", READY), true);
     assert.equal(canRunDeckAction("open-note", READY), true);
     assert.equal(canRunDeckAction("copy-link", READY), true);
     assert.equal(canRunDeckAction("toggle-tray", READY), true);
@@ -35,12 +39,16 @@ describe("Deck action availability", () => {
       hasActiveCard: false,
       hasPreviousCard: false,
       hasNextCard: false,
+      hasPreviousBookmark: false,
+      hasNextBookmark: false,
       canGoBack: false,
       canGoForward: false,
       hasProblems: false,
       filing: false,
     };
     assert.equal(canRunDeckAction("next-card", unavailable), false);
+    assert.equal(canRunDeckAction("previous-bookmark", unavailable), false);
+    assert.equal(canRunDeckAction("next-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("forward-ten-cards", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);

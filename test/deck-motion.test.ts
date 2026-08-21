@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   activeIndexForViewport,
+  adjacentBookmarkIndex,
   bookmarkEdgeTargets,
   cardMotionStyle,
   cardStackOrder,
@@ -13,6 +14,16 @@ import {
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
+  test("chooses the closest bookmark on either side without wrapping", () => {
+    const bookmarks = [9, 1, 6, 3, 6];
+    assert.equal(adjacentBookmarkIndex(bookmarks, 5, -1), 3);
+    assert.equal(adjacentBookmarkIndex(bookmarks, 5, 1), 6);
+    assert.equal(adjacentBookmarkIndex(bookmarks, 1, -1), null);
+    assert.equal(adjacentBookmarkIndex(bookmarks, 9, 1), null);
+    assert.equal(adjacentBookmarkIndex([5], 5, -1), null);
+    assert.equal(adjacentBookmarkIndex([5], 5, 1), null);
+  });
+
   test("fans card surfaces around the active card", () => {
     assert.equal(cardStackOrder(4, 4), 220);
     assert.equal(cardStackOrder(3, 4), 99);

@@ -5244,16 +5244,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
     const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-    this.renderCardAction(
-      actions,
-      "focus",
-      "slipbox-viewed-card-centre",
-      "Centre viewed card (c)",
-      () => {
-        this.centerViewedCard();
-        return true;
-      }
-    );
     if (filed === void 0) {
       this.renderCardAction(
         actions,

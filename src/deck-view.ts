@@ -2109,16 +2109,6 @@ export class DeckView extends ItemView {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
     const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-    this.renderCardAction(
-      actions,
-      "focus",
-      "slipbox-viewed-card-centre",
-      "Centre viewed card (c)",
-      () => {
-        this.centerViewedCard();
-        return true;
-      },
-    );
     if (filed === undefined) {
       this.renderCardAction(
         actions,

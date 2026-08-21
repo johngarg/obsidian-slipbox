@@ -12,6 +12,7 @@ import {
   renderInlineFilingEditor,
   updateInlineFilingEditor,
 } from "../src/index.js";
+import { handleFilingEscape } from "../src/filing-editor.js";
 
 const filed = [
   { address: "A/2", path: "one.md" },
@@ -184,6 +185,35 @@ describe("filing placement preview", () => {
 });
 
 describe("inline tray filing editor DOM", () => {
+  test("cancels filing from Escape outside the address input", () => {
+    const window = new Window();
+    let cancelCount = 0;
+    const escape = new window.KeyboardEvent("keydown", {
+      key: "Escape",
+      cancelable: true,
+    });
+
+    assert.equal(handleFilingEscape(
+      escape as unknown as KeyboardEvent,
+      true,
+      () => cancelCount += 1,
+    ), true);
+    assert.equal(escape.defaultPrevented, true);
+    assert.equal(cancelCount, 1);
+
+    const inactiveEscape = new window.KeyboardEvent("keydown", {
+      key: "Escape",
+      cancelable: true,
+    });
+    assert.equal(handleFilingEscape(
+      inactiveEscape as unknown as KeyboardEvent,
+      false,
+      () => cancelCount += 1,
+    ), false);
+    assert.equal(inactiveEscape.defaultPrevented, false);
+    assert.equal(cancelCount, 1);
+  });
+
   test("keeps unfiled-address pointer events away from tray dragging", () => {
     const window = new Window();
     const parent = window.document.createElementNS(

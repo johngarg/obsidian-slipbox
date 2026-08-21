@@ -452,7 +452,7 @@ export class TrayRenderer {
       if (expanded) {
         this.showCardMenu(event, pile, card);
       } else {
-        this.showPileMenu(event, pile);
+        this.showPileMenu(event, pile, card);
       }
     });
     this.attachCardDragging(miniature, pile, card, expanded);
@@ -477,8 +477,18 @@ export class TrayRenderer {
     });
   }
 
-  private showPileMenu(event: MouseEvent, pile: TrayPile): void {
+  private showPileMenu(
+    event: MouseEvent,
+    pile: TrayPile,
+    visibleCard?: TrayCard,
+  ): void {
     const menu = Menu.forEvent(event);
+    if (
+      visibleCard !== undefined &&
+      this.addCardFileMenuItems(menu, visibleCard)
+    ) {
+      menu.addSeparator();
+    }
     menu.addItem((item) => {
       item
         .setTitle("Lay out pile on active Canvas")
@@ -516,6 +526,9 @@ export class TrayRenderer {
       return;
     }
     const menu = Menu.forEvent(event);
+    if (this.addCardFileMenuItems(menu, card)) {
+      menu.addSeparator();
+    }
     menu.addItem((item) => {
       item
         .setTitle("Move to previous pile")
@@ -564,6 +577,28 @@ export class TrayRenderer {
         });
     });
     menu.showAtMouseEvent(event);
+  }
+
+  private addCardFileMenuItems(menu: Menu, card: TrayCard): boolean {
+    const file = this.plugin.index.fileAtPath(card.cardRef);
+    if (file === undefined) {
+      return false;
+    }
+    menu.addItem((item) => {
+      item
+        .setTitle("Open")
+        .setIcon("file-pen-line")
+        .onClick(() => void this.plugin.openMarkdownFile(file));
+    });
+    if (card.kind === "unfiled") {
+      menu.addItem((item) => {
+        item
+          .setTitle("File")
+          .setIcon("archive-restore")
+          .onClick(() => void this.actions.beginFiling(file));
+      });
+    }
+    return true;
   }
 
   private attachCardDragging(

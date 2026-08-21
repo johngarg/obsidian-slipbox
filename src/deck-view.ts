@@ -45,6 +45,7 @@ import {
   initialFilingAddress,
   type FilingPreview,
 } from "./filing-preview.js";
+import { handleFilingEscape } from "./filing-editor.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -132,6 +133,13 @@ export class DeckView extends ItemView {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
+      if (handleFilingEscape(
+        event,
+        this.filingFile !== null && !this.filingConfirmationInProgress,
+        () => void this.cancelFiling(),
+      )) {
+        return;
+      }
       if (
         this.filingFile !== null &&
         event.key === "Tab" &&
@@ -255,6 +263,15 @@ export class DeckView extends ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
+    this.keymapHandlers.push(scope.register(
+      [],
+      "Escape",
+      (event) => handleFilingEscape(
+        event,
+        this.filingFile !== null && !this.filingConfirmationInProgress,
+        () => void this.cancelFiling(),
+      ),
+    ));
     for (const definition of DECK_ACTION_DEFINITIONS) {
       for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
         const handler = scope.register(

@@ -1143,6 +1143,15 @@ function attachUnfiledAddressFiling(address, beginFiling) {
     beginFiling();
   });
 }
+function handleFilingEscape(event, filingCanBeCancelled, cancelFiling) {
+  if (!filingCanBeCancelled || event.key !== "Escape") {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  cancelFiling();
+  return true;
+}
 function renderInlineFilingEditor(addressSlot, card, state, actions) {
   addressSlot.replaceChildren();
   addressSlot.classList.add("is-editing");
@@ -1162,10 +1171,7 @@ function renderInlineFilingEditor(addressSlot, card, state, actions) {
   input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("input", () => actions.onInput(input.value));
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      actions.onCancel();
+    if (handleFilingEscape(event, true, actions.onCancel)) {
       return;
     }
     if (event.key === "Enter") {
@@ -1888,7 +1894,7 @@ var TrayRenderer = class {
       if (expanded) {
         this.showCardMenu(event, pile, card);
       } else {
-        this.showPileMenu(event, pile);
+        this.showPileMenu(event, pile, card);
       }
     });
     this.attachCardDragging(miniature, pile, card, expanded);
@@ -1911,8 +1917,11 @@ var TrayRenderer = class {
       );
     });
   }
-  showPileMenu(event, pile) {
+  showPileMenu(event, pile, visibleCard) {
     const menu = import_obsidian2.Menu.forEvent(event);
+    if (visibleCard !== void 0 && this.addCardFileMenuItems(menu, visibleCard)) {
+      menu.addSeparator();
+    }
     menu.addItem((item) => {
       item.setTitle("Lay out pile on active Canvas").setIcon("layout-dashboard").setDisabled(!this.plugin.hasActiveCanvas()).onClick(() => void this.plugin.layOutTrayPileOnActiveCanvas(pile.id));
     });
@@ -1935,6 +1944,9 @@ var TrayRenderer = class {
       return;
     }
     const menu = import_obsidian2.Menu.forEvent(event);
+    if (this.addCardFileMenuItems(menu, card)) {
+      menu.addSeparator();
+    }
     menu.addItem((item) => {
       item.setTitle("Move to previous pile").setIcon("arrow-left").setDisabled(position.pileIndex <= 0).onClick(() => {
         const target = state.piles[position.pileIndex - 1];
@@ -1971,6 +1983,21 @@ var TrayRenderer = class {
       });
     });
     menu.showAtMouseEvent(event);
+  }
+  addCardFileMenuItems(menu, card) {
+    const file = this.plugin.index.fileAtPath(card.cardRef);
+    if (file === void 0) {
+      return false;
+    }
+    menu.addItem((item) => {
+      item.setTitle("Open").setIcon("file-pen-line").onClick(() => void this.plugin.openMarkdownFile(file));
+    });
+    if (card.kind === "unfiled") {
+      menu.addItem((item) => {
+        item.setTitle("File").setIcon("archive-restore").onClick(() => void this.actions.beginFiling(file));
+      });
+    }
+    return true;
   }
   attachCardDragging(element, pile, card, expanded) {
     if (!expanded) {
@@ -2353,6 +2380,13 @@ var DeckView = class extends import_obsidian3.ItemView {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
+      if (handleFilingEscape(
+        event,
+        this.filingFile !== null && !this.filingConfirmationInProgress,
+        () => void this.cancelFiling()
+      )) {
+        return;
+      }
       if (this.filingFile !== null && event.key === "Tab" && event.shiftKey && event.target !== this.trayRenderer.filingInput) {
         event.preventDefault();
         this.trayRenderer.focusFilingInputNow();
@@ -2456,6 +2490,15 @@ var DeckView = class extends import_obsidian3.ItemView {
       scope.unregister(handler);
     }
     this.keymapHandlers = [];
+    this.keymapHandlers.push(scope.register(
+      [],
+      "Escape",
+      (event) => handleFilingEscape(
+        event,
+        this.filingFile !== null && !this.filingConfirmationInProgress,
+        () => void this.cancelFiling()
+      )
+    ));
     for (const definition of DECK_ACTION_DEFINITIONS) {
       for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
         const handler = scope.register(

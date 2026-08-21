@@ -43,6 +43,20 @@ export function attachUnfiledAddressFiling(
   });
 }
 
+export function handleFilingEscape(
+  event: KeyboardEvent,
+  filingCanBeCancelled: boolean,
+  cancelFiling: () => void,
+): boolean {
+  if (!filingCanBeCancelled || event.key !== "Escape") {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  cancelFiling();
+  return true;
+}
+
 export function renderInlineFilingEditor(
   addressSlot: HTMLElement,
   card: HTMLElement,
@@ -69,10 +83,7 @@ export function renderInlineFilingEditor(
   input.addEventListener("click", (event) => event.stopPropagation());
   input.addEventListener("input", () => actions.onInput(input.value));
   input.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      actions.onCancel();
+    if (handleFilingEscape(event, true, actions.onCancel)) {
       return;
     }
     if (event.key === "Enter") {

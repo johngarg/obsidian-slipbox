@@ -186,7 +186,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "toggle-bookmark",
-    label: "Toggle bookmark on focused card",
+    label: "Toggle bookmark on focused Deck card",
     repeatable: false,
     defaultBindings: [binding("b")],
   },
@@ -286,7 +286,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "toggle-viewed-card",
-    label: "View or put back focused card",
+    label: "View focused card or return it to Desk",
     repeatable: false,
     defaultBindings: [binding("v")],
   },

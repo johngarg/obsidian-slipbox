@@ -453,6 +453,10 @@ export class DeckView extends ItemView {
     return this.cardFocus;
   }
 
+  get focusedDeckCardPath(): string | null {
+    return this.cardFocus?.surface === "deck" ? this.cardFocus.path : null;
+  }
+
   private setCardFocus(focus: CardFocus | null): void {
     this.cardFocus = focus;
     this.applyCardFocusClasses();
@@ -946,7 +950,7 @@ export class DeckView extends ItemView {
         break;
       case "toggle-viewed-card":
         if (this.cardFocus?.surface === "viewed") {
-          void this.putBackViewedCard();
+          void this.returnViewedCardToDesk();
         } else if (file !== null) {
           void this.viewTrayCard(file, false);
         }
@@ -1122,14 +1126,15 @@ export class DeckView extends ItemView {
   }
 
   async addBookmarkToCurrent(): Promise<void> {
-    if (this.activePath === null) {
-      new Notice("There is no Deck anchor.");
+    const path = this.focusedDeckCardPath;
+    if (path === null) {
+      new Notice("Focus a Deck card before adding a bookmark.");
       return;
     }
     const bookmarkedPaths = this.bookmarkedPaths();
-    bookmarkedPaths.add(this.activePath);
+    bookmarkedPaths.add(path);
     this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.addBookmark(this.activePath);
+    await this.plugin.addBookmark(path);
   }
 
   async removeBookmark(path: string): Promise<void> {
@@ -1234,12 +1239,12 @@ export class DeckView extends ItemView {
     }
   }
 
-  private async putBackViewedCard(): Promise<void> {
+  private async returnViewedCardToDesk(): Promise<void> {
     const viewed = this.viewedCard;
     if (viewed === null) {
       return;
     }
-    await this.runAfterInlineEditing("put-back-viewed-card", async () => {
+    await this.runAfterInlineEditing("return-viewed-card-to-desk", async () => {
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
@@ -3446,13 +3451,13 @@ export class DeckView extends ItemView {
       const isBookmarked = bookmarkedPaths.has(path);
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const toggle = cardEl.querySelector<HTMLButtonElement>(
-        ".slipbox-card-bookmark-toggle",
+        '.slipbox-card-header-action[data-slipbox-action="toggle-bookmark"]',
       );
       if (toggle === null) {
         continue;
       }
       const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
-      toggle.toggleClass("is-bookmarked", isBookmarked);
+      toggle.toggleClass("is-pressed", isBookmarked);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));
       setTooltip(toggle, action, {

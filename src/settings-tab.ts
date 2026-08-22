@@ -42,7 +42,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Title source")
-      .setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.")
+      .setDesc("Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.")
       .addDropdown((dropdown) => {
         dropdown
           .addOption("filename", "Filename")

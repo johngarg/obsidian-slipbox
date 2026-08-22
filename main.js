@@ -479,9 +479,10 @@ function canRunDeckAction(action, context) {
       return context.hasFocusedCard;
     case "copy-link":
     case "toggle-tray":
-    case "toggle-bookmark":
     case "pull-into-pile":
       return context.focusedCardFiled;
+    case "toggle-bookmark":
+      return context.focusedCardFiled && context.focusedSurface === "deck";
     case "show-card-in-deck":
       return context.focusedCardFiled && context.focusedSurface !== "deck";
     case "toggle-viewed-card":
@@ -888,12 +889,12 @@ var import_obsidian2 = require("obsidian");
 var CARD_BUTTON_DEFINITIONS = [
   { action: "edit-card", settingLabel: "Edit card", surfaces: ["deck", "desk", "viewed"] },
   { action: "open-note", settingLabel: "Open Markdown note", surfaces: ["deck", "desk", "viewed"] },
-  { action: "toggle-viewed-card", settingLabel: "View or put back card", surfaces: ["desk", "viewed"] },
+  { action: "toggle-viewed-card", settingLabel: "View or return card to Desk", surfaces: ["desk", "viewed"] },
   { action: "show-card-in-deck", settingLabel: "Show card in Deck", surfaces: ["desk", "viewed"] },
   { action: "toggle-tray", settingLabel: "Put on or return from Desk", surfaces: ["deck", "desk", "viewed"] },
   { action: "file-card", settingLabel: "File card", surfaces: ["desk", "viewed"] },
   { action: "copy-link", settingLabel: "Copy card link", surfaces: ["deck", "desk", "viewed"] },
-  { action: "toggle-bookmark", settingLabel: "Toggle bookmark", surfaces: ["deck", "desk", "viewed"] },
+  { action: "toggle-bookmark", settingLabel: "Toggle bookmark", surfaces: ["deck"] },
   { action: "move-desk-card-left", settingLabel: "Move card left within pile", surfaces: ["desk"] },
   { action: "move-desk-card-right", settingLabel: "Move card right within pile", surfaces: ["desk"] },
   { action: "delete-card", settingLabel: "Delete card", surfaces: ["deck", "desk", "viewed"] }
@@ -915,7 +916,6 @@ var CARD_BUTTON_ORDER = {
     "file-card",
     "toggle-tray",
     "copy-link",
-    "toggle-bookmark",
     "move-desk-card-left",
     "move-desk-card-right",
     "delete-card"
@@ -928,7 +928,6 @@ var CARD_BUTTON_ORDER = {
     "toggle-viewed-card",
     "toggle-tray",
     "copy-link",
-    "toggle-bookmark",
     "delete-card"
   ]
 };
@@ -952,7 +951,7 @@ function cardHeaderActionPresentation(action, context) {
     case "open-note":
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };
     case "toggle-viewed-card":
-      return context.surface === "viewed" ? { action: definition.action, icon: "minimize-2", label: "Put back" } : { action: definition.action, icon: "maximize-2", label: "View" };
+      return context.surface === "viewed" ? { action: definition.action, icon: "minimize-2", label: "Return to Desk" } : { action: definition.action, icon: "maximize-2", label: "View" };
     case "show-card-in-deck":
       return context.filed && context.surface !== "deck" ? { action: definition.action, icon: "locate-fixed", label: "Show in Deck" } : null;
     case "toggle-tray":
@@ -1101,9 +1100,9 @@ var CardHeaderButtonController = class {
       event.preventDefault();
       event.stopPropagation();
       const menu = import_obsidian2.Menu.forEvent(event);
-      for (const presentation of this.overflowed) {
+      for (const { presentation, button: actionButton } of this.overflowed) {
         menu.addItem((item) => {
-          item.setTitle(presentation.label).setIcon(presentation.icon).setWarning(presentation.warning === true).onClick(() => this.options.run(presentation.action));
+          item.setTitle(actionButton.getAttribute("aria-label") ?? presentation.label).setIcon(presentation.icon).setWarning(presentation.warning === true).onClick(() => this.options.run(presentation.action));
         });
       }
       menu.showAtMouseEvent(event);
@@ -1156,7 +1155,7 @@ var CardHeaderButtonController = class {
     for (let index = visibleCount; index < this.rendered.length; index += 1) {
       this.rendered[index]?.button.toggleAttribute("hidden", true);
     }
-    this.overflowed = this.rendered.slice(visibleCount).map(({ presentation }) => presentation);
+    this.overflowed = this.rendered.slice(visibleCount);
   }
 };
 function renderCardHeaderButtons(options) {
@@ -1310,7 +1309,7 @@ var BASE_ACTION_DEFINITIONS = [
   },
   {
     id: "toggle-bookmark",
-    label: "Toggle bookmark on focused card",
+    label: "Toggle bookmark on focused Deck card",
     repeatable: false,
     defaultBindings: [binding("b")]
   },
@@ -1410,7 +1409,7 @@ var BASE_ACTION_DEFINITIONS = [
   },
   {
     id: "toggle-viewed-card",
-    label: "View or put back focused card",
+    label: "View focused card or return it to Desk",
     repeatable: false,
     defaultBindings: [binding("v")]
   },
@@ -4277,6 +4276,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   get cardFocusState() {
     return this.cardFocus;
   }
+  get focusedDeckCardPath() {
+    return this.cardFocus?.surface === "deck" ? this.cardFocus.path : null;
+  }
   setCardFocus(focus) {
     this.cardFocus = focus;
     this.applyCardFocusClasses();
@@ -4691,7 +4693,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         break;
       case "toggle-viewed-card":
         if (this.cardFocus?.surface === "viewed") {
-          void this.putBackViewedCard();
+          void this.returnViewedCardToDesk();
         } else if (file !== null) {
           void this.viewTrayCard(file, false);
         }
@@ -4847,14 +4849,15 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.updateHistoryControls();
   }
   async addBookmarkToCurrent() {
-    if (this.activePath === null) {
-      new import_obsidian4.Notice("There is no Deck anchor.");
+    const path = this.focusedDeckCardPath;
+    if (path === null) {
+      new import_obsidian4.Notice("Focus a Deck card before adding a bookmark.");
       return;
     }
     const bookmarkedPaths = this.bookmarkedPaths();
-    bookmarkedPaths.add(this.activePath);
+    bookmarkedPaths.add(path);
     this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.addBookmark(this.activePath);
+    await this.plugin.addBookmark(path);
   }
   async removeBookmark(path) {
     const bookmarkedPaths = this.bookmarkedPaths();
@@ -4941,12 +4944,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       await this.beginInlineEditing(file, "tray", this.viewedCardBodyEl);
     }
   }
-  async putBackViewedCard() {
+  async returnViewedCardToDesk() {
     const viewed = this.viewedCard;
     if (viewed === null) {
       return;
     }
-    await this.runAfterInlineEditing("put-back-viewed-card", async () => {
+    await this.runAfterInlineEditing("return-viewed-card-to-desk", async () => {
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
@@ -6838,13 +6841,13 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       const isBookmarked = bookmarkedPaths.has(path);
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const toggle = cardEl.querySelector(
-        ".slipbox-card-bookmark-toggle"
+        '.slipbox-card-header-action[data-slipbox-action="toggle-bookmark"]'
       );
       if (toggle === null) {
         continue;
       }
       const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
-      toggle.toggleClass("is-bookmarked", isBookmarked);
+      toggle.toggleClass("is-pressed", isBookmarked);
       toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));
       (0, import_obsidian4.setTooltip)(toggle, action, {
@@ -7176,7 +7179,7 @@ var BookmarksModal = class extends import_obsidian5.Modal {
     this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
-      label: "+ add Deck anchor as bookmark",
+      label: "+ add focused Deck card as bookmark",
       currentAddress: this.actions.currentPath,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),
@@ -7322,6 +7325,9 @@ function activateDefaultButtonOnEnter(container, button) {
 
 // src/new-note.ts
 var UNSAFE_FILENAME_CHARACTERS = new Set('\\/:*?"<>|');
+async function resolveNewCardTitle(mode, prompt) {
+  return mode === "default" ? "" : prompt();
+}
 function replaceUnsafeFilenameCharacters(value, replacement) {
   let result = "";
   for (const character of value) {
@@ -7364,7 +7370,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
     new import_obsidian6.Setting(containerEl).setName("Cards and metadata").setHeading();
     this.renderAddressProperty(containerEl);
     this.renderDeckOrdering(containerEl);
-    new import_obsidian6.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.").addDropdown((dropdown) => {
+    new import_obsidian6.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.").addDropdown((dropdown) => {
       dropdown.addOption("filename", "Filename").addOption("frontmatter", "Frontmatter property").setValue(this.slipbox.settings.titleSource).onChange((value) => {
         if (value === "frontmatter" && this.slipbox.settings.titleProperty === this.slipbox.settings.addressProperty) {
           dropdown.setValue("filename");
@@ -8582,7 +8588,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
   showBookmarks(view) {
     const bookmarks = this.state.bookmarks.filter(isPathBookmark);
     new BookmarksModal(this.app, bookmarks, {
-      currentPath: view.activeCard?.path ?? null,
+      currentPath: view.focusedDeckCardPath,
       isAvailable: (path) => this.index.filedByPath(path) !== void 0,
       label: (path) => this.filedCardLabel(path),
       visit: (path) => void view.jumpToPath(path),
@@ -8879,7 +8885,12 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     this.addCommand({
       id: "new-card",
       name: "New card",
-      callback: () => void this.createNewCard()
+      callback: () => void this.createNewCard("default")
+    });
+    this.addCommand({
+      id: "new-card-with-title",
+      name: "New card with title",
+      callback: () => void this.createNewCard("prompt")
     });
     this.addCommand({
       id: "make-current-note-card",
@@ -8971,11 +8982,11 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     });
   }
   async createNewCardAtTrayPosition(position) {
-    await this.createNewCard(position);
+    await this.createNewCard("default", position);
   }
-  async createNewCard(trayPosition) {
+  async createNewCard(titleMode, trayPosition) {
     try {
-      const file = await this.createCardFile();
+      const file = await this.createCardFile(titleMode);
       if (file === null) {
         return;
       }
@@ -9015,14 +9026,17 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       new import_obsidian9.Notice(`Could not make this note a card: ${errorMessage4(error)}`);
     }
   }
-  async createCardFile(sourcePath) {
+  async createCardFile(titleMode, sourcePath) {
     const timestamp = newNoteBasename(
       "",
       (0, import_obsidian9.moment)().format(this.settings.newNoteTimestampFormat)
     );
-    const title = await promptForNewCardTitle(
-      this.app,
-      newCardTitlePlaceholder(timestamp, this.settings.titleSource)
+    const title = await resolveNewCardTitle(
+      titleMode,
+      () => promptForNewCardTitle(
+        this.app,
+        newCardTitlePlaceholder(timestamp, this.settings.titleSource)
+      )
     );
     if (title === null) {
       return null;

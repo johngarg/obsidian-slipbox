@@ -941,6 +941,7 @@ button.slipbox-tray-pile-cycle svg {
   grid-column: 3;
   flex: 0 0 auto;
   justify-self: end;
+  justify-content: flex-end;
   align-items: center;
   gap: 2px;
   width: 100%;
@@ -969,6 +970,14 @@ button.slipbox-tray-pile-cycle svg {
   opacity: 1;
 }
 
+.slipbox-card-header-action[data-slipbox-action="toggle-bookmark"] svg {
+  fill: none;
+}
+
+.slipbox-card-header-action[data-slipbox-action="toggle-bookmark"].is-pressed svg {
+  fill: currentColor;
+}
+
 .slipbox-card-header-action.is-warning:hover,
 .slipbox-card-header-action.is-warning:focus-visible {
   color: var(--text-error);
@@ -992,16 +1001,6 @@ button.slipbox-tray-pile-cycle svg {
 .slipbox-card-tray-toggle.is-in-tray {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
-}
-
-.slipbox-card-bookmark-toggle,
-.slipbox-card-bookmark-toggle:hover,
-.slipbox-card-bookmark-toggle:focus-visible {
-  color: var(--interactive-accent);
-}
-
-.slipbox-card-bookmark-toggle.is-bookmarked svg {
-  fill: currentColor;
 }
 
 .slipbox-card-scroll {

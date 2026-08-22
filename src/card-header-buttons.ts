@@ -29,7 +29,7 @@ export class CardHeaderButtonController {
   private readonly rendered: readonly RenderedAction[];
   private readonly moreButton: HTMLButtonElement;
   private readonly observer: ResizeObserver;
-  private overflowed: readonly CardHeaderActionPresentation[] = [];
+  private overflowed: readonly RenderedAction[] = [];
   private frame: number | null = null;
 
   constructor(private readonly options: CardHeaderButtonRenderOptions) {
@@ -108,10 +108,10 @@ export class CardHeaderButtonController {
       event.preventDefault();
       event.stopPropagation();
       const menu = Menu.forEvent(event);
-      for (const presentation of this.overflowed) {
+      for (const { presentation, button: actionButton } of this.overflowed) {
         menu.addItem((item) => {
           item
-            .setTitle(presentation.label)
+            .setTitle(actionButton.getAttribute("aria-label") ?? presentation.label)
             .setIcon(presentation.icon)
             .setWarning(presentation.warning === true)
             .onClick(() => this.options.run(presentation.action));
@@ -171,9 +171,7 @@ export class CardHeaderButtonController {
     for (let index = visibleCount; index < this.rendered.length; index += 1) {
       this.rendered[index]?.button.toggleAttribute("hidden", true);
     }
-    this.overflowed = this.rendered
-      .slice(visibleCount)
-      .map(({ presentation }) => presentation);
+    this.overflowed = this.rendered.slice(visibleCount);
   }
 }
 

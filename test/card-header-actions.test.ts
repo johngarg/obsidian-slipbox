@@ -85,8 +85,27 @@ describe("card header action presentation", () => {
     assert.equal(actions.some(({ action }) => action === "copy-link"), false);
     assert.deepEqual(
       actions.find(({ action }) => action === "toggle-viewed-card"),
-      { action: "toggle-viewed-card", icon: "minimize-2", label: "Put back" },
+      { action: "toggle-viewed-card", icon: "minimize-2", label: "Return to Desk" },
     );
+  });
+
+  test("offers bookmarking only on filed Deck cards", () => {
+    assert.equal(cardHeaderActionPresentation("toggle-bookmark", FILED_DESK), null);
+    assert.equal(cardHeaderActionPresentation("toggle-bookmark", {
+      ...FILED_DESK,
+      surface: "viewed",
+    }), null);
+    assert.deepEqual(cardHeaderActionPresentation("toggle-bookmark", {
+      ...FILED_DESK,
+      surface: "deck",
+      onDesk: false,
+      bookmarked: true,
+    }), {
+      action: "toggle-bookmark",
+      icon: "bookmark",
+      label: "Remove bookmark",
+      pressed: true,
+    });
   });
 
   test("applies surface settings without changing conditional availability", () => {

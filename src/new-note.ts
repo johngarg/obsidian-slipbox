@@ -1,5 +1,19 @@
 const UNSAFE_FILENAME_CHARACTERS = new Set('\\/:*?"<>|');
 
+export type NewCardTitleMode = "default" | "prompt";
+
+/**
+ * Resolve the title input for a creation command. The ordinary New card path
+ * deliberately avoids constructing a prompt and uses the established blank
+ * input semantics, while New card with title delegates to the title prompt.
+ */
+export async function resolveNewCardTitle(
+  mode: NewCardTitleMode,
+  prompt: () => Promise<string | null>,
+): Promise<string | null> {
+  return mode === "default" ? "" : prompt();
+}
+
 function replaceUnsafeFilenameCharacters(
   value: string,
   replacement: string,

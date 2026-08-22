@@ -6,10 +6,37 @@ import {
   newCardFrontmatterTitle,
   newCardTitlePlaceholder,
   newNoteBasename,
+  resolveNewCardTitle,
   safeNoteBasename,
 } from "../src/new-note.js";
 
 describe("new-note filenames", () => {
+  test("uses the default title without opening the title prompt", async () => {
+    let promptCount = 0;
+    const title = await resolveNewCardTitle("default", async () => {
+      promptCount += 1;
+      return "Prompted title";
+    });
+
+    assert.equal(title, "");
+    assert.equal(promptCount, 0);
+  });
+
+  test("asks for and returns the title in the prompted workflow", async () => {
+    let promptCount = 0;
+    const title = await resolveNewCardTitle("prompt", async () => {
+      promptCount += 1;
+      return "Prompted title";
+    });
+
+    assert.equal(title, "Prompted title");
+    assert.equal(promptCount, 1);
+    assert.equal(
+      await resolveNewCardTitle("prompt", async () => null),
+      null,
+    );
+  });
+
   test("uses a trimmed title when one is supplied", () => {
     assert.equal(
       newNoteBasename("  Renormalisation group flow  ", "2026-08-20 151726"),

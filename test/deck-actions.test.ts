@@ -77,6 +77,23 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("toggle-deck-map", unavailable), true);
   });
 
+  test("allows bookmarking only with a filed Deck card focused", () => {
+    assert.equal(canRunDeckAction("toggle-bookmark", READY), false);
+    assert.equal(canRunDeckAction("toggle-bookmark", {
+      ...READY,
+      focusedSurface: "viewed",
+    }), false);
+    assert.equal(canRunDeckAction("toggle-bookmark", {
+      ...READY,
+      focusedSurface: "deck",
+    }), true);
+    assert.equal(canRunDeckAction("toggle-bookmark", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardFiled: false,
+    }), false);
+  });
+
   test("does not expose removed creation actions or reuse the a shortcut", () => {
     const definitions = DECK_ACTION_DEFINITIONS as readonly {
       readonly id: string;

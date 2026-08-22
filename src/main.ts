@@ -48,6 +48,8 @@ import {
   newCardFrontmatterTitle,
   newCardTitlePlaceholder,
   newNoteBasename,
+  resolveNewCardTitle,
+  type NewCardTitleMode,
 } from "./new-note.js";
 import {
   DEFAULT_STATE,
@@ -541,7 +543,7 @@ export default class SlipboxPlugin extends Plugin {
   showBookmarks(view: DeckView): void {
     const bookmarks = this.state.bookmarks.filter(isPathBookmark);
     new BookmarksModal(this.app, bookmarks, {
-      currentPath: view.activeCard?.path ?? null,
+      currentPath: view.focusedDeckCardPath,
       isAvailable: (path) => this.index.filedByPath(path) !== undefined,
       label: (path) => this.filedCardLabel(path),
       visit: (path) => void view.jumpToPath(path),
@@ -883,7 +885,13 @@ export default class SlipboxPlugin extends Plugin {
     this.addCommand({
       id: "new-card",
       name: "New card",
-      callback: () => void this.createNewCard(),
+      callback: () => void this.createNewCard("default"),
+    });
+
+    this.addCommand({
+      id: "new-card-with-title",
+      name: "New card with title",
+      callback: () => void this.createNewCard("prompt"),
     });
 
     this.addCommand({
@@ -988,14 +996,15 @@ export default class SlipboxPlugin extends Plugin {
   async createNewCardAtTrayPosition(
     position: TrayPilePosition,
   ): Promise<void> {
-    await this.createNewCard(position);
+    await this.createNewCard("default", position);
   }
 
   private async createNewCard(
+    titleMode: NewCardTitleMode,
     trayPosition?: TrayPilePosition,
   ): Promise<void> {
     try {
-      const file = await this.createCardFile();
+      const file = await this.createCardFile(titleMode);
       if (file === null) {
         return;
       }
@@ -1038,15 +1047,19 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private async createCardFile(
+    titleMode: NewCardTitleMode,
     sourcePath?: string,
   ): Promise<TFile | null> {
     const timestamp = newNoteBasename(
       "",
       moment().format(this.settings.newNoteTimestampFormat),
     );
-    const title = await promptForNewCardTitle(
-      this.app,
-      newCardTitlePlaceholder(timestamp, this.settings.titleSource),
+    const title = await resolveNewCardTitle(
+      titleMode,
+      () => promptForNewCardTitle(
+        this.app,
+        newCardTitlePlaceholder(timestamp, this.settings.titleSource),
+      ),
     );
     if (title === null) {
       return null;

@@ -53,9 +53,10 @@ export function canRunDeckAction(
       return context.hasFocusedCard;
     case "copy-link":
     case "toggle-tray":
-    case "toggle-bookmark":
     case "pull-into-pile":
       return context.focusedCardFiled;
+    case "toggle-bookmark":
+      return context.focusedCardFiled && context.focusedSurface === "deck";
     case "show-card-in-deck":
       return context.focusedCardFiled && context.focusedSurface !== "deck";
     case "toggle-viewed-card":

@@ -31,12 +31,12 @@ export interface CardHeaderButtonDefinition {
 export const CARD_BUTTON_DEFINITIONS: readonly CardHeaderButtonDefinition[] = [
   { action: "edit-card", settingLabel: "Edit card", surfaces: ["deck", "desk", "viewed"] },
   { action: "open-note", settingLabel: "Open Markdown note", surfaces: ["deck", "desk", "viewed"] },
-  { action: "toggle-viewed-card", settingLabel: "View or put back card", surfaces: ["desk", "viewed"] },
+  { action: "toggle-viewed-card", settingLabel: "View or return card to Desk", surfaces: ["desk", "viewed"] },
   { action: "show-card-in-deck", settingLabel: "Show card in Deck", surfaces: ["desk", "viewed"] },
   { action: "toggle-tray", settingLabel: "Put on or return from Desk", surfaces: ["deck", "desk", "viewed"] },
   { action: "file-card", settingLabel: "File card", surfaces: ["desk", "viewed"] },
   { action: "copy-link", settingLabel: "Copy card link", surfaces: ["deck", "desk", "viewed"] },
-  { action: "toggle-bookmark", settingLabel: "Toggle bookmark", surfaces: ["deck", "desk", "viewed"] },
+  { action: "toggle-bookmark", settingLabel: "Toggle bookmark", surfaces: ["deck"] },
   { action: "move-desk-card-left", settingLabel: "Move card left within pile", surfaces: ["desk"] },
   { action: "move-desk-card-right", settingLabel: "Move card right within pile", surfaces: ["desk"] },
   { action: "delete-card", settingLabel: "Delete card", surfaces: ["deck", "desk", "viewed"] },
@@ -62,7 +62,6 @@ export const CARD_BUTTON_ORDER: Readonly<Record<
     "file-card",
     "toggle-tray",
     "copy-link",
-    "toggle-bookmark",
     "move-desk-card-left",
     "move-desk-card-right",
     "delete-card",
@@ -75,7 +74,6 @@ export const CARD_BUTTON_ORDER: Readonly<Record<
     "toggle-viewed-card",
     "toggle-tray",
     "copy-link",
-    "toggle-bookmark",
     "delete-card",
   ],
 };
@@ -112,7 +110,7 @@ export function cardHeaderActionPresentation(
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };
     case "toggle-viewed-card":
       return context.surface === "viewed"
-        ? { action: definition.action, icon: "minimize-2", label: "Put back" }
+        ? { action: definition.action, icon: "minimize-2", label: "Return to Desk" }
         : { action: definition.action, icon: "maximize-2", label: "View" };
     case "show-card-in-deck":
       return context.filed && context.surface !== "deck"

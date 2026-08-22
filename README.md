@@ -390,6 +390,23 @@ card`, the Slipbox-scoped `y` shortcut, and the optional card-header copy button
 all copy this preferred aliased link. A header button targets the exact card it
 belongs to, including when that card is not the Deck anchor.
 
+**Insert link to card…** writes the same link at the cursor of a Markdown
+editor, replacing the selection when there is one. It opens a suggester over
+every filed card, listing each card's address above its resolved title, so the
+title follows the `Title source` setting and shows the configured title
+property rather than the filename when frontmatter titles are chosen. Matching
+is literal rather than fuzzy: an exact address ranks first, then addresses
+beginning with the query, then addresses containing it, and finally titles
+containing it, with Deck order preserved inside each group. Typing a complete
+address and pressing Enter therefore always inserts that card. Cards sharing an
+address are listed separately and show their vault paths.
+
+This is an ordinary Obsidian editor command, so it can be bound to a hotkey in
+Obsidian's own settings and is available wherever an editor is: ordinary notes
+and Canvas card editors alike. It is deliberately unavailable in the Slipbox
+inline card editor, which is a plain textarea rather than an Obsidian editor,
+and is unavailable when no card is filed.
+
 ## Compatibility notes
 
 No Markdown migration is performed. Existing canonical Luhmann addresses remain

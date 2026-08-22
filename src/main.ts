@@ -11,7 +11,9 @@ import {
   moment,
   normalizePath,
   stringifyYaml,
+  type Editor,
   type EventRef,
+  type MarkdownFileInfo,
   type WorkspaceLeaf,
 } from "obsidian";
 
@@ -39,10 +41,15 @@ import {
   confirmAction,
   IssuesModal,
   promptForCanvas,
+  promptForCardLink,
   promptForNewCardTitle,
   promptForTemplate,
   promptForText,
 } from "./modals.js";
+import {
+  buildCardLinkSuggestions,
+  type CardLinkSuggestion,
+} from "./card-link-suggestions.js";
 import {
   newCardBasename,
   newCardFrontmatterTitle,
@@ -940,6 +947,21 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "insert-card-link",
+      name: "Insert link to card…",
+      editorCheckCallback: (checking, editor, ctx) => {
+        const available = this.index.snapshot.filed.length > 0;
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          void this.insertCardLink(editor, ctx);
+        }
+        return available;
+      },
+    });
+
+    this.addCommand({
       id: "export-legacy-desk-to-canvas",
       name: "Export legacy Desk to Canvas…",
       checkCallback: (checking) => {
@@ -1225,6 +1247,50 @@ export default class SlipboxPlugin extends Plugin {
       return "invalid";
     }
     return validateAddress(value).valid ? "filed" : "invalid";
+  }
+
+  private cardLinkSuggestions(): readonly CardLinkSuggestion[] {
+    return buildCardLinkSuggestions(
+      this.index.snapshot.filed.map((card) => ({
+        path: card.path,
+        address: card.address,
+        title: this.cardTitle(card.file),
+      })),
+    );
+  }
+
+  /**
+   * Insert a link to a filed card at the cursor of a Markdown editor.
+   *
+   * This is an editor command, so it reaches ordinary notes and Canvas card
+   * editors, but deliberately not the Slipbox inline card editor, which is a
+   * plain textarea rather than an Obsidian editor.
+   */
+  private async insertCardLink(
+    editor: Editor,
+    ctx: MarkdownView | MarkdownFileInfo,
+  ): Promise<void> {
+    const chosen = await promptForCardLink(
+      this.app,
+      this.cardLinkSuggestions(),
+    );
+    if (chosen === null) {
+      return;
+    }
+    const file = this.index.fileAtPath(chosen.path);
+    if (file === undefined) {
+      new Notice("Could not insert the card link: the card no longer exists.");
+      return;
+    }
+    editor.replaceSelection(
+      generateFiledCardLink(
+        this.app,
+        file,
+        ctx.file?.path ?? "",
+        chosen.address,
+      ),
+    );
+    editor.focus();
   }
 
   async copyCardLink(card: FiledCard): Promise<void> {

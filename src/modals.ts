@@ -1,7 +1,19 @@
-import { App, FuzzySuggestModal, Modal, Notice, TFile, setIcon } from "obsidian";
+import {
+  App,
+  FuzzySuggestModal,
+  Modal,
+  Notice,
+  SuggestModal,
+  TFile,
+  setIcon,
+} from "obsidian";
 
 import type { DeckBookmark } from "./bookmarks.js";
 import type { VaultCardIndex } from "./card-index.js";
+import {
+  matchCardLinkSuggestions,
+  type CardLinkSuggestion,
+} from "./card-link-suggestions.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -183,6 +195,60 @@ export function promptForCanvas(
 ): Promise<TFile | null> {
   return new Promise((resolve) => {
     new CanvasPromptModal(app, files, resolve).open();
+  });
+}
+
+class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
+  private settled = false;
+
+  constructor(
+    app: App,
+    private readonly suggestions: readonly CardLinkSuggestion[],
+    private readonly resolveSuggestion: (
+      suggestion: CardLinkSuggestion | null,
+    ) => void,
+  ) {
+    super(app);
+    this.setPlaceholder("Card address or title (Esc to cancel)");
+    this.emptyStateText = "No filed card matches.";
+  }
+
+  getSuggestions(query: string): CardLinkSuggestion[] {
+    return [...matchCardLinkSuggestions(this.suggestions, query)];
+  }
+
+  renderSuggestion(suggestion: CardLinkSuggestion, el: HTMLElement): void {
+    el.addClass("slipbox-card-link-suggestion");
+    el.createDiv({
+      cls: "slipbox-card-link-address",
+      text: suggestion.address,
+    });
+    el.createDiv({ cls: "slipbox-card-link-title", text: suggestion.title });
+    if (suggestion.ambiguous) {
+      el.createDiv({ cls: "slipbox-card-link-path", text: suggestion.path });
+    }
+  }
+
+  onChooseSuggestion(suggestion: CardLinkSuggestion): void {
+    this.settled = true;
+    this.resolveSuggestion(suggestion);
+  }
+
+  onClose(): void {
+    super.onClose();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveSuggestion(null);
+    }
+  }
+}
+
+export function promptForCardLink(
+  app: App,
+  suggestions: readonly CardLinkSuggestion[],
+): Promise<CardLinkSuggestion | null> {
+  return new Promise((resolve) => {
+    new CardLinkSuggestModal(app, suggestions, resolve).open();
   });
 }
 

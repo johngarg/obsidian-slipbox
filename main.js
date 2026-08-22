@@ -6622,6 +6622,49 @@ function renameDeskCard(cards, oldRef, newRef) {
 
 // src/modals.ts
 var import_obsidian5 = require("obsidian");
+
+// src/card-link-suggestions.ts
+var MATCH_TIERS = 4;
+var NO_MATCH = -1;
+function buildCardLinkSuggestions(candidates) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const candidate of candidates) {
+    counts.set(candidate.address, (counts.get(candidate.address) ?? 0) + 1);
+  }
+  return candidates.map((candidate) => ({
+    ...candidate,
+    ambiguous: (counts.get(candidate.address) ?? 0) > 1
+  }));
+}
+function matchTier(candidate, needle) {
+  const address = candidate.address.toLowerCase();
+  if (address === needle) {
+    return 0;
+  }
+  if (address.startsWith(needle)) {
+    return 1;
+  }
+  if (address.includes(needle)) {
+    return 2;
+  }
+  return candidate.title.toLowerCase().includes(needle) ? 3 : NO_MATCH;
+}
+function matchCardLinkSuggestions(candidates, query) {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") {
+    return [...candidates];
+  }
+  const tiers = Array.from({ length: MATCH_TIERS }, () => []);
+  for (const candidate of candidates) {
+    const tier = matchTier(candidate, needle);
+    if (tier !== NO_MATCH) {
+      tiers[tier]?.push(candidate);
+    }
+  }
+  return tiers.flat();
+}
+
+// src/modals.ts
 var TextPromptModal = class extends import_obsidian5.Modal {
   constructor(app, heading, placeholder, initialValue, resolveValue, allowBlank = false, submitLabel = "Save") {
     super(app);
@@ -6759,6 +6802,46 @@ var CanvasPromptModal = class extends import_obsidian5.FuzzySuggestModal {
 function promptForCanvas(app, files) {
   return new Promise((resolve) => {
     new CanvasPromptModal(app, files, resolve).open();
+  });
+}
+var CardLinkSuggestModal = class extends import_obsidian5.SuggestModal {
+  constructor(app, suggestions, resolveSuggestion) {
+    super(app);
+    this.suggestions = suggestions;
+    this.resolveSuggestion = resolveSuggestion;
+    this.setPlaceholder("Card address or title (Esc to cancel)");
+    this.emptyStateText = "No filed card matches.";
+  }
+  settled = false;
+  getSuggestions(query) {
+    return [...matchCardLinkSuggestions(this.suggestions, query)];
+  }
+  renderSuggestion(suggestion, el) {
+    el.addClass("slipbox-card-link-suggestion");
+    el.createDiv({
+      cls: "slipbox-card-link-address",
+      text: suggestion.address
+    });
+    el.createDiv({ cls: "slipbox-card-link-title", text: suggestion.title });
+    if (suggestion.ambiguous) {
+      el.createDiv({ cls: "slipbox-card-link-path", text: suggestion.path });
+    }
+  }
+  onChooseSuggestion(suggestion) {
+    this.settled = true;
+    this.resolveSuggestion(suggestion);
+  }
+  onClose() {
+    super.onClose();
+    if (!this.settled) {
+      this.settled = true;
+      this.resolveSuggestion(null);
+    }
+  }
+};
+function promptForCardLink(app, suggestions) {
+  return new Promise((resolve) => {
+    new CardLinkSuggestModal(app, suggestions, resolve).open();
   });
 }
 function promptForText(app, heading, placeholder, initialValue = "") {
@@ -8651,6 +8734,20 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       }
     });
     this.addCommand({
+      id: "insert-card-link",
+      name: "Insert link to card\u2026",
+      editorCheckCallback: (checking, editor, ctx) => {
+        const available = this.index.snapshot.filed.length > 0;
+        if (checking) {
+          return available;
+        }
+        if (available) {
+          void this.insertCardLink(editor, ctx);
+        }
+        return available;
+      }
+    });
+    this.addCommand({
       id: "export-legacy-desk-to-canvas",
       name: "Export legacy Desk to Canvas\u2026",
       checkCallback: (checking) => {
@@ -8894,6 +8991,45 @@ ${frontmatter}---
       return "invalid";
     }
     return validateAddress(value).valid ? "filed" : "invalid";
+  }
+  cardLinkSuggestions() {
+    return buildCardLinkSuggestions(
+      this.index.snapshot.filed.map((card) => ({
+        path: card.path,
+        address: card.address,
+        title: this.cardTitle(card.file)
+      }))
+    );
+  }
+  /**
+   * Insert a link to a filed card at the cursor of a Markdown editor.
+   *
+   * This is an editor command, so it reaches ordinary notes and Canvas card
+   * editors, but deliberately not the Slipbox inline card editor, which is a
+   * plain textarea rather than an Obsidian editor.
+   */
+  async insertCardLink(editor, ctx) {
+    const chosen = await promptForCardLink(
+      this.app,
+      this.cardLinkSuggestions()
+    );
+    if (chosen === null) {
+      return;
+    }
+    const file = this.index.fileAtPath(chosen.path);
+    if (file === void 0) {
+      new import_obsidian9.Notice("Could not insert the card link: the card no longer exists.");
+      return;
+    }
+    editor.replaceSelection(
+      generateFiledCardLink(
+        this.app,
+        file,
+        ctx.file?.path ?? "",
+        chosen.address
+      )
+    );
+    editor.focus();
   }
   async copyCardLink(card) {
     const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";

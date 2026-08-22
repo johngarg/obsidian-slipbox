@@ -25,7 +25,6 @@ import {
   deckIndexByDelta,
   stationarySelectionOffset,
 } from "./deck-motion.js";
-import { NavigationHistory } from "./navigation-history.js";
 import type { FiledCard } from "./card-index.js";
 import { CardFooterManager } from "./card-footer.js";
 import { cardHeaderTitle } from "./card-title.js";
@@ -38,7 +37,6 @@ import {
   renderCardHeaderButtons,
   type CardHeaderButtonController,
 } from "./card-header-buttons.js";
-import { MAX_SPREAD, MIN_SPREAD } from "./plugin-state.js";
 import {
   DECK_ACTION_DEFINITIONS,
   type DeckAction,
@@ -86,11 +84,10 @@ import {
   type PendingDeckCommand,
 } from "./deck-commands.js";
 import {
-  DEFAULT_DECK_CHROME_VISIBILITY,
-  applyDeckChromeVisibility,
+  DEFAULT_DECK_MAP_VISIBILITY,
+  applyDeckMapVisibility,
   toggleDeckMapVisibility,
-  toggleToolbarVisibility,
-  type DeckChromeVisibility,
+  type DeckMapVisibility,
 } from "./deck-chrome.js";
 import {
   InlineEditFinalizationCoordinator,
@@ -178,11 +175,6 @@ export class DeckView extends ItemView {
   private renderWindowEnd = -1;
   private renderRefreshPending = false;
   private renderVersion = 0;
-  private readonly history = new NavigationHistory<string>();
-  private backButtonEl: HTMLButtonElement | null = null;
-  private forwardButtonEl: HTMLButtonElement | null = null;
-  private bookmarksButtonEl: HTMLButtonElement | null = null;
-  private toolbarEl: HTMLElement | null = null;
   private deckMapEl: HTMLElement | null = null;
   private deckMapRailEl: HTMLElement | null = null;
   private deckMapSectionLayerEl: HTMLElement | null = null;
@@ -204,7 +196,7 @@ export class DeckView extends ItemView {
   private pendingCommandEl: HTMLElement | null = null;
   private pendingCommandFeedback = "";
   private pendingCommandFeedbackTimer: number | null = null;
-  private chromeVisibility: DeckChromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
+  private deckMapVisibility: DeckMapVisibility = DEFAULT_DECK_MAP_VISIBILITY;
   private inlineEdit: MountedInlineEdit | null = null;
   private readonly inlineEditFinalization = new InlineEditFinalizationCoordinator();
   private inlineEditStarting = false;
@@ -407,10 +399,6 @@ export class DeckView extends ItemView {
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
-    this.backButtonEl = null;
-    this.forwardButtonEl = null;
-    this.bookmarksButtonEl = null;
-    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -421,7 +409,6 @@ export class DeckView extends ItemView {
     this.deckMapBookmarkCount = 0;
     this.pendingCommandEl = null;
     this.pendingCommandStartEvent = null;
-    this.history.reset();
   }
 
   onResize(): void {
@@ -560,14 +547,6 @@ export class DeckView extends ItemView {
     return this.filingFile !== null;
   }
 
-  get canGoBack(): boolean {
-    return this.history.canBack();
-  }
-
-  get canGoForward(): boolean {
-    return this.history.canForward();
-  }
-
   handlePathRename(oldPath: string, newPath: string): void {
     const editing = this.inlineEdit;
     const editingPath = editing?.controller.snapshot.path ?? null;
@@ -603,9 +582,6 @@ export class DeckView extends ItemView {
       this.activePath = renamePathReference(this.activePath, oldPath, newPath);
     }
     this.cardFocus = renameCardFocus(this.cardFocus, oldPath, newPath);
-    this.history.transform((path) =>
-      renamePathReference(path, oldPath, newPath)
-    );
     this.cardScrollPositions = new Map(
       [...this.cardScrollPositions].map(([path, scroll]) => [
         renamePathReference(path, oldPath, newPath),
@@ -656,9 +632,6 @@ export class DeckView extends ItemView {
     if (cardFocusDeleted(this.cardFocus, deletedPath)) {
       this.cardFocus = null;
     }
-    this.history.transform((path) =>
-      pathIsAtOrBelow(path, deletedPath) ? undefined : path
-    );
     for (const path of this.cardScrollPositions.keys()) {
       if (pathIsAtOrBelow(path, deletedPath)) {
         this.cardScrollPositions.delete(path);
@@ -782,8 +755,6 @@ export class DeckView extends ItemView {
       hasNextBookmark:
         action === "next-bookmark" &&
         adjacentBookmarkIndex(bookmarkIndices, activeIndex, 1) !== null,
-      canGoBack: this.history.canBack(),
-      canGoForward: this.history.canForward(),
       hasProblems: this.plugin.index.snapshot.issues.length > 0,
       filing: this.filingFile !== null,
       hasFocusedCard: focusedFile !== null,
@@ -888,12 +859,6 @@ export class DeckView extends ItemView {
           void this.toggleCardBookmark(card.path);
         }
         break;
-      case "back":
-        void this.goBack();
-        break;
-      case "forward":
-        void this.goForward();
-        break;
       case "find-address-forward":
         this.beginAddressCommand("forward");
         break;
@@ -906,19 +871,12 @@ export class DeckView extends ItemView {
       case "pull-into-pile":
         this.beginPileCommand();
         break;
-      case "toggle-toolbar":
-        this.chromeVisibility = toggleToolbarVisibility(
-          this.chromeVisibility,
-          this.plugin.settings.showDeckToolbar,
-        );
-        this.applyChromeVisibility();
-        break;
       case "toggle-deck-map":
-        this.chromeVisibility = toggleDeckMapVisibility(
-          this.chromeVisibility,
+        this.deckMapVisibility = toggleDeckMapVisibility(
+          this.deckMapVisibility,
           this.plugin.settings.showDeckMap,
         );
-        this.applyChromeVisibility();
+        this.applyDeckMapVisibility();
         break;
       case "bookmarks":
         this.plugin.showBookmarks(this);
@@ -1012,13 +970,6 @@ export class DeckView extends ItemView {
     if (this.activePath !== previousActivePath) {
       this.viewportOffset = 0;
     }
-    if (this.activePath === null) {
-      this.history.reset();
-    } else if (this.history.current() === undefined) {
-      this.history.reset(this.activePath);
-    } else if (this.activePath !== previousActivePath) {
-      this.history.replaceCurrent(this.activePath);
-    }
     this.clampViewportOffset();
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
   }
@@ -1067,25 +1018,24 @@ export class DeckView extends ItemView {
     await this.renderDeck(restoreFilingInputFocus);
   }
 
-  async goToPath(path: string): Promise<void> {
-    const moved = await this.navigateToPath(path);
-    if (moved) {
-      this.history.replaceCurrent(path);
-      this.updateHistoryControls();
+  handleCardSpreadChanged(): void {
+    this.positionCards();
+    if (this.stageEl !== null) {
+      this.renderBookmarkEdgeTabs(this.stageEl);
     }
+    this.scheduleCardPositioning();
+  }
+
+  async goToPath(path: string): Promise<void> {
+    await this.navigateToPath(path);
   }
 
   async jumpToPath(path: string): Promise<void> {
-    if (this.activePath !== null) {
-      this.history.replaceCurrent(this.activePath);
-    }
     if (this.plugin.index.filedByPath(path) === undefined) {
       new Notice(`Card ${path} is missing or invalid.`);
       return;
     }
-    this.history.jump(path);
     await this.navigateToPath(path);
-    this.updateHistoryControls();
   }
 
   private jumpToAdjacentBookmark(direction: -1 | 1): void {
@@ -1101,28 +1051,6 @@ export class DeckView extends ItemView {
     if (target !== undefined) {
       void this.jumpToPath(target.path);
     }
-  }
-
-  async goBack(): Promise<void> {
-    const path = this.history.back();
-    if (path === undefined) {
-      return;
-    }
-    if (!(await this.navigateToPath(path))) {
-      new Notice(`The Back destination ${path} is no longer available.`);
-    }
-    this.updateHistoryControls();
-  }
-
-  async goForward(): Promise<void> {
-    const path = this.history.forward();
-    if (path === undefined) {
-      return;
-    }
-    if (!(await this.navigateToPath(path))) {
-      new Notice(`The Forward destination ${path} is no longer available.`);
-    }
-    this.updateHistoryControls();
   }
 
   async addBookmarkToCurrent(): Promise<void> {
@@ -1639,10 +1567,6 @@ export class DeckView extends ItemView {
     this.clearCardHeaderButtonControllers();
     this.contentEl.empty();
     this.renderedCards = [];
-    this.backButtonEl = null;
-    this.forwardButtonEl = null;
-    this.bookmarksButtonEl = null;
-    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -1658,10 +1582,9 @@ export class DeckView extends ItemView {
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
-    this.renderToolbar(shell);
     this.renderDeckMap(shell);
     this.renderPendingCommandStatus(shell);
-    this.applyChromeVisibility();
+    this.applyDeckMapVisibility();
 
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
@@ -1706,88 +1629,6 @@ export class DeckView extends ItemView {
     if (focusFilingInput) {
       this.trayRenderer.focusFilingInput();
     }
-  }
-
-  private renderToolbar(shell: HTMLElement): void {
-    const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
-    this.toolbarEl = toolbar;
-    const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
-    const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
-    setIcon(icon, "archive");
-    identity.createSpan({ text: "Slipbox" });
-
-    const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
-    const back = history.createEl("button", {
-      cls: "slipbox-icon-button",
-      attr: { type: "button", "aria-label": "Back" },
-    });
-    setIcon(back, "arrow-left");
-    back.addEventListener("click", () => this.runAction("back"));
-    this.backButtonEl = back;
-    const forward = history.createEl("button", {
-      cls: "slipbox-icon-button",
-      attr: { type: "button", "aria-label": "Forward" },
-    });
-    setIcon(forward, "arrow-right");
-    forward.addEventListener("click", () => this.runAction("forward"));
-    this.forwardButtonEl = forward;
-    this.updateHistoryControls();
-
-    const controls = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-toolbar-main" });
-    const bookmarks = controls.createEl("button", {
-      attr: { type: "button" },
-      cls: "slipbox-bookmarks-button",
-    });
-    bookmarks.createSpan({ text: "Bookmarks" });
-    if (this.plugin.state.bookmarks.length > 0) {
-      bookmarks.createSpan({ cls: "slipbox-count", text: String(this.plugin.state.bookmarks.length) });
-    }
-    bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
-    this.bookmarksButtonEl = bookmarks;
-
-    if (this.plugin.index.snapshot.issues.length > 0) {
-      const problems = controls.createEl("button", {
-        cls: "slipbox-problem-button",
-        attr: { type: "button" },
-      });
-      const warning = problems.createSpan();
-      setIcon(warning, "triangle-alert");
-      problems.createSpan({
-        text: `${this.plugin.index.snapshot.issues.length} problem${
-          this.plugin.index.snapshot.issues.length === 1 ? "" : "s"
-        }`,
-      });
-      problems.addEventListener("click", () => this.runAction("problems"));
-    }
-
-    const spreadControl = toolbar.createEl("label", { cls: "slipbox-spread-control" });
-    spreadControl.createSpan({ text: "Spread" });
-    const slider = spreadControl.createEl("input", {
-      type: "range",
-      attr: {
-        min: String(MIN_SPREAD),
-        max: String(MAX_SPREAD),
-        step: "0.01",
-        value: String(this.plugin.state.spread),
-        "aria-label": "Card spread",
-      },
-    });
-    slider.addEventListener("input", () => {
-      const spread = Number(slider.value);
-      void this.runAfterInlineEditing("spread-input", () => {
-        this.plugin.setSpread(spread);
-        this.positionCards();
-        if (this.stageEl !== null) {
-          this.renderBookmarkEdgeTabs(this.stageEl);
-        }
-      });
-    });
-    slider.addEventListener("change", () => {
-      void this.runAfterInlineEditing(
-        "spread-change",
-        () => this.renderDeck(),
-      );
-    });
   }
 
   private renderDeckMap(shell: HTMLElement): void {
@@ -1884,12 +1725,10 @@ export class DeckView extends ItemView {
     });
   }
 
-  private applyChromeVisibility(): void {
-    applyDeckChromeVisibility(
-      this.toolbarEl,
+  private applyDeckMapVisibility(): void {
+    applyDeckMapVisibility(
       this.deckMapEl,
-      this.chromeVisibility,
-      this.plugin.settings.showDeckToolbar,
+      this.deckMapVisibility,
       this.plugin.settings.showDeckMap,
       this.plugin.index.snapshot.filed.length,
     );
@@ -2150,7 +1989,7 @@ export class DeckView extends ItemView {
     const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
       8,
-      Math.max(3, Math.ceil(1 / this.plugin.state.spread) + 2),
+      Math.max(3, Math.ceil(1 / this.plugin.settings.cardSpread) + 2),
     );
     const start = Math.max(0, viewportIndex - radius);
     const end = Math.min(filed.length - 1, viewportIndex + radius);
@@ -2860,7 +2699,6 @@ export class DeckView extends ItemView {
       this.setDeckAnchor(file.path);
       this.cardFocus = deckCardFocus(file.path);
       this.viewportOffset = 0;
-      this.history.replaceCurrent(file.path);
       await this.plugin.refreshDeckViews();
     } finally {
       this.filingConfirmationInProgress = false;
@@ -3057,7 +2895,6 @@ export class DeckView extends ItemView {
     const viewportPosition = this.viewportPosition(activeIndex);
     this.setDeckAnchor(target.path);
     this.viewportOffset = viewportPosition - targetIndex;
-    this.history.replaceCurrent(target.path);
     this.centerViewportOnActive(targetIndex, true);
   }
 
@@ -3265,7 +3102,6 @@ export class DeckView extends ItemView {
       targetIndex,
       this.viewportOffset,
     );
-    this.history.replaceCurrent(path);
     this.positionCards();
     this.updateActiveUi();
   }
@@ -3290,7 +3126,6 @@ export class DeckView extends ItemView {
 
     this.setDeckAnchor(activeCard.path);
     this.viewportOffset = viewportPosition - activeIndex;
-    this.history.replaceCurrent(activeCard.path);
     this.positionCards();
     this.updateActiveUi();
     if (this.pointerLastX === null) {
@@ -3408,7 +3243,6 @@ export class DeckView extends ItemView {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateDeckMapActiveUi();
-    this.updateHistoryControls();
     this.applyCardFocusClasses();
   }
 
@@ -3428,21 +3262,6 @@ export class DeckView extends ItemView {
   }
 
   private updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()): void {
-    const bookmarkCount = bookmarkedPaths.size;
-    if (this.bookmarksButtonEl !== null) {
-      const countEl = this.bookmarksButtonEl.querySelector<HTMLElement>(".slipbox-count");
-      if (bookmarkCount === 0) {
-        countEl?.remove();
-      } else if (countEl === null) {
-        this.bookmarksButtonEl.createSpan({
-          cls: "slipbox-count",
-          text: String(bookmarkCount),
-        });
-      } else {
-        countEl.setText(String(bookmarkCount));
-      }
-    }
-
     for (const cardEl of this.renderedCards) {
       const path = cardEl.dataset.path;
       if (path === undefined) {
@@ -3530,21 +3349,12 @@ export class DeckView extends ItemView {
     });
   }
 
-  private updateHistoryControls(): void {
-    if (this.backButtonEl !== null) {
-      this.backButtonEl.disabled = !this.history.canBack();
-    }
-    if (this.forwardButtonEl !== null) {
-      this.forwardButtonEl.disabled = !this.history.canForward();
-    }
-  }
-
   private cardStep(): number {
     const firstCard = this.renderedCards[0];
     if (firstCard === undefined) {
       return 1;
     }
-    return firstCard.offsetWidth * this.plugin.state.spread;
+    return firstCard.offsetWidth * this.plugin.settings.cardSpread;
   }
 
   private rememberScrollPositions(): void {

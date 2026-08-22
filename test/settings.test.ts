@@ -3,6 +3,9 @@ import { describe, test } from "node:test";
 
 import {
   DECK_ACTION_DEFINITIONS,
+  DEFAULT_CARD_SPREAD,
+  MAX_CARD_SPREAD,
+  MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
   formatKeyBinding,
   hasTitleAddressPropertyCollision,
@@ -11,6 +14,7 @@ import {
   normalizeDeckKeybindings,
   normalizeKeyBinding,
   normalizeCardSize,
+  normalizeCardSpread,
   normalizeFolderPath,
   normalizeSettings,
   settingsForPersistence,
@@ -47,12 +51,6 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-viewed-card"], [
       { key: "v", modifiers: [] },
     ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["back"], [
-      { key: "h", modifiers: ["Shift"] },
-    ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["forward"], [
-      { key: "l", modifiers: ["Shift"] },
-    ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["first-card"], [
       { key: "0", modifiers: [] },
     ]);
@@ -77,9 +75,6 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["pull-into-pile"], [
       { key: "p", modifiers: ["Shift"] },
     ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-toolbar"], [
-      { key: "t", modifiers: [] },
-    ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-deck-map"], [
       { key: "m", modifiers: [] },
     ]);
@@ -95,8 +90,8 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
-    assert.equal(DEFAULT_SETTINGS.showDeckToolbar, true);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
+    assert.equal(DEFAULT_SETTINGS.cardSpread, DEFAULT_CARD_SPREAD);
   });
 
   test("normalizes property names, buttons, and configured shortcuts", () => {
@@ -112,8 +107,8 @@ describe("Slipbox settings", () => {
       useTemplatesForNewNotes: false,
       newNoteTemplatePath: " Templates/Zettel.md ",
       showTitleInDeck: true,
-      showDeckToolbar: false,
       showDeckMap: false,
+      cardSpread: 0.73,
       deckHeaderButtons: { bookmark: false, tray: false },
       deckKeybindings: {
         "previous-card": [
@@ -136,8 +131,8 @@ describe("Slipbox settings", () => {
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
     assert.equal(settings.showTitleInDeck, true);
-    assert.equal(settings.showDeckToolbar, false);
     assert.equal(settings.showDeckMap, false);
+    assert.equal(settings.cardSpread, 0.73);
     assert.equal(settings.cardHeaderButtons.deck["toggle-bookmark"], false);
     assert.equal(settings.cardHeaderButtons.deck["toggle-tray"], false);
     assert.equal("desk" in settings.cardHeaderButtons, true);
@@ -272,9 +267,9 @@ describe("Slipbox settings", () => {
       "toggle-toolbar": [],
     });
     assert.deepEqual(withNewCustomization["first-card"], [
-      { key: "g", modifiers: [] },
+      { key: "0", modifiers: [] },
     ]);
-    assert.deepEqual(withNewCustomization["toggle-toolbar"], []);
+    assert.equal("toggle-toolbar" in withNewCustomization, false);
   });
 
   test("preserves every non-default legacy array and protects legacy g", () => {
@@ -287,15 +282,15 @@ describe("Slipbox settings", () => {
     });
     assert.deepEqual(normalized["first-card"], [{ key: "g", modifiers: [] }]);
     assert.deepEqual(normalized["last-card"], [{ key: "g", modifiers: ["Shift"] }]);
-    assert.deepEqual(normalized.back, []);
-    assert.deepEqual(normalized.forward, [{ key: "r", modifiers: ["Alt"] }]);
+    assert.equal("back" in normalized, false);
+    assert.equal("forward" in normalized, false);
     assert.deepEqual(normalized["toggle-bookmark"], []);
     assert.deepEqual(normalized["find-address-first"], []);
     assert.deepEqual(normalized["find-address-backward"], [{
       key: "f",
       modifiers: ["Shift"],
     }]);
-    assert.deepEqual(normalized["toggle-toolbar"], [{ key: "t", modifiers: [] }]);
+    assert.equal("toggle-toolbar" in normalized, false);
   });
 
   test("supplies missing defaults only when existing bindings do not conflict", () => {
@@ -309,7 +304,6 @@ describe("Slipbox settings", () => {
       { key: "t", modifiers: [] },
       { key: "d", modifiers: ["Ctrl"] },
     ]);
-    assert.deepEqual(normalized["toggle-toolbar"], []);
     assert.deepEqual(normalized["forward-ten-cards"], []);
     assert.deepEqual(normalized["backward-ten-cards"], [{
       key: "u",
@@ -353,13 +347,21 @@ describe("Slipbox settings", () => {
 
   test("persists revised bindings and preserves opaque legacy actions", () => {
     const raw = {
+      showDeckToolbar: false,
       deckKeybindings: {
         "removed-action": [{ key: "q", modifiers: [] }],
+        back: [{ key: "h", modifiers: ["Shift"] }],
+        forward: [{ key: "r", modifiers: ["Alt"] }],
+        "toggle-toolbar": [],
       },
     };
     const persisted = settingsForPersistence(raw, DEFAULT_SETTINGS);
     const bindings = persisted.deckKeybindings as Record<string, unknown>;
     assert.deepEqual(bindings["removed-action"], [{ key: "q", modifiers: [] }]);
+    assert.equal("back" in bindings, false);
+    assert.equal("forward" in bindings, false);
+    assert.equal("toggle-toolbar" in bindings, false);
+    assert.equal("showDeckToolbar" in persisted, false);
     assert.deepEqual(bindings["last-card"], [{ key: "$", modifiers: ["Shift"] }]);
     assert.deepEqual(bindings["forward-ten-cards"], [{ key: "d", modifiers: ["Ctrl"] }]);
   });
@@ -373,15 +375,7 @@ describe("Slipbox settings", () => {
     }
   });
 
-  test("defaults older Deck chrome settings on while preserving explicit disablement", () => {
-    assert.equal(normalizeSettings({}).showDeckToolbar, true);
-    assert.equal(normalizeSettings({ showDeckToolbar: "no" }).showDeckToolbar, true);
-    const toolbarDisabled = normalizeSettings({ showDeckToolbar: false });
-    assert.equal(toolbarDisabled.showDeckToolbar, false);
-    assert.equal(
-      settingsForPersistence({}, toolbarDisabled).showDeckToolbar,
-      false,
-    );
+  test("defaults Deck-map visibility and card spread while preserving valid values", () => {
     assert.equal(normalizeSettings({}).showDeckMap, true);
     assert.equal(normalizeSettings({ showDeckMap: "no" }).showDeckMap, true);
     const disabled = normalizeSettings({ showDeckMap: false });
@@ -390,6 +384,10 @@ describe("Slipbox settings", () => {
       settingsForPersistence({}, disabled).showDeckMap,
       false,
     );
+    assert.equal(normalizeSettings({}).cardSpread, DEFAULT_CARD_SPREAD);
+    assert.equal(normalizeSettings({ cardSpread: 0.42 }).cardSpread, 0.42);
+    assert.equal(normalizeSettings({ cardSpread: 0 }).cardSpread, MIN_CARD_SPREAD);
+    assert.equal(normalizeSettings({ cardSpread: 99 }).cardSpread, MAX_CARD_SPREAD);
   });
 
   test("purges entry-point shortcuts while preserving other removed settings", () => {
@@ -401,6 +399,9 @@ describe("Slipbox settings", () => {
         "add-card": [{ key: "a", modifiers: [] }],
         "new-section": [{ key: "n", modifiers: [] }],
         "entry-points": [{ key: "e", modifiers: [] }],
+        back: [],
+        forward: [{ key: "r", modifiers: ["Alt"] }],
+        "toggle-toolbar": [{ key: "t", modifiers: [] }],
       },
     };
     const settings = normalizeSettings(raw);
@@ -432,6 +433,12 @@ describe("Slipbox settings", () => {
       "entry-points" in (persisted.deckKeybindings as Record<string, unknown>),
       false,
     );
+    assert.equal("back" in (persisted.deckKeybindings as Record<string, unknown>), false);
+    assert.equal("forward" in (persisted.deckKeybindings as Record<string, unknown>), false);
+    assert.equal(
+      "toggle-toolbar" in (persisted.deckKeybindings as Record<string, unknown>),
+      false,
+    );
   });
 
   test("falls back from invalid property settings", () => {
@@ -445,8 +452,8 @@ describe("Slipbox settings", () => {
       newNoteTimestampFormat: "   ",
       useTemplatesForNewNotes: "yes",
       newNoteTemplatePath: 42,
-      showDeckToolbar: "yes",
       showDeckMap: "yes",
+      cardSpread: "wide",
     });
     assert.equal(settings.addressProperty, "zettel-id");
     assert.equal(settings.titleSource, "filename");
@@ -457,8 +464,8 @@ describe("Slipbox settings", () => {
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(settings.useTemplatesForNewNotes, false);
     assert.equal(settings.newNoteTemplatePath, "");
-    assert.equal(settings.showDeckToolbar, true);
     assert.equal(settings.showDeckMap, true);
+    assert.equal(settings.cardSpread, DEFAULT_CARD_SPREAD);
   });
 
   test("normalizes vault folder paths and rejects traversal", () => {
@@ -472,6 +479,14 @@ describe("Slipbox settings", () => {
     assert.equal(normalizeCardSize("medium"), "medium");
     assert.equal(normalizeCardSize("large"), "large");
     assert.equal(normalizeCardSize("oversized"), "medium");
+  });
+
+  test("normalizes card spread to finite configured bounds", () => {
+    assert.equal(normalizeCardSpread(0.18), 0.18);
+    assert.equal(normalizeCardSpread(1.12), 1.12);
+    assert.equal(normalizeCardSpread(-1), MIN_CARD_SPREAD);
+    assert.equal(normalizeCardSpread(2), MAX_CARD_SPREAD);
+    assert.equal(normalizeCardSpread(Number.NaN), DEFAULT_CARD_SPREAD);
   });
 
   test("detects cross-action conflicts and formats modifiers", () => {

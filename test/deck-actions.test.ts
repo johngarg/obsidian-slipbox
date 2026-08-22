@@ -14,8 +14,6 @@ const READY: DeckActionContext = {
   hasNextCard: true,
   hasPreviousBookmark: true,
   hasNextBookmark: true,
-  canGoBack: true,
-  canGoForward: true,
   hasProblems: true,
   filing: true,
   hasFocusedCard: true,
@@ -36,21 +34,18 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("open-note", READY), true);
     assert.equal(canRunDeckAction("copy-link", READY), true);
     assert.equal(canRunDeckAction("toggle-tray", READY), true);
-    assert.equal(canRunDeckAction("back", READY), true);
     assert.equal(canRunDeckAction("problems", READY), true);
     assert.equal(canRunDeckAction("confirm-filing", READY), true);
     assert.equal(canRunDeckAction("cancel-filing", READY), true);
   });
 
-  test("disables card, history, diagnostic, and filing actions independently", () => {
+  test("disables card, diagnostic, and filing actions independently", () => {
     const unavailable: DeckActionContext = {
       hasActiveCard: false,
       hasPreviousCard: false,
       hasNextCard: false,
       hasPreviousBookmark: false,
       hasNextBookmark: false,
-      canGoBack: false,
-      canGoForward: false,
       hasProblems: false,
       filing: false,
       hasFocusedCard: false,
@@ -69,11 +64,9 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);
     assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
-    assert.equal(canRunDeckAction("forward", unavailable), false);
     assert.equal(canRunDeckAction("problems", unavailable), false);
     assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
-    assert.equal(canRunDeckAction("toggle-toolbar", unavailable), true);
     assert.equal(canRunDeckAction("toggle-deck-map", unavailable), true);
   });
 
@@ -106,6 +99,33 @@ describe("Deck action availability", () => {
     assert.equal(
       definitions.some((definition) =>
         definition.defaultBindings.some((binding) => binding.key === "a")),
+      false,
+    );
+  });
+
+  test("does not expose browser history or toolbar actions and leaves H, L, and t free", () => {
+    const retiredIds = new Set(["back", "forward", "toggle-toolbar"]);
+    const retiredCommands = new Set([
+      "history-back",
+      "history-forward",
+      "toggle-toolbar-visibility",
+    ]);
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.some((definition) => retiredIds.has(definition.id)),
+      false,
+    );
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.some((definition) =>
+        retiredCommands.has(definition.commandId)),
+      false,
+    );
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.some((definition) =>
+        definition.defaultBindings.some((binding) =>
+          (binding.key === "h" && binding.modifiers.includes("Shift")) ||
+          (binding.key === "l" && binding.modifiers.includes("Shift")) ||
+          (binding.key === "t" && binding.modifiers.length === 0)
+        )),
       false,
     );
   });

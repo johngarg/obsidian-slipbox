@@ -12,7 +12,6 @@ export interface SlipboxPluginState {
   readonly bookmarks: readonly StoredBookmark[];
   /** Retained only until an old persistent Desk has been exported to Canvas. */
   readonly legacyDeskCards?: readonly DeskCardState[];
-  readonly spread: number;
 }
 
 export interface SlipboxPluginData {
@@ -21,13 +20,8 @@ export interface SlipboxPluginData {
   readonly state: SlipboxPluginState;
 }
 
-export const DEFAULT_SPREAD = 0.58;
-export const MIN_SPREAD = 0.18;
-export const MAX_SPREAD = 1.12;
-
 export const DEFAULT_STATE: SlipboxPluginState = {
   bookmarks: [],
-  spread: DEFAULT_SPREAD,
 };
 
 export const DEFAULT_DATA: SlipboxPluginData = {
@@ -71,11 +65,6 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
     return DEFAULT_STATE;
   }
 
-  const rawSpread =
-    typeof value.spread === "number" && Number.isFinite(value.spread)
-      ? value.spread
-      : DEFAULT_SPREAD;
-
   const legacyDeskCards = normalizeDeskCards(
     Object.prototype.hasOwnProperty.call(value, "legacyDeskCards")
       ? value.legacyDeskCards
@@ -84,7 +73,6 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
   return {
     bookmarks: normalizeBookmarks(value.bookmarks),
     ...(legacyDeskCards.length > 0 ? { legacyDeskCards } : {}),
-    spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread)),
   };
 }
 
@@ -94,9 +82,21 @@ export function normalizePluginData(value: unknown): SlipboxPluginData {
     return DEFAULT_DATA;
   }
   const versioned = isRecord(value.state) || isRecord(value.settings);
+  const rawSettings = versioned && isRecord(value.settings)
+    ? value.settings
+    : {};
+  const rawState = versioned && isRecord(value.state) ? value.state : value;
+  const settingsWithMigratedSpread = {
+    ...rawSettings,
+    cardSpread: Object.prototype.hasOwnProperty.call(rawSettings, "cardSpread")
+      ? rawSettings.cardSpread
+      : isRecord(rawState)
+        ? rawState.spread
+        : undefined,
+  };
   return {
     schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
-    settings: normalizeSettings(versioned ? value.settings : undefined),
-    state: normalizePluginState(versioned ? value.state : value),
+    settings: normalizeSettings(settingsWithMigratedSpread),
+    state: normalizePluginState(rawState),
   };
 }

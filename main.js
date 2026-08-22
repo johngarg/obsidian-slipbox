@@ -313,93 +313,6 @@ function deckIndexByDelta(activeIndex, delta, cardCount) {
   );
 }
 
-// src/navigation-history.ts
-var NavigationHistory = class {
-  constructor(initial, equals = Object.is) {
-    this.equals = equals;
-    if (initial !== void 0) {
-      this.entries = [initial];
-      this.index = 0;
-    }
-  }
-  entries = [];
-  index = -1;
-  current() {
-    return this.entries[this.index];
-  }
-  canBack() {
-    return this.index > 0;
-  }
-  canForward() {
-    return this.index >= 0 && this.index < this.entries.length - 1;
-  }
-  /** Set a new browsing session without retaining earlier locations. */
-  reset(location) {
-    this.entries = location === void 0 ? [] : [location];
-    this.index = location === void 0 ? -1 : 0;
-  }
-  /**
-   * Track ordinary physical movement without adding a Back destination.
-   * The resulting card becomes the source if the next action is a jump.
-   */
-  replaceCurrent(location) {
-    if (this.index < 0) {
-      this.entries = [location];
-      this.index = 0;
-      return;
-    }
-    this.entries[this.index] = location;
-  }
-  /** Record an explicit jump with browser-style forward-branch replacement. */
-  jump(location) {
-    const current = this.current();
-    if (current !== void 0 && this.equals(current, location)) {
-      return;
-    }
-    const retained = this.entries.slice(0, this.index + 1);
-    retained.push(location);
-    this.entries = retained;
-    this.index = retained.length - 1;
-  }
-  back() {
-    if (!this.canBack()) {
-      return void 0;
-    }
-    this.index -= 1;
-    return this.current();
-  }
-  forward() {
-    if (!this.canForward()) {
-      return void 0;
-    }
-    this.index += 1;
-    return this.current();
-  }
-  /** Rewrite or remove stored locations after file and folder path changes. */
-  transform(transformLocation) {
-    const transformed = [];
-    let transformedIndex = -1;
-    this.entries.forEach((entry, index) => {
-      const next = transformLocation(entry);
-      if (next === void 0) {
-        return;
-      }
-      const previous = transformed[transformed.length - 1];
-      if (previous === void 0 || !this.equals(previous, next)) {
-        transformed.push(next);
-      }
-      if (index <= this.index) {
-        transformedIndex = transformed.length - 1;
-      }
-    });
-    this.entries = transformed;
-    this.index = transformedIndex;
-  }
-  snapshot() {
-    return { entries: [...this.entries], index: this.index };
-  }
-};
-
 // src/card-footer.ts
 var import_obsidian = require("obsidian");
 
@@ -500,10 +413,6 @@ function canRunDeckAction(action, context) {
     case "first-card":
     case "last-card":
       return context.hasActiveCard;
-    case "back":
-      return context.canGoBack;
-    case "forward":
-      return context.canGoForward;
     case "problems":
       return context.hasProblems;
     case "confirm-filing":
@@ -511,7 +420,6 @@ function canRunDeckAction(action, context) {
     case "cancel-filing":
       return context.filing;
     case "bookmarks":
-    case "toggle-toolbar":
     case "toggle-deck-map":
       return true;
   }
@@ -1162,70 +1070,11 @@ function renderCardHeaderButtons(options) {
   return new CardHeaderButtonController(options);
 }
 
-// src/desk-state.ts
-var DESK_WIDTH = 2400;
-var DESK_HEIGHT = 1600;
-var DESK_CARD_WIDTH = 520;
-var DESK_CARD_HEIGHT = 346;
-function isRecord2(value) {
-  return typeof value === "object" && value !== null;
-}
-function finiteNumber(value) {
-  return typeof value === "number" && Number.isFinite(value);
-}
-function clampDeskPosition(x, y) {
-  return {
-    x: Math.round(Math.max(0, Math.min(DESK_WIDTH - DESK_CARD_WIDTH, x))),
-    y: Math.round(Math.max(0, Math.min(DESK_HEIGHT - DESK_CARD_HEIGHT, y)))
-  };
-}
-function normalizeDeskCards(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const seen = /* @__PURE__ */ new Set();
-  const cards = [];
-  for (const candidate of value) {
-    if (!isRecord2(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
-      continue;
-    }
-    const cardRef = candidate.cardRef.trim();
-    if (seen.has(cardRef)) {
-      continue;
-    }
-    seen.add(cardRef);
-    const position = clampDeskPosition(candidate.x, candidate.y);
-    cards.push({
-      cardRef,
-      ...position,
-      z: Math.max(0, Math.round(candidate.z))
-    });
-  }
-  return cards;
-}
-function removeDeskPath(cards, deletedPath) {
-  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
-  return cards.filter(
-    (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix)
-  );
-}
-function renameDeskCard(cards, oldRef, newRef) {
-  const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
-  const newPrefix = `${newRef.replace(/\/$/, "")}/`;
-  const renamed = cards.map((card) => {
-    if (card.cardRef === oldRef) {
-      return { ...card, cardRef: newRef };
-    }
-    if (card.cardRef.startsWith(oldPrefix)) {
-      return { ...card, cardRef: `${newPrefix}${card.cardRef.slice(oldPrefix.length)}` };
-    }
-    return card;
-  });
-  return normalizeDeskCards(renamed);
-}
-
 // src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 7;
+var SLIPBOX_DATA_SCHEMA_VERSION = 8;
+var DEFAULT_CARD_SPREAD = 0.58;
+var MIN_CARD_SPREAD = 0.18;
+var MAX_CARD_SPREAD = 1.12;
 var CARD_HEADER_BUTTON_ACTIONS = [
   "edit-card",
   "open-note",
@@ -1314,18 +1163,6 @@ var BASE_ACTION_DEFINITIONS = [
     defaultBindings: [binding("b")]
   },
   {
-    id: "back",
-    label: "Move Deck anchor back in history",
-    repeatable: false,
-    defaultBindings: [binding("h", ["Shift"])]
-  },
-  {
-    id: "forward",
-    label: "Move Deck anchor forward in history",
-    repeatable: false,
-    defaultBindings: [binding("l", ["Shift"])]
-  },
-  {
     id: "find-address-forward",
     label: "Move Deck anchor to next address initial",
     description: "Type the address's first character after this prefix.",
@@ -1352,12 +1189,6 @@ var BASE_ACTION_DEFINITIONS = [
     description: "Type a one-based pile number, then press Enter.",
     repeatable: false,
     defaultBindings: [binding("p", ["Shift"])]
-  },
-  {
-    id: "toggle-toolbar",
-    label: "Toggle toolbar visibility",
-    repeatable: false,
-    defaultBindings: [binding("t")]
   },
   {
     id: "toggle-deck-map",
@@ -1456,13 +1287,10 @@ var ACTION_COMMAND_IDS = {
   "copy-link": "copy-current-card-link",
   "toggle-tray": "toggle-tray",
   "toggle-bookmark": "add-bookmark-current-card",
-  back: "history-back",
-  forward: "history-forward",
   "find-address-forward": "find-next-address-initial",
   "find-address-backward": "find-previous-address-initial",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
-  "toggle-toolbar": "toggle-toolbar-visibility",
   "toggle-deck-map": "toggle-deck-map-visibility",
   bookmarks: "manage-bookmarks",
   problems: "show-card-problems",
@@ -1484,7 +1312,6 @@ var FOCUSED_CARD_ACTIONS = /* @__PURE__ */ new Set([
 ]);
 var GLOBAL_ACTIONS = /* @__PURE__ */ new Set(["bookmarks", "problems"]);
 var VIEW_ACTIONS = /* @__PURE__ */ new Set([
-  "toggle-toolbar",
   "toggle-deck-map",
   "confirm-filing",
   "cancel-filing",
@@ -1561,13 +1388,13 @@ var DEFAULT_SETTINGS = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
-  showDeckToolbar: true,
   showDeckMap: true,
+  cardSpread: DEFAULT_CARD_SPREAD,
   cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS
 };
 var MODIFIER_ORDER = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
-function isRecord3(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null;
 }
 function normalizePropertyName(value, fallback) {
@@ -1586,8 +1413,12 @@ function normalizeFolderPath(value) {
 function normalizeCardSize(value) {
   return value === "small" || value === "large" ? value : "medium";
 }
+function normalizeCardSpread(value) {
+  const spread = typeof value === "number" && Number.isFinite(value) ? value : DEFAULT_CARD_SPREAD;
+  return Math.min(MAX_CARD_SPREAD, Math.max(MIN_CARD_SPREAD, spread));
+}
 function hasTitleAddressPropertyCollision(value) {
-  if (!isRecord3(value) || value.titleSource !== "frontmatter") {
+  if (!isRecord2(value) || value.titleSource !== "frontmatter") {
     return false;
   }
   const addressProperty = normalizePropertyName(
@@ -1601,7 +1432,7 @@ function hasTitleAddressPropertyCollision(value) {
   return addressProperty === titleProperty;
 }
 function normalizeKeyBinding(value) {
-  if (!isRecord3(value) || typeof value.key !== "string" || value.key === "") {
+  if (!isRecord2(value) || typeof value.key !== "string" || value.key === "") {
     return null;
   }
   const key = value.key.length === 1 ? value.key.toLowerCase() : value.key;
@@ -1666,7 +1497,7 @@ function isCompletePreviousDefaultMap(source) {
   });
 }
 function normalizeDeckKeybindings(value) {
-  const source = isRecord3(value) ? value : {};
+  const source = isRecord2(value) ? value : {};
   if (isCompletePreviousDefaultMap(source)) {
     return DEFAULT_DECK_KEYBINDINGS;
   }
@@ -1709,7 +1540,7 @@ function normalizeDeckKeybindings(value) {
   return result;
 }
 function normalizeBooleanRecord(value, defaults) {
-  const source = isRecord3(value) ? value : {};
+  const source = isRecord2(value) ? value : {};
   return Object.fromEntries(
     Object.entries(defaults).map(([key, fallback]) => [
       key,
@@ -1718,9 +1549,9 @@ function normalizeBooleanRecord(value, defaults) {
   );
 }
 function normalizeCardHeaderButtons(value, legacyDeckButtons = void 0) {
-  const source = isRecord3(value) ? value : {};
-  const legacy = isRecord3(legacyDeckButtons) ? legacyDeckButtons : {};
-  const deckSource = isRecord3(source.deck) ? source.deck : {};
+  const source = isRecord2(value) ? value : {};
+  const legacy = isRecord2(legacyDeckButtons) ? legacyDeckButtons : {};
+  const deckSource = isRecord2(source.deck) ? source.deck : {};
   const migratedDeck = {
     ...deckSource
   };
@@ -1742,7 +1573,7 @@ function normalizeCardHeaderButtons(value, legacyDeckButtons = void 0) {
   };
 }
 function normalizeSettings(value) {
-  const source = isRecord3(value) ? value : {};
+  const source = isRecord2(value) ? value : {};
   const addressProperty = normalizePropertyName(
     source.addressProperty,
     DEFAULT_SETTINGS.addressProperty
@@ -1767,8 +1598,8 @@ function normalizeSettings(value) {
     useTemplatesForNewNotes: typeof source.useTemplatesForNewNotes === "boolean" ? source.useTemplatesForNewNotes : DEFAULT_SETTINGS.useTemplatesForNewNotes,
     newNoteTemplatePath: typeof source.newNoteTemplatePath === "string" ? source.newNoteTemplatePath.trim() : DEFAULT_SETTINGS.newNoteTemplatePath,
     showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
-    showDeckToolbar: typeof source.showDeckToolbar === "boolean" ? source.showDeckToolbar : DEFAULT_SETTINGS.showDeckToolbar,
     showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
+    cardSpread: normalizeCardSpread(source.cardSpread),
     cardHeaderButtons: normalizeCardHeaderButtons(
       source.cardHeaderButtons,
       source.deckHeaderButtons
@@ -1777,11 +1608,17 @@ function normalizeSettings(value) {
   };
 }
 function settingsForPersistence(rawValue, settings) {
-  const raw = isRecord3(rawValue) ? rawValue : {};
-  const { deckHeaderButtons: _legacyDeckHeaderButtons, ...retainedRaw } = raw;
-  const rawKeybindingsSource = isRecord3(raw.deckKeybindings) ? raw.deckKeybindings : {};
+  const raw = isRecord2(rawValue) ? rawValue : {};
+  const {
+    deckHeaderButtons: _legacyDeckHeaderButtons,
+    showDeckToolbar: _showDeckToolbar,
+    ...retainedRaw
+  } = raw;
+  const rawKeybindingsSource = isRecord2(raw.deckKeybindings) ? raw.deckKeybindings : {};
   const rawKeybindings = Object.fromEntries(
-    Object.entries(rawKeybindingsSource).filter(([key]) => key !== "entry-points")
+    Object.entries(rawKeybindingsSource).filter(
+      ([key]) => key !== "entry-points" && key !== "back" && key !== "forward" && key !== "toggle-toolbar"
+    )
   );
   return {
     ...retainedRaw,
@@ -1803,67 +1640,6 @@ function keyBindingConflict(keybindings, action, bindingValue) {
     }
   }
   return null;
-}
-
-// src/plugin-state.ts
-var DEFAULT_SPREAD = 0.58;
-var MIN_SPREAD = 0.18;
-var MAX_SPREAD = 1.12;
-var DEFAULT_STATE = {
-  bookmarks: [],
-  spread: DEFAULT_SPREAD
-};
-var DEFAULT_DATA = {
-  schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
-  settings: DEFAULT_SETTINGS,
-  state: DEFAULT_STATE
-};
-function isRecord4(value) {
-  return typeof value === "object" && value !== null;
-}
-function hasRemovedEntryPointData(value) {
-  if (!isRecord4(value)) {
-    return false;
-  }
-  const state = isRecord4(value.state) ? value.state : value;
-  const settings = isRecord4(value.settings) ? value.settings : {};
-  const keybindings = isRecord4(settings.deckKeybindings) ? settings.deckKeybindings : {};
-  return Object.prototype.hasOwnProperty.call(state, "entryPoints") || Object.prototype.hasOwnProperty.call(keybindings, "entry-points");
-}
-function hasTitleAddressCollisionData(value) {
-  if (!isRecord4(value)) {
-    return false;
-  }
-  const settings = isRecord4(value.settings) ? value.settings : {};
-  return hasTitleAddressPropertyCollision(settings);
-}
-function needsPluginDataMigration(value) {
-  return isRecord4(value) && value.schemaVersion !== SLIPBOX_DATA_SCHEMA_VERSION;
-}
-function normalizePluginState(value) {
-  if (!isRecord4(value)) {
-    return DEFAULT_STATE;
-  }
-  const rawSpread = typeof value.spread === "number" && Number.isFinite(value.spread) ? value.spread : DEFAULT_SPREAD;
-  const legacyDeskCards = normalizeDeskCards(
-    Object.prototype.hasOwnProperty.call(value, "legacyDeskCards") ? value.legacyDeskCards : value.deskCards
-  );
-  return {
-    bookmarks: normalizeBookmarks(value.bookmarks),
-    ...legacyDeskCards.length > 0 ? { legacyDeskCards } : {},
-    spread: Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, rawSpread))
-  };
-}
-function normalizePluginData(value) {
-  if (!isRecord4(value)) {
-    return DEFAULT_DATA;
-  }
-  const versioned = isRecord4(value.state) || isRecord4(value.settings);
-  return {
-    schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
-    settings: normalizeSettings(versioned ? value.settings : void 0),
-    state: normalizePluginState(versioned ? value.state : value)
-  };
 }
 
 // src/tray-view.ts
@@ -3614,21 +3390,11 @@ function advancePendingDeckCommand(state, key) {
 }
 
 // src/deck-chrome.ts
-var DEFAULT_DECK_CHROME_VISIBILITY = {
-  toolbarOverride: null,
+var DEFAULT_DECK_MAP_VISIBILITY = {
   deckMapOverride: null
 };
-function toolbarIsVisible(state, showDeckToolbarSetting) {
-  return state.toolbarOverride ?? showDeckToolbarSetting;
-}
 function deckMapIsVisible(state, showDeckMapSetting, cardCount) {
   return cardCount > 0 && (state.deckMapOverride ?? showDeckMapSetting);
-}
-function toggleToolbarVisibility(state, showDeckToolbarSetting) {
-  return {
-    ...state,
-    toolbarOverride: !(state.toolbarOverride ?? showDeckToolbarSetting)
-  };
 }
 function toggleDeckMapVisibility(state, showDeckMapSetting) {
   return {
@@ -3636,10 +3402,7 @@ function toggleDeckMapVisibility(state, showDeckMapSetting) {
     deckMapOverride: !(state.deckMapOverride ?? showDeckMapSetting)
   };
 }
-function applyDeckChromeVisibility(toolbar, deckMap, state, showDeckToolbarSetting, showDeckMapSetting, cardCount) {
-  if (toolbar !== null) {
-    toolbar.hidden = !toolbarIsVisible(state, showDeckToolbarSetting);
-  }
+function applyDeckMapVisibility(deckMap, state, showDeckMapSetting, cardCount) {
   if (deckMap !== null) {
     deckMap.hidden = !deckMapIsVisible(state, showDeckMapSetting, cardCount);
   }
@@ -4067,11 +3830,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   renderWindowEnd = -1;
   renderRefreshPending = false;
   renderVersion = 0;
-  history = new NavigationHistory();
-  backButtonEl = null;
-  forwardButtonEl = null;
-  bookmarksButtonEl = null;
-  toolbarEl = null;
   deckMapEl = null;
   deckMapRailEl = null;
   deckMapSectionLayerEl = null;
@@ -4093,7 +3851,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   pendingCommandEl = null;
   pendingCommandFeedback = "";
   pendingCommandFeedbackTimer = null;
-  chromeVisibility = DEFAULT_DECK_CHROME_VISIBILITY;
+  deckMapVisibility = DEFAULT_DECK_MAP_VISIBILITY;
   inlineEdit = null;
   inlineEditFinalization = new InlineEditFinalizationCoordinator();
   inlineEditStarting = false;
@@ -4238,10 +3996,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
-    this.backButtonEl = null;
-    this.forwardButtonEl = null;
-    this.bookmarksButtonEl = null;
-    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -4252,7 +4006,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.deckMapBookmarkCount = 0;
     this.pendingCommandEl = null;
     this.pendingCommandStartEvent = null;
-    this.history.reset();
   }
   onResize() {
     this.scheduleCardPositioning();
@@ -4359,12 +4112,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   get isFiling() {
     return this.filingFile !== null;
   }
-  get canGoBack() {
-    return this.history.canBack();
-  }
-  get canGoForward() {
-    return this.history.canForward();
-  }
   handlePathRename(oldPath, newPath) {
     const editing = this.inlineEdit;
     const editingPath = editing?.controller.snapshot.path ?? null;
@@ -4393,9 +4140,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.activePath = renamePathReference(this.activePath, oldPath, newPath);
     }
     this.cardFocus = renameCardFocus(this.cardFocus, oldPath, newPath);
-    this.history.transform(
-      (path) => renamePathReference(path, oldPath, newPath)
-    );
     this.cardScrollPositions = new Map(
       [...this.cardScrollPositions].map(([path, scroll]) => [
         renamePathReference(path, oldPath, newPath),
@@ -4441,9 +4185,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (cardFocusDeleted(this.cardFocus, deletedPath)) {
       this.cardFocus = null;
     }
-    this.history.transform(
-      (path) => pathIsAtOrBelow(path, deletedPath) ? void 0 : path
-    );
     for (const path of this.cardScrollPositions.keys()) {
       if (pathIsAtOrBelow(path, deletedPath)) {
         this.cardScrollPositions.delete(path);
@@ -4542,8 +4283,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
       hasPreviousBookmark: action === "previous-bookmark" && adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
       hasNextBookmark: action === "next-bookmark" && adjacentBookmarkIndex(bookmarkIndices, activeIndex, 1) !== null,
-      canGoBack: this.history.canBack(),
-      canGoForward: this.history.canForward(),
       hasProblems: this.plugin.index.snapshot.issues.length > 0,
       filing: this.filingFile !== null,
       hasFocusedCard: focusedFile !== null,
@@ -4631,12 +4370,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
           void this.toggleCardBookmark(card.path);
         }
         break;
-      case "back":
-        void this.goBack();
-        break;
-      case "forward":
-        void this.goForward();
-        break;
       case "find-address-forward":
         this.beginAddressCommand("forward");
         break;
@@ -4649,19 +4382,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       case "pull-into-pile":
         this.beginPileCommand();
         break;
-      case "toggle-toolbar":
-        this.chromeVisibility = toggleToolbarVisibility(
-          this.chromeVisibility,
-          this.plugin.settings.showDeckToolbar
-        );
-        this.applyChromeVisibility();
-        break;
       case "toggle-deck-map":
-        this.chromeVisibility = toggleDeckMapVisibility(
-          this.chromeVisibility,
+        this.deckMapVisibility = toggleDeckMapVisibility(
+          this.deckMapVisibility,
           this.plugin.settings.showDeckMap
         );
-        this.applyChromeVisibility();
+        this.applyDeckMapVisibility();
         break;
       case "bookmarks":
         this.plugin.showBookmarks(this);
@@ -4750,13 +4476,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (this.activePath !== previousActivePath) {
       this.viewportOffset = 0;
     }
-    if (this.activePath === null) {
-      this.history.reset();
-    } else if (this.history.current() === void 0) {
-      this.history.reset(this.activePath);
-    } else if (this.activePath !== previousActivePath) {
-      this.history.replaceCurrent(this.activePath);
-    }
     this.clampViewportOffset();
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
   }
@@ -4797,24 +4516,22 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.viewportOffset = 0;
     await this.renderDeck(restoreFilingInputFocus);
   }
-  async goToPath(path) {
-    const moved = await this.navigateToPath(path);
-    if (moved) {
-      this.history.replaceCurrent(path);
-      this.updateHistoryControls();
+  handleCardSpreadChanged() {
+    this.positionCards();
+    if (this.stageEl !== null) {
+      this.renderBookmarkEdgeTabs(this.stageEl);
     }
+    this.scheduleCardPositioning();
+  }
+  async goToPath(path) {
+    await this.navigateToPath(path);
   }
   async jumpToPath(path) {
-    if (this.activePath !== null) {
-      this.history.replaceCurrent(this.activePath);
-    }
     if (this.plugin.index.filedByPath(path) === void 0) {
       new import_obsidian4.Notice(`Card ${path} is missing or invalid.`);
       return;
     }
-    this.history.jump(path);
     await this.navigateToPath(path);
-    this.updateHistoryControls();
   }
   jumpToAdjacentBookmark(direction) {
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
@@ -4827,26 +4544,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (target !== void 0) {
       void this.jumpToPath(target.path);
     }
-  }
-  async goBack() {
-    const path = this.history.back();
-    if (path === void 0) {
-      return;
-    }
-    if (!await this.navigateToPath(path)) {
-      new import_obsidian4.Notice(`The Back destination ${path} is no longer available.`);
-    }
-    this.updateHistoryControls();
-  }
-  async goForward() {
-    const path = this.history.forward();
-    if (path === void 0) {
-      return;
-    }
-    if (!await this.navigateToPath(path)) {
-      new import_obsidian4.Notice(`The Forward destination ${path} is no longer available.`);
-    }
-    this.updateHistoryControls();
   }
   async addBookmarkToCurrent() {
     const path = this.focusedDeckCardPath;
@@ -5268,10 +4965,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.clearCardHeaderButtonControllers();
     this.contentEl.empty();
     this.renderedCards = [];
-    this.backButtonEl = null;
-    this.forwardButtonEl = null;
-    this.bookmarksButtonEl = null;
-    this.toolbarEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -5286,10 +4979,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
-    this.renderToolbar(shell);
     this.renderDeckMap(shell);
     this.renderPendingCommandStatus(shell);
-    this.applyChromeVisibility();
+    this.applyDeckMapVisibility();
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
     this.attachBrowsingEvents(stage);
@@ -5328,81 +5020,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (focusFilingInput) {
       this.trayRenderer.focusFilingInput();
     }
-  }
-  renderToolbar(shell) {
-    const toolbar = shell.createDiv({ cls: "slipbox-deck-toolbar" });
-    this.toolbarEl = toolbar;
-    const identity = toolbar.createDiv({ cls: "slipbox-deck-identity" });
-    const icon = identity.createSpan({ cls: "slipbox-deck-icon" });
-    (0, import_obsidian4.setIcon)(icon, "archive");
-    identity.createSpan({ text: "Slipbox" });
-    const history = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-history-controls" });
-    const back = history.createEl("button", {
-      cls: "slipbox-icon-button",
-      attr: { type: "button", "aria-label": "Back" }
-    });
-    (0, import_obsidian4.setIcon)(back, "arrow-left");
-    back.addEventListener("click", () => this.runAction("back"));
-    this.backButtonEl = back;
-    const forward = history.createEl("button", {
-      cls: "slipbox-icon-button",
-      attr: { type: "button", "aria-label": "Forward" }
-    });
-    (0, import_obsidian4.setIcon)(forward, "arrow-right");
-    forward.addEventListener("click", () => this.runAction("forward"));
-    this.forwardButtonEl = forward;
-    this.updateHistoryControls();
-    const controls = toolbar.createDiv({ cls: "slipbox-toolbar-group slipbox-toolbar-main" });
-    const bookmarks = controls.createEl("button", {
-      attr: { type: "button" },
-      cls: "slipbox-bookmarks-button"
-    });
-    bookmarks.createSpan({ text: "Bookmarks" });
-    if (this.plugin.state.bookmarks.length > 0) {
-      bookmarks.createSpan({ cls: "slipbox-count", text: String(this.plugin.state.bookmarks.length) });
-    }
-    bookmarks.addEventListener("click", () => this.runAction("bookmarks"));
-    this.bookmarksButtonEl = bookmarks;
-    if (this.plugin.index.snapshot.issues.length > 0) {
-      const problems = controls.createEl("button", {
-        cls: "slipbox-problem-button",
-        attr: { type: "button" }
-      });
-      const warning = problems.createSpan();
-      (0, import_obsidian4.setIcon)(warning, "triangle-alert");
-      problems.createSpan({
-        text: `${this.plugin.index.snapshot.issues.length} problem${this.plugin.index.snapshot.issues.length === 1 ? "" : "s"}`
-      });
-      problems.addEventListener("click", () => this.runAction("problems"));
-    }
-    const spreadControl = toolbar.createEl("label", { cls: "slipbox-spread-control" });
-    spreadControl.createSpan({ text: "Spread" });
-    const slider = spreadControl.createEl("input", {
-      type: "range",
-      attr: {
-        min: String(MIN_SPREAD),
-        max: String(MAX_SPREAD),
-        step: "0.01",
-        value: String(this.plugin.state.spread),
-        "aria-label": "Card spread"
-      }
-    });
-    slider.addEventListener("input", () => {
-      const spread = Number(slider.value);
-      void this.runAfterInlineEditing("spread-input", () => {
-        this.plugin.setSpread(spread);
-        this.positionCards();
-        if (this.stageEl !== null) {
-          this.renderBookmarkEdgeTabs(this.stageEl);
-        }
-      });
-    });
-    slider.addEventListener("change", () => {
-      void this.runAfterInlineEditing(
-        "spread-change",
-        () => this.renderDeck()
-      );
-    });
   }
   renderDeckMap(shell) {
     const filed = this.plugin.index.snapshot.filed;
@@ -5486,12 +5103,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.runAction(action);
     });
   }
-  applyChromeVisibility() {
-    applyDeckChromeVisibility(
-      this.toolbarEl,
+  applyDeckMapVisibility() {
+    applyDeckMapVisibility(
       this.deckMapEl,
-      this.chromeVisibility,
-      this.plugin.settings.showDeckToolbar,
+      this.deckMapVisibility,
       this.plugin.settings.showDeckMap,
       this.plugin.index.snapshot.filed.length
     );
@@ -5707,7 +5322,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
       8,
-      Math.max(3, Math.ceil(1 / this.plugin.state.spread) + 2)
+      Math.max(3, Math.ceil(1 / this.plugin.settings.cardSpread) + 2)
     );
     const start = Math.max(0, viewportIndex - radius);
     const end = Math.min(filed.length - 1, viewportIndex + radius);
@@ -6331,7 +5946,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.setDeckAnchor(file.path);
       this.cardFocus = deckCardFocus(file.path);
       this.viewportOffset = 0;
-      this.history.replaceCurrent(file.path);
       await this.plugin.refreshDeckViews();
     } finally {
       this.filingConfirmationInProgress = false;
@@ -6511,7 +6125,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const viewportPosition = this.viewportPosition(activeIndex);
     this.setDeckAnchor(target.path);
     this.viewportOffset = viewportPosition - targetIndex;
-    this.history.replaceCurrent(target.path);
     this.centerViewportOnActive(targetIndex, true);
   }
   centerActiveCard() {
@@ -6682,7 +6295,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       targetIndex,
       this.viewportOffset
     );
-    this.history.replaceCurrent(path);
     this.positionCards();
     this.updateActiveUi();
   }
@@ -6704,7 +6316,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     this.setDeckAnchor(activeCard.path);
     this.viewportOffset = viewportPosition - activeIndex;
-    this.history.replaceCurrent(activeCard.path);
     this.positionCards();
     this.updateActiveUi();
     if (this.pointerLastX === null) {
@@ -6802,7 +6413,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateDeckMapActiveUi();
-    this.updateHistoryControls();
     this.applyCardFocusClasses();
   }
   bookmarkedPaths() {
@@ -6819,20 +6429,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     });
   }
   updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()) {
-    const bookmarkCount = bookmarkedPaths.size;
-    if (this.bookmarksButtonEl !== null) {
-      const countEl = this.bookmarksButtonEl.querySelector(".slipbox-count");
-      if (bookmarkCount === 0) {
-        countEl?.remove();
-      } else if (countEl === null) {
-        this.bookmarksButtonEl.createSpan({
-          cls: "slipbox-count",
-          text: String(bookmarkCount)
-        });
-      } else {
-        countEl.setText(String(bookmarkCount));
-      }
-    }
     for (const cardEl of this.renderedCards) {
       const path = cardEl.dataset.path;
       if (path === void 0) {
@@ -6907,20 +6503,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       }
     });
   }
-  updateHistoryControls() {
-    if (this.backButtonEl !== null) {
-      this.backButtonEl.disabled = !this.history.canBack();
-    }
-    if (this.forwardButtonEl !== null) {
-      this.forwardButtonEl.disabled = !this.history.canForward();
-    }
-  }
   cardStep() {
     const firstCard = this.renderedCards[0];
     if (firstCard === void 0) {
       return 1;
     }
-    return firstCard.offsetWidth * this.plugin.state.spread;
+    return firstCard.offsetWidth * this.plugin.settings.cardSpread;
   }
   rememberScrollPositions() {
     for (const card of this.renderedCards) {
@@ -6958,6 +6546,68 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
 };
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+// src/desk-state.ts
+var DESK_WIDTH = 2400;
+var DESK_HEIGHT = 1600;
+var DESK_CARD_WIDTH = 520;
+var DESK_CARD_HEIGHT = 346;
+function isRecord3(value) {
+  return typeof value === "object" && value !== null;
+}
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+function clampDeskPosition(x, y) {
+  return {
+    x: Math.round(Math.max(0, Math.min(DESK_WIDTH - DESK_CARD_WIDTH, x))),
+    y: Math.round(Math.max(0, Math.min(DESK_HEIGHT - DESK_CARD_HEIGHT, y)))
+  };
+}
+function normalizeDeskCards(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const cards = [];
+  for (const candidate of value) {
+    if (!isRecord3(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
+      continue;
+    }
+    const cardRef = candidate.cardRef.trim();
+    if (seen.has(cardRef)) {
+      continue;
+    }
+    seen.add(cardRef);
+    const position = clampDeskPosition(candidate.x, candidate.y);
+    cards.push({
+      cardRef,
+      ...position,
+      z: Math.max(0, Math.round(candidate.z))
+    });
+  }
+  return cards;
+}
+function removeDeskPath(cards, deletedPath) {
+  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
+  return cards.filter(
+    (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix)
+  );
+}
+function renameDeskCard(cards, oldRef, newRef) {
+  const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
+  const newPrefix = `${newRef.replace(/\/$/, "")}/`;
+  const renamed = cards.map((card) => {
+    if (card.cardRef === oldRef) {
+      return { ...card, cardRef: newRef };
+    }
+    if (card.cardRef.startsWith(oldPrefix)) {
+      return { ...card, cardRef: `${newPrefix}${card.cardRef.slice(oldPrefix.length)}` };
+    }
+    return card;
+  });
+  return normalizeDeskCards(renamed);
 }
 
 // src/modals.ts
@@ -7357,6 +7007,67 @@ function newCardTitlePlaceholder(timestamp, titleSource) {
   return titleSource === "frontmatter" ? "Leave blank for an empty title" : `Leave blank to use ${timestamp} as the filename`;
 }
 
+// src/plugin-state.ts
+var DEFAULT_STATE = {
+  bookmarks: []
+};
+var DEFAULT_DATA = {
+  schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+  settings: DEFAULT_SETTINGS,
+  state: DEFAULT_STATE
+};
+function isRecord4(value) {
+  return typeof value === "object" && value !== null;
+}
+function hasRemovedEntryPointData(value) {
+  if (!isRecord4(value)) {
+    return false;
+  }
+  const state = isRecord4(value.state) ? value.state : value;
+  const settings = isRecord4(value.settings) ? value.settings : {};
+  const keybindings = isRecord4(settings.deckKeybindings) ? settings.deckKeybindings : {};
+  return Object.prototype.hasOwnProperty.call(state, "entryPoints") || Object.prototype.hasOwnProperty.call(keybindings, "entry-points");
+}
+function hasTitleAddressCollisionData(value) {
+  if (!isRecord4(value)) {
+    return false;
+  }
+  const settings = isRecord4(value.settings) ? value.settings : {};
+  return hasTitleAddressPropertyCollision(settings);
+}
+function needsPluginDataMigration(value) {
+  return isRecord4(value) && value.schemaVersion !== SLIPBOX_DATA_SCHEMA_VERSION;
+}
+function normalizePluginState(value) {
+  if (!isRecord4(value)) {
+    return DEFAULT_STATE;
+  }
+  const legacyDeskCards = normalizeDeskCards(
+    Object.prototype.hasOwnProperty.call(value, "legacyDeskCards") ? value.legacyDeskCards : value.deskCards
+  );
+  return {
+    bookmarks: normalizeBookmarks(value.bookmarks),
+    ...legacyDeskCards.length > 0 ? { legacyDeskCards } : {}
+  };
+}
+function normalizePluginData(value) {
+  if (!isRecord4(value)) {
+    return DEFAULT_DATA;
+  }
+  const versioned = isRecord4(value.state) || isRecord4(value.settings);
+  const rawSettings = versioned && isRecord4(value.settings) ? value.settings : {};
+  const rawState = versioned && isRecord4(value.state) ? value.state : value;
+  const settingsWithMigratedSpread = {
+    ...rawSettings,
+    cardSpread: Object.prototype.hasOwnProperty.call(rawSettings, "cardSpread") ? rawSettings.cardSpread : isRecord4(rawState) ? rawState.spread : void 0
+  };
+  return {
+    schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
+    settings: normalizeSettings(settingsWithMigratedSpread),
+    state: normalizePluginState(rawState)
+  };
+}
+
 // src/settings-tab.ts
 var import_obsidian6 = require("obsidian");
 var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
@@ -7412,17 +7123,14 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         showTitleInDeck: value
       }));
     });
-    new import_obsidian6.Setting(containerEl).setName("Show Deck toolbar").setDesc("Show the navigation, bookmark, and spread controls above the Deck.").addToggle((toggle) => {
-      toggle.setValue(this.slipbox.settings.showDeckToolbar).onChange((value) => void this.save({
-        ...this.slipbox.settings,
-        showDeckToolbar: value
-      }));
-    });
     new import_obsidian6.Setting(containerEl).setName("Show Deck map").setDesc("Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showDeckMap).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showDeckMap: value
       }));
+    });
+    new import_obsidian6.Setting(containerEl).setName("Card spread").setDesc("Set the separation between neighbouring Deck cards.").addSlider((slider) => {
+      slider.setLimits(MIN_CARD_SPREAD, MAX_CARD_SPREAD, 0.01).setValue(this.slipbox.settings.cardSpread).setDynamicTooltip().onChange((value) => this.slipbox.setCardSpread(value));
     });
     new import_obsidian6.Setting(containerEl).setName("Card sizes").setHeading();
     this.renderCardSizeSettings(containerEl);
@@ -8279,7 +7987,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
   index;
   canvas;
   indexRefreshTimer = null;
-  spreadSaveTimer = null;
+  cardSpreadSaveTimer = null;
   filingWriteInProgress = false;
   persistQueue = Promise.resolve();
   trayPileSequence = 0;
@@ -8337,8 +8045,10 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     if (this.indexRefreshTimer !== null) {
       window.clearTimeout(this.indexRefreshTimer);
     }
-    if (this.spreadSaveTimer !== null) {
-      window.clearTimeout(this.spreadSaveTimer);
+    if (this.cardSpreadSaveTimer !== null) {
+      window.clearTimeout(this.cardSpreadSaveTimer);
+      this.cardSpreadSaveTimer = null;
+      void this.persistState();
     }
   }
   async openDeck(filingFile) {
@@ -8360,15 +8070,23 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     }
     return leaf.view;
   }
-  setSpread(value) {
-    const spread = Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, value));
-    this.state = { ...this.state, spread };
-    if (this.spreadSaveTimer !== null) {
-      window.clearTimeout(this.spreadSaveTimer);
+  setCardSpread(value) {
+    const cardSpread = normalizeCardSpread(value);
+    if (cardSpread === this.settings.cardSpread) {
+      return;
     }
-    this.spreadSaveTimer = window.setTimeout(() => {
-      this.spreadSaveTimer = null;
-      void this.persistState();
+    this.settings = { ...this.settings, cardSpread };
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handleCardSpreadChanged();
+      }
+    }
+    if (this.cardSpreadSaveTimer !== null) {
+      window.clearTimeout(this.cardSpreadSaveTimer);
+    }
+    this.cardSpreadSaveTimer = window.setTimeout(() => {
+      this.cardSpreadSaveTimer = null;
+      void this.persistState().then(() => this.refreshDeckViews());
     }, 160);
   }
   openMarkdownFile(file) {

@@ -1,59 +1,35 @@
-export interface DeckChromeVisibility {
-  readonly toolbarOverride: boolean | null;
+export interface DeckMapVisibility {
   readonly deckMapOverride: boolean | null;
 }
 
-export const DEFAULT_DECK_CHROME_VISIBILITY: DeckChromeVisibility = {
-  toolbarOverride: null,
+export const DEFAULT_DECK_MAP_VISIBILITY: DeckMapVisibility = {
   deckMapOverride: null,
 };
 
-export function toolbarIsVisible(
-  state: DeckChromeVisibility,
-  showDeckToolbarSetting: boolean,
-): boolean {
-  return state.toolbarOverride ?? showDeckToolbarSetting;
-}
-
 export function deckMapIsVisible(
-  state: DeckChromeVisibility,
+  state: DeckMapVisibility,
   showDeckMapSetting: boolean,
   cardCount: number,
 ): boolean {
   return cardCount > 0 && (state.deckMapOverride ?? showDeckMapSetting);
 }
 
-export function toggleToolbarVisibility(
-  state: DeckChromeVisibility,
-  showDeckToolbarSetting: boolean,
-): DeckChromeVisibility {
-  return {
-    ...state,
-    toolbarOverride: !(state.toolbarOverride ?? showDeckToolbarSetting),
-  };
-}
-
 export function toggleDeckMapVisibility(
-  state: DeckChromeVisibility,
+  state: DeckMapVisibility,
   showDeckMapSetting: boolean,
-): DeckChromeVisibility {
+): DeckMapVisibility {
   return {
     ...state,
     deckMapOverride: !(state.deckMapOverride ?? showDeckMapSetting),
   };
 }
 
-export function applyDeckChromeVisibility(
-  toolbar: HTMLElement | null,
+export function applyDeckMapVisibility(
   deckMap: HTMLElement | null,
-  state: DeckChromeVisibility,
-  showDeckToolbarSetting: boolean,
+  state: DeckMapVisibility,
   showDeckMapSetting: boolean,
   cardCount: number,
 ): void {
-  if (toolbar !== null) {
-    toolbar.hidden = !toolbarIsVisible(state, showDeckToolbarSetting);
-  }
   if (deckMap !== null) {
     deckMap.hidden = !deckMapIsVisible(state, showDeckMapSetting, cardCount);
   }

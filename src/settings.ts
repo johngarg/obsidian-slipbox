@@ -1,6 +1,10 @@
 import type { DeckOrdering } from "./address-order.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 7;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 8;
+
+export const DEFAULT_CARD_SPREAD = 0.58;
+export const MIN_CARD_SPREAD = 0.18;
+export const MAX_CARD_SPREAD = 1.12;
 
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
@@ -59,13 +63,10 @@ export type SlipboxAction =
   | "copy-link"
   | "toggle-tray"
   | "toggle-bookmark"
-  | "back"
-  | "forward"
   | "find-address-forward"
   | "find-address-backward"
   | "find-address-first"
   | "pull-into-pile"
-  | "toggle-toolbar"
   | "toggle-deck-map"
   | "bookmarks"
   | "problems"
@@ -191,18 +192,6 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     defaultBindings: [binding("b")],
   },
   {
-    id: "back",
-    label: "Move Deck anchor back in history",
-    repeatable: false,
-    defaultBindings: [binding("h", ["Shift"])],
-  },
-  {
-    id: "forward",
-    label: "Move Deck anchor forward in history",
-    repeatable: false,
-    defaultBindings: [binding("l", ["Shift"])],
-  },
-  {
     id: "find-address-forward",
     label: "Move Deck anchor to next address initial",
     description: "Type the address's first character after this prefix.",
@@ -229,12 +218,6 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     description: "Type a one-based pile number, then press Enter.",
     repeatable: false,
     defaultBindings: [binding("p", ["Shift"])],
-  },
-  {
-    id: "toggle-toolbar",
-    label: "Toggle toolbar visibility",
-    repeatable: false,
-    defaultBindings: [binding("t")],
   },
   {
     id: "toggle-deck-map",
@@ -334,13 +317,10 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   "copy-link": "copy-current-card-link",
   "toggle-tray": "toggle-tray",
   "toggle-bookmark": "add-bookmark-current-card",
-  back: "history-back",
-  forward: "history-forward",
   "find-address-forward": "find-next-address-initial",
   "find-address-backward": "find-previous-address-initial",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
-  "toggle-toolbar": "toggle-toolbar-visibility",
   "toggle-deck-map": "toggle-deck-map-visibility",
   bookmarks: "manage-bookmarks",
   problems: "show-card-problems",
@@ -365,7 +345,6 @@ const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
 const GLOBAL_ACTIONS = new Set<SlipboxAction>(["bookmarks", "problems"]);
 
 const VIEW_ACTIONS = new Set<SlipboxAction>([
-  "toggle-toolbar",
   "toggle-deck-map",
   "confirm-filing",
   "cancel-filing",
@@ -403,8 +382,8 @@ export interface SlipboxSettings {
   readonly useTemplatesForNewNotes: boolean;
   readonly newNoteTemplatePath: string;
   readonly showTitleInDeck: boolean;
-  readonly showDeckToolbar: boolean;
   readonly showDeckMap: boolean;
+  readonly cardSpread: number;
   readonly cardHeaderButtons: CardHeaderButtonSettings;
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
 }
@@ -484,8 +463,8 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   useTemplatesForNewNotes: false,
   newNoteTemplatePath: "",
   showTitleInDeck: false,
-  showDeckToolbar: true,
   showDeckMap: true,
+  cardSpread: DEFAULT_CARD_SPREAD,
   cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
 };
@@ -519,6 +498,13 @@ export function normalizeFolderPath(value: unknown): string {
 
 export function normalizeCardSize(value: unknown): CardSize {
   return value === "small" || value === "large" ? value : "medium";
+}
+
+export function normalizeCardSpread(value: unknown): number {
+  const spread = typeof value === "number" && Number.isFinite(value)
+    ? value
+    : DEFAULT_CARD_SPREAD;
+  return Math.min(MAX_CARD_SPREAD, Math.max(MIN_CARD_SPREAD, spread));
 }
 
 export function hasTitleAddressPropertyCollision(value: unknown): boolean {
@@ -761,14 +747,11 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
         : DEFAULT_SETTINGS.showTitleInDeck,
-    showDeckToolbar:
-      typeof source.showDeckToolbar === "boolean"
-        ? source.showDeckToolbar
-        : DEFAULT_SETTINGS.showDeckToolbar,
     showDeckMap:
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap
         : DEFAULT_SETTINGS.showDeckMap,
+    cardSpread: normalizeCardSpread(source.cardSpread),
     cardHeaderButtons: normalizeCardHeaderButtons(
       source.cardHeaderButtons,
       source.deckHeaderButtons,
@@ -783,12 +766,21 @@ export function settingsForPersistence(
   settings: SlipboxSettings,
 ): Readonly<Record<string, unknown>> {
   const raw = isRecord(rawValue) ? rawValue : {};
-  const { deckHeaderButtons: _legacyDeckHeaderButtons, ...retainedRaw } = raw;
+  const {
+    deckHeaderButtons: _legacyDeckHeaderButtons,
+    showDeckToolbar: _showDeckToolbar,
+    ...retainedRaw
+  } = raw;
   const rawKeybindingsSource = isRecord(raw.deckKeybindings)
     ? raw.deckKeybindings
     : {};
   const rawKeybindings = Object.fromEntries(
-    Object.entries(rawKeybindingsSource).filter(([key]) => key !== "entry-points"),
+    Object.entries(rawKeybindingsSource).filter(([key]) =>
+      key !== "entry-points" &&
+      key !== "back" &&
+      key !== "forward" &&
+      key !== "toggle-toolbar"
+    ),
   );
   return {
     ...retainedRaw,

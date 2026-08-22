@@ -53,8 +53,6 @@ import {
 } from "./new-note.js";
 import {
   DEFAULT_STATE,
-  MAX_SPREAD,
-  MIN_SPREAD,
   hasRemovedEntryPointData,
   hasTitleAddressCollisionData,
   needsPluginDataMigration,
@@ -64,6 +62,7 @@ import {
 import { resolveCardTitle } from "./card-title.js";
 import {
   DEFAULT_SETTINGS,
+  normalizeCardSpread,
   SLIPBOX_DATA_SCHEMA_VERSION,
   normalizeSettings,
   settingsForPersistence,
@@ -162,7 +161,7 @@ export default class SlipboxPlugin extends Plugin {
   canvas!: CanvasBridge;
 
   private indexRefreshTimer: number | null = null;
-  private spreadSaveTimer: number | null = null;
+  private cardSpreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
   private persistQueue: Promise<void> = Promise.resolve();
   private trayPileSequence = 0;
@@ -228,8 +227,10 @@ export default class SlipboxPlugin extends Plugin {
     if (this.indexRefreshTimer !== null) {
       window.clearTimeout(this.indexRefreshTimer);
     }
-    if (this.spreadSaveTimer !== null) {
-      window.clearTimeout(this.spreadSaveTimer);
+    if (this.cardSpreadSaveTimer !== null) {
+      window.clearTimeout(this.cardSpreadSaveTimer);
+      this.cardSpreadSaveTimer = null;
+      void this.persistState();
     }
   }
 
@@ -254,15 +255,23 @@ export default class SlipboxPlugin extends Plugin {
     return leaf.view;
   }
 
-  setSpread(value: number): void {
-    const spread = Math.min(MAX_SPREAD, Math.max(MIN_SPREAD, value));
-    this.state = { ...this.state, spread };
-    if (this.spreadSaveTimer !== null) {
-      window.clearTimeout(this.spreadSaveTimer);
+  setCardSpread(value: number): void {
+    const cardSpread = normalizeCardSpread(value);
+    if (cardSpread === this.settings.cardSpread) {
+      return;
     }
-    this.spreadSaveTimer = window.setTimeout(() => {
-      this.spreadSaveTimer = null;
-      void this.persistState();
+    this.settings = { ...this.settings, cardSpread };
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.handleCardSpreadChanged();
+      }
+    }
+    if (this.cardSpreadSaveTimer !== null) {
+      window.clearTimeout(this.cardSpreadSaveTimer);
+    }
+    this.cardSpreadSaveTimer = window.setTimeout(() => {
+      this.cardSpreadSaveTimer = null;
+      void this.persistState().then(() => this.refreshDeckViews());
     }, 160);
   }
 

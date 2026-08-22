@@ -95,10 +95,10 @@ including when focused. The viewed-card drag handle and individual controls
 retain their own tooltips.
 
 The Deck anchor is separate. It records the Deck position used by scrolling,
-the map, history, bookmark jumps, and Deck navigation. When card focus is on the
+the map, bookmark jumps, and Deck navigation. When card focus is on the
 Desk or a viewed card, the anchor keeps a neutral grey outline while the focused
 presentation alone keeps the accent outline. Horizontal scrolling, `Left`/
-`Right`, `j`/`k`, address jumps, history, and bookmark jumps always move the
+`Right`, `j`/`k`, address jumps, and bookmark jumps always move the
 anchor. Focus follows only if it already belongs to the Deck. `c` centres the
 anchor without transferring focus.
 
@@ -198,11 +198,10 @@ longer exist.
 - Rendered Markdown cards with raw-Markdown inline editing, internal scrolling,
   and fixed backlink footers.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
-  navigation, and a persistent Spread control.
+  navigation, and persistent card spread configured in Settings.
 - A subtle ordinal Deck map with at most 512 evenly sampled neutral markers,
   exact anchor and bookmark overlays, compact address-section labels, and
   full-order click resolution to exact file paths.
-- Browser-style session history for filed links and bookmarks.
 - One persistent bookmark per filed file.
 - Configurable Deck, Desk, and viewed-card header actions for editing, opening,
   filing, Desk placement, Deck location, links, bookmarks, movement, and deletion.
@@ -219,7 +218,7 @@ Backlinks come from Obsidian's resolved-link graph and are never written to card
 frontmatter or plugin state. Only valid filed source files are shown;
 ordinary notes, unfiled cards, self-links, and unresolved links are excluded.
 
-Bookmarks, navigation history, working piles, backlinks, and direct card actions
+Bookmarks, working piles, backlinks, and direct card actions
 retain exact file paths. File and folder renames rewrite those path references.
 
 ## Settings
@@ -243,9 +242,10 @@ The title property must differ exactly from the address property. Migration
 switches an existing collision to filename titles without renaming or
 removing either property.
 
-`Show Deck toolbar` is enabled by default. Disabling it hides the navigation,
-bookmark, problem, and spread controls above the Deck while leaving
-their commands and shortcuts available.
+Browser-style Back/Forward history and the Deck toolbar were removed by design
+in 0.8.0. The Desk is the analogue surface for retaining working cards, while
+bookmarks provide persistent landmarks. **Manage bookmarks** and **Show card
+problems** remain available through Obsidian's command palette.
 
 `Show Deck map` is enabled by default. The map derives card and bookmark
 positions from the complete configured Deck order and exact file paths. It
@@ -256,11 +256,16 @@ Numeric addresses use their complete leading ASCII digit run (`10/2a`
 and `10,5/3t` both display `10`); other addresses use their first Unicode
 character. Disabling the map removes the overlay.
 
+`Card spread` sets the separation between neighbouring Deck cards from `0.18`
+to `1.12` in steps of `0.01`; the default is `0.58`. Schema 8 migrates the
+previous persistent spread value from workspace state without changing it,
+subject to those bounds.
+
 `Card header buttons` contains separate Deck, Desk, and viewed-card groups.
 Every supported action can be enabled or disabled independently on each
 surface; state-inapplicable actions remain absent. Buttons that do not fit move
 into **More card actions**. Hidden actions remain available through commands,
-Slipbox shortcuts, and card context menus. Schema 7 migrates the former
+Slipbox shortcuts, and card context menus. Schema 7 migrated the former
 Deck-only Open, Copy, Desk, and Bookmark preferences without changing explicit
 off choices.
 
@@ -296,8 +301,6 @@ Templates support is optional and uses Obsidian's Templates core plugin.
 | `v` | View the focused Desk card, or return the focused viewed card to the Desk |
 | `b` | Toggle the focused Deck card's bookmark |
 | `y` | Copy a link to the focused card |
-| `H` | Go Back in Slipbox history |
-| `L` | Go Forward in Slipbox history |
 | `0` | Jump to the first card |
 | `$` | Jump to the last card |
 | `Ctrl+d` | Move forward ten Deck positions |
@@ -309,7 +312,6 @@ Templates support is optional and uses Obsidian's Templates core plugin.
 | `F` then a character | Find the previous card whose address begins with that character |
 | `g` then a character | Find the first card from the start whose address begins with that character |
 | `P` then a pile number and `Enter` | Put or move the focused filed card into that one-based visible pile |
-| `t` | Toggle this Slipbox view's toolbar |
 | `m` | Toggle this Slipbox view's Deck map |
 
 Address-initial searches are case-sensitive, use the first Unicode character of
@@ -318,10 +320,10 @@ command. In pile-number mode, digits accumulate, `Backspace` removes the last
 digit, and invalid or nonexistent pile numbers leave the Desk unchanged. `P`
 never returns a filed card to the Deck; lower-case `p` retains that toggle.
 
-The toolbar and Deck-map shortcuts are session-only and independent in each open
-Slipbox view. Each initially follows its global `Show Deck toolbar` or `Show Deck
-map` setting, but `t` and `m` can temporarily override those defaults in the
-active view.
+The Deck-map shortcut is session-only and independent in each open Slipbox
+view. Each map initially follows the global `Show Deck map` setting, while `m`
+can temporarily override that default in the active view. The retired `H`, `L`,
+and `t` bindings are left unassigned.
 
 On macOS, `Ctrl+d` and `Ctrl+u` use the literal Control key, not Command. Slipbox
 keeps `Ctrl` distinct from the platform-aware `Mod` modifier in custom bindings.

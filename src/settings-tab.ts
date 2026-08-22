@@ -13,6 +13,8 @@ import {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
   DEFAULT_SETTINGS,
+  MAX_CARD_SPREAD,
+  MIN_CARD_SPREAD,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
@@ -112,18 +114,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Show Deck toolbar")
-      .setDesc("Show the navigation, bookmark, and spread controls above the Deck.")
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.slipbox.settings.showDeckToolbar)
-          .onChange((value) => void this.save({
-            ...this.slipbox.settings,
-            showDeckToolbar: value,
-          }));
-      });
-
-    new Setting(containerEl)
       .setName("Show Deck map")
       .setDesc("Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.")
       .addToggle((toggle) => {
@@ -133,6 +123,17 @@ export class SlipboxSettingTab extends PluginSettingTab {
             ...this.slipbox.settings,
             showDeckMap: value,
           }));
+      });
+
+    new Setting(containerEl)
+      .setName("Card spread")
+      .setDesc("Set the separation between neighbouring Deck cards.")
+      .addSlider((slider) => {
+        slider
+          .setLimits(MIN_CARD_SPREAD, MAX_CARD_SPREAD, 0.01)
+          .setValue(this.slipbox.settings.cardSpread)
+          .setDynamicTooltip()
+          .onChange((value) => this.slipbox.setCardSpread(value));
       });
 
     new Setting(containerEl).setName("Card sizes").setHeading();

@@ -6,8 +6,6 @@ export interface DeckActionContext {
   readonly hasNextCard: boolean;
   readonly hasPreviousBookmark: boolean;
   readonly hasNextBookmark: boolean;
-  readonly canGoBack: boolean;
-  readonly canGoForward: boolean;
   readonly hasProblems: boolean;
   readonly filing: boolean;
   readonly hasFocusedCard: boolean;
@@ -74,10 +72,6 @@ export function canRunDeckAction(
     case "first-card":
     case "last-card":
       return context.hasActiveCard;
-    case "back":
-      return context.canGoBack;
-    case "forward":
-      return context.canGoForward;
     case "problems":
       return context.hasProblems;
     case "confirm-filing":
@@ -85,7 +79,6 @@ export function canRunDeckAction(
     case "cancel-filing":
       return context.filing;
     case "bookmarks":
-    case "toggle-toolbar":
     case "toggle-deck-map":
       return true;
   }

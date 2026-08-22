@@ -53,12 +53,10 @@ export {
   startPileCommand,
 } from "./deck-commands.js";
 export {
-  DEFAULT_DECK_CHROME_VISIBILITY,
-  applyDeckChromeVisibility,
+  DEFAULT_DECK_MAP_VISIBILITY,
+  applyDeckMapVisibility,
   deckMapIsVisible,
-  toolbarIsVisible,
   toggleDeckMapVisibility,
-  toggleToolbarVisibility,
 } from "./deck-chrome.js";
 export {
   buildDeckMapModel,
@@ -73,12 +71,16 @@ export {
   SLIPBOX_ACTION_DEFINITIONS,
   CARD_HEADER_BUTTON_ACTIONS,
   DEFAULT_CARD_HEADER_BUTTONS,
+  DEFAULT_CARD_SPREAD,
+  MAX_CARD_SPREAD,
+  MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
   normalizeDeckKeybindings,
   normalizeCardHeaderButtons,
+  normalizeCardSpread,
   normalizeFolderPath,
   normalizeSettings,
   settingsForPersistence,
@@ -97,7 +99,6 @@ export {
   indexFiledBacklinks,
 } from "./backlinks.js";
 
-export { NavigationHistory } from "./navigation-history.js";
 export {
   createBookmark,
   deleteBookmark,
@@ -198,7 +199,7 @@ export type {
   PendingDeckCommand,
   PendingDeckCommandStep,
 } from "./deck-commands.js";
-export type { DeckChromeVisibility } from "./deck-chrome.js";
+export type { DeckMapVisibility } from "./deck-chrome.js";
 export type {
   DeckMapMarker,
   DeckMapModel,

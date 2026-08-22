@@ -3,21 +3,22 @@ import { describe, test } from "node:test";
 
 import {
   DEFAULT_DATA,
-  DEFAULT_SPREAD,
-  MIN_SPREAD,
   hasRemovedEntryPointData,
   hasTitleAddressCollisionData,
   needsPluginDataMigration,
   normalizePluginData,
   normalizePluginState,
 } from "../src/plugin-state.js";
+import { MAX_CARD_SPREAD, MIN_CARD_SPREAD } from "../src/settings.js";
 
 describe("normalizePluginState", () => {
-  test("loads valid persistent state", () => {
+  test("loads valid persistent workspace state and drops retired fields", () => {
     assert.deepEqual(
       normalizePluginState({
         entryPoints: [{ name: " Systems ", id: "1/1" }],
         lastActiveId: "2/3a",
+        history: { entries: ["Cards/here.md"], index: 0 },
+        toolbarOverride: false,
         bookmarks: [
           { path: "Cards/here.md", label: " Here ", color: "blue" },
         ],
@@ -29,12 +30,11 @@ describe("normalizePluginState", () => {
           { path: "Cards/here.md" },
         ],
         legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
-        spread: 0.75,
       },
     );
   });
 
-  test("drops removed entry points and clamps visual state", () => {
+  test("drops removed entry points and malformed Desk data", () => {
     assert.deepEqual(
       normalizePluginState({
         entryPoints: [
@@ -54,87 +54,100 @@ describe("normalizePluginState", () => {
         bookmarks: [
           { path: "Cards/good.md" },
         ],
-        spread: 1.12,
       },
     );
-  });
-
-  test("allows a tighter spread and clamps values below it", () => {
-    assert.equal(normalizePluginState({ spread: 0.2 }).spread, 0.2);
-    assert.equal(normalizePluginState({ spread: 0 }).spread, MIN_SPREAD);
   });
 
   test("uses defaults for unknown data", () => {
-    assert.deepEqual(normalizePluginState(null), {
-      bookmarks: [],
-      spread: DEFAULT_SPREAD,
-    });
-  });
-
-  test("migrates v0.1 state by dropping persistent resume position", () => {
-    assert.deepEqual(
-      normalizePluginState({
-        entryPoints: [{ name: "Start", address: "1/1" }],
-        lastActiveId: "9/9",
-        spread: 0.58,
-      }),
-      {
-        bookmarks: [],
-        spread: 0.58,
-      },
-    );
+    assert.deepEqual(normalizePluginState(null), { bookmarks: [] });
   });
 });
 
 describe("normalizePluginData", () => {
-  test("migrates legacy flat state into versioned settings and state", () => {
+  test("migrates legacy flat state into schema-8 settings and state", () => {
     const data = normalizePluginData({
       entryPoints: [{ name: "Start", id: "1/1" }],
       bookmarks: [{ zettelId: "1/1" }],
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 7);
+    assert.equal(data.schemaVersion, 8);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.equal(data.settings.deckOrdering, "natural");
     assert.equal(data.settings.showDeckMap, true);
+    assert.equal(data.settings.cardSpread, 0.7);
     assert.equal("entryPoints" in data.state, false);
+    assert.equal("spread" in data.state, false);
     assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
     assert.deepEqual(data.state.legacyDeskCards, [
       { cardRef: "Start.md", x: 10, y: 20, z: 1 },
     ]);
-    assert.equal(data.state.spread, 0.7);
   });
 
-  test("loads current versioned settings without losing workspace state", () => {
+  test("migrates schema 7 spread and removes history and toolbar settings", () => {
     const data = normalizePluginData({
-      schemaVersion: 1,
+      schemaVersion: 7,
       settings: {
         addressProperty: "signature",
         titleSource: "frontmatter",
         titleProperty: "name",
         newCardFolder: "Cards",
         showTitleInDeck: true,
+        showDeckToolbar: false,
         showDeckMap: false,
+        deckKeybindings: {
+          back: [{ key: "h", modifiers: ["Shift"] }],
+          forward: [{ key: "r", modifiers: ["Alt"] }],
+          "toggle-toolbar": [],
+          "open-note": [{ key: "o", modifiers: [] }],
+        },
       },
       state: {
-        entryPoints: [],
-        bookmarks: [],
+        bookmarks: [{ path: "Cards/here.md" }],
         spread: 0.42,
+        history: { entries: ["Cards/here.md"], index: 0 },
       },
     });
+    assert.equal(data.schemaVersion, 8);
     assert.equal(data.settings.addressProperty, "signature");
     assert.equal(data.settings.titleProperty, "name");
     assert.equal(data.settings.newCardFolder, "Cards");
     assert.equal(data.settings.showTitleInDeck, true);
     assert.equal(data.settings.showDeckMap, false);
-    assert.equal(data.settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
-    assert.equal(data.settings.useTemplatesForNewNotes, false);
-    assert.equal(data.settings.mainCardSize, "medium");
-    assert.equal(data.settings.trayCardSize, "medium");
-    assert.equal(data.state.spread, 0.42);
-    assert.equal("entryPoints" in data.state, false);
-    assert.equal("legacyDeskCards" in data.state, false);
+    assert.equal(data.settings.cardSpread, 0.42);
+    assert.equal("showDeckToolbar" in data.settings, false);
+    assert.equal("back" in data.settings.deckKeybindings, false);
+    assert.equal("forward" in data.settings.deckKeybindings, false);
+    assert.equal("toggle-toolbar" in data.settings.deckKeybindings, false);
+    assert.deepEqual(data.settings.deckKeybindings["open-note"], [
+      { key: "o", modifiers: [] },
+    ]);
+    assert.deepEqual(data.state.bookmarks, [{ path: "Cards/here.md" }]);
+    assert.equal("spread" in data.state, false);
+    assert.equal("history" in data.state, false);
+  });
+
+  test("prefers current cardSpread and clamps migrated legacy spread", () => {
+    const current = normalizePluginData({
+      schemaVersion: 8,
+      settings: { cardSpread: 0.63 },
+      state: { spread: 0.2 },
+    });
+    assert.equal(current.settings.cardSpread, 0.63);
+    assert.equal("spread" in current.state, false);
+
+    const low = normalizePluginData({
+      schemaVersion: 7,
+      settings: {},
+      state: { spread: 0 },
+    });
+    const high = normalizePluginData({
+      schemaVersion: 7,
+      settings: {},
+      state: { spread: 99 },
+    });
+    assert.equal(low.settings.cardSpread, MIN_CARD_SPREAD);
+    assert.equal(high.settings.cardSpread, MAX_CARD_SPREAD);
   });
 
   test("normalizes current legacy migration data and removes empty Desk fields", () => {
@@ -187,10 +200,10 @@ describe("normalizePluginData", () => {
     };
     assert.equal(needsPluginDataMigration(collision), true);
     assert.equal(hasTitleAddressCollisionData(collision), true);
-    assert.equal(normalizePluginData(collision).schemaVersion, 7);
+    assert.equal(normalizePluginData(collision).schemaVersion, 8);
     assert.equal(normalizePluginData(collision).settings.titleSource, "filename");
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 6 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 7 }), false);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 7 }), true);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 8 }), false);
     assert.equal(hasTitleAddressCollisionData(null), false);
   });
 });

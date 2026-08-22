@@ -1533,6 +1533,11 @@ function normalizePluginData(value) {
 // src/tray-view.ts
 var import_obsidian2 = require("obsidian");
 
+// src/desk-focus.ts
+function isDeskCardFocusTarget(target) {
+  return target !== null && target.closest(".slipbox-tray-card") !== null;
+}
+
 // src/filing-editor.ts
 var HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 function createHtmlElement(document2, tag) {
@@ -1652,6 +1657,9 @@ function fnv1a(value) {
 }
 
 // src/tray-state.ts
+function deskCardPrimaryClickIntent(expanded) {
+  return expanded ? "focus-only" : "expand-pile";
+}
 var EMPTY_TRAY = {
   piles: [],
   expandedPileIds: [],
@@ -2260,7 +2268,10 @@ var TrayRenderer = class {
     pileEl.style.setProperty("--slipbox-pile-y", `${position.y}px`);
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
-    pileEl.addEventListener("focusin", () => {
+    pileEl.addEventListener("focusin", (event) => {
+      if (event.target instanceof Element && isDeskCardFocusTarget(event.target)) {
+        return;
+      }
       const top = pile.cards[0];
       if (top !== void 0) {
         this.actions.focusDeskCard(top.cardRef, pile.id);
@@ -2601,38 +2612,24 @@ var TrayRenderer = class {
       if (event.target instanceof Element && event.target.closest(".slipbox-tray-card-preview") !== null) {
         event.preventDefault();
         event.stopPropagation();
-        this.scheduleCardClick(() => {
-          if (!expanded) {
+        if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
+          this.scheduleCardClick(() => {
             void this.actions.runAfterEditing(
               "tray-expand-pile",
               () => this.plugin.setTrayPileExpanded(pile.id, true)
             );
-          } else if (filed !== void 0) {
-            this.actions.runAction("show-card-in-deck");
-          }
-        });
+          });
+        }
         return;
       }
-      if (!expanded) {
+      if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
         event.preventDefault();
         event.stopPropagation();
         void this.actions.runAfterEditing(
           "tray-expand-pile",
           () => this.plugin.setTrayPileExpanded(pile.id, true)
         );
-        return;
       }
-      if (filed === void 0) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      void this.actions.runAfterEditing(
-        "tray-jump-filed-card",
-        () => {
-          this.actions.runAction("show-card-in-deck");
-        }
-      );
     });
     miniature.addEventListener("contextmenu", (event) => {
       if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select") !== null) {

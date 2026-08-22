@@ -30,6 +30,17 @@ export interface TrayState {
   readonly unfiledPileId: string | null;
 }
 
+/**
+ * A primary click selects a visible Desk card. Collapsed cards additionally
+ * expand their pile; showing a filed card in the Deck is always an explicit
+ * registered action.
+ */
+export function deskCardPrimaryClickIntent(
+  expanded: boolean,
+): "focus-only" | "expand-pile" {
+  return expanded ? "focus-only" : "expand-pile";
+}
+
 export interface TrayStackJitter {
   readonly rotationDegrees: number;
   readonly offsetX: number;

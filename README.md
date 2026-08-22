@@ -88,7 +88,9 @@ presentation in the Deck, on the Desk, or in the movable viewed-card layer.
 The focused presentation has the accent outline and is the target of card
 actions. Tabbing into a card control, clicking a card, or opening a card for
 viewing transfers focus to that presentation. Native focus-visible rings remain
-on individual buttons and fields.
+on individual buttons and fields. Clicking an expanded Desk card only focuses
+it; it never moves the Deck anchor. Use **Show focused card in Deck** when that
+movement is wanted.
 
 The Deck anchor is separate. It records the Deck position used by scrolling,
 the map, history, bookmark jumps, and Deck navigation. When card focus is on the
@@ -103,7 +105,8 @@ centres a filed Desk or viewed card and transfers focus to its Deck
 presentation; a floating viewed card remains open. It does nothing for a
 Deck-focused or unfiled card. Removing or rebinding this action in Settings also
 removes or changes the Enter behaviour. `e` is the separate default editing
-shortcut, and `v` views a Desk card or puts back a viewed card.
+shortcut, and `v` views a Desk card or puts back a viewed card. Putting a viewed
+card back restores focus to that exact card in its Desk pile.
 
 ## Inline card editing
 

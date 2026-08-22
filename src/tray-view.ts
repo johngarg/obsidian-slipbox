@@ -15,6 +15,7 @@ import {
   resolveFiledCardLink,
 } from "./card-links.js";
 import { cardHeaderTitle } from "./card-title.js";
+import { isDeskCardFocusTarget } from "./desk-focus.js";
 import {
   attachUnfiledAddressFiling,
   renderInlineFilingEditor,
@@ -25,6 +26,7 @@ import {
 import {
   cardPosition,
   cyclePileTopCard,
+  deskCardPrimaryClickIntent,
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
@@ -266,7 +268,13 @@ export class TrayRenderer {
 
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
-    pileEl.addEventListener("focusin", () => {
+    pileEl.addEventListener("focusin", (event) => {
+      if (
+        event.target instanceof Element &&
+        isDeskCardFocusTarget(event.target)
+      ) {
+        return;
+      }
       const top = pile.cards[0];
       if (top !== undefined) {
         this.actions.focusDeskCard(top.cardRef, pile.id);
@@ -656,38 +664,24 @@ export class TrayRenderer {
       ) {
         event.preventDefault();
         event.stopPropagation();
-        this.scheduleCardClick(() => {
-          if (!expanded) {
+        if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
+          this.scheduleCardClick(() => {
             void this.actions.runAfterEditing(
               "tray-expand-pile",
               () => this.plugin.setTrayPileExpanded(pile.id, true),
             );
-          } else if (filed !== undefined) {
-            this.actions.runAction("show-card-in-deck");
-          }
-        });
+          });
+        }
         return;
       }
-      if (!expanded) {
+      if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
         event.preventDefault();
         event.stopPropagation();
         void this.actions.runAfterEditing(
           "tray-expand-pile",
           () => this.plugin.setTrayPileExpanded(pile.id, true),
         );
-        return;
       }
-      if (filed === undefined) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      void this.actions.runAfterEditing(
-        "tray-jump-filed-card",
-        () => {
-          this.actions.runAction("show-card-in-deck");
-        },
-      );
     });
     miniature.addEventListener("contextmenu", (event) => {
       if (

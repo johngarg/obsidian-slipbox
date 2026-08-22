@@ -10,6 +10,7 @@ import {
   clearFiledCardsFromTray,
   createPile,
   cyclePileTopCard,
+  deskCardPrimaryClickIntent,
   initialTrayFromUnfiled,
   insertionIndexForPoint,
   mergePiles,
@@ -50,6 +51,11 @@ function tray(...piles: readonly TrayCard[][]): TrayState {
 }
 
 describe("working piles", () => {
+  test("uses primary clicks only for focus or collapsed-pile expansion", () => {
+    assert.equal(deskCardPrimaryClickIntent(true), "focus-only");
+    assert.equal(deskCardPrimaryClickIntent(false), "expand-pile");
+  });
+
   test("constructs one deterministic newest-first pile from unfiled cards", () => {
     const state = initialTrayFromUnfiled([
       unfiled("B.md", 20),

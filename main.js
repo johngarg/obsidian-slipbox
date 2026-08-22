@@ -3163,7 +3163,7 @@ function buildDeckMapSectionMarkers(orderedFiledCards) {
   const sections = [];
   let previousLabel = null;
   for (const [index, card] of orderedFiledCards.entries()) {
-    const label = Array.from(card.address)[0] ?? "";
+    const label = deckMapSectionLabel(card.address);
     if (label === "" || label === previousLabel) {
       continue;
     }
@@ -3176,6 +3176,9 @@ function buildDeckMapSectionMarkers(orderedFiledCards) {
     previousLabel = label;
   }
   return sections;
+}
+function deckMapSectionLabel(address) {
+  return address.match(/^[0-9]+/u)?.[0] ?? Array.from(address)[0] ?? "";
 }
 function visibleDeckMapSectionMarkers(sections, railWidth, minimumSpacing) {
   const visible = [];
@@ -5399,10 +5402,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.address} \xB7 ${title}${isInTray ? "; pulled out into a working pile" : ""}`;
       cardEl.setAttr("aria-label", cardLabel);
-      (0, import_obsidian3.setTooltip)(cardEl, cardLabel, {
-        placement: "bottom",
-        delay: 350
-      });
       cardEl.style.zIndex = String(
         cardStackOrder(filedIndex, focusDisplayIndex)
       );
@@ -5594,10 +5593,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const frame = card.createDiv({ cls: "slipbox-card-frame" });
     const addressRow = frame.createDiv({
       cls: "slipbox-card-address-row slipbox-viewed-card-drag-handle"
-    });
-    (0, import_obsidian3.setTooltip)(addressRow, "Drag to move viewed card", {
-      placement: "top",
-      delay: 500
     });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
     identity.createSpan({ cls: "slipbox-card-address", text: address });

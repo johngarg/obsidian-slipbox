@@ -2175,10 +2175,6 @@ export class DeckView extends ItemView {
         isInTray ? "; pulled out into a working pile" : ""
       }`;
       cardEl.setAttr("aria-label", cardLabel);
-      setTooltip(cardEl, cardLabel, {
-        placement: "bottom",
-        delay: 350,
-      });
       cardEl.style.zIndex = String(
         cardStackOrder(filedIndex, focusDisplayIndex),
       );
@@ -2387,10 +2383,6 @@ export class DeckView extends ItemView {
     const frame = card.createDiv({ cls: "slipbox-card-frame" });
     const addressRow = frame.createDiv({
       cls: "slipbox-card-address-row slipbox-viewed-card-drag-handle",
-    });
-    setTooltip(addressRow, "Drag to move viewed card", {
-      placement: "top",
-      delay: 500,
     });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
     identity.createSpan({ cls: "slipbox-card-address", text: address });

@@ -6,6 +6,7 @@ import {
   buildDeckMapSectionMarkers,
   deckMapCoordinate,
   deckMapIndexAtOffset,
+  deckMapSectionLabel,
   sampleDeckMapIndices,
   visibleDeckMapSectionMarkers,
 } from "../src/deck-map.js";
@@ -89,17 +90,28 @@ describe("Deck map", () => {
     assert.equal(deckMapCoordinate(0.5, 3), null);
   });
 
-  test("marks the first card whenever the first address character changes", () => {
+  test("uses a leading natural number or the first Unicode character as the section label", () => {
+    assert.equal(deckMapSectionLabel("10/2a"), "10");
+    assert.equal(deckMapSectionLabel("10,5/3t"), "10");
+    assert.equal(deckMapSectionLabel("A/1"), "A");
+    assert.equal(deckMapSectionLabel("α/12"), "α");
+    assert.equal(deckMapSectionLabel(""), "");
+  });
+
+  test("marks the first card whenever the derived address section changes", () => {
     assert.deepEqual(buildDeckMapSectionMarkers([
       { path: "one.md", address: "1/1" },
       { path: "two.md", address: "1/2" },
+      { path: "ten-decimal.md", address: "10,5/3t" },
+      { path: "ten.md", address: "10/2a" },
       { path: "alpha.md", address: "A/1" },
       { path: "alpha-child.md", address: "A/1a" },
       { path: "beta.md", address: "B/1" },
     ]), [
       { path: "one.md", ordinal: 1, position: 0, label: "1" },
-      { path: "alpha.md", ordinal: 3, position: 0.5, label: "A" },
-      { path: "beta.md", ordinal: 5, position: 1, label: "B" },
+      { path: "ten-decimal.md", ordinal: 3, position: 1 / 3, label: "10" },
+      { path: "alpha.md", ordinal: 5, position: 2 / 3, label: "A" },
+      { path: "beta.md", ordinal: 7, position: 1, label: "B" },
     ]);
   });
 

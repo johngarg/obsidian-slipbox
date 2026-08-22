@@ -101,7 +101,7 @@ export function buildDeckMapSectionMarkers(
   let previousLabel: string | null = null;
 
   for (const [index, card] of orderedFiledCards.entries()) {
-    const label = Array.from(card.address)[0] ?? "";
+    const label = deckMapSectionLabel(card.address);
     if (label === "" || label === previousLabel) {
       continue;
     }
@@ -115,6 +115,14 @@ export function buildDeckMapSectionMarkers(
   }
 
   return sections;
+}
+
+/**
+ * Use the complete leading ASCII digit run for numeric address sections and
+ * the first Unicode character for every other address.
+ */
+export function deckMapSectionLabel(address: string): string {
+  return address.match(/^[0-9]+/u)?.[0] ?? Array.from(address)[0] ?? "";
 }
 
 export function visibleDeckMapSectionMarkers(

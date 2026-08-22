@@ -90,7 +90,8 @@ actions. Tabbing into a card control, clicking a card, or opening a card for
 viewing transfers focus to that presentation. Native focus-visible rings remain
 on individual buttons and fields. Clicking an expanded Desk card only focuses
 it; it never moves the Deck anchor. Use **Show focused card in Deck** when that
-movement is wanted.
+movement is wanted. Deck and viewed-card surfaces do not repeat their visible
+header identity in a hover label; individual controls retain their tooltips.
 
 The Deck anchor is separate. It records the Deck position used by scrolling,
 the map, history, bookmark jumps, and Deck navigation. When card focus is on the
@@ -170,8 +171,8 @@ longer exist.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
 - A subtle ordinal Deck map with at most 512 evenly sampled neutral markers,
-  exact anchor and bookmark overlays, section initials, and full-order click
-  resolution to exact file paths.
+  exact anchor and bookmark overlays, compact address-section labels, and
+  full-order click resolution to exact file paths.
 - Browser-style session history for filed links and bookmarks.
 - One persistent bookmark per filed file.
 - Card-header and context-menu actions for opening notes, pulling cards out or
@@ -221,8 +222,10 @@ their commands and shortcuts available.
 positions from the complete configured Deck order and exact file paths. It
 renders at most 512 evenly sampled neutral markers, but clicks resolve against
 the complete order. The Deck anchor and every bookmark are overlaid at their
-exact positions; unobtrusive initials mark changes in the first address
-character. Disabling it removes the overlay.
+exact positions; unobtrusive labels mark changes in the address section.
+Numeric addresses use their complete leading ASCII digit run (`10/2a`
+and `10,5/3t` both display `10`); other addresses use their first Unicode
+character. Disabling the map removes the overlay.
 
 Header-button settings affect filed Deck-card headers only. Hidden actions
 remain available through commands, Slipbox shortcuts, and card context menus.

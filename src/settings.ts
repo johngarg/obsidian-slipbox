@@ -1,6 +1,6 @@
 import type { DeckOrdering } from "./address-order.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 6;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 7;
 
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
@@ -10,6 +10,40 @@ export type DeckHeaderButton =
   | "copy-link"
   | "tray"
   | "bookmark";
+
+export type CardButtonSurface = "deck" | "desk" | "viewed";
+
+export type CardHeaderButtonAction =
+  | "edit-card"
+  | "open-note"
+  | "toggle-viewed-card"
+  | "show-card-in-deck"
+  | "toggle-tray"
+  | "file-card"
+  | "copy-link"
+  | "toggle-bookmark"
+  | "move-desk-card-left"
+  | "move-desk-card-right"
+  | "delete-card";
+
+export type CardHeaderButtonSettings = Readonly<Record<
+  CardButtonSurface,
+  Readonly<Record<CardHeaderButtonAction, boolean>>
+>>;
+
+export const CARD_HEADER_BUTTON_ACTIONS: readonly CardHeaderButtonAction[] = [
+  "edit-card",
+  "open-note",
+  "toggle-viewed-card",
+  "show-card-in-deck",
+  "toggle-tray",
+  "file-card",
+  "copy-link",
+  "toggle-bookmark",
+  "move-desk-card-left",
+  "move-desk-card-right",
+  "delete-card",
+];
 
 export type SlipboxAction =
   | "previous-card"
@@ -146,7 +180,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "toggle-tray",
-    label: "Pull out or return focused card",
+    label: "Put focused card on or return it from Desk",
     repeatable: false,
     defaultBindings: [binding("p")],
   },
@@ -191,7 +225,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "pull-into-pile",
-    label: "Pull focused card into numbered pile",
+    label: "Put focused card into numbered pile",
     description: "Type a one-based pile number, then press Enter.",
     repeatable: false,
     defaultBindings: [binding("p", ["Shift"])],
@@ -371,7 +405,7 @@ export interface SlipboxSettings {
   readonly showTitleInDeck: boolean;
   readonly showDeckToolbar: boolean;
   readonly showDeckMap: boolean;
-  readonly deckHeaderButtons: Readonly<Record<DeckHeaderButton, boolean>>;
+  readonly cardHeaderButtons: CardHeaderButtonSettings;
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
 }
 
@@ -380,6 +414,37 @@ export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, bool
   "copy-link": true,
   tray: true,
   bookmark: true,
+};
+
+const allCardHeaderButtons = (
+  enabled: readonly CardHeaderButtonAction[],
+): Readonly<Record<CardHeaderButtonAction, boolean>> => Object.fromEntries(
+  CARD_HEADER_BUTTON_ACTIONS.map((action) => [action, enabled.includes(action)]),
+) as Readonly<Record<CardHeaderButtonAction, boolean>>;
+
+export const DEFAULT_CARD_HEADER_BUTTONS: CardHeaderButtonSettings = {
+  deck: allCardHeaderButtons([
+    "edit-card",
+    "open-note",
+    "toggle-tray",
+    "copy-link",
+    "toggle-bookmark",
+  ]),
+  desk: allCardHeaderButtons([
+    "toggle-viewed-card",
+    "edit-card",
+    "open-note",
+    "show-card-in-deck",
+    "file-card",
+    "toggle-tray",
+  ]),
+  viewed: allCardHeaderButtons([
+    "edit-card",
+    "open-note",
+    "show-card-in-deck",
+    "file-card",
+    "toggle-viewed-card",
+  ]),
 };
 
 export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
@@ -421,7 +486,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   showTitleInDeck: false,
   showDeckToolbar: true,
   showDeckMap: true,
-  deckHeaderButtons: DEFAULT_DECK_HEADER_BUTTONS,
+  cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
 };
 
@@ -624,6 +689,37 @@ function normalizeBooleanRecord<K extends string>(
   ) as Readonly<Record<K, boolean>>;
 }
 
+export function normalizeCardHeaderButtons(
+  value: unknown,
+  legacyDeckButtons: unknown = undefined,
+): CardHeaderButtonSettings {
+  const source = isRecord(value) ? value : {};
+  const legacy = isRecord(legacyDeckButtons) ? legacyDeckButtons : {};
+  const deckSource = isRecord(source.deck) ? source.deck : {};
+  const migratedDeck: Record<string, unknown> = {
+    ...deckSource,
+  };
+  const legacyMappings = {
+    "open-note": "open-note",
+    "copy-link": "copy-link",
+    tray: "toggle-tray",
+    bookmark: "toggle-bookmark",
+  } as const;
+  for (const [legacyKey, action] of Object.entries(legacyMappings)) {
+    if (
+      typeof migratedDeck[action] !== "boolean" &&
+      typeof legacy[legacyKey] === "boolean"
+    ) {
+      migratedDeck[action] = legacy[legacyKey];
+    }
+  }
+  return {
+    deck: normalizeBooleanRecord(migratedDeck, DEFAULT_CARD_HEADER_BUTTONS.deck),
+    desk: normalizeBooleanRecord(source.desk, DEFAULT_CARD_HEADER_BUTTONS.desk),
+    viewed: normalizeBooleanRecord(source.viewed, DEFAULT_CARD_HEADER_BUTTONS.viewed),
+  };
+}
+
 export function normalizeSettings(value: unknown): SlipboxSettings {
   const source = isRecord(value) ? value : {};
   const addressProperty = normalizePropertyName(
@@ -673,9 +769,9 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap
         : DEFAULT_SETTINGS.showDeckMap,
-    deckHeaderButtons: normalizeBooleanRecord(
+    cardHeaderButtons: normalizeCardHeaderButtons(
+      source.cardHeaderButtons,
       source.deckHeaderButtons,
-      DEFAULT_DECK_HEADER_BUTTONS,
     ),
     deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings),
   };
@@ -687,9 +783,7 @@ export function settingsForPersistence(
   settings: SlipboxSettings,
 ): Readonly<Record<string, unknown>> {
   const raw = isRecord(rawValue) ? rawValue : {};
-  const rawButtons = isRecord(raw.deckHeaderButtons)
-    ? raw.deckHeaderButtons
-    : {};
+  const { deckHeaderButtons: _legacyDeckHeaderButtons, ...retainedRaw } = raw;
   const rawKeybindingsSource = isRecord(raw.deckKeybindings)
     ? raw.deckKeybindings
     : {};
@@ -697,12 +791,9 @@ export function settingsForPersistence(
     Object.entries(rawKeybindingsSource).filter(([key]) => key !== "entry-points"),
   );
   return {
-    ...raw,
+    ...retainedRaw,
     ...settings,
-    deckHeaderButtons: {
-      ...rawButtons,
-      ...settings.deckHeaderButtons,
-    },
+    cardHeaderButtons: settings.cardHeaderButtons,
     deckKeybindings: {
       ...rawKeybindings,
       ...settings.deckKeybindings,

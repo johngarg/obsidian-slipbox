@@ -713,10 +713,12 @@ button.slipbox-tray-pile-cycle svg {
 
 .slipbox-tray-card-actions {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 1px;
+  max-width: 58%;
   margin: -3px -3px -3px auto;
+  overflow: hidden;
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -727,6 +729,7 @@ button.slipbox-tray-pile-cycle svg {
 }
 
 .slipbox-tray-card-action {
+  flex: 0 0 auto;
   width: 22px;
   height: 22px;
   padding: 4px;
@@ -940,10 +943,14 @@ button.slipbox-tray-pile-cycle svg {
   justify-self: end;
   align-items: center;
   gap: 2px;
+  width: 100%;
+  min-width: 0;
   margin: -4px -4px -4px 0;
+  overflow: hidden;
 }
 
 .slipbox-card-toggle {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -958,8 +965,17 @@ button.slipbox-tray-pile-cycle svg {
 
 .slipbox-card:hover .slipbox-card-toggle,
 .slipbox-card:focus-within .slipbox-card-toggle,
-.slipbox-card-bookmark-toggle.is-bookmarked {
+.slipbox-card-header-action[data-slipbox-action="toggle-bookmark"].is-pressed {
   opacity: 1;
+}
+
+.slipbox-card-header-action.is-warning:hover,
+.slipbox-card-header-action.is-warning:focus-visible {
+  color: var(--text-error);
+}
+
+.slipbox-card-header-action[hidden] {
+  display: none !important;
 }
 
 .slipbox-card-toggle:hover,

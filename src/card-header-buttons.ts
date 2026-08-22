@@ -1,0 +1,184 @@
+import { Menu, setIcon, setTooltip } from "obsidian";
+
+import {
+  cardHeaderVisibleActionCount,
+  enabledCardHeaderActions,
+  type CardHeaderActionContext,
+  type CardHeaderActionPresentation,
+} from "./card-header-actions.js";
+import type {
+  CardHeaderButtonSettings,
+  SlipboxAction,
+} from "./settings.js";
+
+export interface CardHeaderButtonRenderOptions {
+  readonly container: HTMLElement;
+  readonly context: CardHeaderActionContext;
+  readonly settings: CardHeaderButtonSettings;
+  readonly buttonClass: string;
+  readonly tooltipPlacement: "bottom" | "top";
+  readonly run: (action: SlipboxAction) => void;
+}
+
+interface RenderedAction {
+  readonly presentation: CardHeaderActionPresentation;
+  readonly button: HTMLButtonElement;
+}
+
+export class CardHeaderButtonController {
+  private readonly rendered: readonly RenderedAction[];
+  private readonly moreButton: HTMLButtonElement;
+  private readonly observer: ResizeObserver;
+  private overflowed: readonly CardHeaderActionPresentation[] = [];
+  private frame: number | null = null;
+
+  constructor(private readonly options: CardHeaderButtonRenderOptions) {
+    this.rendered = enabledCardHeaderActions(
+      options.settings,
+      options.context,
+    ).map((presentation) => ({
+      presentation,
+      button: this.renderButton(presentation),
+    }));
+    this.moreButton = this.renderMoreButton();
+    this.observer = new ResizeObserver(() => this.scheduleLayout());
+    this.observer.observe(options.container);
+    const parent = options.container.parentElement;
+    if (parent !== null) {
+      this.observer.observe(parent);
+    }
+    this.scheduleLayout();
+  }
+
+  disconnect(): void {
+    this.observer.disconnect();
+    const ownerWindow = this.options.container.ownerDocument.defaultView;
+    if (this.frame !== null && ownerWindow !== null) {
+      ownerWindow.cancelAnimationFrame(this.frame);
+    }
+    this.frame = null;
+  }
+
+  private renderButton(
+    presentation: CardHeaderActionPresentation,
+  ): HTMLButtonElement {
+    const button = this.options.container.createEl("button", {
+      cls: `clickable-icon slipbox-card-header-action ${this.options.buttonClass}`,
+      attr: {
+        type: "button",
+        "aria-label": presentation.label,
+        "data-slipbox-action": presentation.action,
+      },
+    });
+    setIcon(button, presentation.icon);
+    setTooltip(button, presentation.label, {
+      placement: this.options.tooltipPlacement,
+      delay: 250,
+    });
+    if (presentation.pressed !== undefined) {
+      button.setAttr("aria-pressed", String(presentation.pressed));
+      button.toggleClass("is-pressed", presentation.pressed);
+    }
+    button.toggleClass("is-warning", presentation.warning === true);
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.options.run(presentation.action);
+    });
+    return button;
+  }
+
+  private renderMoreButton(): HTMLButtonElement {
+    const button = this.options.container.createEl("button", {
+      cls: `clickable-icon slipbox-card-header-action slipbox-card-actions-more ${this.options.buttonClass}`,
+      attr: {
+        type: "button",
+        "aria-label": "More card actions",
+      },
+    });
+    setIcon(button, "ellipsis");
+    setTooltip(button, "More card actions", {
+      placement: this.options.tooltipPlacement,
+      delay: 250,
+    });
+    button.hidden = true;
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const menu = Menu.forEvent(event);
+      for (const presentation of this.overflowed) {
+        menu.addItem((item) => {
+          item
+            .setTitle(presentation.label)
+            .setIcon(presentation.icon)
+            .setWarning(presentation.warning === true)
+            .onClick(() => this.options.run(presentation.action));
+        });
+      }
+      menu.showAtMouseEvent(event);
+    });
+    return button;
+  }
+
+  private scheduleLayout(): void {
+    if (this.frame !== null) {
+      return;
+    }
+    const ownerWindow = this.options.container.ownerDocument.defaultView;
+    if (ownerWindow === null) {
+      return;
+    }
+    this.frame = ownerWindow.requestAnimationFrame(() => {
+      this.frame = null;
+      this.layout();
+    });
+  }
+
+  private layout(): void {
+    for (const { button } of this.rendered) {
+      button.hidden = false;
+    }
+    this.moreButton.hidden = true;
+    this.overflowed = [];
+    if (this.rendered.length === 0) {
+      return;
+    }
+
+    const container = this.options.container;
+    const available = container.clientWidth;
+    if (available <= 0) {
+      return;
+    }
+    const style = container.ownerDocument.defaultView?.getComputedStyle(container);
+    const rawGap = style?.columnGap === "normal" ? "0" : style?.columnGap;
+    const gap = Number.parseFloat(rawGap ?? "0") || 0;
+    const widths = this.rendered.map(({ button }) => button.offsetWidth);
+    this.moreButton.hidden = false;
+    const moreWidth = this.moreButton.offsetWidth;
+    const visibleCount = cardHeaderVisibleActionCount(
+      widths,
+      moreWidth,
+      gap,
+      available,
+    );
+    if (visibleCount === this.rendered.length) {
+      this.moreButton.hidden = true;
+      return;
+    }
+
+    for (let index = visibleCount; index < this.rendered.length; index += 1) {
+      this.rendered[index]?.button.toggleAttribute("hidden", true);
+    }
+    this.overflowed = this.rendered
+      .slice(visibleCount)
+      .map(({ presentation }) => presentation);
+  }
+}
+
+export function renderCardHeaderButtons(
+  options: CardHeaderButtonRenderOptions,
+): CardHeaderButtonController {
+  return new CardHeaderButtonController(options);
+}

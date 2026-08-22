@@ -22,8 +22,8 @@ export interface DeckActionContext {
 
 export function trayToggleLabel(
   inTray: boolean,
-): "Return" | "Pull out" {
-  return inTray ? "Return" : "Pull out";
+): "Return from Desk" | "Put on Desk" {
+  return inTray ? "Return from Desk" : "Put on Desk";
 }
 
 export function canRunDeckAction(

@@ -33,7 +33,11 @@ import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
-import { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
+import { canRunDeckAction } from "./deck-actions.js";
+import {
+  renderCardHeaderButtons,
+  type CardHeaderButtonController,
+} from "./card-header-buttons.js";
 import { MAX_SPREAD, MIN_SPREAD } from "./plugin-state.js";
 import {
   DECK_ACTION_DEFINITIONS,
@@ -188,6 +192,7 @@ export class DeckView extends ItemView {
   private deckMapSections: readonly DeckMapSectionMarker[] = [];
   private deckMapBookmarkCount = 0;
   private resizeObserver: ResizeObserver | null = null;
+  private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
   private readonly cardFooters: CardFooterManager;
@@ -378,6 +383,7 @@ export class DeckView extends ItemView {
     this.cancelSpaceRecentering();
     this.cardFooters.clear();
     this.trayRenderer.clear();
+    this.clearCardHeaderButtonControllers();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -1625,6 +1631,7 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.cardFooters.clear();
     this.trayRenderer.clear();
+    this.clearCardHeaderButtonControllers();
     this.contentEl.empty();
     this.renderedCards = [];
     this.backButtonEl = null;
@@ -2014,7 +2021,7 @@ export class DeckView extends ItemView {
     }
     this.showCommandFeedback(
       source === null
-        ? `Pulled the focused card into pile ${ordinal}.`
+        ? `Put the focused card into pile ${ordinal}.`
         : `Moved the focused card to pile ${ordinal}.`,
     );
     const targetPile = this.plugin.tray.piles[ordinal - 1];
@@ -2175,6 +2182,10 @@ export class DeckView extends ItemView {
         isInTray ? "; pulled out into a working pile" : ""
       }`;
       cardEl.setAttr("aria-label", cardLabel);
+      setTooltip(cardEl, cardLabel, {
+        placement: "bottom",
+        delay: 350,
+      });
       cardEl.style.zIndex = String(
         cardStackOrder(filedIndex, focusDisplayIndex),
       );
@@ -2213,6 +2224,7 @@ export class DeckView extends ItemView {
             event,
             card.file,
             card.address,
+            "viewed",
             DECK_VIEW_TYPE,
             this.leaf,
           );
@@ -2235,50 +2247,23 @@ export class DeckView extends ItemView {
         });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-      if (this.plugin.settings.deckHeaderButtons["open-note"]) {
-        this.renderCardAction(
-          cardActions,
-          "file-pen-line",
-          "slipbox-card-open",
-          "Open",
-          () => this.runAction("open-note", card),
-        );
-      }
-      if (this.plugin.settings.deckHeaderButtons["copy-link"]) {
-        this.renderCardAction(
-          cardActions,
-          "copy",
-          "slipbox-card-copy-link",
-          "Copy card link",
-          () => this.runAction("copy-link", card),
-        );
-      }
-      if (this.plugin.settings.deckHeaderButtons.tray) {
-        const trayAction = trayToggleLabel(isInTray);
-        const trayToggle = this.renderCardAction(
-          cardActions,
-          isInTray ? "undo-2" : "inbox",
-          "slipbox-card-tray-toggle",
-          trayAction,
-          () => this.runAction("toggle-tray", card),
-        );
-        trayToggle.setAttr("aria-pressed", String(isInTray));
-        trayToggle.toggleClass("is-in-tray", isInTray);
-      }
-      if (this.plugin.settings.deckHeaderButtons.bookmark) {
-        const bookmarkAction = isBookmarked
-          ? "Remove bookmark"
-          : "Add bookmark";
-        const bookmarkToggle = this.renderCardAction(
-          cardActions,
-          "bookmark",
-          "slipbox-card-bookmark-toggle",
-          bookmarkAction,
-          () => this.runAction("toggle-bookmark", card),
-        );
-        bookmarkToggle.setAttr("aria-pressed", String(isBookmarked));
-        bookmarkToggle.toggleClass("is-bookmarked", isBookmarked);
-      }
+      this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
+        container: cardActions,
+        context: {
+          surface: "deck",
+          filed: true,
+          onDesk: isInTray,
+          bookmarked: isBookmarked,
+          canMoveLeft: false,
+          canMoveRight: false,
+        },
+        settings: this.plugin.settings.cardHeaderButtons,
+        buttonClass: "slipbox-card-toggle",
+        tooltipPlacement: "bottom",
+        run: (action) => {
+          this.runAction(action, card);
+        },
+      }));
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
@@ -2313,6 +2298,7 @@ export class DeckView extends ItemView {
           event,
           card.file,
           card.address,
+          "deck",
           DECK_VIEW_TYPE,
           this.leaf,
         );
@@ -2384,6 +2370,10 @@ export class DeckView extends ItemView {
     const addressRow = frame.createDiv({
       cls: "slipbox-card-address-row slipbox-viewed-card-drag-handle",
     });
+    setTooltip(addressRow, "Drag to move viewed card", {
+      placement: "top",
+      delay: 500,
+    });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
     identity.createSpan({ cls: "slipbox-card-address", text: address });
     const headerTitle = cardHeaderTitle(
@@ -2394,38 +2384,26 @@ export class DeckView extends ItemView {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
     const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-    if (filed === undefined) {
-      this.renderCardAction(
-        actions,
-        "archive-restore",
-        "slipbox-card-file",
-        "File",
-        () => {
-          this.focusViewedCard();
-          return this.runAction("file-card");
-        },
-      );
-    }
-    this.renderCardAction(
-      actions,
-      "file-pen-line",
-      "slipbox-card-open",
-      "Open",
-      () => {
-        this.focusViewedCard();
-        return this.runAction("open-note");
+    const viewedPosition = cardPosition(this.plugin.tray, file.path);
+    this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
+      container: actions,
+      context: {
+        surface: "viewed",
+        filed: filed !== undefined,
+        onDesk: viewedPosition !== null,
+        bookmarked: filed !== undefined &&
+          this.plugin.bookmarkAtPath(filed.path) !== undefined,
+        canMoveLeft: false,
+        canMoveRight: false,
       },
-    );
-    this.renderCardAction(
-      actions,
-      "minimize-2",
-      "slipbox-viewed-card-put-back",
-      "Put back",
-      () => {
+      settings: this.plugin.settings.cardHeaderButtons,
+      buttonClass: "slipbox-card-toggle",
+      tooltipPlacement: "bottom",
+      run: (action) => {
         this.focusViewedCard();
-        return this.runAction("toggle-viewed-card");
+        this.runAction(action);
       },
-    );
+    }));
 
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
     body.scrollTop = state.scrollTop;
@@ -2465,6 +2443,7 @@ export class DeckView extends ItemView {
         event,
         file,
         filed?.address ?? null,
+        "viewed",
         DECK_VIEW_TYPE,
         this.leaf,
       );
@@ -2624,26 +2603,11 @@ export class DeckView extends ItemView {
     });
   }
 
-  private renderCardAction(
-    parent: HTMLElement,
-    icon: Parameters<typeof setIcon>[1],
-    className: string,
-    label: string,
-    action: () => boolean,
-  ): HTMLButtonElement {
-    const button = parent.createEl("button", {
-      cls: `clickable-icon slipbox-card-toggle ${className}`,
-      attr: { type: "button", "aria-label": label },
-    });
-    setIcon(button, icon);
-    setTooltip(button, label, { placement: "bottom", delay: 250 });
-    button.addEventListener("pointerdown", (event) => event.stopPropagation());
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      action();
-    });
-    return button;
+  private clearCardHeaderButtonControllers(): void {
+    for (const controller of this.cardHeaderButtonControllers) {
+      controller.disconnect();
+    }
+    this.cardHeaderButtonControllers.clear();
   }
 
   private async renderMarkdownCard(

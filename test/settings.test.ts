@@ -83,7 +83,11 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-deck-map"], [
       { key: "m", modifiers: [] },
     ]);
-    assert.equal(DEFAULT_SETTINGS.deckHeaderButtons["copy-link"], true);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["copy-link"], true);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["edit-card"], true);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["delete-card"], false);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.desk["show-card-in-deck"], true);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.viewed["toggle-viewed-card"], true);
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
     assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, false);
@@ -134,9 +138,9 @@ describe("Slipbox settings", () => {
     assert.equal(settings.showTitleInDeck, true);
     assert.equal(settings.showDeckToolbar, false);
     assert.equal(settings.showDeckMap, false);
-    assert.equal(settings.deckHeaderButtons.bookmark, false);
-    assert.equal(settings.deckHeaderButtons.tray, false);
-    assert.equal("desk" in settings.deckHeaderButtons, false);
+    assert.equal(settings.cardHeaderButtons.deck["toggle-bookmark"], false);
+    assert.equal(settings.cardHeaderButtons.deck["toggle-tray"], false);
+    assert.equal("desk" in settings.cardHeaderButtons, true);
     assert.equal("showTitleInDesk" in settings, false);
     assert.equal("deskHeaderButtons" in settings, false);
     assert.deepEqual(settings.deckKeybindings["previous-card"], [
@@ -147,7 +151,7 @@ describe("Slipbox settings", () => {
     assert.deepEqual(settings.deckKeybindings["copy-link"], [
       { key: "y", modifiers: [] },
     ]);
-    assert.equal(settings.deckHeaderButtons["copy-link"], true);
+    assert.equal(settings.cardHeaderButtons.deck["copy-link"], true);
   });
 
   test("falls back to filename titles when title and address keys collide", () => {
@@ -187,7 +191,7 @@ describe("Slipbox settings", () => {
         "copy-link": [{ key: "L", modifiers: ["Mod"] }],
       },
     });
-    assert.equal(customized.deckHeaderButtons["copy-link"], false);
+    assert.equal(customized.cardHeaderButtons.deck["copy-link"], false);
     assert.deepEqual(customized.deckKeybindings["copy-link"], [{
       key: "l",
       modifiers: ["Mod"],
@@ -197,6 +201,22 @@ describe("Slipbox settings", () => {
       deckKeybindings: { "copy-link": [] },
     });
     assert.deepEqual(empty.deckKeybindings["copy-link"], []);
+  });
+
+  test("normalizes per-surface button settings and preserves explicit false", () => {
+    const settings = normalizeSettings({
+      cardHeaderButtons: {
+        deck: { "edit-card": false, "unknown-action": true },
+        desk: { "show-card-in-deck": false, "delete-card": true },
+        viewed: { "toggle-viewed-card": false },
+      },
+    });
+    assert.equal(settings.cardHeaderButtons.deck["edit-card"], false);
+    assert.equal(settings.cardHeaderButtons.deck["open-note"], true);
+    assert.equal(settings.cardHeaderButtons.desk["show-card-in-deck"], false);
+    assert.equal(settings.cardHeaderButtons.desk["delete-card"], true);
+    assert.equal(settings.cardHeaderButtons.viewed["toggle-viewed-card"], false);
+    assert.equal("unknown-action" in settings.cardHeaderButtons.deck, false);
   });
 
   test("makes Enter wholly configurable through Show focused card in Deck", () => {
@@ -384,7 +404,7 @@ describe("Slipbox settings", () => {
       },
     };
     const settings = normalizeSettings(raw);
-    assert.equal("add-card" in settings.deckHeaderButtons, false);
+    assert.equal("add-card" in settings.cardHeaderButtons.deck, false);
     assert.equal("add-card" in settings.deckKeybindings, false);
     assert.equal("new-section" in settings.deckKeybindings, false);
     assert.equal("entry-points" in settings.deckKeybindings, false);
@@ -397,8 +417,11 @@ describe("Slipbox settings", () => {
 
     const persisted = settingsForPersistence(raw, settings);
     assert.deepEqual(persisted.unknownFutureKey, { retained: true });
+    assert.equal("deckHeaderButtons" in persisted, false);
     assert.equal(
-      (persisted.deckHeaderButtons as Record<string, unknown>)["add-card"],
+      "add-card" in (
+        (persisted.cardHeaderButtons as Record<string, unknown>).deck as Record<string, unknown>
+      ),
       false,
     );
     assert.deepEqual(

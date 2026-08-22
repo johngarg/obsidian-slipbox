@@ -25,7 +25,10 @@ import {
   type DeckBookmark,
 } from "./bookmarks.js";
 import { DECK_VIEW_TYPE, DeckView } from "./deck-view.js";
-import { trayToggleLabel } from "./deck-actions.js";
+import {
+  applicableCardHeaderActions,
+  type CardHeaderActionContext,
+} from "./card-header-actions.js";
 import {
   removeDeskPath,
   renameDeskCard,
@@ -462,6 +465,7 @@ export default class SlipboxPlugin extends Plugin {
     event: MouseEvent,
     file: TFile,
     address: string | null,
+    surface: CardHeaderActionContext["surface"],
     source: string,
     leaf: WorkspaceLeaf,
   ): void {
@@ -479,53 +483,27 @@ export default class SlipboxPlugin extends Plugin {
       }
     };
 
-    menu.addItem((item) => {
-      item
-        .setTitle(`Open ${title}`)
-        .setIcon("file-pen-line")
-        .setSection("slipbox-card")
-        .onClick(() => runViewAction("open-note"));
-    });
-    menu.addItem((item) => {
-      item
-        .setTitle("Copy link")
-        .setIcon("copy")
-        .setSection("slipbox-card")
-        .setDisabled(address === null)
-        .onClick(() => runViewAction("copy-link"));
-    });
-    menu.addItem((item) => {
-      item
-        .setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark")
-        .setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus")
-        .setSection("slipbox-card")
-        .setDisabled(address === null)
-        .onClick(() => {
-          if (address !== null) {
-            runViewAction("toggle-bookmark");
-          }
-        });
-    });
-    menu.addItem((item) => {
-      item
-        .setTitle(trayToggleLabel(isInTray))
-        .setIcon(isInTray ? "undo-2" : "inbox")
-        .setSection("slipbox-card")
-        .setDisabled(address === null)
-        .onClick(() => {
-          if (address !== null) {
-            runViewAction("toggle-tray");
-          }
-        });
-    });
-    menu.addItem((item) => {
-      item
-        .setTitle(`Delete ${title}`)
-        .setIcon("trash-2")
-        .setWarning(true)
-        .setSection("slipbox-card-danger")
-        .onClick(() => runViewAction("delete-card"));
-    });
+    for (const presentation of applicableCardHeaderActions({
+      surface,
+      filed: address !== null,
+      onDesk: isInTray,
+      bookmarked: isBookmarked,
+      canMoveLeft: false,
+      canMoveRight: false,
+    })) {
+      menu.addItem((item) => {
+        item
+          .setTitle(presentation.action === "delete-card"
+            ? `Delete ${title}`
+            : presentation.label)
+          .setIcon(presentation.icon)
+          .setWarning(presentation.warning === true)
+          .setSection(presentation.warning === true
+            ? "slipbox-card-danger"
+            : "slipbox-card")
+          .onClick(() => runViewAction(presentation.action));
+      });
+    }
 
     // Obsidian supplies its canonical Reveal file in navigation action along
     // with the remaining ordinary file actions and third-party contributions.

@@ -36,6 +36,15 @@ export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
+  CARD_BUTTON_DEFINITIONS,
+  CARD_BUTTON_ORDER,
+  applicableCardHeaderActions,
+  cardHeaderActionPresentation,
+  cardHeaderButtonDefinitionsForSurface,
+  cardHeaderVisibleActionCount,
+  enabledCardHeaderActions,
+} from "./card-header-actions.js";
+export {
   advancePendingDeckCommand,
   findAddressInitialIndex,
   firstUnicodeCharacter,
@@ -62,11 +71,14 @@ export {
 export {
   DECK_ACTION_DEFINITIONS,
   SLIPBOX_ACTION_DEFINITIONS,
+  CARD_HEADER_BUTTON_ACTIONS,
+  DEFAULT_CARD_HEADER_BUTTONS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
   normalizeDeckKeybindings,
+  normalizeCardHeaderButtons,
   normalizeFolderPath,
   normalizeSettings,
   settingsForPersistence,
@@ -195,6 +207,9 @@ export type {
 } from "./deck-map.js";
 export type {
   CardSize,
+  CardButtonSurface,
+  CardHeaderButtonAction,
+  CardHeaderButtonSettings,
   DeckAction,
   DeckHeaderButton,
   DeckKeyBinding,
@@ -206,6 +221,11 @@ export type {
   SlipboxSettings,
   TitleSource,
 } from "./settings.js";
+export type {
+  CardHeaderActionContext,
+  CardHeaderActionPresentation,
+  CardHeaderButtonDefinition,
+} from "./card-header-actions.js";
 export type { CardFocus, CardFocusSurface } from "./card-focus.js";
 export type {
   BacklinkFit,

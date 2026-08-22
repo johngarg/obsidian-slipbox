@@ -30,14 +30,14 @@ rewritten automatically.
 - **Slipbox** is the shared, pannable workspace containing the permanent
   canonical Deck of filed cards and the current Desk.
 - **Desk** is the transient, session-only surface containing working piles. It
-  contains all unfiled cards and any filed cards pulled out for current work,
+  contains all unfiled cards and any filed cards put there for current work,
   without appearing as a separate panel.
 - **Canvas** is Obsidian's vault-native persistent spatial workspace. A working
   pile can be laid out there when the arrangement should survive a restart or
   needs Canvas nodes and connections.
 
 The Desk is deliberately not saved. On startup, Slipbox reconstructs one
-pile from all unfiled cards, newest-modified first. Filed cards pulled out for
+pile from all unfiled cards, newest-modified first. Filed cards put on the Desk for
 current work, pile positions, expansion, and manual ordering last only for the
 current Obsidian session. No pile state is written to Markdown or plugin data.
 
@@ -68,7 +68,7 @@ Use drag and drop to:
 - drop a collapsed pile onto another to merge them.
 
 Focused cards also support `Alt+Left` and `Alt+Right`, and their context menu can
-move them to adjacent piles or split them. Pulling a filed card out does not
+move them to adjacent piles or split them. Putting a filed card on the Desk does not
 change its address, Slipbox filing order, bookmark, or Canvas membership. Its
 filed card is dimmed in light themes or slightly lightened in dark themes, and
 its Deck-map dot becomes invisible while it is in a working pile. The unchanged
@@ -90,8 +90,9 @@ actions. Tabbing into a card control, clicking a card, or opening a card for
 viewing transfers focus to that presentation. Native focus-visible rings remain
 on individual buttons and fields. Clicking an expanded Desk card only focuses
 it; it never moves the Deck anchor. Use **Show focused card in Deck** when that
-movement is wanted. Deck and viewed-card surfaces do not repeat their visible
-header identity in a hover label; individual controls retain their tooltips.
+movement is wanted. Deck cards retain their whole-card identity tooltips,
+including when focused. The viewed-card drag handle and individual controls
+retain their own tooltips.
 
 The Deck anchor is separate. It records the Deck position used by scrolling,
 the map, history, bookmark jumps, and Deck navigation. When card focus is on the
@@ -108,6 +109,32 @@ Deck-focused or unfiled card. Removing or rebinding this action in Settings also
 removes or changes the Enter behaviour. `e` is the separate default editing
 shortcut, and `v` views a Desk card or puts back a viewed card. Putting a viewed
 card back restores focus to that exact card in its Desk pile.
+
+## Card header actions
+
+Deck, Desk, and viewed cards share one action presentation model. **Edit card**
+uses the pen-on-file icon and **Open Markdown note** uses the plain file-text
+icon. **Put on Desk** uses the layered `bring-to-front` icon; once the card is
+on the Desk the same action becomes **Return from Desk**. Desk and viewed cards
+also expose **Show in Deck** when filed, while unfiled cards expose **File
+card**. Buttons always transfer card focus to their own presentation before
+running their shared action.
+
+The defaults keep the main workflow controls visible:
+
+- Deck: Edit, Open Markdown note, Put on/return from Desk, Copy link, and
+  Bookmark;
+- filed Desk: View, Edit, Open Markdown note, Show in Deck, and Return from
+  Desk;
+- unfiled Desk: View, Edit, Open Markdown note, and File card;
+- filed viewed: Edit, Open Markdown note, Show in Deck, and Put back; and
+- unfiled viewed: Edit, Open Markdown note, File card, and Put back.
+
+Copy and Bookmark on Desk/viewed cards, Desk movement, viewed-card Desk return,
+and Delete are available as opt-in header buttons. When enabled actions do not
+fit, Slipbox keeps the highest-priority prefix in the header and moves the rest
+into **More card actions** in their original order. Context menus, commands, and
+Slipbox shortcuts are unaffected by header visibility.
 
 ## Inline card editing
 
@@ -175,8 +202,8 @@ longer exist.
   full-order click resolution to exact file paths.
 - Browser-style session history for filed links and bookmarks.
 - One persistent bookmark per filed file.
-- Card-header and context-menu actions for opening notes, pulling cards out or
-  returning them, bookmarking, and deletion.
+- Configurable Deck, Desk, and viewed-card header actions for editing, opening,
+  filing, Desk placement, Deck location, links, bookmarks, movement, and deletion.
 - Inline manual filing in the existing working card, with optional real-Deck
   placement inspection, plus ordinary-note conversion workflows.
 - Filename- or frontmatter-derived centred titles, configurable new-card folder
@@ -210,8 +237,8 @@ Titles use the filename by default. They may instead use `title`, or another
 configured top-level frontmatter property, with a filename fallback for missing,
 blank, or non-text values. Slipbox card titles are hidden by default. Visible
 titles are centred between the left-aligned address and right-aligned actions.
-The title property must differ exactly from the address property. Schema-6
-migration switches an existing collision to filename titles without renaming or
+The title property must differ exactly from the address property. Migration
+switches an existing collision to filename titles without renaming or
 removing either property.
 
 `Show Deck toolbar` is enabled by default. Disabling it hides the navigation,
@@ -227,8 +254,13 @@ Numeric addresses use their complete leading ASCII digit run (`10/2a`
 and `10,5/3t` both display `10`); other addresses use their first Unicode
 character. Disabling the map removes the overlay.
 
-Header-button settings affect filed Deck-card headers only. Hidden actions
-remain available through commands, Slipbox shortcuts, and card context menus.
+`Card header buttons` contains separate Deck, Desk, and viewed-card groups.
+Every supported action can be enabled or disabled independently on each
+surface; state-inapplicable actions remain absent. Buttons that do not fit move
+into **More card actions**. Hidden actions remain available through commands,
+Slipbox shortcuts, and card context menus. Schema 7 migrates the former
+Deck-only Open, Copy, Desk, and Bookmark preferences without changing explicit
+off choices.
 
 Main-card and Desk-card sizes each have small, medium, and large presets. Medium
 preserves the default 840 px main-card cap and 360 px Desk-card cap. Desk
@@ -266,12 +298,12 @@ Obsidian's Templates core plugin.
 | `Ctrl+d` | Move forward ten Deck positions |
 | `Ctrl+u` | Move backward ten Deck positions |
 | `o` | Open the focused card in Markdown |
-| `p` | Pull out or return the focused card |
+| `p` | Put the focused filed card on the Desk, or return it from the Desk |
 | `Alt+←` / `Alt+→` | Move the focused Desk card within its pile |
 | `f` then a character | Find the next card whose address begins with that character |
 | `F` then a character | Find the previous card whose address begins with that character |
 | `g` then a character | Find the first card from the start whose address begins with that character |
-| `P` then a pile number and `Enter` | Pull or move the focused filed card into that one-based visible pile |
+| `P` then a pile number and `Enter` | Put or move the focused filed card into that one-based visible pile |
 | `t` | Toggle this Slipbox view's toolbar |
 | `m` | Toggle this Slipbox view's Deck map |
 

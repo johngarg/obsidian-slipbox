@@ -159,7 +159,7 @@ describe("Deck action availability", () => {
   });
 
   test("uses concise state-dependent wording in shared card actions", () => {
-    assert.equal(trayToggleLabel(false), "Pull out");
-    assert.equal(trayToggleLabel(true), "Return");
+    assert.equal(trayToggleLabel(false), "Put on Desk");
+    assert.equal(trayToggleLabel(true), "Return from Desk");
   });
 });

@@ -8,6 +8,7 @@ import {
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
+import { cardHeaderButtonDefinitionsForSurface } from "./card-header-actions.js";
 import {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
@@ -17,6 +18,7 @@ import {
   keyBindingConflict,
   keyBindingSignature,
   normalizeCardSize,
+  type CardButtonSurface,
   type DeckActionDefinition,
   type DeckKeyBinding,
   type SlipboxSettings,
@@ -139,12 +141,14 @@ export class SlipboxSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
 
-    new Setting(containerEl).setName("Filed Deck-card header buttons").setHeading();
+    new Setting(containerEl).setName("Card header buttons").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "These settings affect filed Deck-card headers only. Hidden actions remain available through commands and Slipbox shortcuts.",
+      text: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox shortcuts, and context menus.",
     });
-    this.renderDeckHeaderButtons(containerEl);
+    this.renderCardHeaderButtons(containerEl, "deck", "Deck cards");
+    this.renderCardHeaderButtons(containerEl, "desk", "Desk cards");
+    this.renderCardHeaderButtons(containerEl, "viewed", "Viewed cards");
 
     new Setting(containerEl).setName("Keyboard shortcuts").setHeading();
     const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
@@ -382,25 +386,28 @@ export class SlipboxSettingTab extends PluginSettingTab {
       });
   }
 
-  private renderDeckHeaderButtons(container: HTMLElement): void {
-    const labels = {
-      "open-note": "Open Markdown note",
-      "copy-link": "Copy card link",
-      tray: "Pull out or return card",
-      bookmark: "Toggle bookmark",
-    } as const;
-    for (const [id, label] of Object.entries(labels)) {
+  private renderCardHeaderButtons(
+    container: HTMLElement,
+    surface: CardButtonSurface,
+    heading: string,
+  ): void {
+    new Setting(container).setName(heading).setHeading();
+    for (const definition of cardHeaderButtonDefinitionsForSurface(surface)) {
       new Setting(container)
-        .setName(`Slipbox: ${label}`)
+        .setName(definition.settingLabel)
         .addToggle((toggle) => {
-          const key = id as keyof typeof labels;
           toggle
-            .setValue(this.slipbox.settings.deckHeaderButtons[key])
+            .setValue(
+              this.slipbox.settings.cardHeaderButtons[surface][definition.action],
+            )
             .onChange((value) => void this.save({
               ...this.slipbox.settings,
-              deckHeaderButtons: {
-                ...this.slipbox.settings.deckHeaderButtons,
-                [key]: value,
+              cardHeaderButtons: {
+                ...this.slipbox.settings.cardHeaderButtons,
+                [surface]: {
+                  ...this.slipbox.settings.cardHeaderButtons[surface],
+                  [definition.action]: value,
+                },
               },
             }));
         });

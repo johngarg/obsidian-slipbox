@@ -371,7 +371,7 @@ export class CardFooterManager {
     menu.addItem((item) => {
       item
         .setTitle(trayToggleLabel(inTray))
-        .setIcon(inTray ? "undo-2" : "inbox")
+        .setIcon(inTray ? "undo-2" : "bring-to-front")
         .onClick(() => this.environment.runAfterEditing(
           "backlink-tray-toggle",
           () => {

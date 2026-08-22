@@ -10,6 +10,11 @@ import {
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
+import { applicableCardHeaderActions } from "./card-header-actions.js";
+import {
+  renderCardHeaderButtons,
+  type CardHeaderButtonController,
+} from "./card-header-buttons.js";
 import {
   renderedLinkAction,
   resolveFiledCardLink,
@@ -39,6 +44,10 @@ import {
   type TrayState,
 } from "./tray-state.js";
 import { beginThresholdPointerDrag } from "./pointer-drag.js";
+import {
+  cardDropTargetPile,
+  pilePositionAtWorkspacePoint,
+} from "./tray-drop.js";
 import type { SlipboxAction } from "./settings.js";
 
 const DRAG_THRESHOLD_PX = 5;
@@ -75,6 +84,8 @@ export class TrayRenderer {
   private components = new Map<string, Component>();
   private previews = new Map<string, HTMLElement>();
   private rootEl: HTMLElement | null = null;
+  private workspaceEl: HTMLElement | null = null;
+  private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private filingEditor: InlineFilingEditorElements | null = null;
   private suppressClickUntil = 0;
   private pendingCardClickTimer: number | null = null;
@@ -86,6 +97,10 @@ export class TrayRenderer {
   ) {}
 
   clear(): void {
+    for (const controller of this.cardHeaderButtonControllers) {
+      controller.disconnect();
+    }
+    this.cardHeaderButtonControllers.clear();
     if (this.pendingCardClickTimer !== null) {
       window.clearTimeout(this.pendingCardClickTimer);
       this.pendingCardClickTimer = null;
@@ -99,6 +114,7 @@ export class TrayRenderer {
     this.components.clear();
     this.previews.clear();
     this.rootEl = null;
+    this.workspaceEl = null;
     this.filingEditor = null;
   }
 
@@ -172,6 +188,7 @@ export class TrayRenderer {
     }
 
     stage.addClass("has-tray");
+    this.workspaceEl = stage;
     const tray = space.createDiv({
       cls: "slipbox-tray",
       attr: {
@@ -542,41 +559,25 @@ export class TrayRenderer {
     }
     if (!isFilingSource && !isViewed) {
       const controls = identity.createDiv({ cls: "slipbox-tray-card-actions" });
-      const view = trayIconButton(controls, "search", "View");
-      view.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.actions.focusDeskCard(card.cardRef, pile.id);
-        this.actions.runAction("toggle-viewed-card");
-      });
-      if (filed === undefined) {
-        const fileButton = trayIconButton(controls, "archive-restore", "File");
-        fileButton.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
+      this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
+        container: controls,
+        context: {
+          surface: "desk",
+          filed: filed !== undefined,
+          onDesk: true,
+          bookmarked: filed !== undefined &&
+            this.plugin.bookmarkAtPath(filed.path) !== undefined,
+          canMoveLeft: cardIndex > 0,
+          canMoveRight: cardIndex < pile.cards.length - 1,
+        },
+        settings: this.plugin.settings.cardHeaderButtons,
+        buttonClass: "slipbox-tray-card-action",
+        tooltipPlacement: "bottom",
+        run: (action) => {
           this.actions.focusDeskCard(card.cardRef, pile.id);
-          this.actions.runAction("file-card");
-        });
-      } else {
-        const returnButton = trayIconButton(
-          controls,
-          "undo-2",
-          "Return",
-        );
-        returnButton.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          this.actions.focusDeskCard(card.cardRef, pile.id);
-          this.actions.runAction("toggle-tray");
-        });
-      }
-      const open = trayIconButton(controls, "file-pen-line", "Open");
-      open.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.actions.focusDeskCard(card.cardRef, pile.id);
-        this.actions.runAction("open-note");
-      });
+          this.actions.runAction(action);
+        },
+      }));
     }
 
     if (isViewed) {
@@ -893,69 +894,31 @@ export class TrayRenderer {
       return false;
     }
     const filed = this.plugin.index.filedByFile(file);
+    const position = cardPosition(this.plugin.tray, card.cardRef);
     const run = (action: SlipboxAction): void => {
       this.actions.focusDeskCard(card.cardRef, pileId);
       this.actions.runAction(action);
     };
-    menu.addItem((item) => {
-      item
-        .setTitle("View")
-        .setIcon("search")
-        .onClick(() => run("toggle-viewed-card"));
-    });
-    menu.addItem((item) => {
-      item
-        .setTitle("Edit")
-        .setIcon("pencil")
-        .onClick(() => run("edit-card"));
-    });
-    menu.addItem((item) => {
-      item
-        .setTitle("Open")
-        .setIcon("file-pen-line")
-        .onClick(() => run("open-note"));
-    });
-    if (filed === undefined) {
+    for (const presentation of applicableCardHeaderActions({
+      surface: "desk",
+      filed: filed !== undefined,
+      onDesk: true,
+      bookmarked: filed !== undefined &&
+        this.plugin.bookmarkAtPath(filed.path) !== undefined,
+      canMoveLeft: position !== null && position.cardIndex > 0,
+      canMoveRight: position !== null &&
+        position.cardIndex < position.pileSize - 1,
+    })) {
       menu.addItem((item) => {
         item
-          .setTitle("File")
-          .setIcon("archive-restore")
-          .onClick(() => run("file-card"));
-      });
-    } else {
-      menu.addItem((item) => {
-        item
-          .setTitle("Show in Deck")
-          .setIcon("locate-fixed")
-          .onClick(() => run("show-card-in-deck"));
-      });
-      menu.addItem((item) => {
-        item
-          .setTitle("Copy link")
-          .setIcon("copy")
-          .onClick(() => run("copy-link"));
-      });
-      menu.addItem((item) => {
-        const bookmarked = this.plugin.bookmarkAtPath(filed.path) !== undefined;
-        item
-          .setTitle(bookmarked ? "Remove bookmark" : "Add bookmark")
-          .setIcon(bookmarked ? "bookmark-minus" : "bookmark-plus")
-          .onClick(() => run("toggle-bookmark"));
-      });
-      menu.addItem((item) => {
-        item
-          .setTitle("Return")
-          .setIcon("undo-2")
-          .onClick(() => run("toggle-tray"));
+          .setTitle(presentation.action === "delete-card"
+            ? `Delete ${this.plugin.cardTitle(file)}`
+            : presentation.label)
+          .setIcon(presentation.icon)
+          .setWarning(presentation.warning === true)
+          .onClick(() => run(presentation.action));
       });
     }
-    menu.addItem((item) => {
-      item
-        .setTitle(`Delete ${this.plugin.cardTitle(file)}`)
-        .setIcon("trash-2")
-        .setWarning(true)
-        .onClick(() => run("delete-card"));
-    });
     return true;
   }
 
@@ -1000,10 +963,15 @@ export class TrayRenderer {
             this.suppressClickUntil = performance.now() + 400;
             const next = this.cardDropState(
               card.cardRef,
+              pile.id,
               upEvent.clientX,
               upEvent.clientY,
               element,
             );
+            const nextPosition = cardPosition(next, card.cardRef);
+            if (nextPosition !== null) {
+              this.actions.focusDeskCard(card.cardRef, nextPosition.pileId);
+            }
             this.clearDropCues();
             void this.plugin.updateTray(next);
           },
@@ -1071,15 +1039,18 @@ export class TrayRenderer {
 
   private cardDropState(
     cardRef: string,
+    sourcePileId: string,
     x: number,
     y: number,
     dragged: HTMLElement,
   ) {
     const state = this.plugin.tray;
-    const targetPileEl = this.elementsBelowPoint(x, y, dragged)
-      .find((element) => element.matches(".slipbox-tray-pile")) as HTMLElement | undefined;
+    const targetPileEl = cardDropTargetPile(
+      this.elementsBelowPoint(x, y, dragged),
+      sourcePileId,
+    );
     const targetPileId = targetPileEl?.dataset.pileId;
-    if (targetPileEl !== undefined && targetPileId !== undefined) {
+    if (targetPileEl !== null && targetPileId !== undefined) {
       const cards = Array.from(targetPileEl.querySelectorAll<HTMLElement>(
         ".slipbox-tray-card:not(.is-dragging)",
       ));
@@ -1134,10 +1105,8 @@ export class TrayRenderer {
       event.clientY,
       dragged,
     );
-    const targetPile = elements.find(
-      (element) => element.matches(".slipbox-tray-pile"),
-    ) as HTMLElement | undefined;
-    if (targetPile === undefined) {
+    const targetPile = cardDropTargetPile(elements, sourcePileId);
+    if (targetPile === null) {
       return;
     }
     targetPile.addClass(
@@ -1190,24 +1159,19 @@ export class TrayRenderer {
     x: number,
     y: number,
     coordinateElement: HTMLElement | null = this.rootEl,
-    hitBoundsElement: HTMLElement | null = coordinateElement,
+    hitBoundsElement: HTMLElement | null = null,
   ): TrayPilePosition | null {
     const rect = coordinateElement?.getBoundingClientRect();
-    const hitBounds = hitBoundsElement?.getBoundingClientRect();
-    if (
-      rect === undefined ||
-      hitBounds === undefined ||
-      x < hitBounds.left || x > hitBounds.right ||
-      y < hitBounds.top || y > hitBounds.bottom
-    ) {
+    const hitBounds = (hitBoundsElement ?? this.workspaceEl)
+      ?.getBoundingClientRect();
+    if (rect === undefined || hitBounds === undefined) {
       return null;
     }
-    return {
-      x: x - (rect.left + rect.width / 2),
-      y: y - (
-        rect.top + rect.height * PILE_BASE_Y_RATIO - PILE_BASE_Y_OFFSET_PX
-      ) - PILE_CARD_HALF_HEIGHT_PX,
-    };
+    return pilePositionAtWorkspacePoint(x, y, rect, hitBounds, {
+      baseYRatio: PILE_BASE_Y_RATIO,
+      baseYOffsetPx: PILE_BASE_Y_OFFSET_PX,
+      cardHalfHeightPx: PILE_CARD_HALF_HEIGHT_PX,
+    });
   }
 
   private clearDropCues(except?: HTMLElement): void {
@@ -1312,19 +1276,4 @@ function isPointInPileMergeRegion(
     relativeX > 0.2 && relativeX < 0.8 &&
     relativeY > 0.2 && relativeY < 0.8
   );
-}
-
-function trayIconButton(
-  parent: HTMLElement,
-  icon: Parameters<typeof setIcon>[1],
-  label: string,
-): HTMLButtonElement {
-  const button = parent.createEl("button", {
-    cls: "clickable-icon slipbox-tray-card-action",
-    attr: { type: "button", "aria-label": label },
-  });
-  setIcon(button, icon);
-  setTooltip(button, label, { placement: "bottom", delay: 250 });
-  button.addEventListener("pointerdown", (event) => event.stopPropagation());
-  return button;
 }

@@ -929,6 +929,15 @@ function cardHeaderVisibleActionCount(buttonWidths, moreButtonWidth, gap, availa
   return visibleCount;
 }
 
+// src/pointer-button-focus.ts
+function releasePointerActivatedButtonFocus(button, activation) {
+  if (activation.detail === 0) {
+    return false;
+  }
+  button.blur();
+  return true;
+}
+
 // src/card-header-buttons.ts
 var CardHeaderButtonController = class {
   constructor(options) {
@@ -986,6 +995,7 @@ var CardHeaderButtonController = class {
       event.preventDefault();
       event.stopPropagation();
       this.options.run(presentation.action);
+      releasePointerActivatedButtonFocus(button, event);
     });
     return button;
   }

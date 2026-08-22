@@ -10,6 +10,7 @@ import type {
   CardHeaderButtonSettings,
   SlipboxAction,
 } from "./settings.js";
+import { releasePointerActivatedButtonFocus } from "./pointer-button-focus.js";
 
 export interface CardHeaderButtonRenderOptions {
   readonly container: HTMLElement;
@@ -85,6 +86,7 @@ export class CardHeaderButtonController {
       event.preventDefault();
       event.stopPropagation();
       this.options.run(presentation.action);
+      releasePointerActivatedButtonFocus(button, event);
     });
     return button;
   }

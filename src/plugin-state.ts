@@ -3,6 +3,7 @@ import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
 import {
   DEFAULT_SETTINGS,
   SLIPBOX_DATA_SCHEMA_VERSION,
+  hasTitleAddressPropertyCollision,
   normalizeSettings,
   type SlipboxSettings,
 } from "./settings.js";
@@ -50,6 +51,18 @@ export function hasRemovedEntryPointData(value: unknown): boolean {
     : {};
   return Object.prototype.hasOwnProperty.call(state, "entryPoints") ||
     Object.prototype.hasOwnProperty.call(keybindings, "entry-points");
+}
+
+export function hasTitleAddressCollisionData(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const settings = isRecord(value.settings) ? value.settings : {};
+  return hasTitleAddressPropertyCollision(settings);
+}
+
+export function needsPluginDataMigration(value: unknown): boolean {
+  return isRecord(value) && value.schemaVersion !== SLIPBOX_DATA_SCHEMA_VERSION;
 }
 
 /** Tolerant loading for plugin data written by this or an older release. */

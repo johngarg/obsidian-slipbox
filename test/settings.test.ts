@@ -5,6 +5,7 @@ import {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
+  hasTitleAddressPropertyCollision,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
   normalizeDeckKeybindings,
@@ -36,6 +37,15 @@ describe("Slipbox settings", () => {
     ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["copy-link"], [
       { key: "y", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["edit-card"], [
+      { key: "e", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["show-card-in-deck"], [
+      { key: "Enter", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-viewed-card"], [
+      { key: "v", modifiers: [] },
     ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["back"], [
       { key: "h", modifiers: ["Shift"] },
@@ -140,6 +150,36 @@ describe("Slipbox settings", () => {
     assert.equal(settings.deckHeaderButtons["copy-link"], true);
   });
 
+  test("falls back to filename titles when title and address keys collide", () => {
+    const raw = {
+      addressProperty: " card-key ",
+      titleSource: "frontmatter",
+      titleProperty: "card-key",
+    };
+    assert.equal(hasTitleAddressPropertyCollision(raw), true);
+    const normalized = normalizeSettings(raw);
+    assert.equal(normalized.addressProperty, "card-key");
+    assert.equal(normalized.titleProperty, "card-key");
+    assert.equal(normalized.titleSource, "filename");
+    assert.equal(hasTitleAddressPropertyCollision({
+      ...raw,
+      titleSource: "filename",
+    }), false);
+  });
+
+  test("gives every registered action a unique command and target", () => {
+    const commandIds = DECK_ACTION_DEFINITIONS.map((definition) =>
+      definition.commandId
+    );
+    assert.equal(new Set(commandIds).size, commandIds.length);
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.every((definition) =>
+        definition.commandName !== "" && definition.target !== undefined
+      ),
+      true,
+    );
+  });
+
   test("preserves customized and deliberately empty copy-link settings", () => {
     const customized = normalizeSettings({
       deckHeaderButtons: { "copy-link": false },
@@ -157,6 +197,29 @@ describe("Slipbox settings", () => {
       deckKeybindings: { "copy-link": [] },
     });
     assert.deepEqual(empty.deckKeybindings["copy-link"], []);
+  });
+
+  test("makes Enter wholly configurable through Show focused card in Deck", () => {
+    const removed = normalizeSettings({
+      deckKeybindings: { "show-card-in-deck": [] },
+    });
+    assert.deepEqual(removed.deckKeybindings["show-card-in-deck"], []);
+    assert.equal(
+      Object.values(removed.deckKeybindings).flat().some(
+        (binding) => binding.key === "Enter",
+      ),
+      false,
+    );
+
+    const rebound = normalizeSettings({
+      deckKeybindings: {
+        "show-card-in-deck": [{ key: "s", modifiers: ["Mod"] }],
+      },
+    });
+    assert.deepEqual(rebound.deckKeybindings["show-card-in-deck"], [{
+      key: "s",
+      modifiers: ["Mod"],
+    }]);
   });
 
   test("upgrades the complete previously shipped default map as one unit", () => {

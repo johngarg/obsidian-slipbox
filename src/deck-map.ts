@@ -42,7 +42,7 @@ export function deckMapCoordinate(
  *
  * Once there are more cards than useful horizontal pixels, rendering one DOM
  * node per card adds memory and layout work without adding visible detail.
- * Active cards and bookmarks are rendered separately at their exact positions.
+ * The Deck anchor and bookmarks are rendered separately at exact positions.
  */
 export function sampleDeckMapIndices(
   cardCount: number,

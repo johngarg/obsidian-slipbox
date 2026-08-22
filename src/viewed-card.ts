@@ -17,12 +17,6 @@ export function createViewedCardState(path: string): ViewedCardState {
   return { path, x: 0, y: 0, scrollTop: 0 };
 }
 
-export function centerViewedCardState(
-  state: ViewedCardState,
-): ViewedCardState {
-  return { ...state, x: 0, y: 0 };
-}
-
 export function moveViewedCardState(
   state: ViewedCardState,
   x: number,

@@ -47,6 +47,17 @@ export class SlipboxSettingTab extends PluginSettingTab {
           .addOption("frontmatter", "Frontmatter property")
           .setValue(this.slipbox.settings.titleSource)
           .onChange((value) => {
+            if (
+              value === "frontmatter" &&
+              this.slipbox.settings.titleProperty ===
+                this.slipbox.settings.addressProperty
+            ) {
+              dropdown.setValue("filename");
+              new Notice(
+                "The title property must be different from the address property.",
+              );
+              return;
+            }
             void this.save({
               ...this.slipbox.settings,
               titleSource: value === "frontmatter" ? "frontmatter" : "filename",
@@ -56,13 +67,14 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     const titleProperty = new Setting(containerEl)
       .setName("Title property")
-      .setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.")
+      .setDesc("Exact top-level YAML key. It must differ from the address property. Missing, blank, or non-text values fall back to the filename.")
       .setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
     titleProperty.addText((text) => {
       let property = this.slipbox.settings.titleProperty;
       const queueCommit = this.debounceTextCommit(text.inputEl, () => {
         if (
           property !== "" &&
+          property !== this.slipbox.settings.addressProperty &&
           property !== this.slipbox.settings.titleProperty
         ) {
           void this.save({
@@ -76,14 +88,18 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .setDisabled(this.slipbox.settings.titleSource !== "frontmatter")
         .onChange((value) => {
           property = value.trim();
-          this.setPropertyValidity(titleProperty, property !== "");
+          this.setMetadataPropertyValidity(
+            titleProperty,
+            property,
+            this.slipbox.settings.addressProperty,
+          );
           queueCommit();
         });
     });
 
     new Setting(containerEl)
       .setName("Show title in Slipbox card headers")
-      .setDesc("Show resolved titles beside addresses in Deck and tray card headers.")
+      .setDesc("Show resolved titles beside addresses in Deck and Desk card headers.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.showTitleInDeck)
@@ -107,7 +123,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Show Deck map")
-      .setDesc("Show a clickable overview of every filed card and bookmark.")
+      .setDesc("Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.slipbox.settings.showDeckMap)
@@ -123,10 +139,10 @@ export class SlipboxSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
 
-    new Setting(containerEl).setName("Card-header buttons").setHeading();
+    new Setting(containerEl).setName("Filed Deck-card header buttons").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Hidden buttons remain available through commands, Slipbox shortcuts, and card context menus.",
+      text: "These settings affect filed Deck-card headers only. Hidden actions remain available through commands and Slipbox shortcuts.",
     });
     this.renderDeckHeaderButtons(containerEl);
 
@@ -168,8 +184,8 @@ export class SlipboxSettingTab extends PluginSettingTab {
       });
 
     new Setting(container)
-      .setName("Tray card size")
-      .setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Tray cards remain smaller than main cards.")
+      .setName("Desk card size")
+      .setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Desk cards remain smaller than main cards.")
       .addDropdown((dropdown) => {
         dropdown
           .addOption("small", "Small")
@@ -319,6 +335,10 @@ export class SlipboxSettingTab extends PluginSettingTab {
       const queueCommit = this.debounceTextCommit(text.inputEl, () => {
         if (
           property !== "" &&
+          !(
+            this.slipbox.settings.titleSource === "frontmatter" &&
+            property === this.slipbox.settings.titleProperty
+          ) &&
           property !== this.slipbox.settings.addressProperty
         ) {
           void this.save({
@@ -332,7 +352,13 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .setValue(this.slipbox.settings.addressProperty)
         .onChange((value) => {
           property = value.trim();
-          this.setPropertyValidity(setting, property !== "");
+          this.setMetadataPropertyValidity(
+            setting,
+            property,
+            this.slipbox.settings.titleSource === "frontmatter"
+              ? this.slipbox.settings.titleProperty
+              : null,
+          );
           queueCommit();
         });
     });
@@ -574,11 +600,19 @@ export class SlipboxSettingTab extends PluginSettingTab {
     };
   }
 
-  private setPropertyValidity(setting: Setting, valid: boolean): void {
+  private setMetadataPropertyValidity(
+    setting: Setting,
+    property: string,
+    disallowedProperty: string | null,
+  ): void {
+    const empty = property === "";
+    const collision = disallowedProperty !== null && property === disallowedProperty;
     this.setTextValidity(
       setting,
-      valid,
-      "A non-empty top-level property name is required.",
+      !empty && !collision,
+      collision
+        ? "The title and address properties must use different keys."
+        : "A non-empty top-level property name is required.",
     );
   }
 

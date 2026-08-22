@@ -1,6 +1,6 @@
 import type { DeckOrdering } from "./address-order.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 5;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 6;
 
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
@@ -11,7 +11,7 @@ export type DeckHeaderButton =
   | "tray"
   | "bookmark";
 
-export type DeckAction =
+export type SlipboxAction =
   | "previous-card"
   | "next-card"
   | "previous-bookmark"
@@ -36,7 +36,19 @@ export type DeckAction =
   | "bookmarks"
   | "problems"
   | "confirm-filing"
-  | "cancel-filing";
+  | "cancel-filing"
+  | "edit-card"
+  | "show-card-in-deck"
+  | "toggle-viewed-card"
+  | "file-card"
+  | "move-desk-card-left"
+  | "move-desk-card-right"
+  | "delete-card"
+  | "collapse-all-piles"
+  | "return-all-filed-cards";
+
+/** Compatibility alias retained for integrations built before schema 6. */
+export type DeckAction = SlipboxAction;
 
 export type KeyModifier = "Mod" | "Ctrl" | "Meta" | "Alt" | "Shift";
 
@@ -45,128 +57,141 @@ export interface DeckKeyBinding {
   readonly key: string;
 }
 
-export interface DeckActionDefinition {
-  readonly id: DeckAction;
+export type SlipboxActionScope = "active-view" | "global";
+export type SlipboxActionTarget = "deck-anchor" | "focused-card" | "view" | "global";
+
+export interface SlipboxActionDefinition {
+  readonly id: SlipboxAction;
   readonly label: string;
   readonly description?: string;
   readonly repeatable: boolean;
   readonly defaultBindings: readonly DeckKeyBinding[];
+  readonly commandId: string;
+  readonly commandName: string;
+  readonly scope: SlipboxActionScope;
+  readonly target: SlipboxActionTarget;
 }
+
+/** Compatibility alias retained for integrations built before schema 6. */
+export type DeckActionDefinition = SlipboxActionDefinition;
 
 const binding = (
   key: string,
   modifiers: readonly KeyModifier[] = [],
 ): DeckKeyBinding => ({ key, modifiers });
 
-export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
+const BASE_ACTION_DEFINITIONS: readonly Omit<
+  SlipboxActionDefinition,
+  "commandId" | "commandName" | "scope" | "target"
+>[] = [
   {
     id: "previous-card",
-    label: "Previous card",
+    label: "Move Deck anchor to previous card",
     repeatable: true,
     defaultBindings: [binding("ArrowLeft"), binding("k")],
   },
   {
     id: "next-card",
-    label: "Next card",
+    label: "Move Deck anchor to next card",
     repeatable: true,
     defaultBindings: [binding("ArrowRight"), binding("j")],
   },
   {
     id: "previous-bookmark",
-    label: "Previous bookmark",
+    label: "Move Deck anchor to previous bookmark",
     repeatable: false,
     defaultBindings: [binding("[")],
   },
   {
     id: "next-bookmark",
-    label: "Next bookmark",
+    label: "Move Deck anchor to next bookmark",
     repeatable: false,
     defaultBindings: [binding("]")],
   },
   {
     id: "centre-card",
-    label: "Centre active card",
+    label: "Centre Deck anchor",
     repeatable: false,
     defaultBindings: [binding("c")],
   },
   {
     id: "first-card",
-    label: "First card",
+    label: "Move Deck anchor to first card",
     repeatable: false,
     defaultBindings: [binding("0")],
   },
   {
     id: "last-card",
-    label: "Last card",
+    label: "Move Deck anchor to last card",
     repeatable: false,
     defaultBindings: [binding("$", ["Shift"])],
   },
   {
     id: "forward-ten-cards",
-    label: "Move forward ten cards",
+    label: "Move Deck anchor forward ten cards",
     repeatable: true,
     defaultBindings: [binding("d", ["Ctrl"])],
   },
   {
     id: "backward-ten-cards",
-    label: "Move backward ten cards",
+    label: "Move Deck anchor backward ten cards",
     repeatable: true,
     defaultBindings: [binding("u", ["Ctrl"])],
   },
   {
     id: "open-note",
-    label: "Open Markdown note",
+    label: "Open focused card in Markdown",
     repeatable: false,
     defaultBindings: [binding("o")],
   },
   {
     id: "toggle-tray",
-    label: "Pull out or return card",
+    label: "Pull out or return focused card",
     repeatable: false,
     defaultBindings: [binding("p")],
   },
   {
     id: "toggle-bookmark",
-    label: "Toggle bookmark",
+    label: "Toggle bookmark on focused card",
     repeatable: false,
     defaultBindings: [binding("b")],
   },
   {
     id: "back",
-    label: "Back",
+    label: "Move Deck anchor back in history",
     repeatable: false,
     defaultBindings: [binding("h", ["Shift"])],
   },
   {
     id: "forward",
-    label: "Forward",
+    label: "Move Deck anchor forward in history",
     repeatable: false,
     defaultBindings: [binding("l", ["Shift"])],
   },
   {
     id: "find-address-forward",
-    label: "Find next address initial",
+    label: "Move Deck anchor to next address initial",
     description: "Type the address's first character after this prefix.",
     repeatable: false,
     defaultBindings: [binding("f")],
   },
   {
     id: "find-address-backward",
-    label: "Find previous address initial",
+    label: "Move Deck anchor to previous address initial",
     description: "Type the address's first character after this prefix.",
     repeatable: false,
     defaultBindings: [binding("f", ["Shift"])],
   },
   {
     id: "find-address-first",
-    label: "Go to first address initial",
+    label: "Move Deck anchor to first address initial",
     description: "Type the address's first character after this prefix.",
     repeatable: false,
     defaultBindings: [binding("g")],
   },
   {
     id: "pull-into-pile",
-    label: "Pull into numbered pile",
+    label: "Pull focused card into numbered pile",
     description: "Type a one-based pile number, then press Enter.",
     repeatable: false,
     defaultBindings: [binding("p", ["Shift"])],
@@ -209,11 +234,128 @@ export const DECK_ACTION_DEFINITIONS: readonly DeckActionDefinition[] = [
   },
   {
     id: "copy-link",
-    label: "Copy card link",
+    label: "Copy link to focused card",
     repeatable: false,
     defaultBindings: [binding("y")],
   },
+  {
+    id: "edit-card",
+    label: "Edit focused card",
+    repeatable: false,
+    defaultBindings: [binding("e")],
+  },
+  {
+    id: "show-card-in-deck",
+    label: "Show focused card in Deck",
+    repeatable: false,
+    defaultBindings: [binding("Enter")],
+  },
+  {
+    id: "toggle-viewed-card",
+    label: "View or put back focused card",
+    repeatable: false,
+    defaultBindings: [binding("v")],
+  },
+  {
+    id: "file-card",
+    label: "File focused card",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "move-desk-card-left",
+    label: "Move focused Desk card left",
+    repeatable: true,
+    defaultBindings: [binding("ArrowLeft", ["Alt"])],
+  },
+  {
+    id: "move-desk-card-right",
+    label: "Move focused Desk card right",
+    repeatable: true,
+    defaultBindings: [binding("ArrowRight", ["Alt"])],
+  },
+  {
+    id: "delete-card",
+    label: "Delete focused card",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "collapse-all-piles",
+    label: "Collapse all Desk piles",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "return-all-filed-cards",
+    label: "Return all filed Desk cards",
+    repeatable: false,
+    defaultBindings: [],
+  },
 ];
+
+const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
+  "centre-card": "centre-active-card",
+  "open-note": "open-current-card-markdown",
+  "copy-link": "copy-current-card-link",
+  "toggle-tray": "toggle-tray",
+  "toggle-bookmark": "add-bookmark-current-card",
+  back: "history-back",
+  forward: "history-forward",
+  "find-address-forward": "find-next-address-initial",
+  "find-address-backward": "find-previous-address-initial",
+  "find-address-first": "find-first-address-initial",
+  "pull-into-pile": "pull-into-numbered-pile",
+  "toggle-toolbar": "toggle-toolbar-visibility",
+  "toggle-deck-map": "toggle-deck-map-visibility",
+  bookmarks: "manage-bookmarks",
+  problems: "show-card-problems",
+  "return-all-filed-cards": "clear-tray",
+};
+
+const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
+  "open-note",
+  "copy-link",
+  "toggle-tray",
+  "toggle-bookmark",
+  "pull-into-pile",
+  "edit-card",
+  "show-card-in-deck",
+  "toggle-viewed-card",
+  "file-card",
+  "move-desk-card-left",
+  "move-desk-card-right",
+  "delete-card",
+]);
+
+const GLOBAL_ACTIONS = new Set<SlipboxAction>(["bookmarks", "problems"]);
+
+const VIEW_ACTIONS = new Set<SlipboxAction>([
+  "toggle-toolbar",
+  "toggle-deck-map",
+  "confirm-filing",
+  "cancel-filing",
+  "collapse-all-piles",
+  "return-all-filed-cards",
+]);
+
+export const SLIPBOX_ACTION_DEFINITIONS: readonly SlipboxActionDefinition[] =
+  BASE_ACTION_DEFINITIONS.map((definition) => ({
+    ...definition,
+    commandId: ACTION_COMMAND_IDS[definition.id] ?? definition.id,
+    commandName: definition.label,
+    scope: GLOBAL_ACTIONS.has(definition.id) ? "global" : "active-view",
+    target: GLOBAL_ACTIONS.has(definition.id)
+      ? "global"
+      : FOCUSED_CARD_ACTIONS.has(definition.id)
+        ? "focused-card"
+        : VIEW_ACTIONS.has(definition.id)
+          ? "view"
+          : "deck-anchor",
+  }));
+
+/** Compatibility alias retained for integrations built before schema 6. */
+export const DECK_ACTION_DEFINITIONS = SLIPBOX_ACTION_DEFINITIONS;
 
 export interface SlipboxSettings {
   readonly addressProperty: string;
@@ -312,6 +454,21 @@ export function normalizeFolderPath(value: unknown): string {
 
 export function normalizeCardSize(value: unknown): CardSize {
   return value === "small" || value === "large" ? value : "medium";
+}
+
+export function hasTitleAddressPropertyCollision(value: unknown): boolean {
+  if (!isRecord(value) || value.titleSource !== "frontmatter") {
+    return false;
+  }
+  const addressProperty = normalizePropertyName(
+    value.addressProperty,
+    DEFAULT_SETTINGS.addressProperty,
+  );
+  const titleProperty = normalizePropertyName(
+    value.titleProperty,
+    DEFAULT_SETTINGS.titleProperty,
+  );
+  return addressProperty === titleProperty;
 }
 
 export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
@@ -469,18 +626,26 @@ function normalizeBooleanRecord<K extends string>(
 
 export function normalizeSettings(value: unknown): SlipboxSettings {
   const source = isRecord(value) ? value : {};
+  const addressProperty = normalizePropertyName(
+    source.addressProperty,
+    DEFAULT_SETTINGS.addressProperty,
+  );
+  const titleProperty = normalizePropertyName(
+    source.titleProperty,
+    DEFAULT_SETTINGS.titleProperty,
+  );
+  const requestedTitleSource = source.titleSource === "frontmatter"
+    ? "frontmatter"
+    : "filename";
   return {
-    addressProperty: normalizePropertyName(
-      source.addressProperty,
-      DEFAULT_SETTINGS.addressProperty,
-    ),
+    addressProperty,
     deckOrdering:
       source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
-    titleSource: source.titleSource === "frontmatter" ? "frontmatter" : "filename",
-    titleProperty: normalizePropertyName(
-      source.titleProperty,
-      DEFAULT_SETTINGS.titleProperty,
-    ),
+    titleSource:
+      requestedTitleSource === "frontmatter" && titleProperty === addressProperty
+        ? "filename"
+        : requestedTitleSource,
+    titleProperty,
     mainCardSize: normalizeCardSize(source.mainCardSize),
     trayCardSize: normalizeCardSize(source.trayCardSize),
     newCardFolder: normalizeFolderPath(source.newCardFolder),

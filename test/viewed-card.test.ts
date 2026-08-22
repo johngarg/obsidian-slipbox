@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  centerViewedCardState,
   createViewedCardState,
   moveViewedCardState,
   renameViewedCardState,
@@ -35,7 +34,6 @@ describe("viewed card state", () => {
     });
     assert.equal(moved.x, 180);
     assert.equal(moved.y, -130);
-    assert.deepEqual(centerViewedCardState(moved), state);
   });
 
   test("centres cards too large for the stage and clamps scroll", () => {

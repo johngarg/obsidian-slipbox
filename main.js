@@ -469,15 +469,33 @@ function canRunDeckAction(action, context) {
     case "backward-ten-cards":
       return context.hasActiveCard;
     case "centre-card":
-    case "open-note":
-    case "copy-link":
-    case "toggle-tray":
-    case "toggle-bookmark":
     case "find-address-forward":
     case "find-address-backward":
     case "find-address-first":
-    case "pull-into-pile":
       return context.hasActiveCard;
+    case "open-note":
+    case "edit-card":
+    case "delete-card":
+      return context.hasFocusedCard;
+    case "copy-link":
+    case "toggle-tray":
+    case "toggle-bookmark":
+    case "pull-into-pile":
+      return context.focusedCardFiled;
+    case "show-card-in-deck":
+      return context.focusedCardFiled && context.focusedSurface !== "deck";
+    case "toggle-viewed-card":
+      return context.focusedSurface === "desk" || context.focusedSurface === "viewed";
+    case "file-card":
+      return context.focusedCardUnfiled && context.focusedSurface !== "deck";
+    case "move-desk-card-left":
+      return context.canMoveDeskCardLeft;
+    case "move-desk-card-right":
+      return context.canMoveDeskCardRight;
+    case "collapse-all-piles":
+      return context.hasExpandedPiles;
+    case "return-all-filed-cards":
+      return context.hasFiledDeskCards;
     case "first-card":
     case "last-card":
       return context.hasActiveCard;
@@ -785,7 +803,9 @@ var CardFooterManager = class {
     menu.addItem((item) => {
       item.setTitle(trayToggleLabel(inTray)).setIcon(inTray ? "undo-2" : "inbox").onClick(() => this.environment.runAfterEditing(
         "backlink-tray-toggle",
-        () => this.environment.toggleTray(backlink.file)
+        () => {
+          this.environment.runAction("toggle-tray", backlink);
+        }
       ));
     });
     this.environment.app.workspace.trigger(
@@ -924,117 +944,117 @@ function renameDeskCard(cards, oldRef, newRef) {
 }
 
 // src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 5;
+var SLIPBOX_DATA_SCHEMA_VERSION = 6;
 var binding = (key, modifiers = []) => ({ key, modifiers });
-var DECK_ACTION_DEFINITIONS = [
+var BASE_ACTION_DEFINITIONS = [
   {
     id: "previous-card",
-    label: "Previous card",
+    label: "Move Deck anchor to previous card",
     repeatable: true,
     defaultBindings: [binding("ArrowLeft"), binding("k")]
   },
   {
     id: "next-card",
-    label: "Next card",
+    label: "Move Deck anchor to next card",
     repeatable: true,
     defaultBindings: [binding("ArrowRight"), binding("j")]
   },
   {
     id: "previous-bookmark",
-    label: "Previous bookmark",
+    label: "Move Deck anchor to previous bookmark",
     repeatable: false,
     defaultBindings: [binding("[")]
   },
   {
     id: "next-bookmark",
-    label: "Next bookmark",
+    label: "Move Deck anchor to next bookmark",
     repeatable: false,
     defaultBindings: [binding("]")]
   },
   {
     id: "centre-card",
-    label: "Centre active card",
+    label: "Centre Deck anchor",
     repeatable: false,
     defaultBindings: [binding("c")]
   },
   {
     id: "first-card",
-    label: "First card",
+    label: "Move Deck anchor to first card",
     repeatable: false,
     defaultBindings: [binding("0")]
   },
   {
     id: "last-card",
-    label: "Last card",
+    label: "Move Deck anchor to last card",
     repeatable: false,
     defaultBindings: [binding("$", ["Shift"])]
   },
   {
     id: "forward-ten-cards",
-    label: "Move forward ten cards",
+    label: "Move Deck anchor forward ten cards",
     repeatable: true,
     defaultBindings: [binding("d", ["Ctrl"])]
   },
   {
     id: "backward-ten-cards",
-    label: "Move backward ten cards",
+    label: "Move Deck anchor backward ten cards",
     repeatable: true,
     defaultBindings: [binding("u", ["Ctrl"])]
   },
   {
     id: "open-note",
-    label: "Open Markdown note",
+    label: "Open focused card in Markdown",
     repeatable: false,
     defaultBindings: [binding("o")]
   },
   {
     id: "toggle-tray",
-    label: "Pull out or return card",
+    label: "Pull out or return focused card",
     repeatable: false,
     defaultBindings: [binding("p")]
   },
   {
     id: "toggle-bookmark",
-    label: "Toggle bookmark",
+    label: "Toggle bookmark on focused card",
     repeatable: false,
     defaultBindings: [binding("b")]
   },
   {
     id: "back",
-    label: "Back",
+    label: "Move Deck anchor back in history",
     repeatable: false,
     defaultBindings: [binding("h", ["Shift"])]
   },
   {
     id: "forward",
-    label: "Forward",
+    label: "Move Deck anchor forward in history",
     repeatable: false,
     defaultBindings: [binding("l", ["Shift"])]
   },
   {
     id: "find-address-forward",
-    label: "Find next address initial",
+    label: "Move Deck anchor to next address initial",
     description: "Type the address's first character after this prefix.",
     repeatable: false,
     defaultBindings: [binding("f")]
   },
   {
     id: "find-address-backward",
-    label: "Find previous address initial",
+    label: "Move Deck anchor to previous address initial",
     description: "Type the address's first character after this prefix.",
     repeatable: false,
     defaultBindings: [binding("f", ["Shift"])]
   },
   {
     id: "find-address-first",
-    label: "Go to first address initial",
+    label: "Move Deck anchor to first address initial",
     description: "Type the address's first character after this prefix.",
     repeatable: false,
     defaultBindings: [binding("g")]
   },
   {
     id: "pull-into-pile",
-    label: "Pull into numbered pile",
+    label: "Pull focused card into numbered pile",
     description: "Type a one-based pile number, then press Enter.",
     repeatable: false,
     defaultBindings: [binding("p", ["Shift"])]
@@ -1077,11 +1097,114 @@ var DECK_ACTION_DEFINITIONS = [
   },
   {
     id: "copy-link",
-    label: "Copy card link",
+    label: "Copy link to focused card",
     repeatable: false,
     defaultBindings: [binding("y")]
+  },
+  {
+    id: "edit-card",
+    label: "Edit focused card",
+    repeatable: false,
+    defaultBindings: [binding("e")]
+  },
+  {
+    id: "show-card-in-deck",
+    label: "Show focused card in Deck",
+    repeatable: false,
+    defaultBindings: [binding("Enter")]
+  },
+  {
+    id: "toggle-viewed-card",
+    label: "View or put back focused card",
+    repeatable: false,
+    defaultBindings: [binding("v")]
+  },
+  {
+    id: "file-card",
+    label: "File focused card",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "move-desk-card-left",
+    label: "Move focused Desk card left",
+    repeatable: true,
+    defaultBindings: [binding("ArrowLeft", ["Alt"])]
+  },
+  {
+    id: "move-desk-card-right",
+    label: "Move focused Desk card right",
+    repeatable: true,
+    defaultBindings: [binding("ArrowRight", ["Alt"])]
+  },
+  {
+    id: "delete-card",
+    label: "Delete focused card",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "collapse-all-piles",
+    label: "Collapse all Desk piles",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "return-all-filed-cards",
+    label: "Return all filed Desk cards",
+    repeatable: false,
+    defaultBindings: []
   }
 ];
+var ACTION_COMMAND_IDS = {
+  "centre-card": "centre-active-card",
+  "open-note": "open-current-card-markdown",
+  "copy-link": "copy-current-card-link",
+  "toggle-tray": "toggle-tray",
+  "toggle-bookmark": "add-bookmark-current-card",
+  back: "history-back",
+  forward: "history-forward",
+  "find-address-forward": "find-next-address-initial",
+  "find-address-backward": "find-previous-address-initial",
+  "find-address-first": "find-first-address-initial",
+  "pull-into-pile": "pull-into-numbered-pile",
+  "toggle-toolbar": "toggle-toolbar-visibility",
+  "toggle-deck-map": "toggle-deck-map-visibility",
+  bookmarks: "manage-bookmarks",
+  problems: "show-card-problems",
+  "return-all-filed-cards": "clear-tray"
+};
+var FOCUSED_CARD_ACTIONS = /* @__PURE__ */ new Set([
+  "open-note",
+  "copy-link",
+  "toggle-tray",
+  "toggle-bookmark",
+  "pull-into-pile",
+  "edit-card",
+  "show-card-in-deck",
+  "toggle-viewed-card",
+  "file-card",
+  "move-desk-card-left",
+  "move-desk-card-right",
+  "delete-card"
+]);
+var GLOBAL_ACTIONS = /* @__PURE__ */ new Set(["bookmarks", "problems"]);
+var VIEW_ACTIONS = /* @__PURE__ */ new Set([
+  "toggle-toolbar",
+  "toggle-deck-map",
+  "confirm-filing",
+  "cancel-filing",
+  "collapse-all-piles",
+  "return-all-filed-cards"
+]);
+var SLIPBOX_ACTION_DEFINITIONS = BASE_ACTION_DEFINITIONS.map((definition) => ({
+  ...definition,
+  commandId: ACTION_COMMAND_IDS[definition.id] ?? definition.id,
+  commandName: definition.label,
+  scope: GLOBAL_ACTIONS.has(definition.id) ? "global" : "active-view",
+  target: GLOBAL_ACTIONS.has(definition.id) ? "global" : FOCUSED_CARD_ACTIONS.has(definition.id) ? "focused-card" : VIEW_ACTIONS.has(definition.id) ? "view" : "deck-anchor"
+}));
+var DECK_ACTION_DEFINITIONS = SLIPBOX_ACTION_DEFINITIONS;
 var DEFAULT_DECK_HEADER_BUTTONS = {
   "open-note": true,
   "copy-link": true,
@@ -1147,6 +1270,20 @@ function normalizeFolderPath(value) {
 }
 function normalizeCardSize(value) {
   return value === "small" || value === "large" ? value : "medium";
+}
+function hasTitleAddressPropertyCollision(value) {
+  if (!isRecord3(value) || value.titleSource !== "frontmatter") {
+    return false;
+  }
+  const addressProperty = normalizePropertyName(
+    value.addressProperty,
+    DEFAULT_SETTINGS.addressProperty
+  );
+  const titleProperty = normalizePropertyName(
+    value.titleProperty,
+    DEFAULT_SETTINGS.titleProperty
+  );
+  return addressProperty === titleProperty;
 }
 function normalizeKeyBinding(value) {
   if (!isRecord3(value) || typeof value.key !== "string" || value.key === "") {
@@ -1267,17 +1404,20 @@ function normalizeBooleanRecord(value, defaults) {
 }
 function normalizeSettings(value) {
   const source = isRecord3(value) ? value : {};
+  const addressProperty = normalizePropertyName(
+    source.addressProperty,
+    DEFAULT_SETTINGS.addressProperty
+  );
+  const titleProperty = normalizePropertyName(
+    source.titleProperty,
+    DEFAULT_SETTINGS.titleProperty
+  );
+  const requestedTitleSource = source.titleSource === "frontmatter" ? "frontmatter" : "filename";
   return {
-    addressProperty: normalizePropertyName(
-      source.addressProperty,
-      DEFAULT_SETTINGS.addressProperty
-    ),
+    addressProperty,
     deckOrdering: source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
-    titleSource: source.titleSource === "frontmatter" ? "frontmatter" : "filename",
-    titleProperty: normalizePropertyName(
-      source.titleProperty,
-      DEFAULT_SETTINGS.titleProperty
-    ),
+    titleSource: requestedTitleSource === "frontmatter" && titleProperty === addressProperty ? "filename" : requestedTitleSource,
+    titleProperty,
     mainCardSize: normalizeCardSize(source.mainCardSize),
     trayCardSize: normalizeCardSize(source.trayCardSize),
     newCardFolder: normalizeFolderPath(source.newCardFolder),
@@ -1354,6 +1494,16 @@ function hasRemovedEntryPointData(value) {
   const keybindings = isRecord4(settings.deckKeybindings) ? settings.deckKeybindings : {};
   return Object.prototype.hasOwnProperty.call(state, "entryPoints") || Object.prototype.hasOwnProperty.call(keybindings, "entry-points");
 }
+function hasTitleAddressCollisionData(value) {
+  if (!isRecord4(value)) {
+    return false;
+  }
+  const settings = isRecord4(value.settings) ? value.settings : {};
+  return hasTitleAddressPropertyCollision(settings);
+}
+function needsPluginDataMigration(value) {
+  return isRecord4(value) && value.schemaVersion !== SLIPBOX_DATA_SCHEMA_VERSION;
+}
 function normalizePluginState(value) {
   if (!isRecord4(value)) {
     return DEFAULT_STATE;
@@ -1415,7 +1565,7 @@ function shouldSuspendDeckShortcut(eventTarget, filingInputFocused) {
   }
   const target = eventTarget;
   const tagName = target.tagName?.toLowerCase();
-  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable === true;
+  return tagName === "input" || tagName === "textarea" || tagName === "select" || tagName === "button" || tagName === "a" || target.isContentEditable === true;
 }
 function renderInlineFilingEditor(addressSlot, card, state, actions) {
   addressSlot.replaceChildren();
@@ -2089,16 +2239,10 @@ var TrayRenderer = class {
       });
       menu.addSeparator();
       menu.addItem((item) => {
-        item.setTitle("Collapse all piles").setIcon("minimize-2").setDisabled(this.plugin.tray.expandedPileIds.length === 0).onClick(() => this.actions.runAfterEditing(
-          "tray-collapse-all-piles",
-          () => this.plugin.updateTray(collapseAllPiles(this.plugin.tray))
-        ));
+        item.setTitle("Collapse all piles").setIcon("minimize-2").setDisabled(!this.actions.canRunAction("collapse-all-piles")).onClick(() => this.actions.runAction("collapse-all-piles"));
       });
       menu.addItem((item) => {
-        item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!trayHasFiledCards(this.plugin.tray)).onClick(() => this.actions.runAfterEditing(
-          "tray-return-all",
-          () => this.plugin.clearTray()
-        ));
+        item.setTitle("Return all filed cards").setIcon("eraser").setDisabled(!this.actions.canRunAction("return-all-filed-cards")).onClick(() => this.actions.runAction("return-all-filed-cards"));
       });
       menu.showAtMouseEvent(event);
     });
@@ -2116,6 +2260,12 @@ var TrayRenderer = class {
     pileEl.style.setProperty("--slipbox-pile-y", `${position.y}px`);
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
+    pileEl.addEventListener("focusin", () => {
+      const top = pile.cards[0];
+      if (top !== void 0) {
+        this.actions.focusDeskCard(top.cardRef, pile.id);
+      }
+    });
     if (!expanded) {
       this.renderStackLayers(pileEl, pile);
       if (pile.cards.length > 1) {
@@ -2193,21 +2343,7 @@ var TrayRenderer = class {
       if (event.target !== pileEl) {
         return;
       }
-      if (isPlainKey(event, "v")) {
-        const topCard = pile.cards[0];
-        const file = topCard === void 0 ? void 0 : this.plugin.index.fileAtPath(topCard.cardRef);
-        if (file !== void 0) {
-          event.preventDefault();
-          event.stopPropagation();
-          if (viewedPath === file.path) {
-            void this.actions.putBackViewedCard();
-          } else {
-            void this.actions.viewCard(file, false);
-          }
-        }
-        return;
-      }
-      if (event.key !== "Enter" && event.key !== " ") {
+      if (event.key !== " ") {
         return;
       }
       event.preventDefault();
@@ -2222,6 +2358,10 @@ var TrayRenderer = class {
       }
       event.preventDefault();
       event.stopPropagation();
+      const top = pile.cards[0];
+      if (top !== void 0) {
+        this.actions.focusDeskCard(top.cardRef, pile.id);
+      }
       this.showPileMenu(event, pile);
     });
     this.attachPileDragging(pileEl, dragSurface, pile, position);
@@ -2280,9 +2420,10 @@ var TrayRenderer = class {
       attr: {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== void 0 ? "button" : "group",
-        "aria-label": isViewed ? `${address}, ${title}; viewed card placeholder. Activate to centre the viewed card.` : `${address}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
+        "aria-label": isViewed ? `${address}, ${title}; viewed card placeholder. Activate to focus the viewed card.` : `${address}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
       }
     });
+    miniature.dataset.pileId = pile.id;
     const jitter = trayStackJitter(card.cardRef, cardIndex);
     miniature.style.setProperty(
       "--slipbox-tray-card-tilt",
@@ -2292,6 +2433,17 @@ var TrayRenderer = class {
     miniature.toggleClass("is-filed", filed !== void 0);
     miniature.toggleClass("is-unfiled", filed === void 0);
     miniature.toggleClass("is-viewed-ghost", isViewed);
+    miniature.toggleClass(
+      "is-card-focused",
+      !isViewed && this.actions.isDeskCardFocused(card.cardRef, pile.id)
+    );
+    miniature.addEventListener("focusin", () => {
+      if (isViewed) {
+        this.actions.focusViewedCard();
+      } else {
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+      }
+    });
     const isFilingSource = filing?.sourcePath === card.cardRef;
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
@@ -2323,10 +2475,8 @@ var TrayRenderer = class {
         delay: 350
       });
       attachUnfiledAddressFiling(addressEl, () => {
-        void this.actions.runAfterEditing(
-          "tray-address-filing",
-          () => this.actions.beginFiling(file)
-        );
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+        this.actions.runAction("file-card");
       });
     }
     const headerTitle = cardHeaderTitle(
@@ -2345,17 +2495,16 @@ var TrayRenderer = class {
       view.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.viewCard(file, false);
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+        this.actions.runAction("toggle-viewed-card");
       });
       if (filed === void 0) {
         const fileButton = trayIconButton(controls, "archive-restore", "File");
         fileButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.actions.runAfterEditing(
-            "tray-file-card",
-            () => this.actions.beginFiling(file)
-          );
+          this.actions.focusDeskCard(card.cardRef, pile.id);
+          this.actions.runAction("file-card");
         });
       } else {
         const returnButton = trayIconButton(
@@ -2366,20 +2515,16 @@ var TrayRenderer = class {
         returnButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.actions.runAfterEditing(
-            "tray-return-card",
-            () => this.plugin.toggleFileInTray(file)
-          );
+          this.actions.focusDeskCard(card.cardRef, pile.id);
+          this.actions.runAction("toggle-tray");
         });
       }
       const open = trayIconButton(controls, "file-pen-line", "Open");
       open.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.runAfterEditing(
-          "tray-open-note",
-          () => this.plugin.openMarkdownFile(file)
-        );
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+        this.actions.runAction("open-note");
       });
     }
     if (isViewed) {
@@ -2390,13 +2535,10 @@ var TrayRenderer = class {
         this.actions.focusViewedCard();
       });
       miniature.addEventListener("keydown", (event) => {
-        if (isPlainKey(event, "v")) {
-          event.preventDefault();
-          event.stopPropagation();
-          void this.actions.putBackViewedCard();
+        if (event.key !== "Enter" && event.key !== " ") {
           return;
         }
-        if (event.key !== "Enter" && event.key !== " ") {
+        if (event.key === "Enter") {
           return;
         }
         event.preventDefault();
@@ -2425,7 +2567,8 @@ var TrayRenderer = class {
       event.preventDefault();
       event.stopPropagation();
       this.cancelPendingCardClick();
-      void this.actions.viewCard(file, true);
+      this.actions.focusDeskCard(card.cardRef, pile.id);
+      this.actions.runAction("edit-card");
     });
     this.attachPreviewLinkInteractions(preview, file.path);
     const component = new import_obsidian2.Component();
@@ -2446,6 +2589,7 @@ var TrayRenderer = class {
       preview.setText("Preview unavailable");
     }
     miniature.addEventListener("click", (event) => {
+      this.actions.focusDeskCard(card.cardRef, pile.id);
       if (performance.now() < this.suppressClickUntil) {
         event.preventDefault();
         event.stopPropagation();
@@ -2464,10 +2608,7 @@ var TrayRenderer = class {
               () => this.plugin.setTrayPileExpanded(pile.id, true)
             );
           } else if (filed !== void 0) {
-            void this.actions.runAfterEditing(
-              "tray-jump-filed-card",
-              () => this.actions.jumpToFiledCard(filed.path)
-            );
+            this.actions.runAction("show-card-in-deck");
           }
         });
         return;
@@ -2488,36 +2629,10 @@ var TrayRenderer = class {
       event.stopPropagation();
       void this.actions.runAfterEditing(
         "tray-jump-filed-card",
-        () => this.actions.jumpToFiledCard(filed.path)
+        () => {
+          this.actions.runAction("show-card-in-deck");
+        }
       );
-    });
-    miniature.addEventListener("keydown", (event) => {
-      if (isPlainKey(event, "v")) {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.actions.viewCard(file, false);
-        return;
-      }
-      if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.actions.runAfterEditing(
-          "tray-move-card-key",
-          () => this.actions.moveCardBy(
-            card.cardRef,
-            event.key === "ArrowLeft" ? -1 : 1
-          )
-        );
-        return;
-      }
-      if (event.key === "Enter" && filed !== void 0) {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.actions.runAfterEditing(
-          "tray-jump-filed-card-key",
-          () => this.actions.jumpToFiledCard(filed.path)
-        );
-      }
     });
     miniature.addEventListener("contextmenu", (event) => {
       if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select") !== null) {
@@ -2525,6 +2640,7 @@ var TrayRenderer = class {
       }
       event.preventDefault();
       event.stopPropagation();
+      this.actions.focusDeskCard(card.cardRef, pile.id);
       if (expanded) {
         this.showCardMenu(event, pile, card);
       } else {
@@ -2591,7 +2707,7 @@ var TrayRenderer = class {
   }
   showPileMenu(event, pile, visibleCard) {
     const menu = import_obsidian2.Menu.forEvent(event);
-    if (visibleCard !== void 0 && this.addCardFileMenuItems(menu, visibleCard)) {
+    if (visibleCard !== void 0 && this.addCardFileMenuItems(menu, visibleCard, pile.id)) {
       menu.addSeparator();
     }
     menu.addItem((item) => {
@@ -2628,7 +2744,7 @@ var TrayRenderer = class {
       return;
     }
     const menu = import_obsidian2.Menu.forEvent(event);
-    if (this.addCardFileMenuItems(menu, card)) {
+    if (this.addCardFileMenuItems(menu, card, pile.id)) {
       menu.addSeparator();
     }
     menu.addItem((item) => {
@@ -2669,28 +2785,47 @@ var TrayRenderer = class {
     });
     menu.showAtMouseEvent(event);
   }
-  addCardFileMenuItems(menu, card) {
+  addCardFileMenuItems(menu, card, pileId) {
     const file = this.plugin.index.fileAtPath(card.cardRef);
     if (file === void 0) {
       return false;
     }
+    const filed = this.plugin.index.filedByFile(file);
+    const run = (action) => {
+      this.actions.focusDeskCard(card.cardRef, pileId);
+      this.actions.runAction(action);
+    };
     menu.addItem((item) => {
-      item.setTitle("View").setIcon("search").onClick(() => this.actions.viewCard(file, false));
+      item.setTitle("View").setIcon("search").onClick(() => run("toggle-viewed-card"));
     });
     menu.addItem((item) => {
-      item.setTitle("Open").setIcon("file-pen-line").onClick(() => this.actions.runAfterEditing(
-        "tray-menu-open-note",
-        () => this.plugin.openMarkdownFile(file)
-      ));
+      item.setTitle("Edit").setIcon("pencil").onClick(() => run("edit-card"));
     });
-    if (card.kind === "unfiled") {
+    menu.addItem((item) => {
+      item.setTitle("Open").setIcon("file-pen-line").onClick(() => run("open-note"));
+    });
+    if (filed === void 0) {
       menu.addItem((item) => {
-        item.setTitle("File").setIcon("archive-restore").onClick(() => this.actions.runAfterEditing(
-          "tray-menu-file-card",
-          () => this.actions.beginFiling(file)
-        ));
+        item.setTitle("File").setIcon("archive-restore").onClick(() => run("file-card"));
+      });
+    } else {
+      menu.addItem((item) => {
+        item.setTitle("Show in Deck").setIcon("locate-fixed").onClick(() => run("show-card-in-deck"));
+      });
+      menu.addItem((item) => {
+        item.setTitle("Copy link").setIcon("copy").onClick(() => run("copy-link"));
+      });
+      menu.addItem((item) => {
+        const bookmarked = this.plugin.bookmarkAtPath(filed.path) !== void 0;
+        item.setTitle(bookmarked ? "Remove bookmark" : "Add bookmark").setIcon(bookmarked ? "bookmark-minus" : "bookmark-plus").onClick(() => run("toggle-bookmark"));
+      });
+      menu.addItem((item) => {
+        item.setTitle("Return").setIcon("undo-2").onClick(() => run("toggle-tray"));
       });
     }
+    menu.addItem((item) => {
+      item.setTitle(`Delete ${this.plugin.cardTitle(file)}`).setIcon("trash-2").setWarning(true).onClick(() => run("delete-card"));
+    });
     return true;
   }
   attachCardDragging(element, pile, card, expanded) {
@@ -2960,9 +3095,6 @@ function trayIconButton(parent, icon, label) {
   (0, import_obsidian2.setTooltip)(button, label, { placement: "bottom", delay: 250 });
   button.addEventListener("pointerdown", (event) => event.stopPropagation());
   return button;
-}
-function isPlainKey(event, key) {
-  return event.key === key && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 }
 
 // src/filing-preview.ts
@@ -3463,26 +3595,10 @@ function shouldNavigateDeckFromWheel(event, inlineEditor) {
   }
   return Math.abs(event.deltaX) > Math.abs(event.deltaY);
 }
-function isDeckInlineEditEnter(event, deck, state) {
-  return event.target === deck && event.key === "Enter" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && state.hasActiveCard && !state.editing && !state.starting && !state.filing && !state.pendingCommand;
-}
-function isViewedCardCenterKey(event, viewedCard, editing) {
-  if (viewedCard === null || editing || event.key !== "c" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-    return false;
-  }
-  const NodeConstructor = viewedCard.ownerDocument.defaultView?.Node;
-  return NodeConstructor !== void 0 && event.target instanceof NodeConstructor && viewedCard.contains(event.target);
-}
-function isViewedCardToggleKey(event, state) {
-  return state.viewedCardOpen && !state.editing && !state.starting && !state.filing && !state.pendingCommand && !state.editableTarget && event.key === "v" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
-}
 
 // src/viewed-card.ts
 function createViewedCardState(path) {
   return { path, x: 0, y: 0, scrollTop: 0 };
-}
-function centerViewedCardState(state) {
-  return { ...state, x: 0, y: 0 };
 }
 function moveViewedCardState(state, x, y, bounds) {
   const margin = Math.max(0, bounds.margin ?? 16);
@@ -3508,6 +3624,37 @@ function renameViewedCardState(state, path) {
 }
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+// src/card-focus.ts
+function deckCardFocus(path) {
+  return { surface: "deck", path };
+}
+function deskCardFocus(path, pileId) {
+  return { surface: "desk", path, pileId };
+}
+function viewedCardFocus(path, pileId) {
+  return pileId === void 0 ? { surface: "viewed", path } : { surface: "viewed", path, pileId };
+}
+function moveDeckFocusWithAnchor(focus, path) {
+  return focus?.surface === "deck" ? deckCardFocus(path) : focus;
+}
+function renameCardFocus(focus, oldPath, newPath) {
+  if (focus === null) {
+    return null;
+  }
+  if (focus.path === oldPath) {
+    return { ...focus, path: newPath };
+  }
+  const prefix = `${oldPath.replace(/\/$/, "")}/`;
+  return focus.path.startsWith(prefix) ? { ...focus, path: `${newPath}${focus.path.slice(oldPath.length)}` } : focus;
+}
+function cardFocusDeleted(focus, deletedPath) {
+  if (focus === null) {
+    return false;
+  }
+  const prefix = `${deletedPath.replace(/\/$/, "")}/`;
+  return focus.path === deletedPath || focus.path.startsWith(prefix);
 }
 
 // src/deck-view.ts
@@ -3536,23 +3683,28 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
       isInTray: (file) => this.plugin.isFileInTray(file),
-      toggleTray: (file) => this.plugin.toggleFileInTray(file),
+      runAction: (action, target) => this.runAction(action, target),
       runAfterEditing: (reason, action) => {
         void this.runAfterInlineEditing(reason, action);
       }
     });
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
-      moveCardBy: (cardRef, delta) => this.moveTrayCardBy(cardRef, delta),
-      beginFiling: (file) => this.startFiling(file),
       updateFilingInput: (value) => this.updateFilingInput(value),
       confirmFiling: () => void this.confirmFiling(),
       cancelFiling: () => void this.cancelFiling(),
       previewFilingPlacement: () => void this.previewFilingPlacement(),
-      filingInputFocusChanged: (focused) => this.setDeckKeybindingsSuspended(focused),
-      viewCard: (file, editImmediately) => this.viewTrayCard(file, editImmediately),
+      filingInputFocusChanged: (focused) => {
+        this.setDeckKeybindingsSuspended(focused);
+        if (focused) {
+          this.restoreFilingSourceFocus();
+        }
+      },
       focusViewedCard: () => this.focusViewedCard(),
-      putBackViewedCard: () => this.putBackViewedCard(),
+      focusDeskCard: (path, pileId) => this.focusDeskCard(path, pileId),
+      isDeskCardFocused: (path, pileId) => this.cardFocus?.surface === "desk" && this.cardFocus.path === path && this.cardFocus.pileId === pileId,
+      canRunAction: (action) => this.canRunAction(action),
+      runAction: (action) => this.runAction(action),
       runAfterEditing: (reason, action) => this.runAfterInlineEditing(reason, action)
     });
     this.registerEvent(
@@ -3562,6 +3714,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.updateKeybindings();
   }
   activePath = null;
+  cardFocus = null;
   filingFile = null;
   filingSourcePath = null;
   filingInputValue = "";
@@ -3650,33 +3803,9 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       if (this.handleDeckEscape(event)) {
         return;
       }
-      if (this.handleViewedCardToggle(event)) {
-        return;
-      }
-      if (isViewedCardCenterKey(event, this.viewedCardEl, this.inlineEdit !== null)) {
-        event.preventDefault();
-        event.stopPropagation();
-        this.centerViewedCard();
-        return;
-      }
-      const editing = this.inlineEdit;
-      const activeCard = this.activeCard;
-      if (isDeckInlineEditEnter(event, this.contentEl, {
-        hasActiveCard: activeCard !== null,
-        editing: editing !== null,
-        starting: this.inlineEditStarting,
-        filing: this.filingFile !== null,
-        pendingCommand: this.pendingCommand.kind !== "idle"
-      })) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (activeCard !== null) {
-          void this.beginDeckInlineEditing(activeCard.file, "deck");
-        }
-        return;
-      }
       if (this.filingFile !== null && event.key === "Tab" && event.shiftKey && event.target !== this.trayRenderer.filingInput) {
         event.preventDefault();
+        this.restoreFilingSourceFocus();
         this.trayRenderer.focusFilingInputNow();
       }
     }, { capture: true });
@@ -3773,6 +3902,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     this.viewedCard = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
+    this.cardFocus = null;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
@@ -3803,6 +3933,93 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return null;
     }
     return this.plugin.index.filedByPath(this.activePath) ?? null;
+  }
+  get focusedCardFile() {
+    return this.cardFocus === null ? null : this.plugin.index.fileAtPath(this.cardFocus.path) ?? null;
+  }
+  get focusedFiledCard() {
+    const file = this.focusedCardFile;
+    return file === null ? null : this.plugin.index.filedByFile(file) ?? null;
+  }
+  get cardFocusState() {
+    return this.cardFocus;
+  }
+  setCardFocus(focus) {
+    this.cardFocus = focus;
+    this.applyCardFocusClasses();
+  }
+  focusDeskCard(path, pileId) {
+    this.setCardFocus(deskCardFocus(path, pileId));
+  }
+  focusDeckCard(path) {
+    if (this.plugin.index.filedByPath(path) === void 0) {
+      return;
+    }
+    if (path !== this.activePath) {
+      this.selectCardWithoutMoving(path);
+    }
+    this.setCardFocus(deckCardFocus(path));
+  }
+  setDeckAnchor(path) {
+    this.activePath = path;
+    this.cardFocus = moveDeckFocusWithAnchor(this.cardFocus, path);
+  }
+  applyCardFocusClasses() {
+    for (const card of this.renderedCards) {
+      const path = card.dataset.path;
+      card.toggleClass("is-deck-anchor", path === this.activePath);
+      card.toggleClass(
+        "is-card-focused",
+        path !== void 0 && this.cardFocus?.surface === "deck" && this.cardFocus.path === path
+      );
+    }
+    this.stageEl?.querySelectorAll(".slipbox-tray-card").forEach((card) => {
+      const path = card.dataset.cardRef;
+      const pileId = card.dataset.pileId;
+      card.toggleClass(
+        "is-card-focused",
+        !card.hasClass("is-viewed-ghost") && path !== void 0 && pileId !== void 0 && this.cardFocus?.surface === "desk" && this.cardFocus.path === path && this.cardFocus.pileId === pileId
+      );
+    });
+    if (this.viewedCardEl !== null) {
+      this.viewedCardEl.toggleClass(
+        "is-card-focused",
+        this.viewedCard !== null && this.cardFocus?.surface === "viewed" && this.cardFocus.path === this.viewedCard.path
+      );
+    }
+  }
+  reconcileCardFocus() {
+    const focus = this.cardFocus;
+    if (focus?.surface === "deck" && this.activePath !== null) {
+      this.cardFocus = deckCardFocus(this.activePath);
+      return;
+    }
+    if (focus?.surface === "viewed" && this.viewedCard?.path === focus.path && this.plugin.index.fileAtPath(focus.path) !== void 0) {
+      return;
+    }
+    if (focus?.surface === "desk") {
+      const pile = this.plugin.tray.piles.find(
+        (candidate) => candidate.id === focus.pileId
+      );
+      const index = pile?.cards.findIndex((card) => card.cardRef === focus.path) ?? -1;
+      if (pile !== void 0 && index >= 0) {
+        if (this.plugin.tray.expandedPileIds.includes(pile.id) || index === 0) {
+          return;
+        }
+        const top = pile.cards[0];
+        if (top !== void 0) {
+          this.cardFocus = deskCardFocus(top.cardRef, pile.id);
+          return;
+        }
+      }
+    }
+    if (this.activePath !== null) {
+      this.cardFocus = deckCardFocus(this.activePath);
+      return;
+    }
+    const firstPile = this.plugin.tray.piles[0];
+    const firstCard = firstPile?.cards[0];
+    this.cardFocus = firstPile !== void 0 && firstCard !== void 0 ? deskCardFocus(firstCard.cardRef, firstPile.id) : null;
   }
   get isFiling() {
     return this.filingFile !== null;
@@ -3840,6 +4057,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     if (this.activePath !== null) {
       this.activePath = renamePathReference(this.activePath, oldPath, newPath);
     }
+    this.cardFocus = renameCardFocus(this.cardFocus, oldPath, newPath);
     this.history.transform(
       (path) => renamePathReference(path, oldPath, newPath)
     );
@@ -3885,6 +4103,9 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     if (this.activePath !== null && pathIsAtOrBelow(this.activePath, deletedPath) && this.activePath !== editingPath) {
       this.activePath = null;
     }
+    if (cardFocusDeleted(this.cardFocus, deletedPath)) {
+      this.cardFocus = null;
+    }
     this.history.transform(
       (path) => pathIsAtOrBelow(path, deletedPath) ? void 0 : path
     );
@@ -3916,10 +4137,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return this.handleDeckEscape(event) ? false : void 0;
     });
     this.keymapHandlers.push(escapeHandler);
-    const viewedCardToggleHandler = scope.register([], "v", (event) => {
-      return this.handleViewedCardToggle(event) ? false : void 0;
-    });
-    this.keymapHandlers.push(viewedCardToggleHandler);
     if (!this.deckKeybindingsSuspended) {
       for (const definition of DECK_ACTION_DEFINITIONS) {
         for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
@@ -3969,29 +4186,6 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     }
     return true;
   }
-  handleViewedCardToggle(event) {
-    if (this.app.workspace.getActiveViewOfType(_DeckView) !== this) {
-      return false;
-    }
-    if (!isViewedCardToggleKey(event, {
-      viewedCardOpen: this.viewedCard !== null,
-      editing: this.inlineEdit !== null,
-      starting: this.inlineEditStarting,
-      filing: this.filingFile !== null,
-      pendingCommand: this.pendingCommand.kind !== "idle",
-      editableTarget: shouldSuspendDeckShortcut(
-        event.target,
-        this.trayRenderer.isFilingInputFocused
-      )
-    })) {
-      return false;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    void this.putBackViewedCard();
-    return true;
-  }
   canRunAction(action, target) {
     if (action === "confirm-filing") {
       return this.filingFile !== null && this.filingPreview !== null && !this.filingConfirmationInProgress;
@@ -4000,10 +4194,13 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return this.filingFile !== null && !this.filingConfirmationInProgress;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const active = target ?? this.activeCard;
+    const active = this.activeCard;
     const activeIndex = active === null ? -1 : this.plugin.index.filedIndexForPath(active.path);
     const needsBookmarkTarget = action === "previous-bookmark" || action === "next-bookmark";
     const bookmarkIndices = needsBookmarkTarget && activeIndex >= 0 ? this.bookmarkIndices() : [];
+    const focusedFile = target?.file ?? this.focusedCardFile;
+    const focusedFiled = target ?? this.focusedFiledCard;
+    const focusedPosition = this.cardFocus?.surface === "desk" ? cardPosition(this.plugin.tray, this.cardFocus.path) : null;
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
@@ -4013,14 +4210,26 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       canGoBack: this.history.canBack(),
       canGoForward: this.history.canForward(),
       hasProblems: this.plugin.index.snapshot.issues.length > 0,
-      filing: this.filingFile !== null
+      filing: this.filingFile !== null,
+      hasFocusedCard: focusedFile !== null,
+      focusedCardFiled: focusedFiled !== null,
+      focusedCardUnfiled: focusedFile !== null && focusedFiled === null && this.cardFocus?.surface !== "deck",
+      focusedSurface: target === void 0 ? this.cardFocus?.surface ?? null : "deck",
+      canMoveDeskCardLeft: focusedPosition !== null && focusedPosition.cardIndex > 0,
+      canMoveDeskCardRight: focusedPosition !== null && focusedPosition.cardIndex < focusedPosition.pileSize - 1,
+      hasExpandedPiles: this.plugin.tray.expandedPileIds.length > 0,
+      hasFiledDeskCards: trayHasFiledCards(this.plugin.tray)
     });
   }
   runAction(action, target) {
+    if (target !== void 0) {
+      this.focusDeckCard(target.path);
+    }
     if (!this.canRunAction(action, target)) {
       return false;
     }
-    const card = target ?? this.activeCard;
+    const file = target?.file ?? this.focusedCardFile;
+    const card = target ?? this.focusedFiledCard;
     return dispatchInlineAwareDeckAction(
       {
         editing: this.inlineEdit !== null,
@@ -4030,10 +4239,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         `deck-action:${action}`,
         semanticAction
       ),
-      () => this.performAction(action, card)
+      () => this.performAction(action, file, card)
     );
   }
-  performAction(action, card) {
+  performAction(action, file, card) {
     switch (action) {
       case "previous-card":
         this.moveBy(-1);
@@ -4063,8 +4272,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         this.goToDeckBoundary("end");
         break;
       case "open-note":
-        if (card !== null) {
-          void this.plugin.openMarkdownFile(card.file);
+        if (file !== null) {
+          void this.plugin.openMarkdownFile(file);
         }
         break;
       case "copy-link":
@@ -4074,6 +4283,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         break;
       case "toggle-tray":
         if (card !== null) {
+          if (this.cardFocus?.surface === "desk" && this.plugin.isFileInTray(card.file)) {
+            this.setDeckAnchor(card.path);
+            this.cardFocus = deckCardFocus(card.path);
+            this.viewportOffset = 0;
+          }
           void this.plugin.toggleFileInTray(card.file);
         }
         break;
@@ -4126,6 +4340,64 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       case "cancel-filing":
         void this.cancelFiling();
         break;
+      case "edit-card":
+        if (file !== null) {
+          if (this.cardFocus?.surface === "deck") {
+            void this.beginDeckInlineEditing(file, "deck");
+          } else if (this.cardFocus?.surface === "viewed") {
+            void this.beginInlineEditing(file, "tray", this.viewedCardBodyEl);
+          } else {
+            void this.viewTrayCard(file, true);
+          }
+        }
+        break;
+      case "show-card-in-deck":
+        if (card !== null) {
+          void this.showFocusedCardInDeck(card.path);
+        }
+        break;
+      case "toggle-viewed-card":
+        if (this.cardFocus?.surface === "viewed") {
+          void this.putBackViewedCard();
+        } else if (file !== null) {
+          void this.viewTrayCard(file, false);
+        }
+        break;
+      case "file-card":
+        if (file !== null) {
+          if (this.cardFocus?.surface === "viewed") {
+            void this.beginFilingViewedCard(file);
+          } else {
+            void this.startFiling(file);
+          }
+        }
+        break;
+      case "move-desk-card-left":
+        if (this.cardFocus?.surface === "desk") {
+          void this.moveTrayCardBy(this.cardFocus.path, -1);
+        }
+        break;
+      case "move-desk-card-right":
+        if (this.cardFocus?.surface === "desk") {
+          void this.moveTrayCardBy(this.cardFocus.path, 1);
+        }
+        break;
+      case "delete-card":
+        if (file !== null) {
+          void this.deleteFocusedCard(file);
+        }
+        break;
+      case "collapse-all-piles":
+        void this.plugin.updateTray(collapseAllPiles(this.plugin.tray));
+        break;
+      case "return-all-filed-cards":
+        if (card !== null && this.cardFocus?.surface === "desk" && this.plugin.isFileInTray(card.file)) {
+          this.setDeckAnchor(card.path);
+          this.cardFocus = deckCardFocus(card.path);
+          this.viewportOffset = 0;
+        }
+        void this.plugin.clearTray();
+        break;
     }
   }
   async refresh() {
@@ -4139,6 +4411,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const previousActivePath = this.activePath;
     this.reconcileScrollPositions();
     this.chooseAvailableActiveCard();
+    this.reconcileCardFocus();
     if (this.activePath !== previousActivePath) {
       this.viewportOffset = 0;
     }
@@ -4154,6 +4427,9 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   }
   async startFiling(file) {
     const trayPosition = cardPosition(this.plugin.tray, file.path);
+    if (trayPosition !== null) {
+      this.cardFocus = deskCardFocus(file.path, trayPosition.pileId);
+    }
     if (trayPosition !== null && trayPosition.cardIndex > 0 && !this.plugin.tray.expandedPileIds.includes(trayPosition.pileId)) {
       await this.plugin.setTrayPileExpanded(trayPosition.pileId, true);
     }
@@ -4239,7 +4515,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
   }
   async addBookmarkToCurrent() {
     if (this.activePath === null) {
-      new import_obsidian3.Notice("There is no active filed card.");
+      new import_obsidian3.Notice("There is no Deck anchor.");
       return;
     }
     const bookmarkedPaths = this.bookmarkedPaths();
@@ -4333,15 +4609,22 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     }
   }
   async putBackViewedCard() {
-    if (this.viewedCard === null) {
+    const viewed = this.viewedCard;
+    if (viewed === null) {
       return;
     }
     await this.runAfterInlineEditing("put-back-viewed-card", async () => {
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
+      const position = cardPosition(this.plugin.tray, viewed.path);
+      this.cardFocus = position === null ? null : deskCardFocus(viewed.path, position.pileId);
+      this.reconcileCardFocus();
       await this.renderDeck(false);
-      this.contentEl.focus({ preventScroll: true });
+      const deskCard = this.stageEl?.querySelector(
+        `.slipbox-tray-card[data-card-ref="${CSS.escape(viewed.path)}"]`
+      );
+      (deskCard ?? this.contentEl).focus({ preventScroll: true });
     });
   }
   async beginDeckInlineEditing(file, origin, bodySurface) {
@@ -4555,6 +4838,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     let bodySurface = null;
     if (draft.origin === "tray") {
       this.viewedCard = createViewedCardState(draft.path);
+      const position = cardPosition(this.plugin.tray, draft.path);
+      this.cardFocus = viewedCardFocus(draft.path, position?.pileId);
       await this.renderDeck(false);
       bodySurface = this.viewedCardBodyEl;
     } else if (filed !== void 0) {
@@ -4582,7 +4867,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return false;
     }
     this.cancelViewportCentering();
-    this.activePath = path;
+    this.setDeckAnchor(path);
     this.viewportOffset = 0;
     const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
@@ -4598,6 +4883,37 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return;
     }
     this.activePath = filed[0]?.path ?? null;
+  }
+  async showFocusedCardInDeck(path) {
+    this.cardFocus = deckCardFocus(path);
+    await this.jumpToPath(path);
+    this.contentEl.focus({ preventScroll: true });
+    this.applyCardFocusClasses();
+  }
+  async deleteFocusedCard(file) {
+    const focus = this.cardFocus;
+    const filed = this.plugin.index.snapshot.filed;
+    const deckIndex = this.plugin.index.filedIndexForPath(file.path);
+    const nextDeckPath = deckIndex < 0 ? this.activePath : filed[deckIndex + 1]?.path ?? filed[deckIndex - 1]?.path ?? null;
+    const position = cardPosition(this.plugin.tray, file.path);
+    const pile = position === null ? void 0 : this.plugin.tray.piles[position.pileIndex];
+    const nextDeskPath = position === null || pile === void 0 ? null : pile.cards[position.cardIndex + 1]?.cardRef ?? pile.cards[position.cardIndex - 1]?.cardRef ?? null;
+    if (!await this.plugin.deleteCard(file)) {
+      return;
+    }
+    if (focus?.path !== file.path) {
+      return;
+    }
+    if (focus.surface !== "deck" && nextDeskPath !== null && position !== null) {
+      this.cardFocus = deskCardFocus(nextDeskPath, position.pileId);
+    } else if (nextDeckPath !== null) {
+      this.setDeckAnchor(nextDeckPath);
+      this.cardFocus = deckCardFocus(nextDeckPath);
+      this.viewportOffset = 0;
+    } else {
+      this.cardFocus = null;
+    }
+    this.applyCardFocusClasses();
   }
   async renderDeck(focusFilingInput = true) {
     if (this.inlineEdit !== null || this.inlineEditStarting) {
@@ -4928,10 +5244,10 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       this.updatePendingCommandStatus();
       return;
     }
-    const card = this.activeCard;
+    const card = this.focusedFiledCard;
     if (card === null) {
       this.clearPendingCommand();
-      this.showCommandFeedback("There is no active filed card.");
+      this.showCommandFeedback("There is no focused filed card.");
       return;
     }
     const source = cardPosition(this.plugin.tray, card.path);
@@ -4942,12 +5258,16 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     );
     this.clearPendingCommand();
     if (next === this.plugin.tray) {
-      this.showCommandFeedback(`The active card is already in pile ${ordinal}.`);
+      this.showCommandFeedback(`The focused card is already in pile ${ordinal}.`);
       return;
     }
     this.showCommandFeedback(
-      source === null ? `Pulled the active card into pile ${ordinal}.` : `Moved the active card to pile ${ordinal}.`
+      source === null ? `Pulled the focused card into pile ${ordinal}.` : `Moved the focused card to pile ${ordinal}.`
     );
+    const targetPile = this.plugin.tray.piles[ordinal - 1];
+    if (targetPile !== void 0) {
+      this.cardFocus = deskCardFocus(card.path, targetPile.id);
+    }
     void this.plugin.updateTray(next);
   }
   updateDeckMapBookmarks(bookmarkedPaths) {
@@ -5034,7 +5354,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         String(position)
       );
     }
-    const summary = `Card ${activeIndex + 1} of ${cardCount}; ${bookmarkLabel}`;
+    const summary = `Deck anchor ${activeIndex + 1} of ${cardCount}; ${bookmarkLabel}`;
     map.setAttr("aria-valuenow", String(activeIndex + 1));
     map.setAttr("aria-valuetext", summary);
   }
@@ -5067,7 +5387,12 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       cardEl.dataset.index = String(filedIndex);
       cardEl.dataset.filedIndex = String(filedIndex);
       cardEl.dataset.path = card.path;
-      cardEl.toggleClass("is-active", filedIndex === activeIndex);
+      cardEl.toggleClass("is-deck-anchor", filedIndex === activeIndex);
+      cardEl.toggleClass(
+        "is-card-focused",
+        this.cardFocus?.surface === "deck" && this.cardFocus.path === card.path
+      );
+      cardEl.addEventListener("focusin", () => this.focusDeckCard(card.path));
       const isViewed = this.viewedCard?.path === card.path;
       cardEl.toggleClass("is-viewed-ghost", isViewed);
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== void 0;
@@ -5088,17 +5413,17 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       if (isViewed) {
         cardEl.setAttr(
           "aria-label",
-          `${card.address} \xB7 ${title}; viewed card placeholder. Activate to centre the viewed card.`
+          `${card.address} \xB7 ${title}; viewed card placeholder. Activate to focus the viewed card.`
         );
         const ghost = cardEl.createEl("button", {
           cls: "clickable-icon slipbox-card-ghost-control",
           attr: {
             type: "button",
-            "aria-label": `Centre viewed card ${title}`
+            "aria-label": `Focus viewed card ${title}`
           }
         });
         (0, import_obsidian3.setIcon)(ghost, "search");
-        (0, import_obsidian3.setTooltip)(ghost, "Centre viewed card", {
+        (0, import_obsidian3.setTooltip)(ghost, "Focus viewed card", {
           placement: "bottom",
           delay: 250
         });
@@ -5113,6 +5438,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
           this.focusViewedCard();
         });
         cardEl.addEventListener("contextmenu", (event) => {
+          this.focusViewedCard();
           this.plugin.showCardContextMenu(
             event,
             card.file,
@@ -5189,9 +5515,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         event.preventDefault();
         event.stopPropagation();
         void this.runAfterInlineEditing("body-double-click", async () => {
-          if (card.path !== this.activePath) {
-            this.selectCardWithoutMoving(card.path);
-          }
+          this.focusDeckCard(card.path);
           await this.beginDeckInlineEditing(card.file, "deck", scroll);
         });
       });
@@ -5207,6 +5531,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         if (!(target instanceof Element) || target.closest("a, button, input, textarea, select") !== null) {
           return;
         }
+        this.focusDeckCard(card.path);
         this.plugin.showCardContextMenu(
           event,
           card.file,
@@ -5221,13 +5546,14 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
           return;
         }
         if (card.path === this.activePath) {
+          this.setCardFocus(deckCardFocus(card.path));
           return;
         }
         event.preventDefault();
         event.stopPropagation();
         void this.runAfterInlineEditing(
           "select-card",
-          () => this.selectCardWithoutMoving(card.path)
+          () => this.focusDeckCard(card.path)
         );
       });
     }
@@ -5249,12 +5575,20 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     const title = this.plugin.cardTitle(file);
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
-      cls: "slipbox-card slipbox-viewed-card is-active",
+      cls: "slipbox-card slipbox-viewed-card",
       attr: {
         role: "group",
         tabindex: "0",
         "aria-label": `Viewed card ${address} \xB7 ${title}`
       }
+    });
+    card.toggleClass(
+      "is-card-focused",
+      this.cardFocus?.surface === "viewed" && this.cardFocus.path === file.path
+    );
+    card.addEventListener("focusin", () => {
+      const position = cardPosition(this.plugin.tray, file.path);
+      this.setCardFocus(viewedCardFocus(file.path, position?.pileId));
     });
     card.dataset.path = file.path;
     card.toggleClass("is-bookmarked", filed !== void 0 && this.plugin.bookmarkAtPath(filed.path) !== void 0);
@@ -5285,8 +5619,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
         "slipbox-card-file",
         "File",
         () => {
-          void this.beginFilingViewedCard(file);
-          return true;
+          this.focusViewedCard();
+          return this.runAction("file-card");
         }
       );
     }
@@ -5296,11 +5630,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       "slipbox-card-open",
       "Open",
       () => {
-        void this.runAfterInlineEditing(
-          "viewed-open-note",
-          () => this.plugin.openMarkdownFile(file)
-        );
-        return true;
+        this.focusViewedCard();
+        return this.runAction("open-note");
       }
     );
     this.renderCardAction(
@@ -5309,8 +5640,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       "slipbox-viewed-card-put-back",
       "Put back",
       () => {
-        void this.putBackViewedCard();
-        return true;
+        this.focusViewedCard();
+        return this.runAction("toggle-viewed-card");
       }
     );
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
@@ -5326,6 +5657,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       }
       event.preventDefault();
       event.stopPropagation();
+      this.focusViewedCard();
       void this.beginInlineEditing(file, "tray", body);
     });
     this.viewedCardBodyEl = body;
@@ -5342,6 +5674,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       if (!(target instanceof Element) || target.closest("a, button, input, textarea, select") !== null) {
         return;
       }
+      this.focusViewedCard();
       this.plugin.showCardContextMenu(
         event,
         file,
@@ -5459,22 +5792,24 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     );
     this.applyViewedCardPosition();
   }
-  centerViewedCard() {
-    if (this.viewedCard === null) {
+  focusViewedCard() {
+    const viewed = this.viewedCard;
+    if (viewed === null) {
       return;
     }
-    this.viewedCard = centerViewedCardState(this.viewedCard);
-    this.applyViewedCardPosition();
+    const position = cardPosition(this.plugin.tray, viewed.path);
+    this.setCardFocus(viewedCardFocus(viewed.path, position?.pileId));
     this.viewedCardEl?.focus({ preventScroll: true });
-  }
-  focusViewedCard() {
-    this.centerViewedCard();
   }
   async beginFilingViewedCard(file) {
     await this.runAfterInlineEditing("viewed-file-card", async () => {
+      const position = cardPosition(this.plugin.tray, file.path);
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
+      if (position !== null) {
+        this.cardFocus = deskCardFocus(file.path, position.pileId);
+      }
       await this.startFiling(file);
     });
   }
@@ -5652,8 +5987,19 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     if (targetPath === null) {
       return;
     }
+    this.cardFocus = deckCardFocus(targetPath);
     await this.jumpToPath(targetPath);
     this.contentEl.focus({ preventScroll: true });
+  }
+  restoreFilingSourceFocus() {
+    const path = this.filingSourcePath;
+    if (path === null) {
+      return;
+    }
+    const position = cardPosition(this.plugin.tray, path);
+    if (position !== null) {
+      this.setCardFocus(deskCardFocus(path, position.pileId));
+    }
   }
   async confirmFiling() {
     const file = this.filingFile;
@@ -5689,7 +6035,8 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       this.filingSourcePath = null;
       this.filingPreview = null;
       this.filingInputValue = "";
-      this.activePath = file.path;
+      this.setDeckAnchor(file.path);
+      this.cardFocus = deckCardFocus(file.path);
       this.viewportOffset = 0;
       this.history.replaceCurrent(file.path);
       await this.plugin.refreshDeckViews();
@@ -5869,14 +6216,14 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
       return;
     }
     const viewportPosition = this.viewportPosition(activeIndex);
-    this.activePath = target.path;
+    this.setDeckAnchor(target.path);
     this.viewportOffset = viewportPosition - targetIndex;
     this.history.replaceCurrent(target.path);
     this.centerViewportOnActive(targetIndex, true);
   }
   centerActiveCard() {
     if (this.activePath === null) {
-      new import_obsidian3.Notice("There is no active filed card to centre.");
+      new import_obsidian3.Notice("There is no Deck anchor to centre.");
       return;
     }
     const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
@@ -6036,7 +6383,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     if (targetIndex < 0) {
       return;
     }
-    this.activePath = path;
+    this.setDeckAnchor(path);
     this.viewportOffset = stationarySelectionOffset(
       previousActiveIndex,
       targetIndex,
@@ -6062,7 +6409,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     if (activeCard === void 0) {
       return;
     }
-    this.activePath = activeCard.path;
+    this.setDeckAnchor(activeCard.path);
     this.viewportOffset = viewportPosition - activeIndex;
     this.history.replaceCurrent(activeCard.path);
     this.positionCards();
@@ -6085,7 +6432,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       const isActive = card.dataset.path === this.activePath;
-      card.toggleClass("is-active", isActive);
+      card.toggleClass("is-deck-anchor", isActive);
+      card.toggleClass(
+        "is-card-focused",
+        this.cardFocus?.surface === "deck" && card.dataset.path === this.cardFocus.path
+      );
       card.style.zIndex = String(cardStackOrder(index, focusDisplayIndex));
       const motion = cardMotionStyle(
         index,
@@ -6146,7 +6497,11 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     }
     for (const card of this.renderedCards) {
       const filedIndex = Number(card.dataset.filedIndex ?? "-1");
-      card.toggleClass("is-active", filedIndex === activeIndex);
+      card.toggleClass("is-deck-anchor", filedIndex === activeIndex);
+      card.toggleClass(
+        "is-card-focused",
+        this.cardFocus?.surface === "deck" && card.dataset.path === this.cardFocus.path
+      );
       card.style.zIndex = String(cardStackOrder(filedIndex, activeIndex));
       this.cardFooters.setInteractive(card, filedIndex === activeIndex);
     }
@@ -6155,6 +6510,7 @@ var DeckView = class _DeckView extends import_obsidian3.ItemView {
     }
     this.updateDeckMapActiveUi();
     this.updateHistoryControls();
+    this.applyCardFocusClasses();
   }
   bookmarkedPaths() {
     return new Set(
@@ -6530,7 +6886,7 @@ var BookmarksModal = class extends import_obsidian4.Modal {
     this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
-      label: "+ add current card as bookmark",
+      label: "+ add Deck anchor as bookmark",
       currentAddress: this.actions.currentPath,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),
@@ -6720,17 +7076,24 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     this.renderDeckOrdering(containerEl);
     new import_obsidian5.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New cards use the entered title in the selected location.").addDropdown((dropdown) => {
       dropdown.addOption("filename", "Filename").addOption("frontmatter", "Frontmatter property").setValue(this.slipbox.settings.titleSource).onChange((value) => {
+        if (value === "frontmatter" && this.slipbox.settings.titleProperty === this.slipbox.settings.addressProperty) {
+          dropdown.setValue("filename");
+          new import_obsidian5.Notice(
+            "The title property must be different from the address property."
+          );
+          return;
+        }
         void this.save({
           ...this.slipbox.settings,
           titleSource: value === "frontmatter" ? "frontmatter" : "filename"
         }).then(() => this.redisplayPreservingScroll());
       });
     });
-    const titleProperty = new import_obsidian5.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
+    const titleProperty = new import_obsidian5.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. It must differ from the address property. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
     titleProperty.addText((text) => {
       let property = this.slipbox.settings.titleProperty;
       const queueCommit = this.debounceTextCommit(text.inputEl, () => {
-        if (property !== "" && property !== this.slipbox.settings.titleProperty) {
+        if (property !== "" && property !== this.slipbox.settings.addressProperty && property !== this.slipbox.settings.titleProperty) {
           void this.save({
             ...this.slipbox.settings,
             titleProperty: property
@@ -6739,11 +7102,15 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       });
       text.setValue(this.slipbox.settings.titleProperty).setDisabled(this.slipbox.settings.titleSource !== "frontmatter").onChange((value) => {
         property = value.trim();
-        this.setPropertyValidity(titleProperty, property !== "");
+        this.setMetadataPropertyValidity(
+          titleProperty,
+          property,
+          this.slipbox.settings.addressProperty
+        );
         queueCommit();
       });
     });
-    new import_obsidian5.Setting(containerEl).setName("Show title in Slipbox card headers").setDesc("Show resolved titles beside addresses in Deck and tray card headers.").addToggle((toggle) => {
+    new import_obsidian5.Setting(containerEl).setName("Show title in Slipbox card headers").setDesc("Show resolved titles beside addresses in Deck and Desk card headers.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDeck: value
@@ -6755,7 +7122,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         showDeckToolbar: value
       }));
     });
-    new import_obsidian5.Setting(containerEl).setName("Show Deck map").setDesc("Show a clickable overview of every filed card and bookmark.").addToggle((toggle) => {
+    new import_obsidian5.Setting(containerEl).setName("Show Deck map").setDesc("Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.").addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showDeckMap).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showDeckMap: value
@@ -6765,10 +7132,10 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     this.renderCardSizeSettings(containerEl);
     new import_obsidian5.Setting(containerEl).setName("New cards").setHeading();
     this.renderNewCardSettings(containerEl);
-    new import_obsidian5.Setting(containerEl).setName("Card-header buttons").setHeading();
+    new import_obsidian5.Setting(containerEl).setName("Filed Deck-card header buttons").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Hidden buttons remain available through commands, Slipbox shortcuts, and card context menus."
+      text: "These settings affect filed Deck-card headers only. Hidden actions remain available through commands and Slipbox shortcuts."
     });
     this.renderDeckHeaderButtons(containerEl);
     new import_obsidian5.Setting(containerEl).setName("Keyboard shortcuts").setHeading();
@@ -6798,7 +7165,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
         mainCardSize: normalizeCardSize(value)
       }));
     });
-    new import_obsidian5.Setting(container).setName("Tray card size").setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Tray cards remain smaller than main cards.").addDropdown((dropdown) => {
+    new import_obsidian5.Setting(container).setName("Desk card size").setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Desk cards remain smaller than main cards.").addDropdown((dropdown) => {
       dropdown.addOption("small", "Small").addOption("medium", "Medium").addOption("large", "Large").setValue(this.slipbox.settings.trayCardSize).onChange((value) => void this.save({
         ...this.slipbox.settings,
         trayCardSize: normalizeCardSize(value)
@@ -6893,7 +7260,7 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
     setting.addText((text) => {
       let property = this.slipbox.settings.addressProperty;
       const queueCommit = this.debounceTextCommit(text.inputEl, () => {
-        if (property !== "" && property !== this.slipbox.settings.addressProperty) {
+        if (property !== "" && !(this.slipbox.settings.titleSource === "frontmatter" && property === this.slipbox.settings.titleProperty) && property !== this.slipbox.settings.addressProperty) {
           void this.save({
             ...this.slipbox.settings,
             addressProperty: property
@@ -6902,7 +7269,11 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       });
       text.setPlaceholder(DEFAULT_SETTINGS.addressProperty).setValue(this.slipbox.settings.addressProperty).onChange((value) => {
         property = value.trim();
-        this.setPropertyValidity(setting, property !== "");
+        this.setMetadataPropertyValidity(
+          setting,
+          property,
+          this.slipbox.settings.titleSource === "frontmatter" ? this.slipbox.settings.titleProperty : null
+        );
         queueCommit();
       });
     });
@@ -7103,11 +7474,13 @@ var SlipboxSettingTab = class extends import_obsidian5.PluginSettingTab {
       timer = window.setTimeout(flush, 300);
     };
   }
-  setPropertyValidity(setting, valid) {
+  setMetadataPropertyValidity(setting, property, disallowedProperty) {
+    const empty = property === "";
+    const collision = disallowedProperty !== null && property === disallowedProperty;
     this.setTextValidity(
       setting,
-      valid,
-      "A non-empty top-level property name is required."
+      !empty && !collision,
+      collision ? "The title and address properties must use different keys." : "A non-empty top-level property name is required."
     );
   }
   setTextValidity(setting, valid, message) {
@@ -7619,6 +7992,8 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
   async onload() {
     const loadedData = await this.loadData();
     const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
+    const migrateTitleCollision = hasTitleAddressCollisionData(loadedData);
+    const migratePluginData = needsPluginDataMigration(loadedData);
     const data = normalizePluginData(loadedData);
     this.rawSettings = rawSettingsFromPluginData(loadedData);
     this.settings = data.settings;
@@ -7647,7 +8022,12 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       void this.openDeck();
     });
     this.registerCommands();
-    if (purgeRemovedEntryPoints) {
+    if (migrateTitleCollision) {
+      new import_obsidian8.Notice(
+        "Slipbox changed title source to filename because the title and address properties used the same key."
+      );
+    }
+    if (purgeRemovedEntryPoints || migrateTitleCollision || migratePluginData) {
       void this.persistState();
     }
     this.app.workspace.onLayoutReady(() => {
@@ -7863,56 +8243,47 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = import_obsidian8.Menu.forEvent(event);
-    const run = (reason, action) => {
+    const runViewAction = (action) => {
       if (leaf.view instanceof DeckView) {
-        void leaf.view.runAfterInlineEditing(reason, action);
-      } else {
-        void action();
+        leaf.view.runAction(action);
       }
     };
     menu.addItem((item) => {
-      item.setTitle(`Open ${title}`).setIcon("file-pen-line").setSection("slipbox-card").onClick(() => run(
-        "card-menu-open-note",
-        () => this.openMarkdownFile(file)
-      ));
+      item.setTitle(`Open ${title}`).setIcon("file-pen-line").setSection("slipbox-card").onClick(() => runViewAction("open-note"));
+    });
+    menu.addItem((item) => {
+      item.setTitle("Copy link").setIcon("copy").setSection("slipbox-card").setDisabled(address === null).onClick(() => runViewAction("copy-link"));
     });
     menu.addItem((item) => {
       item.setTitle(isBookmarked ? "Remove bookmark" : "Add bookmark").setIcon(isBookmarked ? "bookmark-minus" : "bookmark-plus").setSection("slipbox-card").setDisabled(address === null).onClick(() => {
         if (address !== null) {
-          run(
-            "card-menu-toggle-bookmark",
-            () => this.toggleBookmark(file.path)
-          );
+          runViewAction("toggle-bookmark");
         }
       });
     });
     menu.addItem((item) => {
       item.setTitle(trayToggleLabel(isInTray)).setIcon(isInTray ? "undo-2" : "inbox").setSection("slipbox-card").setDisabled(address === null).onClick(() => {
         if (address !== null) {
-          run(
-            "card-menu-toggle-tray",
-            () => this.toggleFileInTray(file)
-          );
+          runViewAction("toggle-tray");
         }
       });
     });
     menu.addItem((item) => {
-      item.setTitle(`Delete ${title}`).setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => run(
-        "card-menu-delete",
-        () => this.deleteCard(file)
-      ));
+      item.setTitle(`Delete ${title}`).setIcon("trash-2").setWarning(true).setSection("slipbox-card-danger").onClick(() => runViewAction("delete-card"));
     });
     this.app.workspace.trigger("file-menu", menu, file, source, leaf);
     menu.showAtMouseEvent(event);
   }
   async deleteCard(file) {
     if (!await this.app.fileManager.promptForDeletion(file)) {
-      return;
+      return false;
     }
     try {
       await this.app.fileManager.trashFile(file);
+      return true;
     } catch (error) {
       new import_obsidian8.Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage4(error)}`);
+      return false;
     }
   }
   showIssues() {
@@ -8232,7 +8603,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
     this.addCommand({
       id: "make-current-note-card",
-      name: "Make current note a card",
+      name: "Make active Markdown note a card",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file !== null && file.extension === "md" && this.cardMetadataState(file) === "ordinary";
@@ -8247,7 +8618,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
     });
     this.addCommand({
       id: "file-current-unfiled-card",
-      name: "File current unfiled card",
+      name: "File active unfiled Markdown note",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available = file !== null && this.cardMetadataState(file) === "unfiled";
@@ -8256,48 +8627,6 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
         }
         if (available && file !== null) {
           void this.beginFiling(file);
-        }
-        return available;
-      }
-    });
-    this.addCommand({
-      id: "toggle-tray",
-      name: "Pull out or return current card",
-      checkCallback: (checking) => {
-        const file = this.currentCardFile();
-        const available = file !== null && this.index.filedByFile(file) !== void 0;
-        if (checking) {
-          return available;
-        }
-        if (available && file !== null) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck !== null) {
-            deck.runAction("toggle-tray");
-          } else {
-            void this.toggleFileInTray(file);
-          }
-        }
-        return available;
-      }
-    });
-    this.addCommand({
-      id: "clear-tray",
-      name: "Return all filed cards",
-      checkCallback: (checking) => {
-        const available = trayHasFiledCards(this.tray);
-        if (checking) {
-          return available;
-        }
-        if (available) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck === null) {
-            void this.clearTray();
-          } else {
-            void deck.runAfterInlineEditing(
-              "command-clear-tray",
-              () => this.clearTray()
-            );
-          }
         }
         return available;
       }
@@ -8316,192 +8645,46 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
         return available;
       }
     });
-    this.addCommand({
-      id: "add-bookmark-current-card",
-      name: "Toggle bookmark on current card",
-      checkCallback: (checking) => {
-        const path = this.currentFiledPath();
-        const available = path !== null;
-        if (checking) {
-          return available;
-        }
-        if (available && path !== null) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck !== null) {
-            deck.runAction("toggle-bookmark");
-          } else {
-            void this.toggleBookmark(path);
-          }
-        }
-        return available;
-      }
-    });
-    this.addCommand({
-      id: "history-back",
-      name: "Back",
-      checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.canGoBack ?? false;
-        if (checking) {
-          return available;
-        }
-        if (available && view !== null) {
-          view.runAction("back");
-        }
-        return available;
-      }
-    });
-    this.addCommand({
-      id: "history-forward",
-      name: "Forward",
-      checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.canGoForward ?? false;
-        if (checking) {
-          return available;
-        }
-        if (available && view !== null) {
-          view.runAction("forward");
-        }
-        return available;
-      }
-    });
-    this.addCommand({
-      id: "open-current-card-markdown",
-      name: "Open current card in Markdown",
-      checkCallback: (checking) => {
-        const file = this.currentCardFile();
-        if (checking) {
-          return file !== null;
-        }
-        if (file !== null) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck !== null) {
-            deck.runAction("open-note");
-          } else {
-            void this.openMarkdownFile(file);
-          }
-        }
-        return file !== null;
-      }
-    });
-    this.addCommand({
-      id: "copy-current-card-link",
-      name: "Copy link to current card",
-      checkCallback: (checking) => {
-        const path = this.currentFiledPath();
-        const card = path === null ? void 0 : this.index.filedByPath(path);
-        const available = card !== void 0;
-        if (checking) {
-          return available;
-        }
-        if (card !== void 0) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck === null) {
-            void this.copyCardLink(card);
-          } else {
-            deck.runAction("copy-link", card);
-          }
-        }
-        return available;
-      }
-    });
-    this.registerDeckCommand("previous-card", "Previous card", "previous-card");
-    this.registerDeckCommand("next-card", "Next card", "next-card");
-    this.registerDeckCommand(
-      "previous-bookmark",
-      "Jump to previous bookmark",
-      "previous-bookmark"
-    );
-    this.registerDeckCommand(
-      "next-bookmark",
-      "Jump to next bookmark",
-      "next-bookmark"
-    );
-    this.registerDeckCommand(
-      "forward-ten-cards",
-      "Move forward ten cards",
-      "forward-ten-cards"
-    );
-    this.registerDeckCommand(
-      "backward-ten-cards",
-      "Move backward ten cards",
-      "backward-ten-cards"
-    );
-    this.registerDeckCommand("centre-active-card", "Centre active card", "centre-card");
-    this.registerDeckCommand("first-card", "First card", "first-card");
-    this.registerDeckCommand("last-card", "Last card", "last-card");
-    this.registerDeckCommand(
-      "find-next-address-initial",
-      "Find next address initial",
-      "find-address-forward"
-    );
-    this.registerDeckCommand(
-      "find-previous-address-initial",
-      "Find previous address initial",
-      "find-address-backward"
-    );
-    this.registerDeckCommand(
-      "find-first-address-initial",
-      "Go to first address initial",
-      "find-address-first"
-    );
-    this.registerDeckCommand(
-      "pull-into-numbered-pile",
-      "Pull current card into numbered pile",
-      "pull-into-pile"
-    );
-    this.registerDeckCommand(
-      "toggle-toolbar-visibility",
-      "Toggle toolbar visibility",
-      "toggle-toolbar"
-    );
-    this.registerDeckCommand(
-      "toggle-deck-map-visibility",
-      "Toggle Deck-map visibility",
-      "toggle-deck-map"
-    );
-    this.addCommand({
-      id: "manage-bookmarks",
-      name: "Manage bookmarks",
-      callback: () => void this.openDeck().then((view) => {
-        view.runAction("bookmarks");
-      })
-    });
-    this.addCommand({
-      id: "show-card-problems",
-      name: "Show card problems",
-      checkCallback: (checking) => {
-        const available = this.index.snapshot.issues.length > 0;
-        if (checking) {
-          return available;
-        }
-        if (available) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck === null) {
-            this.showIssues();
-          } else {
-            deck.runAction("problems");
-          }
-        }
-        return available;
-      }
-    });
-    this.registerDeckCommand("confirm-filing", "File card", "confirm-filing");
-    this.registerDeckCommand("cancel-filing", "Cancel filing", "cancel-filing");
+    for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
+      this.registerSlipboxActionCommand(definition);
+    }
   }
-  registerDeckCommand(id, name, action) {
+  registerSlipboxActionCommand(definition) {
+    if (definition.id === "bookmarks") {
+      this.addCommand({
+        id: definition.commandId,
+        name: definition.commandName,
+        callback: () => void this.openDeck().then((view) => {
+          view.runAction(definition.id);
+        })
+      });
+      return;
+    }
+    if (definition.id === "problems") {
+      this.addCommand({
+        id: definition.commandId,
+        name: definition.commandName,
+        checkCallback: (checking) => {
+          const available = this.index.snapshot.issues.length > 0;
+          if (!checking && available) {
+            this.showIssues();
+          }
+          return available;
+        }
+      });
+      return;
+    }
     this.addCommand({
-      id,
-      name,
+      id: definition.commandId,
+      name: definition.commandName,
       checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.canRunAction(action) ?? false;
+        const view = this.app.workspace.getActiveViewOfType(DeckView);
+        const available = view?.canRunAction(definition.id) ?? false;
         if (checking) {
           return available;
         }
         if (available && view !== null) {
-          view.runAction(action);
+          view.runAction(definition.id);
         }
         return available;
       }
@@ -8588,7 +8771,7 @@ var SlipboxPlugin = class extends import_obsidian8.Plugin {
       title,
       this.settings.titleSource
     );
-    if (frontmatterTitle !== null && this.settings.titleProperty !== this.settings.addressProperty) {
+    if (frontmatterTitle !== null) {
       properties[this.settings.titleProperty] = frontmatterTitle;
     }
     const frontmatter = (0, import_obsidian8.stringifyYaml)(properties);
@@ -8689,36 +8872,6 @@ ${frontmatter}---
       return "invalid";
     }
     return validateAddress(value).valid ? "filed" : "invalid";
-  }
-  currentDeckView() {
-    const active = this.app.workspace.getActiveViewOfType(DeckView);
-    if (active !== null) {
-      return active;
-    }
-    const leaf = this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)[0];
-    return leaf?.view instanceof DeckView ? leaf.view : null;
-  }
-  currentFiledPath() {
-    const deck = this.app.workspace.getActiveViewOfType(DeckView);
-    const deckPath = deck?.activeCard?.path;
-    if (deckPath !== void 0) {
-      return deckPath;
-    }
-    const activeFile = this.app.workspace.getActiveFile();
-    return activeFile === null ? null : this.index.filedByFile(activeFile)?.path ?? null;
-  }
-  currentCardFile() {
-    const deck = this.app.workspace.getActiveViewOfType(DeckView);
-    const deckFile = deck?.activeCard?.file;
-    if (deckFile !== void 0) {
-      return deckFile;
-    }
-    const activeFile = this.app.workspace.getActiveFile();
-    if (activeFile === null) {
-      return null;
-    }
-    const state = this.cardMetadataState(activeFile);
-    return state === "filed" || state === "unfiled" ? activeFile : null;
   }
   async copyCardLink(card) {
     const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";

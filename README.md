@@ -25,18 +25,18 @@ address and lists all affected paths. Invalid stored values—including non-text
 values and text with outer whitespace—are diagnosed and excluded, but never
 rewritten automatically.
 
-## Slipbox workspace, working piles, and Canvas
+## Slipbox workspace, Desk, and Canvas
 
 - **Slipbox** is the shared, pannable workspace containing the permanent
-  canonical sequence of filed cards and the current working piles.
-- **Working piles** are the transient, session-only workspace. They contain all
-  unfiled cards and any filed cards pulled out for current work, without
-  appearing as a separate panel.
+  canonical Deck of filed cards and the current Desk.
+- **Desk** is the transient, session-only surface containing working piles. It
+  contains all unfiled cards and any filed cards pulled out for current work,
+  without appearing as a separate panel.
 - **Canvas** is Obsidian's vault-native persistent spatial workspace. A working
   pile can be laid out there when the arrangement should survive a restart or
   needs Canvas nodes and connections.
 
-Working piles are deliberately not saved. On startup, Slipbox reconstructs one
+The Desk is deliberately not saved. On startup, Slipbox reconstructs one
 pile from all unfiled cards, newest-modified first. Filed cards pulled out for
 current work, pile positions, expansion, and manual ordering last only for the
 current Obsidian session. No pile state is written to Markdown or plugin data.
@@ -81,24 +81,48 @@ disappear. Inline filing leaves the source card in its existing pile and leaves
 every pile visible. Successful filing removes only the newly filed card from its
 former pile.
 
+## Card focus and the Deck anchor
+
+Each Slipbox view has one logical card focus. It belongs to exactly one card
+presentation in the Deck, on the Desk, or in the movable viewed-card layer.
+The focused presentation has the accent outline and is the target of card
+actions. Tabbing into a card control, clicking a card, or opening a card for
+viewing transfers focus to that presentation. Native focus-visible rings remain
+on individual buttons and fields.
+
+The Deck anchor is separate. It records the Deck position used by scrolling,
+the map, history, bookmark jumps, and Deck navigation. When card focus is on the
+Desk or a viewed card, the anchor keeps a neutral grey outline while the focused
+presentation alone keeps the accent outline. Horizontal scrolling, `Left`/
+`Right`, `j`/`k`, address jumps, history, and bookmark jumps always move the
+anchor. Focus follows only if it already belongs to the Deck. `c` centres the
+anchor without transferring focus.
+
+`Enter` is only the configurable shortcut for **Show focused card in Deck**. It
+centres a filed Desk or viewed card and transfers focus to its Deck
+presentation; a floating viewed card remains open. It does nothing for a
+Deck-focused or unfiled card. Removing or rebinding this action in Settings also
+removes or changes the Enter behaviour. `e` is the separate default editing
+shortcut, and `v` views a Desk card or puts back a viewed card.
+
 ## Inline card editing
 
 Double-click the body of a card to edit its raw Markdown in place. With the
-Slipbox workspace focused, `Enter` edits the active filed card. `Escape`, an
+Slipbox workspace focused, `e` edits the focused card. `Escape`, an
 outside Slipbox action, navigation, a view change, or closing Slipbox saves the
 latest draft before editing ends. Typing also saves after 500 ms of inactivity.
 Links, card controls, headers, footers, and filing/address fields keep their
 normal behavior instead of opening the editor.
 
-Double-clicking a working-pile card first brings it into a single movable viewed
+Double-clicking a Desk card first brings it into a single movable viewed
 card, then starts editing. The `View` action brings it closer without editing.
-Its original Tray position becomes a muted magnifying-glass placeholder; a
+Its original Desk position becomes a muted magnifying-glass placeholder; a
 filed card's Deck position does the same. Clicking away saves and ends editing
 but leaves the viewed card open, so the Deck can still be browsed behind it.
-Drag the viewed card by its header, use `c` while it owns focus to centre it,
-and press `v` anywhere in the active Slipbox view—or choose `Put back`—when
-finished. Only one card can be viewed per Slipbox view. Filing an unfiled viewed
-card puts it back before opening its existing inline filing control.
+Drag the viewed card by its header and press `v` anywhere in the active Slipbox
+view—or choose `Put back`—when finished. Only one card can be viewed per Slipbox
+view. Filing an unfiled viewed card puts it back before opening its existing
+inline filing control.
 
 Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
 so comments, key order, spacing, and line endings remain byte-for-byte intact,
@@ -142,8 +166,9 @@ longer exist.
   and fixed backlink footers.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and a persistent Spread control.
-- A subtle ordinal Deck map with one dot per filed card, accent-coloured
-  bookmarks, section initials, and click navigation to exact file paths.
+- A subtle ordinal Deck map with at most 512 evenly sampled neutral markers,
+  exact anchor and bookmark overlays, section initials, and full-order click
+  resolution to exact file paths.
 - Browser-style session history for filed links and bookmarks.
 - One persistent bookmark per filed file.
 - Card-header and context-menu actions for opening notes, pulling cards out or
@@ -153,7 +178,7 @@ longer exist.
 - Filename- or frontmatter-derived centred titles, configurable new-card folder
   and timestamp naming, and Obsidian Templates integration.
 - Visible malformed-address errors and non-blocking duplicate-address warnings.
-- Windowed Slipbox rendering around the active card rather than the whole vault.
+- Windowed Slipbox rendering around the Deck anchor rather than the whole vault.
 - `Return` activates the affirmative action in Slipbox prompt and confirmation
   dialogs, including card creation and bookmark edits.
 
@@ -181,22 +206,26 @@ Titles use the filename by default. They may instead use `title`, or another
 configured top-level frontmatter property, with a filename fallback for missing,
 blank, or non-text values. Slipbox card titles are hidden by default. Visible
 titles are centred between the left-aligned address and right-aligned actions.
+The title property must differ exactly from the address property. Schema-6
+migration switches an existing collision to filename titles without renaming or
+removing either property.
 
 `Show Deck toolbar` is enabled by default. Disabling it hides the navigation,
 bookmark, problem, and spread controls above the Deck while leaving
 their commands and shortcuts available.
 
 `Show Deck map` is enabled by default. The map derives card and bookmark
-positions from the complete configured Deck order and exact file paths. Click a
-dot to jump to that card; the active card is a grey bar, bookmarked cards use
-the accent colour, and unobtrusive initials mark changes in the first address
+positions from the complete configured Deck order and exact file paths. It
+renders at most 512 evenly sampled neutral markers, but clicks resolve against
+the complete order. The Deck anchor and every bookmark are overlaid at their
+exact positions; unobtrusive initials mark changes in the first address
 character. Disabling it removes the overlay.
 
-Header-button settings affect presentation only. Hidden actions remain
-available through commands, Slipbox shortcuts, and card context menus.
+Header-button settings affect filed Deck-card headers only. Hidden actions
+remain available through commands, Slipbox shortcuts, and card context menus.
 
-Main-card and tray-card sizes each have small, medium, and large presets. Medium
-preserves the default 840 px main-card cap and 360 px tray-card cap. Tray
+Main-card and Desk-card sizes each have small, medium, and large presets. Medium
+preserves the default 840 px main-card cap and 360 px Desk-card cap. Desk
 presets remain smaller than main-card presets, including on narrow views.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
@@ -214,33 +243,36 @@ Obsidian's Templates core plugin.
 
 | Key | Action |
 | --- | --- |
-| `←` / `k` | Select the previous card |
-| `→` / `j` | Select the next card |
-| `[` | Jump to the closest bookmark to the left |
-| `]` | Jump to the closest bookmark to the right |
-| `c` | Centre the active card, or the viewed card while it owns focus |
-| `v` | View the focused working card, or put back the currently viewed card |
-| `b` | Toggle the active-card bookmark |
-| `y` | Copy a link to the active card |
+| `←` / `k` | Move the Deck anchor to the previous card |
+| `→` / `j` | Move the Deck anchor to the next card |
+| `[` | Move the Deck anchor to the closest bookmark on the left |
+| `]` | Move the Deck anchor to the closest bookmark on the right |
+| `c` | Centre the Deck anchor without transferring focus |
+| `Enter` | Show the focused filed Desk/viewed card in the Deck |
+| `e` | Edit the focused card |
+| `v` | View the focused Desk card, or put back the focused viewed card |
+| `b` | Toggle the focused-card bookmark |
+| `y` | Copy a link to the focused card |
 | `H` | Go Back in Slipbox history |
 | `L` | Go Forward in Slipbox history |
 | `0` | Jump to the first card |
 | `$` | Jump to the last card |
 | `Ctrl+d` | Move forward ten Deck positions |
 | `Ctrl+u` | Move backward ten Deck positions |
-| `o` | Open the active Markdown note |
-| `p` | Pull out or return the active card |
+| `o` | Open the focused card in Markdown |
+| `p` | Pull out or return the focused card |
+| `Alt+←` / `Alt+→` | Move the focused Desk card within its pile |
 | `f` then a character | Find the next card whose address begins with that character |
 | `F` then a character | Find the previous card whose address begins with that character |
 | `g` then a character | Find the first card from the start whose address begins with that character |
-| `P` then a pile number and `Enter` | Pull or move the active card into that one-based visible pile |
+| `P` then a pile number and `Enter` | Pull or move the focused filed card into that one-based visible pile |
 | `t` | Toggle this Slipbox view's toolbar |
 | `m` | Toggle this Slipbox view's Deck map |
 
 Address-initial searches are case-sensitive, use the first Unicode character of
 the configured address, and do not wrap. `Escape` cancels a pending multi-key
 command. In pile-number mode, digits accumulate, `Backspace` removes the last
-digit, and invalid or nonexistent pile numbers leave the Tray unchanged. `P`
+digit, and invalid or nonexistent pile numbers leave the Desk unchanged. `P`
 never returns a filed card to the Deck; lower-case `p` retains that toggle.
 
 The toolbar and Deck-map shortcuts are session-only and independent in each open
@@ -253,25 +285,26 @@ keeps `Ctrl` distinct from the platform-aware `Mod` modifier in custom bindings.
 
 Every stable Slipbox action can have multiple scoped shortcuts. Changes apply to
 open Slipbox views immediately, and duplicate bindings are rejected. The previous
-Desk shortcut is removed rather than repurposed.
+Legacy Desk shortcut is removed rather than repurposed.
 
 ## Manual filing and address domain
 
-`File current unfiled card`, the working-card File action, or a double-click on
-an unfiled address starts inline filing. The existing Tray card stays at its
+`File active unfiled Markdown note`, the Desk-card File action, or a double-click
+on an unfiled address starts inline filing. The existing Desk card stays at its
 ordinary size and position, gains a light accent treatment, and replaces its
 `unfiled` label with an address field. The active filed card's address is
 prefilled when one is available. Validation and an expandable duplicate-path
 summary appear compactly on the same card; there is no separate card-in-hand,
 bottom bar, or Deck ghost.
 
-`Enter` confirms the current valid address and `Escape` cancels without changing
-Markdown or working-pile membership. `Tab` moves focus to the Deck and selects
-the real card immediately before the prospective insertion point. At the
-beginning it selects the first filed card for context. The ordinary Deck
-shortcuts and horizontal scrolling then work normally, including normal active
-card styling and history. `Shift+Tab` returns directly to the inline address
-field. Editing an address alone never moves the Deck.
+While the address field owns native focus, `Enter` confirms the current valid
+address and `Escape` cancels without changing Markdown or working-pile
+membership. `Tab` moves focus to the Deck and selects the real card immediately
+before the prospective insertion point. At the beginning it selects the first
+filed card for context. The ordinary Deck shortcuts and horizontal scrolling
+then work normally. The previewed Deck card receives focus, while `Shift+Tab`
+returns directly to the inline address field. Editing an address alone never
+moves the Deck.
 
 Before writing, Slipbox refreshes metadata and revalidates the exact source
 file, its unfiled state, the ordering mode, and the complete placement signature.
@@ -296,9 +329,10 @@ removes the short-lived ghost/display-sequence preview exports in favour of
 inline filing-editor helpers and a real-card focus-path helper, along with
 direct-child creation, next-section creation, `Add card from here`, the
 card-header `+`, and `New section`, including their commands, settings, and
-shortcuts. Persisted keys from older versions are ignored at runtime and
-preserved opaquely when settings are saved; the former `a` shortcut is not
-reassigned.
+shortcuts. The old entry-point model was also removed completely by design:
+entry-point controls, commands, state, and its shortcut are not part of the
+current product. Schema migration purges their persisted state and shortcut
+data; the former `a` shortcut is not reassigned.
 
 ## Filed-card links
 
@@ -306,10 +340,10 @@ reassigned.
 preferred Markdown-link generator and uses the address as display text. Slipbox
 does not copy addresses into `aliases`, where they could become stale or
 ambiguous, and does not generate bare address links because `/` may be
-interpreted as a path separator. The command-palette action `Copy link to current
-card`, the Deck-scoped `y` shortcut, and the optional card-header copy button
+interpreted as a path separator. The command-palette action `Copy link to focused
+card`, the Slipbox-scoped `y` shortcut, and the optional card-header copy button
 all copy this preferred aliased link. A header button targets the exact card it
-belongs to, including when that card is not active.
+belongs to, including when that card is not the Deck anchor.
 
 ## Compatibility notes
 

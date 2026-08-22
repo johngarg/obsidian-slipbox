@@ -297,7 +297,7 @@ export class BookmarksModal extends Modal {
     this.listEl = contentEl.createDiv({ cls: "slipbox-modal-list" });
     this.renderList();
     this.addButton = renderCurrentCardAddAction(contentEl, {
-      label: "+ add current card as bookmark",
+      label: "+ add Deck anchor as bookmark",
       currentAddress: this.actions.currentPath,
       isCurrentListed: this.currentIsListed(),
       addCurrent: () => this.actions.addCurrent(),

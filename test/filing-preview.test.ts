@@ -206,6 +206,14 @@ describe("inline tray filing editor DOM", () => {
       "http://www.w3.org/1999/xhtml",
       "select",
     );
+    const button = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "button",
+    );
+    const link = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "a",
+    );
 
     assert.equal(shouldSuspendDeckShortcut(
       deck as unknown as EventTarget,
@@ -221,6 +229,14 @@ describe("inline tray filing editor DOM", () => {
     ), true);
     assert.equal(shouldSuspendDeckShortcut(
       select as unknown as EventTarget,
+      false,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      button as unknown as EventTarget,
+      false,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      link as unknown as EventTarget,
       false,
     ), true);
     assert.equal(shouldSuspendDeckShortcut(

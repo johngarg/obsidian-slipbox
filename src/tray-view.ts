@@ -24,14 +24,12 @@ import {
 } from "./filing-editor.js";
 import {
   cardPosition,
-  collapseAllPiles,
   cyclePileTopCard,
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
   setPilePosition,
   splitCardIntoNewPile,
-  trayHasFiledCards,
   trayStackJitter,
   type TrayCard,
   type TrayPile,
@@ -39,6 +37,7 @@ import {
   type TrayState,
 } from "./tray-state.js";
 import { beginThresholdPointerDrag } from "./pointer-drag.js";
+import type { SlipboxAction } from "./settings.js";
 
 const DRAG_THRESHOLD_PX = 5;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
@@ -50,16 +49,16 @@ const TRAY_SINGLE_CLICK_DELAY_MS = 320;
 
 export interface TrayViewActions {
   jumpToFiledCard(path: string): Promise<void>;
-  moveCardBy(cardRef: string, delta: -1 | 1): Promise<void>;
-  beginFiling(file: TFile): Promise<void>;
   updateFilingInput(value: string): void;
   confirmFiling(): void;
   cancelFiling(): void;
   previewFilingPlacement(): void;
   filingInputFocusChanged(focused: boolean): void;
-  viewCard(file: TFile, editImmediately: boolean): Promise<void>;
   focusViewedCard(): void;
-  putBackViewedCard(): Promise<void>;
+  focusDeskCard(path: string, pileId: string): void;
+  isDeskCardFocused(path: string, pileId: string): boolean;
+  canRunAction(action: SlipboxAction): boolean;
+  runAction(action: SlipboxAction): boolean;
   runAfterEditing(
     reason: string,
     action: () => void | Promise<void>,
@@ -228,21 +227,15 @@ export class TrayRenderer {
         item
           .setTitle("Collapse all piles")
           .setIcon("minimize-2")
-          .setDisabled(this.plugin.tray.expandedPileIds.length === 0)
-          .onClick(() => this.actions.runAfterEditing(
-            "tray-collapse-all-piles",
-            () => this.plugin.updateTray(collapseAllPiles(this.plugin.tray)),
-          ));
+          .setDisabled(!this.actions.canRunAction("collapse-all-piles"))
+          .onClick(() => this.actions.runAction("collapse-all-piles"));
       });
       menu.addItem((item) => {
         item
           .setTitle("Return all filed cards")
           .setIcon("eraser")
-          .setDisabled(!trayHasFiledCards(this.plugin.tray))
-          .onClick(() => this.actions.runAfterEditing(
-            "tray-return-all",
-            () => this.plugin.clearTray(),
-          ));
+          .setDisabled(!this.actions.canRunAction("return-all-filed-cards"))
+          .onClick(() => this.actions.runAction("return-all-filed-cards"));
       });
       menu.showAtMouseEvent(event);
     });
@@ -273,6 +266,12 @@ export class TrayRenderer {
 
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
+    pileEl.addEventListener("focusin", () => {
+      const top = pile.cards[0];
+      if (top !== undefined) {
+        this.actions.focusDeskCard(top.cardRef, pile.id);
+      }
+    });
     if (!expanded) {
       this.renderStackLayers(pileEl, pile);
       if (pile.cards.length > 1) {
@@ -358,23 +357,7 @@ export class TrayRenderer {
       if (event.target !== pileEl) {
         return;
       }
-      if (isPlainKey(event, "v")) {
-        const topCard = pile.cards[0];
-        const file = topCard === undefined
-          ? undefined
-          : this.plugin.index.fileAtPath(topCard.cardRef);
-        if (file !== undefined) {
-          event.preventDefault();
-          event.stopPropagation();
-          if (viewedPath === file.path) {
-            void this.actions.putBackViewedCard();
-          } else {
-            void this.actions.viewCard(file, false);
-          }
-        }
-        return;
-      }
-      if (event.key !== "Enter" && event.key !== " ") {
+      if (event.key !== " ") {
         return;
       }
       event.preventDefault();
@@ -392,6 +375,10 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
+      const top = pile.cards[0];
+      if (top !== undefined) {
+        this.actions.focusDeskCard(top.cardRef, pile.id);
+      }
       this.showPileMenu(event, pile);
     });
     this.attachPileDragging(pileEl, dragSurface, pile, position);
@@ -471,12 +458,13 @@ export class TrayRenderer {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== undefined ? "button" : "group",
         "aria-label": isViewed
-          ? `${address}, ${title}; viewed card placeholder. Activate to centre the viewed card.`
+          ? `${address}, ${title}; viewed card placeholder. Activate to focus the viewed card.`
           : `${address}, ${title}; card ${cardIndex + 1} of ${
               pile.cards.length
             } in pile ${pileIndex + 1}`,
       },
     });
+    miniature.dataset.pileId = pile.id;
     const jitter = trayStackJitter(card.cardRef, cardIndex);
     miniature.style.setProperty(
       "--slipbox-tray-card-tilt",
@@ -486,6 +474,17 @@ export class TrayRenderer {
     miniature.toggleClass("is-filed", filed !== undefined);
     miniature.toggleClass("is-unfiled", filed === undefined);
     miniature.toggleClass("is-viewed-ghost", isViewed);
+    miniature.toggleClass(
+      "is-card-focused",
+      !isViewed && this.actions.isDeskCardFocused(card.cardRef, pile.id),
+    );
+    miniature.addEventListener("focusin", () => {
+      if (isViewed) {
+        this.actions.focusViewedCard();
+      } else {
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+      }
+    });
     const isFilingSource = filing?.sourcePath === card.cardRef;
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
@@ -519,10 +518,8 @@ export class TrayRenderer {
         delay: 350,
       });
       attachUnfiledAddressFiling(addressEl, () => {
-        void this.actions.runAfterEditing(
-          "tray-address-filing",
-          () => this.actions.beginFiling(file),
-        );
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+        this.actions.runAction("file-card");
       });
     }
     const headerTitle = cardHeaderTitle(
@@ -541,17 +538,16 @@ export class TrayRenderer {
       view.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.viewCard(file, false);
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+        this.actions.runAction("toggle-viewed-card");
       });
       if (filed === undefined) {
         const fileButton = trayIconButton(controls, "archive-restore", "File");
         fileButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.actions.runAfterEditing(
-            "tray-file-card",
-            () => this.actions.beginFiling(file),
-          );
+          this.actions.focusDeskCard(card.cardRef, pile.id);
+          this.actions.runAction("file-card");
         });
       } else {
         const returnButton = trayIconButton(
@@ -562,20 +558,16 @@ export class TrayRenderer {
         returnButton.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          void this.actions.runAfterEditing(
-            "tray-return-card",
-            () => this.plugin.toggleFileInTray(file),
-          );
+          this.actions.focusDeskCard(card.cardRef, pile.id);
+          this.actions.runAction("toggle-tray");
         });
       }
       const open = trayIconButton(controls, "file-pen-line", "Open");
       open.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void this.actions.runAfterEditing(
-          "tray-open-note",
-          () => this.plugin.openMarkdownFile(file),
-        );
+        this.actions.focusDeskCard(card.cardRef, pile.id);
+        this.actions.runAction("open-note");
       });
     }
 
@@ -587,13 +579,10 @@ export class TrayRenderer {
         this.actions.focusViewedCard();
       });
       miniature.addEventListener("keydown", (event) => {
-        if (isPlainKey(event, "v")) {
-          event.preventDefault();
-          event.stopPropagation();
-          void this.actions.putBackViewedCard();
+        if (event.key !== "Enter" && event.key !== " ") {
           return;
         }
-        if (event.key !== "Enter" && event.key !== " ") {
+        if (event.key === "Enter") {
           return;
         }
         event.preventDefault();
@@ -626,7 +615,8 @@ export class TrayRenderer {
       event.preventDefault();
       event.stopPropagation();
       this.cancelPendingCardClick();
-      void this.actions.viewCard(file, true);
+      this.actions.focusDeskCard(card.cardRef, pile.id);
+      this.actions.runAction("edit-card");
     });
     this.attachPreviewLinkInteractions(preview, file.path);
     const component = new Component();
@@ -648,6 +638,7 @@ export class TrayRenderer {
     }
 
     miniature.addEventListener("click", (event) => {
+      this.actions.focusDeskCard(card.cardRef, pile.id);
       if (performance.now() < this.suppressClickUntil) {
         event.preventDefault();
         event.stopPropagation();
@@ -672,10 +663,7 @@ export class TrayRenderer {
               () => this.plugin.setTrayPileExpanded(pile.id, true),
             );
           } else if (filed !== undefined) {
-            void this.actions.runAfterEditing(
-              "tray-jump-filed-card",
-              () => this.actions.jumpToFiledCard(filed.path),
-            );
+            this.actions.runAction("show-card-in-deck");
           }
         });
         return;
@@ -696,36 +684,10 @@ export class TrayRenderer {
       event.stopPropagation();
       void this.actions.runAfterEditing(
         "tray-jump-filed-card",
-        () => this.actions.jumpToFiledCard(filed.path),
+        () => {
+          this.actions.runAction("show-card-in-deck");
+        },
       );
-    });
-    miniature.addEventListener("keydown", (event) => {
-      if (isPlainKey(event, "v")) {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.actions.viewCard(file, false);
-        return;
-      }
-      if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.actions.runAfterEditing(
-          "tray-move-card-key",
-          () => this.actions.moveCardBy(
-            card.cardRef,
-            event.key === "ArrowLeft" ? -1 : 1,
-          ),
-        );
-        return;
-      }
-      if (event.key === "Enter" && filed !== undefined) {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.actions.runAfterEditing(
-          "tray-jump-filed-card-key",
-          () => this.actions.jumpToFiledCard(filed.path),
-        );
-      }
     });
     miniature.addEventListener("contextmenu", (event) => {
       if (
@@ -736,6 +698,7 @@ export class TrayRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
+      this.actions.focusDeskCard(card.cardRef, pile.id);
       if (expanded) {
         this.showCardMenu(event, pile, card);
       } else {
@@ -819,7 +782,7 @@ export class TrayRenderer {
     const menu = Menu.forEvent(event);
     if (
       visibleCard !== undefined &&
-      this.addCardFileMenuItems(menu, visibleCard)
+      this.addCardFileMenuItems(menu, visibleCard, pile.id)
     ) {
       menu.addSeparator();
     }
@@ -872,7 +835,7 @@ export class TrayRenderer {
       return;
     }
     const menu = Menu.forEvent(event);
-    if (this.addCardFileMenuItems(menu, card)) {
+    if (this.addCardFileMenuItems(menu, card, pile.id)) {
       menu.addSeparator();
     }
     menu.addItem((item) => {
@@ -926,37 +889,79 @@ export class TrayRenderer {
     menu.showAtMouseEvent(event);
   }
 
-  private addCardFileMenuItems(menu: Menu, card: TrayCard): boolean {
+  private addCardFileMenuItems(
+    menu: Menu,
+    card: TrayCard,
+    pileId: string,
+  ): boolean {
     const file = this.plugin.index.fileAtPath(card.cardRef);
     if (file === undefined) {
       return false;
     }
+    const filed = this.plugin.index.filedByFile(file);
+    const run = (action: SlipboxAction): void => {
+      this.actions.focusDeskCard(card.cardRef, pileId);
+      this.actions.runAction(action);
+    };
     menu.addItem((item) => {
       item
         .setTitle("View")
         .setIcon("search")
-        .onClick(() => this.actions.viewCard(file, false));
+        .onClick(() => run("toggle-viewed-card"));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Edit")
+        .setIcon("pencil")
+        .onClick(() => run("edit-card"));
     });
     menu.addItem((item) => {
       item
         .setTitle("Open")
         .setIcon("file-pen-line")
-        .onClick(() => this.actions.runAfterEditing(
-          "tray-menu-open-note",
-          () => this.plugin.openMarkdownFile(file),
-        ));
+        .onClick(() => run("open-note"));
     });
-    if (card.kind === "unfiled") {
+    if (filed === undefined) {
       menu.addItem((item) => {
         item
           .setTitle("File")
           .setIcon("archive-restore")
-          .onClick(() => this.actions.runAfterEditing(
-            "tray-menu-file-card",
-            () => this.actions.beginFiling(file),
-          ));
+          .onClick(() => run("file-card"));
+      });
+    } else {
+      menu.addItem((item) => {
+        item
+          .setTitle("Show in Deck")
+          .setIcon("locate-fixed")
+          .onClick(() => run("show-card-in-deck"));
+      });
+      menu.addItem((item) => {
+        item
+          .setTitle("Copy link")
+          .setIcon("copy")
+          .onClick(() => run("copy-link"));
+      });
+      menu.addItem((item) => {
+        const bookmarked = this.plugin.bookmarkAtPath(filed.path) !== undefined;
+        item
+          .setTitle(bookmarked ? "Remove bookmark" : "Add bookmark")
+          .setIcon(bookmarked ? "bookmark-minus" : "bookmark-plus")
+          .onClick(() => run("toggle-bookmark"));
+      });
+      menu.addItem((item) => {
+        item
+          .setTitle("Return")
+          .setIcon("undo-2")
+          .onClick(() => run("toggle-tray"));
       });
     }
+    menu.addItem((item) => {
+      item
+        .setTitle(`Delete ${this.plugin.cardTitle(file)}`)
+        .setIcon("trash-2")
+        .setWarning(true)
+        .onClick(() => run("delete-card"));
+    });
     return true;
   }
 
@@ -1328,12 +1333,4 @@ function trayIconButton(
   setTooltip(button, label, { placement: "bottom", delay: 250 });
   button.addEventListener("pointerdown", (event) => event.stopPropagation());
   return button;
-}
-
-function isPlainKey(event: KeyboardEvent, key: string): boolean {
-  return event.key === key &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.shiftKey;
 }

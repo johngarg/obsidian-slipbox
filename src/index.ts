@@ -61,6 +61,7 @@ export {
 } from "./deck-map.js";
 export {
   DECK_ACTION_DEFINITIONS,
+  SLIPBOX_ACTION_DEFINITIONS,
   DEFAULT_SETTINGS,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
@@ -70,6 +71,14 @@ export {
   normalizeSettings,
   settingsForPersistence,
 } from "./settings.js";
+export {
+  cardFocusDeleted,
+  deckCardFocus,
+  deskCardFocus,
+  moveDeckFocusWithAnchor,
+  renameCardFocus,
+  viewedCardFocus,
+} from "./card-focus.js";
 export {
   fitBacklinkPrefix,
   fitMeasuredBacklinkPrefix,
@@ -190,9 +199,14 @@ export type {
   DeckHeaderButton,
   DeckKeyBinding,
   KeyModifier,
+  SlipboxAction,
+  SlipboxActionDefinition,
+  SlipboxActionScope,
+  SlipboxActionTarget,
   SlipboxSettings,
   TitleSource,
 } from "./settings.js";
+export type { CardFocus, CardFocusSurface } from "./card-focus.js";
 export type {
   BacklinkFit,
   ResolvedLinks,

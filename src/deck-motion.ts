@@ -5,7 +5,7 @@ export interface CardMotionStyle {
 }
 
 export const DEFAULT_ACTIVE_HYSTERESIS = 0.06;
-/** Keep card surfaces in one physical stack ordered around the active card. */
+/** Keep card surfaces in one physical stack ordered around the Deck anchor. */
 export function cardStackOrder(
   cardIndex: number,
   activeIndex: number,
@@ -100,7 +100,7 @@ export function clampViewportPosition(
 /**
  * Select the card nearest the centre without flickering at a midpoint.
  *
- * The previous active card remains selected until the viewport crosses the
+ * The previous Deck anchor remains selected until the viewport crosses the
  * midpoint by `hysteresis` card widths. Crossing back requires passing the
  * corresponding threshold on the other side.
  */

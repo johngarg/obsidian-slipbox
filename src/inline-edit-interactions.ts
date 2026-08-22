@@ -1,11 +1,3 @@
-export interface DeckInlineEditEnterState {
-  readonly hasActiveCard: boolean;
-  readonly editing: boolean;
-  readonly starting: boolean;
-  readonly filing: boolean;
-  readonly pendingCommand: boolean;
-}
-
 export interface InlineAwareDeckActionState {
   readonly editing: boolean;
   readonly starting: boolean;
@@ -15,15 +7,6 @@ export interface DeckEscapeState {
   readonly editing: boolean;
   readonly pendingCommand: boolean;
   readonly filing: boolean;
-}
-
-export interface ViewedCardToggleKeyState {
-  readonly viewedCardOpen: boolean;
-  readonly editing: boolean;
-  readonly starting: boolean;
-  readonly filing: boolean;
-  readonly pendingCommand: boolean;
-  readonly editableTarget: boolean;
 }
 
 export type DeckEscapeAction =
@@ -106,67 +89,4 @@ export function shouldNavigateDeckFromWheel(
     return false;
   }
   return Math.abs(event.deltaX) > Math.abs(event.deltaY);
-}
-
-export function isDeckInlineEditEnter(
-  event: KeyboardEvent,
-  deck: HTMLElement,
-  state: DeckInlineEditEnterState,
-): boolean {
-  return (
-    event.target === deck &&
-    event.key === "Enter" &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.shiftKey &&
-    state.hasActiveCard &&
-    !state.editing &&
-    !state.starting &&
-    !state.filing &&
-    !state.pendingCommand
-  );
-}
-
-/** Centre only while the viewed card owns focus, without stealing typed text. */
-export function isViewedCardCenterKey(
-  event: KeyboardEvent,
-  viewedCard: HTMLElement | null,
-  editing: boolean,
-): boolean {
-  if (
-    viewedCard === null ||
-    editing ||
-    event.key !== "c" ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey
-  ) {
-    return false;
-  }
-  const NodeConstructor = viewedCard.ownerDocument.defaultView?.Node;
-  return NodeConstructor !== undefined &&
-    event.target instanceof NodeConstructor &&
-    viewedCard.contains(event.target);
-}
-
-/** Put back the one viewed card from any non-editable surface in the view. */
-export function isViewedCardToggleKey(
-  event: KeyboardEvent,
-  state: ViewedCardToggleKeyState,
-): boolean {
-  return (
-    state.viewedCardOpen &&
-    !state.editing &&
-    !state.starting &&
-    !state.filing &&
-    !state.pendingCommand &&
-    !state.editableTarget &&
-    event.key === "v" &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.shiftKey
-  );
 }

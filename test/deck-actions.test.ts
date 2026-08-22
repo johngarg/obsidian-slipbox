@@ -18,6 +18,14 @@ const READY: DeckActionContext = {
   canGoForward: true,
   hasProblems: true,
   filing: true,
+  hasFocusedCard: true,
+  focusedCardFiled: true,
+  focusedCardUnfiled: false,
+  focusedSurface: "desk",
+  canMoveDeskCardLeft: true,
+  canMoveDeskCardRight: true,
+  hasExpandedPiles: true,
+  hasFiledDeskCards: true,
 };
 
 describe("Deck action availability", () => {
@@ -45,6 +53,14 @@ describe("Deck action availability", () => {
       canGoForward: false,
       hasProblems: false,
       filing: false,
+      hasFocusedCard: false,
+      focusedCardFiled: false,
+      focusedCardUnfiled: false,
+      focusedSurface: null,
+      canMoveDeskCardLeft: false,
+      canMoveDeskCardRight: false,
+      hasExpandedPiles: false,
+      hasFiledDeskCards: false,
     };
     assert.equal(canRunDeckAction("next-card", unavailable), false);
     assert.equal(canRunDeckAction("previous-bookmark", unavailable), false);
@@ -82,6 +98,39 @@ describe("Deck action availability", () => {
       (definition) => definition.id === "copy-link",
     );
     assert.deepEqual(copy?.defaultBindings, [{ key: "y", modifiers: [] }]);
+  });
+
+  test("registers Enter only for Show in Deck and e only for focused editing", () => {
+    const show = DECK_ACTION_DEFINITIONS.find(
+      (definition) => definition.id === "show-card-in-deck",
+    );
+    const edit = DECK_ACTION_DEFINITIONS.find(
+      (definition) => definition.id === "edit-card",
+    );
+    assert.deepEqual(show?.defaultBindings, [{ key: "Enter", modifiers: [] }]);
+    assert.deepEqual(edit?.defaultBindings, [{ key: "e", modifiers: [] }]);
+    assert.equal(show?.target, "focused-card");
+    assert.equal(show?.scope, "active-view");
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.filter((definition) =>
+        definition.defaultBindings.some((binding) => binding.key === "Enter")
+      ).length,
+      1,
+    );
+  });
+
+  test("shows only a filed non-Deck focus in the Deck", () => {
+    assert.equal(canRunDeckAction("show-card-in-deck", READY), true);
+    assert.equal(canRunDeckAction("show-card-in-deck", {
+      ...READY,
+      focusedSurface: "deck",
+    }), false);
+    assert.equal(canRunDeckAction("show-card-in-deck", {
+      ...READY,
+      focusedCardFiled: false,
+      focusedCardUnfiled: true,
+    }), false);
+    assert.equal(canRunDeckAction("edit-card", READY), true);
   });
 
   test("marks held ten-card motion repeatable and prefixes discrete", () => {

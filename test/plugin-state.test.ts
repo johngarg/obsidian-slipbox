@@ -6,6 +6,8 @@ import {
   DEFAULT_SPREAD,
   MIN_SPREAD,
   hasRemovedEntryPointData,
+  hasTitleAddressCollisionData,
+  needsPluginDataMigration,
   normalizePluginData,
   normalizePluginState,
 } from "../src/plugin-state.js";
@@ -92,7 +94,7 @@ describe("normalizePluginData", () => {
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 5);
+    assert.equal(data.schemaVersion, 6);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.equal(data.settings.deckOrdering, "natural");
     assert.equal(data.settings.showDeckMap, true);
@@ -171,5 +173,23 @@ describe("normalizePluginData", () => {
       settings: { deckKeybindings: { bookmarks: [] } },
       state: { bookmarks: [] },
     }), false);
+  });
+
+  test("detects schema and title-key migrations", () => {
+    const collision = {
+      schemaVersion: 5,
+      settings: {
+        addressProperty: "zettel-id",
+        titleSource: "frontmatter",
+        titleProperty: "zettel-id",
+      },
+      state: {},
+    };
+    assert.equal(needsPluginDataMigration(collision), true);
+    assert.equal(hasTitleAddressCollisionData(collision), true);
+    assert.equal(normalizePluginData(collision).schemaVersion, 6);
+    assert.equal(normalizePluginData(collision).settings.titleSource, "filename");
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 6 }), false);
+    assert.equal(hasTitleAddressCollisionData(null), false);
   });
 });

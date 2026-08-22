@@ -51,6 +51,8 @@ import {
   MAX_SPREAD,
   MIN_SPREAD,
   hasRemovedEntryPointData,
+  hasTitleAddressCollisionData,
+  needsPluginDataMigration,
   normalizePluginData,
   type SlipboxPluginState,
 } from "./plugin-state.js";
@@ -60,7 +62,8 @@ import {
   SLIPBOX_DATA_SCHEMA_VERSION,
   normalizeSettings,
   settingsForPersistence,
-  type DeckAction,
+  SLIPBOX_ACTION_DEFINITIONS,
+  type SlipboxActionDefinition,
   type SlipboxSettings,
 } from "./settings.js";
 import { SlipboxSettingTab } from "./settings-tab.js";
@@ -76,7 +79,6 @@ import {
   setPileExpanded,
   toggleFiledCard,
   trayContains,
-  trayHasFiledCards,
   type TrayCardCandidate,
   type TrayPilePosition,
   type TrayState,
@@ -169,6 +171,8 @@ export default class SlipboxPlugin extends Plugin {
   async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
     const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
+    const migrateTitleCollision = hasTitleAddressCollisionData(loadedData);
+    const migratePluginData = needsPluginDataMigration(loadedData);
     const data = normalizePluginData(loadedData);
     this.rawSettings = rawSettingsFromPluginData(loadedData);
     this.settings = data.settings;
@@ -200,7 +204,12 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.registerCommands();
-    if (purgeRemovedEntryPoints) {
+    if (migrateTitleCollision) {
+      new Notice(
+        "Slipbox changed title source to filename because the title and address properties used the same key.",
+      );
+    }
+    if (purgeRemovedEntryPoints || migrateTitleCollision || migratePluginData) {
       void this.persistState();
     }
     this.app.workspace.onLayoutReady(() => {
@@ -464,11 +473,9 @@ export default class SlipboxPlugin extends Plugin {
     const isInTray = trayContains(this.tray, file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
-    const run = (reason: string, action: () => void | Promise<void>): void => {
+    const runViewAction = (action: Parameters<DeckView["runAction"]>[0]): void => {
       if (leaf.view instanceof DeckView) {
-        void leaf.view.runAfterInlineEditing(reason, action);
-      } else {
-        void action();
+        leaf.view.runAction(action);
       }
     };
 
@@ -477,10 +484,15 @@ export default class SlipboxPlugin extends Plugin {
         .setTitle(`Open ${title}`)
         .setIcon("file-pen-line")
         .setSection("slipbox-card")
-        .onClick(() => run(
-          "card-menu-open-note",
-          () => this.openMarkdownFile(file),
-        ));
+        .onClick(() => runViewAction("open-note"));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Copy link")
+        .setIcon("copy")
+        .setSection("slipbox-card")
+        .setDisabled(address === null)
+        .onClick(() => runViewAction("copy-link"));
     });
     menu.addItem((item) => {
       item
@@ -490,10 +502,7 @@ export default class SlipboxPlugin extends Plugin {
         .setDisabled(address === null)
         .onClick(() => {
           if (address !== null) {
-            run(
-              "card-menu-toggle-bookmark",
-              () => this.toggleBookmark(file.path),
-            );
+            runViewAction("toggle-bookmark");
           }
         });
     });
@@ -505,10 +514,7 @@ export default class SlipboxPlugin extends Plugin {
         .setDisabled(address === null)
         .onClick(() => {
           if (address !== null) {
-            run(
-              "card-menu-toggle-tray",
-              () => this.toggleFileInTray(file),
-            );
+            runViewAction("toggle-tray");
           }
         });
     });
@@ -518,10 +524,7 @@ export default class SlipboxPlugin extends Plugin {
         .setIcon("trash-2")
         .setWarning(true)
         .setSection("slipbox-card-danger")
-        .onClick(() => run(
-          "card-menu-delete",
-          () => this.deleteCard(file),
-        ));
+        .onClick(() => runViewAction("delete-card"));
     });
 
     // Obsidian supplies its canonical Reveal file in navigation action along
@@ -530,14 +533,16 @@ export default class SlipboxPlugin extends Plugin {
     menu.showAtMouseEvent(event);
   }
 
-  private async deleteCard(file: TFile): Promise<void> {
+  async deleteCard(file: TFile): Promise<boolean> {
     if (!(await this.app.fileManager.promptForDeletion(file))) {
-      return;
+      return false;
     }
     try {
       await this.app.fileManager.trashFile(file);
+      return true;
     } catch (error) {
       new Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage(error)}`);
+      return false;
     }
   }
 
@@ -905,7 +910,7 @@ export default class SlipboxPlugin extends Plugin {
 
     this.addCommand({
       id: "make-current-note-card",
-      name: "Make current note a card",
+      name: "Make active Markdown note a card",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available =
@@ -924,7 +929,7 @@ export default class SlipboxPlugin extends Plugin {
 
     this.addCommand({
       id: "file-current-unfiled-card",
-      name: "File current unfiled card",
+      name: "File active unfiled Markdown note",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available =
@@ -934,50 +939,6 @@ export default class SlipboxPlugin extends Plugin {
         }
         if (available && file !== null) {
           void this.beginFiling(file);
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
-      id: "toggle-tray",
-      name: "Pull out or return current card",
-      checkCallback: (checking) => {
-        const file = this.currentCardFile();
-        const available = file !== null && this.index.filedByFile(file) !== undefined;
-        if (checking) {
-          return available;
-        }
-        if (available && file !== null) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck !== null) {
-            deck.runAction("toggle-tray");
-          } else {
-            void this.toggleFileInTray(file);
-          }
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
-      id: "clear-tray",
-      name: "Return all filed cards",
-      checkCallback: (checking) => {
-        const available = trayHasFiledCards(this.tray);
-        if (checking) {
-          return available;
-        }
-        if (available) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck === null) {
-            void this.clearTray();
-          } else {
-            void deck.runAfterInlineEditing(
-              "command-clear-tray",
-              () => this.clearTray(),
-            );
-          }
         }
         return available;
       },
@@ -997,203 +958,49 @@ export default class SlipboxPlugin extends Plugin {
         return available;
       },
     });
-
-    this.addCommand({
-      id: "add-bookmark-current-card",
-      name: "Toggle bookmark on current card",
-      checkCallback: (checking) => {
-        const path = this.currentFiledPath();
-        const available = path !== null;
-        if (checking) {
-          return available;
-        }
-        if (available && path !== null) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck !== null) {
-            deck.runAction("toggle-bookmark");
-          } else {
-            void this.toggleBookmark(path);
-          }
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
-      id: "history-back",
-      name: "Back",
-      checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.canGoBack ?? false;
-        if (checking) {
-          return available;
-        }
-        if (available && view !== null) {
-          view.runAction("back");
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
-      id: "history-forward",
-      name: "Forward",
-      checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.canGoForward ?? false;
-        if (checking) {
-          return available;
-        }
-        if (available && view !== null) {
-          view.runAction("forward");
-        }
-        return available;
-      },
-    });
-
-    this.addCommand({
-      id: "open-current-card-markdown",
-      name: "Open current card in Markdown",
-      checkCallback: (checking) => {
-        const file = this.currentCardFile();
-        if (checking) {
-          return file !== null;
-        }
-        if (file !== null) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck !== null) {
-            deck.runAction("open-note");
-          } else {
-            void this.openMarkdownFile(file);
-          }
-        }
-        return file !== null;
-      },
-    });
-
-    this.addCommand({
-      id: "copy-current-card-link",
-      name: "Copy link to current card",
-      checkCallback: (checking) => {
-        const path = this.currentFiledPath();
-        const card = path === null ? undefined : this.index.filedByPath(path);
-        const available = card !== undefined;
-        if (checking) {
-          return available;
-        }
-        if (card !== undefined) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck === null) {
-            void this.copyCardLink(card);
-          } else {
-            deck.runAction("copy-link", card);
-          }
-        }
-        return available;
-      },
-    });
-
-    this.registerDeckCommand("previous-card", "Previous card", "previous-card");
-    this.registerDeckCommand("next-card", "Next card", "next-card");
-    this.registerDeckCommand(
-      "previous-bookmark",
-      "Jump to previous bookmark",
-      "previous-bookmark",
-    );
-    this.registerDeckCommand(
-      "next-bookmark",
-      "Jump to next bookmark",
-      "next-bookmark",
-    );
-    this.registerDeckCommand(
-      "forward-ten-cards",
-      "Move forward ten cards",
-      "forward-ten-cards",
-    );
-    this.registerDeckCommand(
-      "backward-ten-cards",
-      "Move backward ten cards",
-      "backward-ten-cards",
-    );
-    this.registerDeckCommand("centre-active-card", "Centre active card", "centre-card");
-    this.registerDeckCommand("first-card", "First card", "first-card");
-    this.registerDeckCommand("last-card", "Last card", "last-card");
-    this.registerDeckCommand(
-      "find-next-address-initial",
-      "Find next address initial",
-      "find-address-forward",
-    );
-    this.registerDeckCommand(
-      "find-previous-address-initial",
-      "Find previous address initial",
-      "find-address-backward",
-    );
-    this.registerDeckCommand(
-      "find-first-address-initial",
-      "Go to first address initial",
-      "find-address-first",
-    );
-    this.registerDeckCommand(
-      "pull-into-numbered-pile",
-      "Pull current card into numbered pile",
-      "pull-into-pile",
-    );
-    this.registerDeckCommand(
-      "toggle-toolbar-visibility",
-      "Toggle toolbar visibility",
-      "toggle-toolbar",
-    );
-    this.registerDeckCommand(
-      "toggle-deck-map-visibility",
-      "Toggle Deck-map visibility",
-      "toggle-deck-map",
-    );
-    this.addCommand({
-      id: "manage-bookmarks",
-      name: "Manage bookmarks",
-      callback: () => void this.openDeck().then((view) => {
-        view.runAction("bookmarks");
-      }),
-    });
-    this.addCommand({
-      id: "show-card-problems",
-      name: "Show card problems",
-      checkCallback: (checking) => {
-        const available = this.index.snapshot.issues.length > 0;
-        if (checking) {
-          return available;
-        }
-        if (available) {
-          const deck = this.app.workspace.getActiveViewOfType(DeckView);
-          if (deck === null) {
-            this.showIssues();
-          } else {
-            deck.runAction("problems");
-          }
-        }
-        return available;
-      },
-    });
-    this.registerDeckCommand("confirm-filing", "File card", "confirm-filing");
-    this.registerDeckCommand("cancel-filing", "Cancel filing", "cancel-filing");
+    for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
+      this.registerSlipboxActionCommand(definition);
+    }
   }
 
-  private registerDeckCommand(
-    id: string,
-    name: string,
-    action: DeckAction,
+  private registerSlipboxActionCommand(
+    definition: SlipboxActionDefinition,
   ): void {
+    if (definition.id === "bookmarks") {
+      this.addCommand({
+        id: definition.commandId,
+        name: definition.commandName,
+        callback: () => void this.openDeck().then((view) => {
+          view.runAction(definition.id);
+        }),
+      });
+      return;
+    }
+    if (definition.id === "problems") {
+      this.addCommand({
+        id: definition.commandId,
+        name: definition.commandName,
+        checkCallback: (checking) => {
+          const available = this.index.snapshot.issues.length > 0;
+          if (!checking && available) {
+            this.showIssues();
+          }
+          return available;
+        },
+      });
+      return;
+    }
     this.addCommand({
-      id,
-      name,
+      id: definition.commandId,
+      name: definition.commandName,
       checkCallback: (checking) => {
-        const view = this.currentDeckView();
-        const available = view?.canRunAction(action) ?? false;
+        const view = this.app.workspace.getActiveViewOfType(DeckView);
+        const available = view?.canRunAction(definition.id) ?? false;
         if (checking) {
           return available;
         }
         if (available && view !== null) {
-          view.runAction(action);
+          view.runAction(definition.id);
         }
         return available;
       },
@@ -1292,10 +1099,7 @@ export default class SlipboxPlugin extends Plugin {
       title,
       this.settings.titleSource,
     );
-    if (
-      frontmatterTitle !== null &&
-      this.settings.titleProperty !== this.settings.addressProperty
-    ) {
+    if (frontmatterTitle !== null) {
       properties[this.settings.titleProperty] = frontmatterTitle;
     }
     const frontmatter = stringifyYaml(properties);
@@ -1421,41 +1225,6 @@ export default class SlipboxPlugin extends Plugin {
       return "invalid";
     }
     return validateAddress(value).valid ? "filed" : "invalid";
-  }
-
-  private currentDeckView(): DeckView | null {
-    const active = this.app.workspace.getActiveViewOfType(DeckView);
-    if (active !== null) {
-      return active;
-    }
-    const leaf = this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)[0];
-    return leaf?.view instanceof DeckView ? leaf.view : null;
-  }
-
-  private currentFiledPath(): string | null {
-    const deck = this.app.workspace.getActiveViewOfType(DeckView);
-    const deckPath = deck?.activeCard?.path;
-    if (deckPath !== undefined) {
-      return deckPath;
-    }
-    const activeFile = this.app.workspace.getActiveFile();
-    return activeFile === null
-      ? null
-      : this.index.filedByFile(activeFile)?.path ?? null;
-  }
-
-  private currentCardFile(): TFile | null {
-    const deck = this.app.workspace.getActiveViewOfType(DeckView);
-    const deckFile = deck?.activeCard?.file;
-    if (deckFile !== undefined) {
-      return deckFile;
-    }
-    const activeFile = this.app.workspace.getActiveFile();
-    if (activeFile === null) {
-      return null;
-    }
-    const state = this.cardMetadataState(activeFile);
-    return state === "filed" || state === "unfiled" ? activeFile : null;
   }
 
   async copyCardLink(card: FiledCard): Promise<void> {

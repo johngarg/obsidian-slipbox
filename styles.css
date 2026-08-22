@@ -296,11 +296,6 @@
   transition: transform 140ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 
-.slipbox-tray-pile:focus-visible {
-  border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 28%, transparent);
-}
-
 .slipbox-tray-pile.is-collapsed {
   width: calc(var(--slipbox-tray-card-width) + 16px);
   height: var(--slipbox-tray-pile-height);
@@ -557,7 +552,7 @@ button.slipbox-tray-pile-cycle svg {
   background: transparent;
 }
 
-.slipbox-tray-card:focus-visible {
+.slipbox-tray-card.is-card-focused {
   border-color: var(--interactive-accent);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--interactive-accent) 28%, transparent),
@@ -808,7 +803,16 @@ button.slipbox-tray-pile-cycle svg {
   background: var(--background-primary);
 }
 
-.slipbox-card.is-active {
+.slipbox-card.is-deck-anchor {
+  border-color: var(--background-modifier-border-focus);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--text-muted) 16%, transparent),
+    0 2px 7px rgb(0 0 0 / 0.14),
+    0 18px 52px rgb(0 0 0 / 0.18);
+  cursor: default;
+}
+
+.slipbox-card.is-card-focused {
   border-color: var(--interactive-accent);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--interactive-accent) 32%, transparent),
@@ -844,7 +848,7 @@ button.slipbox-tray-pile-cycle svg {
   cursor: pointer;
 }
 
-.slipbox-card.is-viewed-ghost.is-active {
+.slipbox-card.is-viewed-ghost.is-deck-anchor {
   border-color: var(--background-modifier-border-hover);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--text-muted) 14%, transparent),
@@ -1267,7 +1271,7 @@ button.slipbox-card-backlink-overflow:disabled {
   text-decoration: none;
 }
 
-.slipbox-card:not(.is-active) .slipbox-card-scroll {
+.slipbox-card:not(.is-deck-anchor, .slipbox-viewed-card) .slipbox-card-scroll {
   pointer-events: none;
   user-select: none;
 }
@@ -1518,6 +1522,19 @@ button.slipbox-card-backlink-overflow:disabled {
 }
 
 @media (forced-colors: active) {
+  .slipbox-card.is-card-focused,
+  .slipbox-tray-card.is-card-focused {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
+
+  .slipbox-card.is-deck-anchor:not(.is-card-focused) {
+    border-color: GrayText;
+    outline: 1px solid GrayText;
+    outline-offset: 1px;
+  }
+
   .slipbox-deck-map-marker,
   .slipbox-deck-map-section {
     forced-color-adjust: none;

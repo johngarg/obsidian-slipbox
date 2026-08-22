@@ -33,7 +33,7 @@ export function attachUnfiledAddressFiling(
   address: HTMLElement,
   beginFiling: () => void,
 ): void {
-  // Tray cards and collapsed piles begin dragging on pointerdown. Keep the
+  // Desk cards and collapsed piles begin dragging on pointerdown. Keep the
   // pointer sequence on the address so the browser can deliver its dblclick.
   address.addEventListener("pointerdown", (event) => event.stopPropagation());
   address.addEventListener("click", (event) => event.stopPropagation());
@@ -73,6 +73,8 @@ export function shouldSuspendDeckShortcut(
   return tagName === "input" ||
     tagName === "textarea" ||
     tagName === "select" ||
+    tagName === "button" ||
+    tagName === "a" ||
     target.isContentEditable === true;
 }
 

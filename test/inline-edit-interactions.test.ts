@@ -5,10 +5,7 @@ import { Window } from "happy-dom";
 import {
   consumeDeckEscape,
   dispatchInlineAwareDeckAction,
-  isDeckInlineEditEnter,
   isInlineEditBodyTarget,
-  isViewedCardCenterKey,
-  isViewedCardToggleKey,
   resolveDeckEscapeAction,
   shouldNavigateDeckFromWheel,
 } from "../src/inline-edit-interactions.js";
@@ -128,60 +125,6 @@ describe("inline edit entry interactions", () => {
     assert.equal(isInlineEditBodyTarget(outside as unknown as EventTarget, htmlBody), false);
   });
 
-  test("enters only from an unmodified Enter owned by an idle Deck", () => {
-    const window = new Window();
-    const deck = window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "div",
-    );
-    const child = deck.appendChild(window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "button",
-    ));
-    const ready = {
-      hasActiveCard: true,
-      editing: false,
-      starting: false,
-      filing: false,
-      pendingCommand: false,
-    };
-    const enter = new window.KeyboardEvent("keydown", { key: "Enter" });
-    Object.defineProperty(enter, "target", { value: deck });
-    assert.equal(isDeckInlineEditEnter(
-      enter as unknown as KeyboardEvent,
-      deck as unknown as HTMLElement,
-      ready,
-    ), true);
-
-    const childEnter = new window.KeyboardEvent("keydown", { key: "Enter" });
-    Object.defineProperty(childEnter, "target", { value: child });
-    assert.equal(isDeckInlineEditEnter(
-      childEnter as unknown as KeyboardEvent,
-      deck as unknown as HTMLElement,
-      ready,
-    ), false);
-    assert.equal(isDeckInlineEditEnter(
-      enter as unknown as KeyboardEvent,
-      deck as unknown as HTMLElement,
-      { ...ready, pendingCommand: true },
-    ), false);
-    assert.equal(isDeckInlineEditEnter(
-      enter as unknown as KeyboardEvent,
-      deck as unknown as HTMLElement,
-      { ...ready, editing: true },
-    ), false);
-    const shifted = new window.KeyboardEvent("keydown", {
-      key: "Enter",
-      shiftKey: true,
-    });
-    Object.defineProperty(shifted, "target", { value: deck });
-    assert.equal(isDeckInlineEditEnter(
-      shifted as unknown as KeyboardEvent,
-      deck as unknown as HTMLElement,
-      ready,
-    ), false);
-  });
-
   test("keeps textarea wheel gestures native while retaining Deck navigation", () => {
     const window = new Window();
     const stage = window.document.createElementNS(
@@ -237,80 +180,6 @@ describe("inline edit entry interactions", () => {
     assert.equal(verticalDeckWheel.defaultPrevented, false);
   });
 
-  test("keeps c focus-local while v puts back a viewed card view-wide", () => {
-    const window = new Window();
-    const createDiv = () => window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "div",
-    );
-    const card = createDiv();
-    const body = card.appendChild(createDiv());
-    const outside = createDiv();
-    window.document.body.append(card, outside);
-    const event = new window.KeyboardEvent("keydown", { key: "c" });
-    Object.defineProperty(event, "target", { value: body });
-
-    assert.equal(isViewedCardCenterKey(
-      event as unknown as KeyboardEvent,
-      card as unknown as HTMLElement,
-      false,
-    ), true);
-    assert.equal(isViewedCardCenterKey(
-      event as unknown as KeyboardEvent,
-      card as unknown as HTMLElement,
-      true,
-    ), false);
-
-    const outsideEvent = new window.KeyboardEvent("keydown", { key: "c" });
-    Object.defineProperty(outsideEvent, "target", { value: outside });
-    assert.equal(isViewedCardCenterKey(
-      outsideEvent as unknown as KeyboardEvent,
-      card as unknown as HTMLElement,
-      false,
-    ), false);
-
-    const shifted = new window.KeyboardEvent("keydown", {
-      key: "C",
-      shiftKey: true,
-    });
-    Object.defineProperty(shifted, "target", { value: body });
-    assert.equal(isViewedCardCenterKey(
-      shifted as unknown as KeyboardEvent,
-      card as unknown as HTMLElement,
-      false,
-    ), false);
-
-    const toggle = new window.KeyboardEvent("keydown", { key: "v" });
-    Object.defineProperty(toggle, "target", { value: outside });
-    const readyToPutBack = {
-      viewedCardOpen: true,
-      editing: false,
-      starting: false,
-      filing: false,
-      pendingCommand: false,
-      editableTarget: false,
-    };
-    assert.equal(isViewedCardToggleKey(
-      toggle as unknown as KeyboardEvent,
-      readyToPutBack,
-    ), true);
-    for (const blocker of [
-      "editing",
-      "starting",
-      "filing",
-      "pendingCommand",
-      "editableTarget",
-    ] as const) {
-      assert.equal(isViewedCardToggleKey(
-        toggle as unknown as KeyboardEvent,
-        { ...readyToPutBack, [blocker]: true },
-      ), false);
-    }
-    assert.equal(isViewedCardToggleKey(
-      toggle as unknown as KeyboardEvent,
-      { ...readyToPutBack, viewedCardOpen: false },
-    ), false);
-  });
 });
 
 describe("inline-aware Deck action dispatch", () => {

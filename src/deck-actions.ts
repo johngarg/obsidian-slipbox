@@ -10,6 +10,14 @@ export interface DeckActionContext {
   readonly canGoForward: boolean;
   readonly hasProblems: boolean;
   readonly filing: boolean;
+  readonly hasFocusedCard: boolean;
+  readonly focusedCardFiled: boolean;
+  readonly focusedCardUnfiled: boolean;
+  readonly focusedSurface: "deck" | "desk" | "viewed" | null;
+  readonly canMoveDeskCardLeft: boolean;
+  readonly canMoveDeskCardRight: boolean;
+  readonly hasExpandedPiles: boolean;
+  readonly hasFiledDeskCards: boolean;
 }
 
 export function trayToggleLabel(
@@ -35,15 +43,33 @@ export function canRunDeckAction(
     case "backward-ten-cards":
       return context.hasActiveCard;
     case "centre-card":
-    case "open-note":
-    case "copy-link":
-    case "toggle-tray":
-    case "toggle-bookmark":
     case "find-address-forward":
     case "find-address-backward":
     case "find-address-first":
-    case "pull-into-pile":
       return context.hasActiveCard;
+    case "open-note":
+    case "edit-card":
+    case "delete-card":
+      return context.hasFocusedCard;
+    case "copy-link":
+    case "toggle-tray":
+    case "toggle-bookmark":
+    case "pull-into-pile":
+      return context.focusedCardFiled;
+    case "show-card-in-deck":
+      return context.focusedCardFiled && context.focusedSurface !== "deck";
+    case "toggle-viewed-card":
+      return context.focusedSurface === "desk" || context.focusedSurface === "viewed";
+    case "file-card":
+      return context.focusedCardUnfiled && context.focusedSurface !== "deck";
+    case "move-desk-card-left":
+      return context.canMoveDeskCardLeft;
+    case "move-desk-card-right":
+      return context.canMoveDeskCardRight;
+    case "collapse-all-piles":
+      return context.hasExpandedPiles;
+    case "return-all-filed-cards":
+      return context.hasFiledDeskCards;
     case "first-card":
     case "last-card":
       return context.hasActiveCard;

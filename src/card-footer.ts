@@ -9,13 +9,14 @@ import {
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { trayToggleLabel } from "./deck-actions.js";
 import type { FiledCard } from "./card-index.js";
+import type { SlipboxAction } from "./settings.js";
 
 export interface CardFooterEnvironment {
   readonly app: App;
   readonly leaf: WorkspaceLeaf;
   readonly hoverSource: string;
   readonly isInTray: (file: TFile) => boolean;
-  readonly toggleTray: (file: TFile) => void | Promise<void>;
+  readonly runAction: (action: SlipboxAction, target: FiledCard) => boolean;
   readonly runAfterEditing: (
     reason: string,
     action: () => void | Promise<void>,
@@ -373,7 +374,9 @@ export class CardFooterManager {
         .setIcon(inTray ? "undo-2" : "inbox")
         .onClick(() => this.environment.runAfterEditing(
           "backlink-tray-toggle",
-          () => this.environment.toggleTray(backlink.file),
+          () => {
+            this.environment.runAction("toggle-tray", backlink);
+          },
         ));
     });
     this.environment.app.workspace.trigger(

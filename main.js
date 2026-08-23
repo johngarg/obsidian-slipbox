@@ -1460,6 +1460,7 @@ var PREVIOUS_DEFAULT_DECK_KEYBINDINGS = {
 var DEFAULT_SETTINGS = {
   addressProperty: "zettel-id",
   deckOrdering: "natural",
+  duplicateAddresses: "allowed",
   titleSource: "filename",
   titleProperty: "title",
   mainCardSize: "medium",
@@ -1665,6 +1666,7 @@ function normalizeSettings(value) {
   return {
     addressProperty,
     deckOrdering: source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
+    duplicateAddresses: source.duplicateAddresses === "problem" ? "problem" : "allowed",
     titleSource: requestedTitleSource === "frontmatter" && titleProperty === addressProperty ? "filename" : requestedTitleSource,
     titleProperty,
     mainCardSize: normalizeCardSize(source.mainCardSize),
@@ -3283,6 +3285,9 @@ function isPointInPileMergeRegion(pile, x, y) {
 }
 
 // src/filing-preview.ts
+function duplicateFilingMessage(address, occupants) {
+  return `${address} is already used by ${occupants} card${occupants === 1 ? "" : "s"}. Duplicate addresses are not allowed.`;
+}
 function initialFilingAddress(focusedCard) {
   return focusedCard?.address ?? "";
 }
@@ -6274,14 +6279,16 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       return null;
     }
     const preview = this.filingPreview;
+    const duplicatePaths = preview === null ? [] : this.plugin.index.filedAtAddress(preview.address).map((card) => card.path);
+    const blockedByDuplicate = preview !== null && this.plugin.duplicateOccupants(preview.address).length > 0;
     return {
       sourcePath,
       value: this.filingInputValue,
       address: preview?.address ?? null,
-      message: this.filingMessage,
-      invalid: preview === null && this.filingMessage !== "Enter an address.",
+      message: blockedByDuplicate && preview !== null ? duplicateFilingMessage(preview.address, duplicatePaths.length) : this.filingMessage,
+      invalid: blockedByDuplicate || preview === null && this.filingMessage !== "Enter an address.",
       confirmationInProgress: this.filingConfirmationInProgress,
-      duplicatePaths: preview === null ? [] : this.plugin.index.filedAtAddress(preview.address).map((card) => card.path)
+      duplicatePaths
     };
   }
   async previewFilingPlacement() {
@@ -6313,6 +6320,13 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const preview = this.filingPreview;
     if (file === null || preview === null || this.filingConfirmationInProgress) {
       this.recalculateFilingPreview();
+      const filing = this.currentTrayFilingState();
+      if (filing !== null) {
+        this.trayRenderer.updateFilingState(filing);
+      }
+      return;
+    }
+    if (this.plugin.duplicateOccupants(preview.address).length > 0) {
       const filing = this.currentTrayFilingState();
       if (filing !== null) {
         this.trayRenderer.updateFilingState(filing);
@@ -7018,6 +7032,125 @@ function renameDeskCard(cards, oldRef, newRef) {
   return normalizeDeskCards(renamed);
 }
 
+// src/card-metadata.ts
+function cardMetadataRecord(path, frontmatter, addressProperty) {
+  const hasAddress = frontmatter !== void 0 && Object.prototype.hasOwnProperty.call(frontmatter, addressProperty);
+  return {
+    path,
+    hasAddress,
+    address: hasAddress ? frontmatter[addressProperty] : void 0
+  };
+}
+function issueListDescription(duplicatePolicy) {
+  const duplicates = duplicatePolicy === "problem" ? " Duplicate-address cards remain in the Deck beside one another, ordered by file path, and filing onto an occupied address is refused." : "";
+  return `Invalid addresses are excluded until corrected.${duplicates} Slipbox never repairs addresses automatically.`;
+}
+function issueStatusSummary(issues) {
+  if (issues.length === 0) {
+    return null;
+  }
+  let invalid = 0;
+  let duplicate = 0;
+  for (const issue of issues) {
+    if (issue.kind === "invalid") {
+      invalid += 1;
+    } else {
+      duplicate += 1;
+    }
+  }
+  const parts = [];
+  if (invalid > 0) {
+    parts.push(`${invalid} unfilable card${invalid === 1 ? "" : "s"}`);
+  }
+  if (duplicate > 0) {
+    parts.push(`${duplicate} duplicate address${duplicate === 1 ? "" : "es"}`);
+  }
+  return {
+    count: issues.length,
+    severity: invalid > 0 ? "error" : "warning",
+    description: `Slipbox: ${parts.join(", ")}. Click to review.`
+  };
+}
+function displayValue(value) {
+  const serialized = JSON.stringify(value);
+  return serialized === void 0 ? String(value) : serialized;
+}
+function buildFiledCardLookups(filed) {
+  const byPath = /* @__PURE__ */ new Map();
+  const indexByPath = /* @__PURE__ */ new Map();
+  const byAddress = /* @__PURE__ */ new Map();
+  filed.forEach((card, index) => {
+    byPath.set(card.path, card);
+    indexByPath.set(card.path, index);
+    const matches = byAddress.get(card.address) ?? [];
+    matches.push(card);
+    byAddress.set(card.address, matches);
+  });
+  return { byPath, indexByPath, byAddress };
+}
+function indexCardMetadata(records, addressProperty = "zettel-id", ordering = "natural", duplicatePolicy = "allowed") {
+  const unfiledPaths = [];
+  const issues = [];
+  const filed = [];
+  for (const record of records) {
+    if (!record.hasAddress) {
+      continue;
+    }
+    if (record.address === "" || record.address === null || record.address === void 0) {
+      unfiledPaths.push(record.path);
+      continue;
+    }
+    if (typeof record.address !== "string") {
+      issues.push({
+        kind: "invalid",
+        severity: "error",
+        paths: [record.path],
+        message: `Unsupported ${addressProperty} ${displayValue(record.address)}: address must be text`
+      });
+      continue;
+    }
+    const validation = validateAddress(record.address);
+    if (!validation.valid) {
+      issues.push({
+        kind: "invalid",
+        severity: "error",
+        paths: [record.path],
+        message: `Unsupported ${addressProperty} ${displayValue(record.address)}: ${validation.message}`
+      });
+      continue;
+    }
+    filed.push({ path: record.path, address: validation.address });
+  }
+  filed.sort(cardComparatorFor(ordering));
+  unfiledPaths.sort(compareVaultPaths);
+  if (duplicatePolicy === "problem") {
+    const pathsByAddress = /* @__PURE__ */ new Map();
+    for (const card of filed) {
+      const paths = pathsByAddress.get(card.address) ?? [];
+      paths.push(card.path);
+      pathsByAddress.set(card.address, paths);
+    }
+    for (const [address, paths] of pathsByAddress) {
+      const first = paths[0];
+      const second = paths[1];
+      if (first !== void 0 && second !== void 0) {
+        issues.push({
+          kind: "duplicate",
+          severity: "warning",
+          address,
+          paths: [first, second, ...paths.slice(2)],
+          message: `Duplicate ${addressProperty} ${address}`
+        });
+      }
+    }
+  }
+  issues.sort((left, right) => {
+    const pathComparison = compareVaultPaths(left.paths[0], right.paths[0]);
+    return pathComparison !== 0 ? pathComparison : compareVaultPaths(left.kind, right.kind);
+  });
+  return { filed, unfiledPaths, issues };
+}
+
 // src/modals.ts
 var import_obsidian5 = require("obsidian");
 
@@ -7386,9 +7519,10 @@ function updateCurrentCardAddAction(button, currentAddress, isCurrentListed) {
   }
 }
 var IssuesModal = class extends import_obsidian5.Modal {
-  constructor(app, index, actions) {
+  constructor(app, index, duplicatePolicy, actions) {
     super(app);
     this.index = index;
+    this.duplicatePolicy = duplicatePolicy;
     this.actions = actions;
   }
   onOpen() {
@@ -7396,7 +7530,7 @@ var IssuesModal = class extends import_obsidian5.Modal {
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Card address issues" });
     contentEl.createEl("p", {
-      text: "Invalid addresses are excluded until corrected. Duplicate-address cards remain in the Deck beside one another, ordered by file path. Slipbox never repairs addresses automatically."
+      text: issueListDescription(this.duplicatePolicy)
     });
     const list = contentEl.createDiv({ cls: "slipbox-modal-list" });
     for (const issue of this.index.issues) {
@@ -7564,6 +7698,11 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
             (setting) => this.renderDeckOrdering(setting)
           ),
           this.definition(
+            "Duplicate addresses",
+            "Two cards may share an address. Allowed keeps them silent; Report as a problem lists them as warnings, counts them in the status bar, and refuses to file onto an occupied address. Neither setting rewrites existing notes.",
+            (setting) => this.renderDuplicateAddresses(setting)
+          ),
+          this.definition(
             "Title source",
             "Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.",
             (setting) => this.renderTitleSource(setting)
@@ -7695,6 +7834,14 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         );
         queueCommit();
       });
+    });
+  }
+  renderDuplicateAddresses(setting) {
+    setting.addDropdown((dropdown) => {
+      dropdown.addOption("allowed", "Allowed").addOption("problem", "Report as a problem").setValue(this.slipbox.settings.duplicateAddresses).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        duplicateAddresses: value === "problem" ? "problem" : "allowed"
+      }));
     });
   }
   renderShowTitle(setting) {
@@ -8054,95 +8201,6 @@ function errorMessage2(error) {
 
 // src/card-index.ts
 var import_obsidian7 = require("obsidian");
-
-// src/card-metadata.ts
-function cardMetadataRecord(path, frontmatter, addressProperty) {
-  const hasAddress = frontmatter !== void 0 && Object.prototype.hasOwnProperty.call(frontmatter, addressProperty);
-  return {
-    path,
-    hasAddress,
-    address: hasAddress ? frontmatter[addressProperty] : void 0
-  };
-}
-function displayValue(value) {
-  const serialized = JSON.stringify(value);
-  return serialized === void 0 ? String(value) : serialized;
-}
-function buildFiledCardLookups(filed) {
-  const byPath = /* @__PURE__ */ new Map();
-  const indexByPath = /* @__PURE__ */ new Map();
-  const byAddress = /* @__PURE__ */ new Map();
-  filed.forEach((card, index) => {
-    byPath.set(card.path, card);
-    indexByPath.set(card.path, index);
-    const matches = byAddress.get(card.address) ?? [];
-    matches.push(card);
-    byAddress.set(card.address, matches);
-  });
-  return { byPath, indexByPath, byAddress };
-}
-function indexCardMetadata(records, addressProperty = "zettel-id", ordering = "natural") {
-  const unfiledPaths = [];
-  const issues = [];
-  const filed = [];
-  for (const record of records) {
-    if (!record.hasAddress) {
-      continue;
-    }
-    if (record.address === "" || record.address === null || record.address === void 0) {
-      unfiledPaths.push(record.path);
-      continue;
-    }
-    if (typeof record.address !== "string") {
-      issues.push({
-        kind: "invalid",
-        severity: "error",
-        paths: [record.path],
-        message: `Unsupported ${addressProperty} ${displayValue(record.address)}: address must be text`
-      });
-      continue;
-    }
-    const validation = validateAddress(record.address);
-    if (!validation.valid) {
-      issues.push({
-        kind: "invalid",
-        severity: "error",
-        paths: [record.path],
-        message: `Unsupported ${addressProperty} ${displayValue(record.address)}: ${validation.message}`
-      });
-      continue;
-    }
-    filed.push({ path: record.path, address: validation.address });
-  }
-  filed.sort(cardComparatorFor(ordering));
-  unfiledPaths.sort(compareVaultPaths);
-  const pathsByAddress = /* @__PURE__ */ new Map();
-  for (const card of filed) {
-    const paths = pathsByAddress.get(card.address) ?? [];
-    paths.push(card.path);
-    pathsByAddress.set(card.address, paths);
-  }
-  for (const [address, paths] of pathsByAddress) {
-    const first = paths[0];
-    const second = paths[1];
-    if (first !== void 0 && second !== void 0) {
-      issues.push({
-        kind: "duplicate",
-        severity: "warning",
-        address,
-        paths: [first, second, ...paths.slice(2)],
-        message: `Duplicate ${addressProperty} ${address}`
-      });
-    }
-  }
-  issues.sort((left, right) => {
-    const pathComparison = compareVaultPaths(left.paths[0], right.paths[0]);
-    return pathComparison !== 0 ? pathComparison : compareVaultPaths(left.kind, right.kind);
-  });
-  return { filed, unfiledPaths, issues };
-}
-
-// src/card-index.ts
 var EMPTY_INDEX = {
   filed: [],
   unfiled: [],
@@ -8153,10 +8211,11 @@ var EMPTY_INDEX = {
 var NO_BACKLINKS = [];
 var NO_FILED_CARDS = [];
 var CardIndex = class {
-  constructor(app, addressProperty = "zettel-id", ordering = "natural") {
+  constructor(app, addressProperty = "zettel-id", ordering = "natural", duplicatePolicy = "allowed") {
     this.app = app;
     this.addressProperty = addressProperty;
     this.ordering = ordering;
+    this.duplicatePolicy = duplicatePolicy;
   }
   current = EMPTY_INDEX;
   filedByPathMap = /* @__PURE__ */ new Map();
@@ -8174,6 +8233,9 @@ var CardIndex = class {
   setDeckOrdering(ordering) {
     this.ordering = ordering;
   }
+  setDuplicateAddressPolicy(policy) {
+    this.duplicatePolicy = policy;
+  }
   refresh() {
     const markdownFiles = this.app.vault.getMarkdownFiles();
     const records = markdownFiles.map((file) => cardMetadataRecord(
@@ -8184,7 +8246,8 @@ var CardIndex = class {
     const indexed = indexCardMetadata(
       records,
       this.addressProperty,
-      this.ordering
+      this.ordering,
+      this.duplicatePolicy
     );
     const filesByPath = new Map(markdownFiles.map((file) => [file.path, file]));
     const filed = [];
@@ -8529,6 +8592,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
   tray = EMPTY_TRAY;
   index;
   canvas;
+  problemStatusBarItem = null;
   indexRefreshTimer = null;
   cardSpreadSaveTimer = null;
   filingWriteInProgress = false;
@@ -8549,7 +8613,8 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     this.index = new CardIndex(
       this.app,
       this.settings.addressProperty,
-      this.settings.deckOrdering
+      this.settings.deckOrdering,
+      this.settings.duplicateAddresses
     );
     this.canvas = new CanvasBridge(this.app);
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
@@ -8569,6 +8634,12 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     this.addRibbonIcon("archive", "Open Slipbox", () => {
       void this.openDeck();
     });
+    this.problemStatusBarItem = this.addStatusBarItem();
+    this.problemStatusBarItem.addClass("mod-clickable");
+    this.problemStatusBarItem.addEventListener("click", () => {
+      this.showIssues();
+    });
+    this.updateProblemStatusBarItem();
     this.registerCommands();
     if (migrateTitleCollision) {
       new import_obsidian9.Notice(
@@ -8764,16 +8835,18 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
   async updateSettings(value) {
     const previousAddressProperty = this.settings.addressProperty;
     const previousOrdering = this.settings.deckOrdering;
+    const previousDuplicatePolicy = this.settings.duplicateAddresses;
     this.settings = normalizeSettings(value);
     this.index.setAddressProperty(this.settings.addressProperty);
     this.index.setDeckOrdering(this.settings.deckOrdering);
+    this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
         leaf.view.updateKeybindings();
       }
     }
-    if (this.settings.addressProperty !== previousAddressProperty || this.settings.deckOrdering !== previousOrdering) {
+    if (this.settings.addressProperty !== previousAddressProperty || this.settings.deckOrdering !== previousOrdering || this.settings.duplicateAddresses !== previousDuplicatePolicy) {
       await this.refreshIndex();
       if (this.settings.deckOrdering !== previousOrdering) {
         for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
@@ -8826,18 +8899,64 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       return false;
     }
   }
+  /**
+   * Cards already filed at `address` when duplicates are not allowed. Always
+   * empty under the permissive policy, so callers need no policy branch.
+   */
+  duplicateOccupants(address) {
+    if (this.settings.duplicateAddresses !== "problem") {
+      return [];
+    }
+    return this.index.filedAtAddress(address).map((card) => card.path);
+  }
   showIssues() {
     this.index.refresh();
-    new IssuesModal(this.app, this.index.snapshot, {
-      open: (path) => {
-        const file = this.index.fileAtPath(path);
-        if (file === void 0) {
-          new import_obsidian9.Notice(`Could not find ${path}.`);
-        } else {
-          void this.openMarkdownFile(file);
+    this.updateProblemStatusBarItem();
+    new IssuesModal(
+      this.app,
+      this.index.snapshot,
+      this.settings.duplicateAddresses,
+      {
+        open: (path) => {
+          const file = this.index.fileAtPath(path);
+          if (file === void 0) {
+            new import_obsidian9.Notice(`Could not find ${path}.`);
+          } else {
+            void this.openMarkdownFile(file);
+          }
         }
       }
-    }).open();
+    ).open();
+  }
+  /**
+   * Reflect the current issue count in the status bar. The item is hidden
+   * entirely when the vault is clean, so a healthy vault shows no chrome.
+   */
+  updateProblemStatusBarItem() {
+    const item = this.problemStatusBarItem;
+    if (item === null) {
+      return;
+    }
+    const summary = issueStatusSummary(this.index.snapshot.issues);
+    item.replaceChildren();
+    if (summary === null) {
+      item.hide();
+      return;
+    }
+    item.show();
+    item.toggleClass("is-error", summary.severity === "error");
+    item.toggleClass("is-warning", summary.severity === "warning");
+    const icon = item.createSpan({ cls: "slipbox-status-bar-icon" });
+    (0, import_obsidian9.setIcon)(
+      icon,
+      summary.severity === "error" ? "alert-triangle" : "alert-circle"
+    );
+    item.createSpan({
+      cls: "slipbox-status-bar-count",
+      text: String(summary.count)
+    });
+    item.setAttr("aria-label", summary.description);
+    (0, import_obsidian9.setTooltip)(item, summary.description, { placement: "top" });
   }
   showBookmarks(view) {
     const bookmarks = this.state.bookmarks.filter(isPathBookmark);
@@ -9081,6 +9200,11 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       }
       if (!this.filingPreviewMatches(file, preview)) {
         return { status: "preview-changed" };
+      }
+      const occupants = this.duplicateOccupants(preview.address);
+      if (occupants.length > 0) {
+        new import_obsidian9.Notice(duplicateFilingMessage(preview.address, occupants.length));
+        return { status: "failed" };
       }
       await this.app.fileManager.processFrontMatter(
         file,
@@ -9558,6 +9682,7 @@ ${frontmatter}---
     await this.refreshDeckViews();
   }
   async refreshDeckViews() {
+    this.updateProblemStatusBarItem();
     await Promise.all(
       this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE).flatMap(
         (leaf) => leaf.view instanceof DeckView ? [leaf.view.refresh()] : []

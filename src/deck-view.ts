@@ -65,6 +65,7 @@ import {
 } from "./path-reference.js";
 import { normalizeAddressInput } from "./address-order.js";
 import {
+  duplicateFilingMessage,
   filingPreviewFocusPath,
   initialFilingAddress,
   type FilingPreview,
@@ -2922,17 +2923,22 @@ export class DeckView extends ItemView {
       return null;
     }
     const preview = this.filingPreview;
+    const duplicatePaths = preview === null
+      ? []
+      : this.plugin.index.filedAtAddress(preview.address).map((card) => card.path);
+    const blockedByDuplicate = preview !== null &&
+      this.plugin.duplicateOccupants(preview.address).length > 0;
     return {
       sourcePath,
       value: this.filingInputValue,
       address: preview?.address ?? null,
-      message: this.filingMessage,
-      invalid:
-        preview === null && this.filingMessage !== "Enter an address.",
+      message: blockedByDuplicate && preview !== null
+        ? duplicateFilingMessage(preview.address, duplicatePaths.length)
+        : this.filingMessage,
+      invalid: blockedByDuplicate ||
+        (preview === null && this.filingMessage !== "Enter an address."),
       confirmationInProgress: this.filingConfirmationInProgress,
-      duplicatePaths: preview === null
-        ? []
-        : this.plugin.index.filedAtAddress(preview.address).map((card) => card.path),
+      duplicatePaths,
     };
   }
 
@@ -2971,6 +2977,13 @@ export class DeckView extends ItemView {
       this.filingConfirmationInProgress
     ) {
       this.recalculateFilingPreview();
+      const filing = this.currentTrayFilingState();
+      if (filing !== null) {
+        this.trayRenderer.updateFilingState(filing);
+      }
+      return;
+    }
+    if (this.plugin.duplicateOccupants(preview.address).length > 0) {
       const filing = this.currentTrayFilingState();
       if (filing !== null) {
         this.trayRenderer.updateFilingState(filing);

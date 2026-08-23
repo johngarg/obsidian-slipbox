@@ -11,6 +11,10 @@ import {
 import type { DeckBookmark } from "./bookmarks.js";
 import type { VaultCardIndex } from "./card-index.js";
 import {
+  issueListDescription,
+  type DuplicateAddressPolicy,
+} from "./card-metadata.js";
+import {
   matchCardLinkSuggestions,
   type CardLinkSuggestion,
 } from "./card-link-suggestions.js";
@@ -425,10 +429,12 @@ export interface IssuesModalActions {
   open(path: string): void;
 }
 
+
 export class IssuesModal extends Modal {
   constructor(
     app: App,
     private readonly index: VaultCardIndex,
+    private readonly duplicatePolicy: DuplicateAddressPolicy,
     private readonly actions: IssuesModalActions,
   ) {
     super(app);
@@ -439,7 +445,7 @@ export class IssuesModal extends Modal {
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Card address issues" });
     contentEl.createEl("p", {
-      text: "Invalid addresses are excluded until corrected. Duplicate-address cards remain in the Deck beside one another, ordered by file path. Slipbox never repairs addresses automatically.",
+      text: issueListDescription(this.duplicatePolicy),
     });
 
     const list = contentEl.createDiv({ cls: "slipbox-modal-list" });

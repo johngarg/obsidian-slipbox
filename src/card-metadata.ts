@@ -47,6 +47,70 @@ export interface DuplicateAddressIssue {
 
 export type CardIssue = InvalidCardIssue | DuplicateAddressIssue;
 
+/**
+ * How duplicate addresses are treated.
+ *
+ * Duplicates remain structurally supported under both policies: the vault can
+ * always acquire them from outside Slipbox, and the Deck keeps every copy
+ * selectable and adjacent in path order. The policy decides only whether they
+ * are reported as a problem and whether filing may create one.
+ */
+export type DuplicateAddressPolicy = "allowed" | "problem";
+
+/**
+ * Explain only what an issue list can actually contain. Under the permissive
+ * policy duplicates are never listed, so describing them would explain an
+ * absence.
+ */
+export function issueListDescription(
+  duplicatePolicy: DuplicateAddressPolicy,
+): string {
+  const duplicates = duplicatePolicy === "problem"
+    ? " Duplicate-address cards remain in the Deck beside one another, ordered by file path, and filing onto an occupied address is refused."
+    : "";
+  return `Invalid addresses are excluded until corrected.${duplicates} Slipbox never repairs addresses automatically.`;
+}
+
+export interface IssueStatusSummary {
+  readonly count: number;
+  readonly severity: "warning" | "error";
+  readonly description: string;
+}
+
+/**
+ * Summarise outstanding issues for an ambient indicator, or null when there is
+ * nothing to report. An invalid address outranks a duplicate because its card
+ * is excluded from the Deck entirely, while duplicates remain usable.
+ */
+export function issueStatusSummary(
+  issues: readonly CardIssue[],
+): IssueStatusSummary | null {
+  if (issues.length === 0) {
+    return null;
+  }
+  let invalid = 0;
+  let duplicate = 0;
+  for (const issue of issues) {
+    if (issue.kind === "invalid") {
+      invalid += 1;
+    } else {
+      duplicate += 1;
+    }
+  }
+  const parts: string[] = [];
+  if (invalid > 0) {
+    parts.push(`${invalid} unfilable card${invalid === 1 ? "" : "s"}`);
+  }
+  if (duplicate > 0) {
+    parts.push(`${duplicate} duplicate address${duplicate === 1 ? "" : "es"}`);
+  }
+  return {
+    count: issues.length,
+    severity: invalid > 0 ? "error" : "warning",
+    description: `Slipbox: ${parts.join(", ")}. Click to review.`,
+  };
+}
+
 /** A complete, deterministic classification of the vault's Markdown files. */
 export interface CardMetadataIndex {
   readonly filed: readonly FiledCardRecord[];
@@ -87,12 +151,14 @@ export function buildFiledCardLookups<T extends FiledCardRecord>(
  *
  * Missing properties are ordinary notes. Null, undefined, and the empty string
  * are unfiled cards. Valid nonempty strings are filed; duplicate addresses stay
- * adjacent and are ordered by exact vault-relative path.
+ * adjacent and are ordered by exact vault-relative path under either policy,
+ * which only decides whether they are also reported as problems.
  */
 export function indexCardMetadata(
   records: Iterable<CardMetadataRecord>,
   addressProperty = "zettel-id",
   ordering: DeckOrdering = "natural",
+  duplicatePolicy: DuplicateAddressPolicy = "allowed",
 ): CardMetadataIndex {
   const unfiledPaths: string[] = [];
   const issues: CardIssue[] = [];
@@ -139,23 +205,25 @@ export function indexCardMetadata(
   filed.sort(cardComparatorFor(ordering));
   unfiledPaths.sort(compareVaultPaths);
 
-  const pathsByAddress = new Map<string, string[]>();
-  for (const card of filed) {
-    const paths = pathsByAddress.get(card.address) ?? [];
-    paths.push(card.path);
-    pathsByAddress.set(card.address, paths);
-  }
-  for (const [address, paths] of pathsByAddress) {
-    const first = paths[0];
-    const second = paths[1];
-    if (first !== undefined && second !== undefined) {
-      issues.push({
-        kind: "duplicate",
-        severity: "warning",
-        address,
-        paths: [first, second, ...paths.slice(2)],
-        message: `Duplicate ${addressProperty} ${address}`,
-      });
+  if (duplicatePolicy === "problem") {
+    const pathsByAddress = new Map<string, string[]>();
+    for (const card of filed) {
+      const paths = pathsByAddress.get(card.address) ?? [];
+      paths.push(card.path);
+      pathsByAddress.set(card.address, paths);
+    }
+    for (const [address, paths] of pathsByAddress) {
+      const first = paths[0];
+      const second = paths[1];
+      if (first !== undefined && second !== undefined) {
+        issues.push({
+          kind: "duplicate",
+          severity: "warning",
+          address,
+          paths: [first, second, ...paths.slice(2)],
+          message: `Duplicate ${addressProperty} ${address}`,
+        });
+      }
     }
   }
 

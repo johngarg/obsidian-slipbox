@@ -6,6 +6,7 @@ import {
   cardMetadataRecord,
   indexCardMetadata,
   type CardMetadataIndex,
+  type DuplicateAddressPolicy,
   type FiledCardRecord,
 } from "./card-metadata.js";
 import { indexFiledBacklinks } from "./backlinks.js";
@@ -43,6 +44,7 @@ export class CardIndex {
     private readonly app: App,
     private addressProperty = "zettel-id",
     private ordering: DeckOrdering = "natural",
+    private duplicatePolicy: DuplicateAddressPolicy = "allowed",
   ) {}
 
   get snapshot(): VaultCardIndex {
@@ -61,6 +63,10 @@ export class CardIndex {
     this.ordering = ordering;
   }
 
+  setDuplicateAddressPolicy(policy: DuplicateAddressPolicy): void {
+    this.duplicatePolicy = policy;
+  }
+
   refresh(): VaultCardIndex {
     const markdownFiles = this.app.vault.getMarkdownFiles();
     const records = markdownFiles.map((file) => cardMetadataRecord(
@@ -73,6 +79,7 @@ export class CardIndex {
       records,
       this.addressProperty,
       this.ordering,
+      this.duplicatePolicy,
     );
     const filesByPath = new Map(markdownFiles.map((file) => [file.path, file]));
     const filed: FiledCard[] = [];

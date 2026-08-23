@@ -85,8 +85,6 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.viewed["toggle-viewed-card"], true);
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
-    assert.equal(DEFAULT_SETTINGS.useTemplatesForNewNotes, false);
-    assert.equal(DEFAULT_SETTINGS.newNoteTemplatePath, "");
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
@@ -104,8 +102,6 @@ describe("Slipbox settings", () => {
       trayCardSize: "small",
       newCardFolder: " /Cards\\Slipbox/ ",
       newNoteTimestampFormat: " YYYYMMDD-HHmmss ",
-      useTemplatesForNewNotes: false,
-      newNoteTemplatePath: " Templates/Zettel.md ",
       showTitleInDeck: true,
       showDeckMap: false,
       cardSpread: 0.73,
@@ -128,8 +124,6 @@ describe("Slipbox settings", () => {
     assert.equal(settings.trayCardSize, "small");
     assert.equal(settings.newCardFolder, "Cards/Slipbox");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDD-HHmmss");
-    assert.equal(settings.useTemplatesForNewNotes, false);
-    assert.equal(settings.newNoteTemplatePath, "Templates/Zettel.md");
     assert.equal(settings.showTitleInDeck, true);
     assert.equal(settings.showDeckMap, false);
     assert.equal(settings.cardSpread, 0.73);
@@ -441,6 +435,24 @@ describe("Slipbox settings", () => {
     );
   });
 
+  test("purges the retired template settings without touching other keys", () => {
+    const raw = {
+      useTemplatesForNewNotes: true,
+      newNoteTemplatePath: "Templates/Zettel.md",
+      newCardFolder: "Cards",
+      unknownFutureKey: { retained: true },
+    };
+    const settings = normalizeSettings(raw);
+    assert.equal("useTemplatesForNewNotes" in settings, false);
+    assert.equal("newNoteTemplatePath" in settings, false);
+
+    const persisted = settingsForPersistence(raw, settings);
+    assert.equal("useTemplatesForNewNotes" in persisted, false);
+    assert.equal("newNoteTemplatePath" in persisted, false);
+    assert.equal(persisted.newCardFolder, "Cards");
+    assert.deepEqual(persisted.unknownFutureKey, { retained: true });
+  });
+
   test("falls back from invalid property settings", () => {
     const settings = normalizeSettings({
       addressProperty: "   ",
@@ -450,8 +462,6 @@ describe("Slipbox settings", () => {
       trayCardSize: null,
       newCardFolder: 42,
       newNoteTimestampFormat: "   ",
-      useTemplatesForNewNotes: "yes",
-      newNoteTemplatePath: 42,
       showDeckMap: "yes",
       cardSpread: "wide",
     });
@@ -462,8 +472,6 @@ describe("Slipbox settings", () => {
     assert.equal(settings.trayCardSize, "medium");
     assert.equal(settings.newCardFolder, "");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
-    assert.equal(settings.useTemplatesForNewNotes, false);
-    assert.equal(settings.newNoteTemplatePath, "");
     assert.equal(settings.showDeckMap, true);
     assert.equal(settings.cardSpread, DEFAULT_CARD_SPREAD);
   });

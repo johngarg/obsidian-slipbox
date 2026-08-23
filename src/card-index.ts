@@ -1,5 +1,5 @@
 import type { App, TFile } from "obsidian";
-import { TFile as ObsidianFile, getFrontMatterInfo } from "obsidian";
+import { getFrontMatterInfo } from "obsidian";
 
 import {
   buildFiledCardLookups,
@@ -121,8 +121,7 @@ export class CardIndex {
   }
 
   fileAtPath(path: string): TFile | undefined {
-    const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof ObsidianFile ? file : undefined;
+    return this.app.vault.getFileByPath(path) ?? undefined;
   }
 
   backlinksForPath(path: string): readonly FiledCard[] {

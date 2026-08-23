@@ -151,6 +151,17 @@ interface MountedInlineEdit {
 }
 
 export class DeckView extends ItemView {
+  /**
+   * Slipbox is a static surface, not a navigable one.
+   *
+   * Leaving this at the default lets Obsidian navigate the Slipbox leaf away,
+   * which is what an Escape arriving from a modal does, and what makes
+   * `getLeaf(false)` treat the Slipbox leaf as reusable when opening a note.
+   * The Deck's own Escape containment cannot prevent the first case, because
+   * neither the view scope nor the content-element listener receives a
+   * keystroke while a modal holds focus.
+   */
+  navigation = false;
   private activePath: string | null = null;
   private cardFocus: CardFocus | null = null;
   private filingFile: TFile | null = null;
@@ -451,6 +462,21 @@ export class DeckView extends ItemView {
 
   private focusDeskCard(path: string, pileId: string): void {
     this.setCardFocus(deskCardFocus(path, pileId));
+  }
+
+  /**
+   * Focus a card that is currently placed on the Desk.
+   *
+   * Call this only after the Desk has been rendered, so that the focus classes
+   * land on a mounted card. Returns false when the path is not on the Desk.
+   */
+  focusDeskCardAtPath(path: string): boolean {
+    const position = cardPosition(this.plugin.tray, path);
+    if (position === null) {
+      return false;
+    }
+    this.focusDeskCard(path, position.pileId);
+    return true;
   }
 
   private focusDeckCard(path: string): void {

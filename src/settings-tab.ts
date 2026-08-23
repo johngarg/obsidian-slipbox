@@ -207,9 +207,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
   private renderNewCardSettings(container: HTMLElement): void {
     const folderSetting = new Setting(container)
       .setName("New card folder")
-      .setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note’s folder, or the vault root when no source note is active.");
+      .setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to follow Obsidian’s own default location for new notes.");
     folderSetting.addDropdown((dropdown) => {
-      dropdown.addOption("", "Source note’s folder");
+      dropdown.addOption("", "Obsidian’s default location");
       const folders = this.app.vault
         .getAllLoadedFiles()
         .filter(
@@ -267,66 +267,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
         });
     });
 
-    const info = this.slipbox.templatesInfo();
-    let templateSetting: Setting | null = null;
-
-    new Setting(container)
-      .setName("Apply a template to new cards")
-      .setDesc("Use Obsidian’s templates core plugin after Slipbox creates and opens the note.")
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.slipbox.settings.useTemplatesForNewNotes)
-          .onChange((value) => void this.save({
-            ...this.slipbox.settings,
-            useTemplatesForNewNotes: value,
-          }).then(() => {
-            templateSetting?.setDisabled(
-              !value || !info.enabled || info.files.length === 0,
-            );
-          }));
-      });
-
-    let description = "Choose a fixed template, or ask each time a card is created.";
-    if (!info.enabled) {
-      description = "Enable Obsidian’s Templates core plugin to choose a template.";
-    } else if (info.folder === "") {
-      description = "Choose a template folder in the Templates core plugin settings first.";
-    } else if (info.files.length === 0) {
-      description = `No Markdown templates were found in ${info.folder}.`;
-    }
-    const templateDisabled =
-      !this.slipbox.settings.useTemplatesForNewNotes ||
-      !info.enabled ||
-      info.files.length === 0;
-    const template = new Setting(container)
-      .setName("New card template")
-      .setDesc(description)
-      .setDisabled(templateDisabled);
-    templateSetting = template;
-    template.addDropdown((dropdown) => {
-      dropdown.addOption("", "Ask each time");
-      for (const file of info.files) {
-        const prefix = `${info.folder}/`;
-        const label = file.path.startsWith(prefix)
-          ? file.path.slice(prefix.length, -3)
-          : file.basename;
-        dropdown.addOption(file.path, label);
-      }
-      const current = this.slipbox.settings.newNoteTemplatePath;
-      if (
-        current !== "" &&
-        !info.files.some((file) => file.path === current)
-      ) {
-        dropdown.addOption(current, `${current} (missing)`);
-      }
-      dropdown
-        .setValue(current)
-        .setDisabled(templateDisabled)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          newNoteTemplatePath: value,
-        }));
-    });
   }
 
   private renderAddressProperty(container: HTMLElement): void {

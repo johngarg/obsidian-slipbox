@@ -207,8 +207,8 @@ longer exist.
   filing, Desk placement, Deck location, links, bookmarks, movement, and deletion.
 - Inline manual filing in the existing working card, with optional real-Deck
   placement inspection, plus ordinary-note conversion workflows.
-- Filename- or frontmatter-derived centred titles, configurable new-card folder
-  and timestamp naming, and Obsidian Templates integration.
+- Filename- or frontmatter-derived centred titles, with a configurable new-card
+  folder and timestamp naming.
 - Visible malformed-address errors and non-blocking duplicate-address warnings.
 - Windowed Slipbox rendering around the Deck anchor rather than the whole vault.
 - `Return` activates the affirmative action in Slipbox prompt and confirmation
@@ -274,18 +274,51 @@ preserves the default 840 px main-card cap and 360 px Desk-card cap. Desk
 presets remain smaller than main-card presets, including on narrow views.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
-The empty default inherits the source note's folder, or uses the vault root when
-there is no source note. A missing configured folder is reported rather than
-silently recreated elsewhere.
+The empty default follows Obsidian's own **Default location for new notes**
+under Settings → Files and links, rather than reimplementing that preference.
+Slipbox supplies the source path, so Obsidian's **Same folder as current file**
+option resolves against the Deck's active card when a Slipbox view is focused,
+and against the active note otherwise. A configured folder that is missing, or
+that names a note rather than a folder, is reported instead of being silently
+recreated elsewhere.
 
 **New card** creates immediately with the default timestamp-derived title and
 does not open the title prompt. **New card with title** asks for a title;
 filename-derived titles use a sanitised nonblank title as the filename, while
 frontmatter-derived titles use the configured Moment timestamp filename and
 write the entered title property. Submitting a blank prompted title uses the
-same default-title behaviour, while cancelling creates nothing. Creating a card
-from the Desk background also uses the immediate default-title workflow.
-Templates support is optional and uses Obsidian's Templates core plugin.
+same default-title behaviour, while cancelling creates nothing. A filename
+already in use gains a numeric suffix starting at 1, matching Obsidian's own
+collision numbering.
+
+**New card on Desk** and **New card with title on Desk** create an unfiled card
+and open no note at all. The card is placed by ordinary Desk reconciliation, so
+it joins the Desk's home pile exactly like any other newly discovered unfiled
+card. Slipbox is opened first if no Slipbox view is present.
+
+The Desk background context menu offers the same two workflows as **New card
+here** and **New card with title here**, differing only in placing the card at
+the clicked position instead of the home pile.
+
+Every Desk creation path gives the new card the card focus, so `e` begins
+inline editing immediately. Both paths leave the card at the top of its pile,
+so that focus survives later reconciliation. A Desk card's title still comes
+from its filename or title property, and inline editing only edits the body, so
+changing the title means opening the note.
+
+**New card** and **New card with title** open the created note the way Obsidian
+itself opens a file. Slipbox reuses a navigable leaf rather than always spawning
+a tab, so the result matches the core New note command and respects a pinned
+tab.
+
+The Slipbox view declares itself non-navigable, as Obsidian's own static views
+do. Obsidian therefore never navigates the Slipbox leaf away, whether from an
+Escape arriving while a modal holds focus or from reusing a leaf to open a
+note, and the view does not need to be pinned to survive.
+
+Slipbox applies no template of its own. Obsidian's Templates core plugin
+provides an **Insert template** command that works in any editor, including a
+newly created card.
 
 ## Default Slipbox keys
 
@@ -416,6 +449,11 @@ renumbered. The default Natural comparator intentionally differs from the old
 Luhmann comparator in alphabetic rollover cases—for example, `1/1aa` may now
 precede `1/1z`. Renaming a file may reorder it within an exact-address duplicate
 group because path order is the deterministic tie-breaker.
+
+Schema 9 silently purges the retired `useTemplatesForNewNotes` and
+`newNoteTemplatePath` settings, retaining every other compatible setting and all
+state. Card notes written while template support existed are unaffected; the
+template content is already part of those files.
 
 ## Development
 

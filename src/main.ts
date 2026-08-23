@@ -43,7 +43,6 @@ import {
   promptForCanvas,
   promptForCardLink,
   promptForNewCardTitle,
-  promptForTemplate,
   promptForText,
 } from "./modals.js";
 import {
@@ -123,16 +122,10 @@ export type FileCardResult =
   | { readonly status: "preview-changed" }
   | { readonly status: "failed" };
 
-interface TemplatesCorePlugin {
-  readonly options?: { readonly folder?: unknown };
-  insertTemplate(file: TFile): Promise<void> | void;
-}
-
-export interface TemplatesInfo {
-  readonly enabled: boolean;
-  readonly folder: string;
-  readonly files: readonly TFile[];
-}
+/** Where a newly created card goes, and whether its note is opened. */
+type NewCardPlacement =
+  | { readonly kind: "open" }
+  | { readonly kind: "desk"; readonly position?: TrayPilePosition };
 
 export interface InlineEditStartData {
   readonly file: TFile;
@@ -282,8 +275,15 @@ export default class SlipboxPlugin extends Plugin {
     }, 160);
   }
 
+  /**
+   * Open a card's note the way Obsidian itself opens a file.
+   *
+   * `getLeaf(false)` reuses a navigable leaf and honours pinning, so opening a
+   * card matches the core New note and link-following behaviour rather than
+   * always spawning a tab.
+   */
   openMarkdownFile(file: TFile): Promise<void> {
-    return this.app.workspace.getLeaf("tab").openFile(file);
+    return this.app.workspace.getLeaf(false).openFile(file);
   }
 
   acquireInlineEdit(path: string, owner: DeckView): boolean {
@@ -319,8 +319,8 @@ export default class SlipboxPlugin extends Plugin {
 
   async prepareInlineEdit(file: TFile): Promise<InlineEditStartData> {
     await this.flushOpenTextViews(file.path);
-    const latest = this.app.vault.getAbstractFileByPath(file.path);
-    if (!(latest instanceof TFile)) {
+    const latest = this.app.vault.getFileByPath(file.path);
+    if (latest === null) {
       throw new Error("The card no longer exists.");
     }
     const source = await this.app.vault.read(latest);
@@ -334,8 +334,8 @@ export default class SlipboxPlugin extends Plugin {
   async commitInlineEdit(
     request: InlineEditCommitRequest,
   ): Promise<InlineEditCommitResult> {
-    const file = this.app.vault.getAbstractFileByPath(request.path);
-    if (!(file instanceof TFile)) {
+    const file = this.app.vault.getFileByPath(request.path);
+    if (file === null) {
       return {
         status: "conflict",
         message: "The card was deleted while it was being edited.",
@@ -430,24 +430,6 @@ export default class SlipboxPlugin extends Plugin {
     return card === undefined
       ? path
       : `${card.address} · ${this.cardTitle(card.file)}`;
-  }
-
-  templatesInfo(): TemplatesInfo {
-    const plugin = this.templatesPlugin();
-    const configuredFolder = plugin?.options?.folder;
-    if (plugin === null || typeof configuredFolder !== "string") {
-      return { enabled: plugin !== null, folder: "", files: [] };
-    }
-    const folder = normalizePath(configuredFolder);
-    if (folder === "") {
-      return { enabled: true, folder, files: [] };
-    }
-    const prefix = `${folder}/`;
-    const files = this.app.vault
-      .getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix))
-      .sort((left, right) => left.path.localeCompare(right.path));
-    return { enabled: true, folder, files };
   }
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
@@ -733,10 +715,9 @@ export default class SlipboxPlugin extends Plugin {
       return;
     }
 
-    const available = legacy.filter((card) => {
-      const file = this.app.vault.getAbstractFileByPath(card.cardRef);
-      return file instanceof TFile && file.extension === "md";
-    });
+    const available = legacy.filter(
+      (card) => this.app.vault.getFileByPath(card.cardRef)?.extension === "md",
+    );
     const missingCount = legacy.length - available.length;
     if (available.length === 0) {
       new Notice("None of the cards in the legacy Desk layout still exist. The layout was kept.");
@@ -911,6 +892,18 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "new-card-on-desk",
+      name: "New card on Desk",
+      callback: () => void this.createNewCardOnDesk("default"),
+    });
+
+    this.addCommand({
+      id: "new-card-with-title-on-desk",
+      name: "New card with title on Desk",
+      callback: () => void this.createNewCardOnDesk("prompt"),
+    });
+
+    this.addCommand({
       id: "make-current-note-card",
       name: "Make active Markdown note a card",
       checkCallback: (checking) => {
@@ -1026,31 +1019,63 @@ export default class SlipboxPlugin extends Plugin {
 
   async createNewCardAtTrayPosition(
     position: TrayPilePosition,
+    titleMode: NewCardTitleMode = "default",
   ): Promise<void> {
-    await this.createNewCard("default", position);
+    await this.createNewCard(titleMode, { kind: "desk", position });
+  }
+
+  /** Create an unfiled card on the Desk without opening its note. */
+  private async createNewCardOnDesk(
+    titleMode: NewCardTitleMode,
+  ): Promise<void> {
+    await this.openDeck();
+    await this.createNewCard(titleMode, { kind: "desk" });
+  }
+
+  /**
+   * Focus a newly placed Desk card in every Slipbox view.
+   *
+   * The Desk is shared plugin state rendered per view, while card focus is per
+   * view, so each view focuses the card it has just rendered. Both Desk
+   * creation paths leave the new card at the top of its pile, so focus
+   * survives later reconciliation.
+   */
+  private focusDeskCardInViews(path: string): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.focusDeskCardAtPath(path);
+      }
+    }
   }
 
   private async createNewCard(
     titleMode: NewCardTitleMode,
-    trayPosition?: TrayPilePosition,
+    placement: NewCardPlacement = { kind: "open" },
   ): Promise<void> {
     try {
-      const file = await this.createCardFile(titleMode);
+      const file = await this.createCardFile(
+        titleMode,
+        placement.kind === "open",
+      );
       if (file === null) {
         return;
       }
-      if (trayPosition !== undefined) {
+      if (placement.kind === "desk") {
         await this.waitForCachedAddress(file, "");
         this.index.refresh();
+        // Reconciliation alone places the card in the Desk's home pile, which
+        // is where every other newly discovered unfiled card lands.
         this.reconcileSessionTray();
-        const pileId = this.createTrayPileId();
-        this.tray = placeUnfiledCardAtPosition(
-          this.tray,
-          file.path,
-          pileId,
-          trayPosition,
-        );
+        if (placement.position !== undefined) {
+          this.tray = placeUnfiledCardAtPosition(
+            this.tray,
+            file.path,
+            this.createTrayPileId(),
+            placement.position,
+          );
+        }
         await this.refreshDeckViews();
+        this.focusDeskCardInViews(file.path);
       }
       this.queueIndexRefresh();
     } catch (error) {
@@ -1079,6 +1104,7 @@ export default class SlipboxPlugin extends Plugin {
 
   private async createCardFile(
     titleMode: NewCardTitleMode,
+    open: boolean,
     sourcePath?: string,
   ): Promise<TFile | null> {
     const timestamp = newNoteBasename(
@@ -1103,13 +1129,13 @@ export default class SlipboxPlugin extends Plugin {
     const parent = this.newCardParent(
       sourcePath ?? this.activeCreationSourcePath(),
     );
-    const template = await this.resolveNewNoteTemplate();
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;
     let sequence = 0;
     let path: string;
 
+    // Numbering starts at 1 to match Obsidian's own collision suffixes.
     do {
-      const suffix = sequence === 0 ? "" : ` ${sequence + 1}`;
+      const suffix = sequence === 0 ? "" : ` ${sequence}`;
       path = normalizePath(`${prefix}${basename}${suffix}.md`);
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);
@@ -1129,23 +1155,8 @@ export default class SlipboxPlugin extends Plugin {
       path,
       `---\n${frontmatter}---\n\n`,
     );
-    await this.openMarkdownFile(file);
-    if (template !== null) {
-      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-      if (view?.file?.path !== file.path) {
-        new Notice("Could not apply the new-card template: the note editor is not active.");
-      } else {
-        const lastLine = view.editor.lastLine();
-        view.editor.setCursor({
-          line: lastLine,
-          ch: view.editor.getLine(lastLine).length,
-        });
-        try {
-          await template.plugin.insertTemplate(template.file);
-        } catch (error) {
-          new Notice(`Could not apply the new-card template: ${errorMessage(error)}`);
-        }
-      }
+    if (open) {
+      await this.openMarkdownFile(file);
     }
     return file;
   }
@@ -1156,74 +1167,25 @@ export default class SlipboxPlugin extends Plugin {
       this.app.workspace.getActiveFile()?.path;
   }
 
+  /**
+   * Resolve the folder a new card belongs in.
+   *
+   * An empty setting defers to Obsidian's own Default location for new notes.
+   * Slipbox supplies the source path so that the Same folder as current file
+   * option resolves against the Deck's active card, not only the active note.
+   */
   private newCardParent(sourcePath: string | undefined): TFolder {
     const path = this.settings.newCardFolder;
     if (path === "") {
-      const source = sourcePath === undefined
-        ? null
-        : this.app.vault.getAbstractFileByPath(sourcePath);
-      return source instanceof TFile && source.parent !== null
-        ? source.parent
-        : this.app.vault.getRoot();
+      return this.app.fileManager.getNewFileParent(sourcePath ?? "");
     }
-    const folder = this.app.vault.getAbstractFileByPath(path);
-    if (!(folder instanceof TFolder)) {
+    const folder = this.app.vault.getFolderByPath(path);
+    if (folder === null) {
       throw new Error(
-        `The configured new-card folder “${path}” does not exist`,
+        `The configured new-card folder “${path}” is not a folder in this vault`,
       );
     }
     return folder;
-  }
-
-  private templatesPlugin(): TemplatesCorePlugin | null {
-    const app = this.app as typeof this.app & {
-      readonly internalPlugins?: {
-        getEnabledPluginById(id: string): unknown;
-      };
-    };
-    const candidate = app.internalPlugins?.getEnabledPluginById("templates");
-    if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      !("insertTemplate" in candidate) ||
-      typeof candidate.insertTemplate !== "function"
-    ) {
-      return null;
-    }
-    return candidate as TemplatesCorePlugin;
-  }
-
-  private async resolveNewNoteTemplate(): Promise<{
-    readonly plugin: TemplatesCorePlugin;
-    readonly file: TFile;
-  } | null> {
-    if (!this.settings.useTemplatesForNewNotes) {
-      return null;
-    }
-    const plugin = this.templatesPlugin();
-    const info = this.templatesInfo();
-    if (plugin === null) {
-      new Notice("Enable Obsidian’s templates core plugin to apply templates to new cards.");
-      return null;
-    }
-    if (info.folder === "" || info.files.length === 0) {
-      new Notice("Configure a templates folder containing at least one template to use it for new cards.");
-      return null;
-    }
-
-    let file: TFile | null = null;
-    if (this.settings.newNoteTemplatePath !== "") {
-      file = info.files.find(
-        (candidate) => candidate.path === this.settings.newNoteTemplatePath,
-      ) ?? null;
-      if (file === null) {
-        new Notice("The configured new-card template is missing. Choose another template.");
-      }
-    }
-    if (file === null) {
-      file = await promptForTemplate(this.app, info.files, info.folder);
-    }
-    return file === null ? null : { plugin, file };
   }
 
   private cardMetadataState(file: TFile): CardMetadataState {
@@ -1282,15 +1244,16 @@ export default class SlipboxPlugin extends Plugin {
       new Notice("Could not insert the card link: the card no longer exists.");
       return;
     }
-    editor.replaceSelection(
-      generateFiledCardLink(
-        this.app,
-        file,
-        ctx.file?.path ?? "",
-        chosen.address,
-      ),
+    const link = generateFiledCardLink(
+      this.app,
+      file,
+      ctx.file?.path ?? "",
+      chosen.address,
     );
+    // Focus first: replaceSelection acts on the editor's current selection, and
+    // the editor has just lost focus to the suggester.
     editor.focus();
+    editor.replaceSelection(link);
   }
 
   async copyCardLink(card: FiledCard): Promise<void> {

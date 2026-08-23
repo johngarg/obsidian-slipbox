@@ -14,6 +14,7 @@ import {
   matchCardLinkSuggestions,
   type CardLinkSuggestion,
 } from "./card-link-suggestions.js";
+import { modalChoice, type ModalChoice } from "./modal-choice.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -107,54 +108,6 @@ export function promptForNewCardTitle(
   });
 }
 
-class TemplatePromptModal extends FuzzySuggestModal<TFile> {
-  private settled = false;
-
-  constructor(
-    app: App,
-    private readonly files: readonly TFile[],
-    private readonly folder: string,
-    private readonly resolveFile: (file: TFile | null) => void,
-  ) {
-    super(app);
-    this.setPlaceholder("Choose a template (Esc to skip)");
-  }
-
-  getItems(): TFile[] {
-    return [...this.files];
-  }
-
-  getItemText(file: TFile): string {
-    const prefix = `${this.folder}/`;
-    return file.path.startsWith(prefix)
-      ? file.path.slice(prefix.length, -3)
-      : file.basename;
-  }
-
-  onChooseItem(file: TFile): void {
-    this.settled = true;
-    this.resolveFile(file);
-  }
-
-  onClose(): void {
-    super.onClose();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveFile(null);
-    }
-  }
-}
-
-export function promptForTemplate(
-  app: App,
-  files: readonly TFile[],
-  folder: string,
-): Promise<TFile | null> {
-  return new Promise((resolve) => {
-    new TemplatePromptModal(app, files, folder, resolve).open();
-  });
-}
-
 class CanvasPromptModal extends FuzzySuggestModal<TFile> {
   private settled = false;
 
@@ -199,16 +152,17 @@ export function promptForCanvas(
 }
 
 class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
-  private settled = false;
+  private readonly choice: ModalChoice<CardLinkSuggestion>;
 
   constructor(
     app: App,
     private readonly suggestions: readonly CardLinkSuggestion[],
-    private readonly resolveSuggestion: (
-      suggestion: CardLinkSuggestion | null,
-    ) => void,
+    resolveSuggestion: (suggestion: CardLinkSuggestion | null) => void,
   ) {
     super(app);
+    this.choice = modalChoice(resolveSuggestion, (task) => {
+      window.setTimeout(task);
+    });
     this.setPlaceholder("Card address or title (Esc to cancel)");
     this.emptyStateText = "No filed card matches.";
   }
@@ -230,16 +184,12 @@ class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
   }
 
   onChooseSuggestion(suggestion: CardLinkSuggestion): void {
-    this.settled = true;
-    this.resolveSuggestion(suggestion);
+    this.choice.choose(suggestion);
   }
 
   onClose(): void {
     super.onClose();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveSuggestion(null);
-    }
+    this.choice.cancel();
   }
 }
 

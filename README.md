@@ -311,6 +311,11 @@ itself opens a file. Slipbox reuses a navigable leaf rather than always spawning
 a tab, so the result matches the core New note command and respects a pinned
 tab.
 
+The Slipbox view declares itself non-navigable, as Obsidian's own static views
+do. Obsidian therefore never navigates the Slipbox leaf away, whether from an
+Escape arriving while a modal holds focus or from reusing a leaf to open a
+note, and the view does not need to be pinned to survive.
+
 Slipbox applies no template of its own. Obsidian's Templates core plugin
 provides an **Insert template** command that works in any editor, including a
 newly created card.

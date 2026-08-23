@@ -46,13 +46,13 @@ describe("Desk card drops", () => {
   });
 
   test("accepts visible workspace outside a translated Desk layer", () => {
-    const coordinateBounds = {
-      left: 100,
-      right: 1100,
-      top: 50,
-      bottom: 850,
-      width: 1000,
-      height: 800,
+    const anchorBounds = {
+      left: 420,
+      right: 780,
+      top: 100,
+      bottom: 358,
+      width: 360,
+      height: 258,
     };
     const workspaceBounds = {
       left: 0,
@@ -62,29 +62,21 @@ describe("Desk card drops", () => {
       width: 1000,
       height: 800,
     };
-    const geometry = {
-      baseYRatio: 0.31,
-      baseYOffsetPx: 126,
-      cardHalfHeightPx: 58,
-    };
-
     assert.deepEqual(
       pilePositionAtWorkspacePoint(
         50,
         400,
-        coordinateBounds,
+        anchorBounds,
         workspaceBounds,
-        geometry,
       ),
-      { x: -550, y: 170 },
+      { x: -550, y: 171 },
     );
     assert.equal(
       pilePositionAtWorkspacePoint(
         -1,
         400,
-        coordinateBounds,
+        anchorBounds,
         workspaceBounds,
-        geometry,
       ),
       null,
     );

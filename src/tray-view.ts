@@ -59,13 +59,9 @@ import {
   applyRenderedLinkAccessibility,
   attachRenderedLinkInteractions,
 } from "./rendered-link-interactions.js";
+import { defaultPilePosition } from "./workspace-layout.js";
 
 const DRAG_THRESHOLD_PX = 5;
-const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
-const DEFAULT_PILE_DECK_CLEARANCE_PX = 24;
-const PILE_BASE_Y_RATIO = 0.31;
-const PILE_BASE_Y_OFFSET_PX = 126;
-const PILE_CARD_HALF_HEIGHT_PX = 58;
 const TRAY_SINGLE_CLICK_DELAY_MS = 320;
 
 export interface TrayViewActions {
@@ -102,6 +98,7 @@ export class TrayRenderer {
   private components = new Map<string, Component>();
   private previews = new Map<string, HTMLElement>();
   private rootEl: HTMLElement | null = null;
+  private pilesAnchorEl: HTMLElement | null = null;
   private workspaceEl: HTMLElement | null = null;
   private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private filingEditor: InlineFilingEditorElements | null = null;
@@ -132,6 +129,7 @@ export class TrayRenderer {
     this.components.clear();
     this.previews.clear();
     this.rootEl = null;
+    this.pilesAnchorEl = null;
     this.workspaceEl = null;
     this.filingEditor = null;
   }
@@ -210,12 +208,7 @@ export class TrayRenderer {
       (total, pile) => total + pile.cards.length,
       0,
     );
-    this.attachBackgroundMenu(stage, space);
-    if (cardCount === 0) {
-      return;
-    }
-
-    stage.addClass("has-tray");
+    this.attachBackgroundMenu(stage);
     this.workspaceEl = stage;
     const tray = space.createDiv({
       cls: "slipbox-tray",
@@ -226,6 +219,12 @@ export class TrayRenderer {
     this.rootEl = tray;
 
     const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
+    this.pilesAnchorEl = piles;
+    if (cardCount === 0) {
+      return;
+    }
+
+    stage.addClass("has-tray");
     const jobs: Promise<void>[] = [];
     state.piles.forEach((pile, pileIndex) => {
       jobs.push(...this.renderPile(
@@ -242,7 +241,7 @@ export class TrayRenderer {
     await Promise.all(jobs);
   }
 
-  private attachBackgroundMenu(stage: HTMLElement, space: HTMLElement): void {
+  private attachBackgroundMenu(stage: HTMLElement): void {
     stage.addEventListener("contextmenu", (event) => {
       if (event.target !== stage) {
         return;
@@ -252,7 +251,7 @@ export class TrayRenderer {
       const position = this.positionAtPoint(
         event.clientX,
         event.clientY,
-        space,
+        this.pilesAnchorEl,
         stage,
       );
       menu.addItem((item) => {
@@ -1200,7 +1199,7 @@ export class TrayRenderer {
   private positionAtPoint(
     x: number,
     y: number,
-    coordinateElement: HTMLElement | null = this.rootEl,
+    coordinateElement: HTMLElement | null = this.pilesAnchorEl,
     hitBoundsElement: HTMLElement | null = null,
   ): TrayPilePosition | null {
     const rect = coordinateElement?.getBoundingClientRect();
@@ -1209,11 +1208,7 @@ export class TrayRenderer {
     if (rect === undefined || hitBounds === undefined) {
       return null;
     }
-    return pilePositionAtWorkspacePoint(x, y, rect, hitBounds, {
-      baseYRatio: PILE_BASE_Y_RATIO,
-      baseYOffsetPx: PILE_BASE_Y_OFFSET_PX,
-      cardHalfHeightPx: PILE_CARD_HALF_HEIGHT_PX,
-    });
+    return pilePositionAtWorkspacePoint(x, y, rect, hitBounds);
   }
 
   private clearDropCues(except?: HTMLElement): void {
@@ -1295,15 +1290,6 @@ export class TrayRenderer {
       this.pendingCardClickTimer = null;
     }
   }
-}
-
-function defaultPilePosition(pileIndex: number): TrayPilePosition {
-  return {
-    x: 0,
-    y:
-      pileIndex * DEFAULT_PILE_VERTICAL_STEP_PX -
-      DEFAULT_PILE_DECK_CLEARANCE_PX,
-  };
 }
 
 function isPointInPileMergeRegion(

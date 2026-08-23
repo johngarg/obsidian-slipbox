@@ -1,5 +1,7 @@
 .slipbox-deck-view {
   --slipbox-card-footer-height: 36px;
+  --slipbox-deck-top: 31%;
+  --slipbox-pile-deck-gap: 24px;
 }
 
 .slipbox-deck-view {
@@ -166,28 +168,36 @@
   pointer-events: none;
 }
 
-.slipbox-tray,
-.slipbox-tray-piles {
+.slipbox-tray {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
 .slipbox-tray-piles {
+  position: absolute;
+  top: calc(var(--slipbox-deck-top) - var(--slipbox-pile-deck-gap));
+  left: 50%;
+  width: calc(var(--slipbox-tray-card-width) + 16px);
+  height: var(--slipbox-tray-pile-height);
   overflow: visible;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
 }
 
 .slipbox-tray-pile {
   position: absolute;
-  top: calc(31% - 126px + var(--slipbox-pile-y, 0px));
+  top: calc(50% + var(--slipbox-pile-y, 0px));
   left: calc(50% + var(--slipbox-pile-x, 0px));
   z-index: 230;
+  box-sizing: border-box;
+  height: var(--slipbox-tray-pile-height);
   min-width: 0;
   border: 1px solid transparent;
   border-radius: 8px;
   outline: none;
   pointer-events: auto;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   transition: transform 140ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 

@@ -164,6 +164,7 @@ import {
   type PileFocusLocation,
   type PileNavigationDirection,
 } from "./pile-navigation.js";
+import { deckTopForPileAnchor } from "./workspace-layout.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -3885,7 +3886,7 @@ export class DeckView extends ItemView {
       this.renderedCards.length === 0 ||
       activeIndex < 0
     ) {
-      return true;
+      return this.updatePileAnchorFromDeck();
     }
 
     const step = this.cardStep();
@@ -3916,6 +3917,31 @@ export class DeckView extends ItemView {
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
       card.style.opacity = String(motion.opacity);
     }
+    return this.updatePileAnchorFromDeck();
+  }
+
+  private updatePileAnchorFromDeck(): boolean {
+    const stage = this.stageEl;
+    const space = this.spaceEl;
+    const activeCard = this.activePath === null
+      ? null
+      : this.renderedCards.find(
+        (card) => card.dataset.path === this.activePath,
+      ) ?? null;
+    const deckFootprint = activeCard ?? this.deckCardsEl?.querySelector<HTMLElement>(
+      ".slipbox-deck-empty",
+    ) ?? null;
+    if (stage === null || space === null || deckFootprint === null) {
+      return true;
+    }
+    const deckTop = deckTopForPileAnchor(
+      stage.clientHeight,
+      deckFootprint.offsetHeight,
+    );
+    if (deckTop === null) {
+      return false;
+    }
+    space.style.setProperty("--slipbox-deck-top", `${deckTop}px`);
     return true;
   }
 

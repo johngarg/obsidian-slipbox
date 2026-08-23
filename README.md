@@ -69,9 +69,12 @@ current work, pile positions, expansion, and manual ordering last only for the
 current Obsidian session. No pile state is written to Markdown or plugin data.
 
 Piles are anonymous and float directly beside the filed cards in the same
-workspace. Their initial positions form a compact vertical stack immediately
-above the filed cards, and collapsed piles can be dragged anywhere. A collapsed
-pile shows its readable top card and count, with the slightly varied corners of
+workspace. The home pile initially sits 24 px above the actual Deck footprint,
+so the clearance follows the configured card sizes; later automatic piles step
+upward from it. Piles may clip at the top of a short workspace, while the Deck
+remains fully visible. Manually positioned piles stay where they are placed and
+may overlap the Deck. A collapsed pile shows its readable top card and count,
+with the slightly varied corners of
 the cards beneath it exposed. Hover a multi-card pile and use the side arrows to
 cycle its top card without opening it. Click the pile itself to expand its
 ordered, gently tilted card miniatures directly onto the workspace—there is no

@@ -201,14 +201,11 @@ describe("Deck action availability", () => {
     assert.deepEqual(copy?.defaultBindings, [{ key: "y", modifiers: [] }]);
   });
 
-  test("uses Alt+p for a Deck-only Desk toggle that preserves focus", () => {
+  test("leaves the Deck-only background toggle unbound by default", () => {
     const backgroundToggle = DECK_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "toggle-tray-without-focus",
     );
-    assert.deepEqual(backgroundToggle?.defaultBindings, [{
-      key: "p",
-      modifiers: ["Alt"],
-    }]);
+    assert.deepEqual(backgroundToggle?.defaultBindings, []);
     assert.equal(backgroundToggle?.target, "focused-card");
     assert.equal(canRunDeckAction("toggle-tray-without-focus", {
       ...READY,

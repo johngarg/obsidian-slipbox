@@ -52,9 +52,7 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray"], [
       { key: "p", modifiers: [] },
     ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray-without-focus"], [
-      { key: "p", modifiers: ["Alt"] },
-    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray-without-focus"], []);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["copy-link"], [
       { key: "y", modifiers: [] },
     ]);
@@ -260,7 +258,7 @@ describe("Slipbox settings", () => {
     assert.deepEqual(settings.deckKeybindings["toggle-pile"], []);
   });
 
-  test("does not let the new background-pull default displace an existing Alt+p", () => {
+  test("keeps background pull unbound unless it was explicitly configured", () => {
     const normalized = normalizeDeckKeybindings({
       "open-note": [{ key: "p", modifiers: ["Alt"] }],
     });
@@ -269,6 +267,14 @@ describe("Slipbox settings", () => {
       modifiers: ["Alt"],
     }]);
     assert.deepEqual(normalized["toggle-tray-without-focus"], []);
+
+    const configured = normalizeDeckKeybindings({
+      "toggle-tray-without-focus": [{ key: "q", modifiers: ["Alt"] }],
+    });
+    assert.deepEqual(configured["toggle-tray-without-focus"], [{
+      key: "q",
+      modifiers: ["Alt"],
+    }]);
   });
 
   test("formats shifted pile-navigation symbols without redundant Shift text", () => {

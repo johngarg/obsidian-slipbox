@@ -1225,7 +1225,7 @@ var BASE_ACTION_DEFINITIONS = [
     id: "toggle-tray-without-focus",
     label: "Put focused Deck card on or return it from Desk without moving focus",
     repeatable: false,
-    defaultBindings: [binding("p", ["Alt"])]
+    defaultBindings: []
   },
   {
     id: "toggle-bookmark",

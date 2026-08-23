@@ -144,10 +144,9 @@ focused Desk card or returns a viewed card to its exact Desk pile.
 Slipbox viewing and editing are Desk-only. A Deck card has no View or Edit
 action, and ignores `e`, `v`, and body double-click. Press `p` to put it on the
 Desk and transfer focus to the pulled card; `p` followed by `e` therefore begins
-editing, while `p` followed by `v` opens the view-only presentation. `Alt+p`
-(`Option+p` on macOS) toggles the focused Deck card on the Desk without moving
-focus, including returning a background-pulled card while its Deck copy remains
-focused.
+editing, while `p` followed by `v` opens the view-only presentation. The
+separate action that toggles the focused Deck card on the Desk without moving
+focus has no default shortcut; assign one in Slipbox settings if desired.
 
 ## Card header actions
 
@@ -383,7 +382,7 @@ newly created card.
 | `Ctrl+u` | Move backward ten Deck positions |
 | `o` | Open the focused card in Markdown |
 | `p` | Put the focused filed card on the Desk and focus it, or return it from the Desk |
-| `Alt+p` (`Option+p` on macOS) | Toggle the focused Deck card on the Desk without moving focus |
+| Unassigned | Toggle the focused Deck card on the Desk without moving focus |
 | `{` / `}` | Cycle card focus backward/forward through the Deck and Desk piles |
 | `%` | Swap focus between the Deck and the last focused pile |
 | `Space` | Expand or collapse the focused Desk card's pile |

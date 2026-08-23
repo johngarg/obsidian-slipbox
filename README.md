@@ -10,6 +10,17 @@ zettel-id: ""
 ---
 ```
 
+## Requirements and installation
+
+Slipbox requires the desktop Obsidian app at version 1.13.0 or newer. Download
+`manifest.json`, `main.js`, and `styles.css` from the same GitHub Release and
+place them in `<Vault>/.obsidian/plugins/slipbox/`. Reload Obsidian, then enable
+Slipbox under **Settings → Community plugins**.
+
+The source repository does not track the generated `main.js`. A source checkout
+must run the production build described under [Development](#development)
+before Obsidian can load it directly.
+
 An empty value is an unfiled card. Any trimmed, nonempty, single-line string
 without control characters is a filed address: `1/2b1`, `A/1`, `Project-17`,
 and `α/12` are all valid. Because the address domain is that open, an unfiled
@@ -549,16 +560,34 @@ Schema 11 adds automatic-backlink visibility and rendered-card scrolling.
 Missing or invalid values preserve the previous display: automatic backlink
 footers and scrolling remain enabled.
 
+## Privacy and security
+
+Slipbox operates locally and offline. The plugin does not make network
+requests, load remote code, collect telemetry, display advertising, require an
+account, or access files outside the active Obsidian vault. It reads and writes
+vault files only for the card, filing, linking, and Canvas actions initiated by
+the user.
+
 ## Development
 
+Development requires Node.js 20 or newer and npm. Install the locked dependency
+set and run the complete verification pipeline:
+
 ```sh
-npm install
+npm ci
 npm run check
 ```
 
-`npm run build` produces `main.js`. The installable plugin consists of
-`manifest.json`, `main.js`, and `styles.css`. Tests use Node's built-in runner,
-and strict TypeScript checks the complete plugin.
+`npm run check` performs strict TypeScript checking, the Node test suite,
+warning-free ESLint, a production build, and release-metadata validation.
+`npm run build` produces the ignored `main.js`. The installable plugin consists
+of `manifest.json`, `main.js`, and `styles.css`.
+
+[`AGENTS.md`](AGENTS.md) is a byte-for-byte mirror of the official Obsidian
+sample plugin file at commit
+[`07ceb81`](https://github.com/obsidianmd/obsidian-sample-plugin/commit/07ceb81d1fb3384af611ebf665a1ec42a7e5926d).
+Refresh it deliberately from that upstream file; do not add Slipbox-only rules
+to the mirror.
 
 For repeatable large-vault profiling, generate a standalone synthetic vault:
 
@@ -569,3 +598,22 @@ npm run generate:scale-vault -- --notes 25000 --output /tmp/SlipboxScaleVault
 The generator refuses to write into a non-empty directory, installs the current
 plugin bundle into the fixture, and creates a deterministic mix of filed cards,
 unfiled cards, ordinary notes, resolved-link traffic, and a high-backlink hub.
+
+## Releases
+
+Run `npm version patch`, `npm version minor`, or `npm version major` from a clean
+`main` branch. The version lifecycle runs the complete check, synchronises
+`package.json`, `package-lock.json`, `manifest.json`, and `versions.json`, and
+creates an exact version tag without a leading `v`. Pushing that tag builds and
+refreshes a draft GitHub Release containing `main.js`, `manifest.json`, and
+`styles.css`.
+
+Draft releases created while the repository is private are not publishable.
+After making the repository public, manually rerun the release workflow for the
+tag so GitHub can attest the rebuilt artifacts. Inspect the refreshed assets and
+attestations before publishing the draft.
+
+## Support and license
+
+Report defects and request features through the repository's GitHub Issues.
+Slipbox is available under the [0BSD license](LICENSE).

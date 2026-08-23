@@ -3,14 +3,24 @@
   "version": "0.10.0",
   "private": true,
   "description": "A tactile, sequential Slipbox for Obsidian",
+  "license": "0BSD",
   "main": "main.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  },
   "scripts": {
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "rm -rf dist && tsc -p tsconfig.test.json && node --test dist/test/*.test.js",
     "lint": "eslint .",
-    "check": "npm run typecheck && npm test && npm run lint && npm run build",
+    "check": "npm run typecheck && npm test && npm run lint && npm run build && npm run validate:release",
+    "validate:release": "node scripts/validate-release.mjs",
+    "preversion": "npm run check",
+    "version": "node version-bump.mjs && npm run validate:release && git add manifest.json versions.json package-lock.json",
     "generate:scale-vault": "node scripts/generate-scale-vault.mjs"
   },
   "devDependencies": {

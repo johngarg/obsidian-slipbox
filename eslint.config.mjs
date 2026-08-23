@@ -26,6 +26,7 @@ export default defineConfig(
             "eslint.config.mjs",
             "manifest.json",
             "scripts/*.mjs",
+            "version-bump.mjs",
           ],
         },
         tsconfigRootDir: import.meta.dirname,

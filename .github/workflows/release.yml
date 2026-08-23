@@ -1,0 +1,77 @@
+name: Draft Obsidian plugin release
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing exact version tag to rebuild
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node --check main.js
+      - name: Validate exact release tag
+        run: npm run validate:release -- --tag "$RELEASE_TAG"
+      - name: Confirm tracked files are unchanged
+        run: git diff --exit-code
+
+      - name: Attest public release assets
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      - name: Create or refresh draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]; then
+              echo "Refusing to replace assets on a published release." >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" \
+              --draft \
+              --generate-notes \
+              --title "$RELEASE_TAG"
+          fi
+          gh release upload "$RELEASE_TAG" \
+            main.js manifest.json styles.css \
+            --clobber
+
+      - name: Record publication gate
+        run: |
+          if [ "${{ github.event.repository.visibility }}" = "public" ]; then
+            echo "Artifacts were attested. Review the draft before publishing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The repository is private, so attestation was skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "Do not publish this draft. Make the repository public and rerun this workflow first." >> "$GITHUB_STEP_SUMMARY"
+          fi

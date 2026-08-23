@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 data.json
+main.js
+*.map
+.DS_Store
+.idea/
+.vscode/
+*.iml

@@ -1,6 +1,7 @@
 .slipbox-deck-view {
   --slipbox-card-footer-height: 36px;
-  --slipbox-deck-top: 31%;
+  --slipbox-deck-center: 56%;
+  --slipbox-deck-top: 28%;
   --slipbox-pile-deck-gap: 24px;
 }
 
@@ -693,10 +694,10 @@ button.slipbox-tray-pile-cycle svg {
 
 .slipbox-card {
   position: absolute;
-  top: 50%;
+  top: var(--slipbox-deck-center);
   left: 50%;
   width: var(--slipbox-main-card-width);
-  max-height: calc(100% - 54px);
+  max-height: calc(88% - 54px);
   aspect-ratio: 3 / 2;
   transform: translate(-50%, -50%);
   transform-origin: center;
@@ -1298,7 +1299,7 @@ button.slipbox-card-backlink-overflow:disabled {
 
 .slipbox-deck-empty {
   position: absolute;
-  top: 50%;
+  top: var(--slipbox-deck-center);
   left: 50%;
   width: min(460px, calc(100% - 48px));
   padding: 28px;

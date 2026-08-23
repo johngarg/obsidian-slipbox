@@ -1,12 +1,12 @@
-const DECK_CENTER_RATIO = 0.5;
-const DEFAULT_PILE_HORIZONTAL_STEP_PERCENT = 12;
+const DEFAULT_PILE_HORIZONTAL_STEP_PERCENT = 6;
+const DEFAULT_PILE_VERTICAL_STEP_PX = 36;
 
 export interface AutomaticPilePosition {
   readonly xPercent: number;
   readonly y: number;
 }
 
-/** Keep the home pile centred and cascade later automatic piles to the left. */
+/** Keep the home pile centred and expose each later pile's preceding header. */
 export function defaultPilePosition(
   pileIndex: number,
 ): AutomaticPilePosition {
@@ -14,25 +14,23 @@ export function defaultPilePosition(
     ? Math.max(0, Math.trunc(pileIndex))
     : 0;
   return {
-    xPercent: index === 0
-      ? 0
-      : -index * DEFAULT_PILE_HORIZONTAL_STEP_PERCENT,
-    y: 0,
+    xPercent: index * DEFAULT_PILE_HORIZONTAL_STEP_PERCENT,
+    y: index * DEFAULT_PILE_VERTICAL_STEP_PX,
   };
 }
 
-/** Return the untransformed top edge of the permanently centred Deck. */
+/** Return the untransformed top edge of the fixed Deck footprint. */
 export function deckTopForPileAnchor(
-  stageHeight: number,
+  deckCenterY: number,
   measuredDeckHeight: number,
 ): number | null {
   if (
-    !Number.isFinite(stageHeight) ||
+    !Number.isFinite(deckCenterY) ||
     !Number.isFinite(measuredDeckHeight) ||
-    stageHeight <= 0 ||
+    deckCenterY < 0 ||
     measuredDeckHeight <= 0
   ) {
     return null;
   }
-  return stageHeight * DECK_CENTER_RATIO - measuredDeckHeight / 2;
+  return deckCenterY - measuredDeckHeight / 2;
 }

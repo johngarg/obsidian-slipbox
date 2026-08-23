@@ -3921,7 +3921,6 @@ export class DeckView extends ItemView {
   }
 
   private updatePileAnchorFromDeck(): boolean {
-    const stage = this.stageEl;
     const space = this.spaceEl;
     const activeCard = this.activePath === null
       ? null
@@ -3931,11 +3930,11 @@ export class DeckView extends ItemView {
     const deckFootprint = activeCard ?? this.deckCardsEl?.querySelector<HTMLElement>(
       ".slipbox-deck-empty",
     ) ?? null;
-    if (stage === null || space === null || deckFootprint === null) {
+    if (space === null || deckFootprint === null) {
       return true;
     }
     const deckTop = deckTopForPileAnchor(
-      stage.clientHeight,
+      deckFootprint.offsetTop,
       deckFootprint.offsetHeight,
     );
     if (deckTop === null) {

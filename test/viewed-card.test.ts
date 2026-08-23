@@ -6,6 +6,7 @@ import {
   moveViewedCardState,
   renameViewedCardState,
   resolveViewedCardReturnTarget,
+  retargetViewedCardState,
   scrollViewedCardState,
 } from "../src/viewed-card.js";
 
@@ -81,5 +82,34 @@ describe("viewed card state", () => {
       { surface: "deck" },
     );
     assert.equal(resolveViewedCardReturnTarget(fromDesk, false), null);
+  });
+
+  test("retargets a viewed Deck card to its exact Desk pile before editing", () => {
+    const fromDeck = moveViewedCardState(
+      scrollViewedCardState(
+        createViewedCardState("Cards/one.md", { surface: "deck" }),
+        42,
+      ),
+      30,
+      -20,
+      {
+        stageWidth: 1_000,
+        stageHeight: 700,
+        cardWidth: 600,
+        cardHeight: 400,
+      },
+    );
+    const onDesk = retargetViewedCardState(fromDeck, {
+      surface: "desk",
+      pileId: "pile-2",
+    });
+    assert.deepEqual(onDesk, {
+      ...fromDeck,
+      returnTarget: { surface: "desk", pileId: "pile-2" },
+    });
+    assert.equal(
+      retargetViewedCardState(onDesk, onDesk.returnTarget),
+      onDesk,
+    );
   });
 });

@@ -615,6 +615,25 @@ export default class SlipboxPlugin extends Plugin {
     await this.refreshDeckViews();
   }
 
+  async putFileOnDesk(file: TFile): Promise<boolean> {
+    if (trayContains(this.tray, file.path)) {
+      return true;
+    }
+    this.index.refresh();
+    const filed = this.index.filedByFile(file);
+    if (filed === undefined) {
+      new Notice("Only an available filed card can be put on the Desk.");
+      return false;
+    }
+    this.tray = toggleFiledCard(
+      this.tray,
+      { cardRef: file.path, kind: "filed" },
+      this.createTrayPileId(),
+    );
+    await this.refreshDeckViews();
+    return trayContains(this.tray, file.path);
+  }
+
   isFileInTray(file: TFile): boolean {
     return trayContains(this.tray, file.path);
   }

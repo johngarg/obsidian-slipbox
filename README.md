@@ -120,17 +120,20 @@ Deck-focused or unfiled card. Removing or rebinding this action in Settings also
 removes or changes the Enter behaviour. `e` is the separate default editing
 shortcut, and `v` views a focused Deck or Desk card or returns a viewed card to
 the presentation that opened it. Returning restores the exact Deck card and
-anchor or the exact card in its Desk pile.
+anchor or the exact card in its Desk pile. Editing is Desk-only: using `e` on a
+Deck card first puts it on the Desk, and closing the viewed card then returns to
+that Desk position.
 
 ## Card header actions
 
-Deck, Desk, and viewed cards share one action presentation model. **Edit card**
-uses the pen-on-file icon and **Open Markdown note** uses the plain file-text
-icon. **Put on Desk** uses the layered `bring-to-front` icon; once the card is
-on the Desk the same action becomes **Return from Desk**. Desk and viewed cards
-also expose **Show in Deck** when filed, while unfiled cards expose **File
-card**. Buttons always transfer card focus to their own presentation before
-running their shared action.
+Deck, Desk, and viewed cards share one action presentation model. The edit
+action uses the pen-on-file icon and is labelled **Edit on Desk** when it must
+pull a Deck card into the working surface; otherwise it is **Edit card**.
+**Open Markdown note** uses the plain file-text icon. **Put on Desk** uses the
+layered `bring-to-front` icon; once the card is on the Desk the same action
+becomes **Return from Desk**. Desk and viewed cards also expose **Show in Deck**
+when filed, while unfiled cards expose **File card**. Buttons always transfer
+card focus to their own presentation before running their shared action.
 
 The defaults keep the main workflow controls visible:
 
@@ -153,9 +156,10 @@ Slipbox shortcuts are unaffected by header visibility.
 ## Inline card editing
 
 The movable viewed card is Slipbox's only inline-editing surface. Double-click
-the body of a Deck or Desk card to view it and immediately edit its raw
-Markdown; with the Slipbox workspace focused, `e` does the same for the focused
-card. `Escape`, an
+the body of a card to view it and immediately edit its raw Markdown; with the
+Slipbox workspace focused, `e` does the same for the focused card. A Deck card
+is first put on the Desk using the ordinary **Put on Desk** placement policy,
+then viewed in edit mode. `Escape`, an
 outside Slipbox action, navigation, a view change, or closing Slipbox saves the
 latest draft before editing ends. Typing also saves after 500 ms of inactivity.
 Links, card controls, headers, footers, and filing/address fields keep their
@@ -163,13 +167,16 @@ normal behavior instead of opening the editor.
 
 The Desk `View` action brings a card closer without editing, while `v` provides
 the same view-only transition for focused Deck and Desk cards. Deck headers and
-context menus do not add a separate View action. Other presentations of the
-viewed card become muted magnifying-glass placeholders. Clicking away saves and
-ends editing but leaves the viewed card open, so the Deck can still be browsed
-behind it. Drag the viewed card by its header and press `v` anywhere in the
-active Slipbox view—or choose `Return to Deck` or `Return to Desk`—when
-finished. Only one card can be viewed per Slipbox view. Filing an unfiled viewed
-card returns it to the Desk before opening its existing inline filing control.
+context menus do not add a separate View action. A Deck-origin view remains
+read-only and returns to the Deck unless editing is requested; editing first
+puts the card on the Desk and changes its return target to that exact pile.
+Other presentations of the viewed card become muted magnifying-glass
+placeholders. Clicking away saves and ends editing but leaves the viewed card
+open, so the Deck can still be browsed behind it. Drag the viewed card by its
+header and press `v` anywhere in the active Slipbox view—or choose `Return to
+Deck` or `Return to Desk`—when finished. Only one card can be viewed per Slipbox
+view. Filing an unfiled viewed card returns it to the Desk before opening its
+existing inline filing control.
 
 Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
 so comments, key order, spacing, and line endings remain byte-for-byte intact,
@@ -344,7 +351,7 @@ newly created card.
 | `]` | Move the Deck anchor to the closest bookmark on the right |
 | `c` | Centre the Deck anchor without transferring focus |
 | `Enter` | Show the focused filed Desk/viewed card in the Deck |
-| `e` | Edit the focused card |
+| `e` | Put the focused card on the Desk if needed, then view and edit it |
 | `v` | View the focused Deck/Desk card, or return the viewed card to its source |
 | `b` | Toggle the focused Deck card's bookmark |
 | `y` | Copy a link to the focused card |

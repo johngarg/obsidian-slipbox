@@ -109,6 +109,7 @@ import {
   moveViewedCardState,
   renameViewedCardState,
   resolveViewedCardReturnTarget,
+  retargetViewedCardState,
   scrollViewedCardState,
   type ViewedCardReturnTarget,
   type ViewedCardState,
@@ -1067,12 +1068,7 @@ export class DeckView extends ItemView {
         break;
       case "edit-card":
         if (file !== null) {
-          const returnTarget = this.viewedCardReturnTargetForFocus();
-          if (returnTarget === null) {
-            void this.beginInlineEditing(file, this.viewedCardBodyEl);
-          } else {
-            void this.viewCard(file, returnTarget, true);
-          }
+          void this.editCardOnDesk(file);
         }
         break;
       case "show-card-in-deck":
@@ -1343,6 +1339,48 @@ export class DeckView extends ItemView {
     if (editImmediately && this.viewedCardBodyEl !== null) {
       await this.beginInlineEditing(file, this.viewedCardBodyEl);
     }
+  }
+
+  private async editCardOnDesk(file: TFile): Promise<void> {
+    if (this.filingFile !== null) {
+      new Notice("Finish filing before editing a card body.");
+      return;
+    }
+    if (!(await this.plugin.putFileOnDesk(file))) {
+      return;
+    }
+    let position = cardPosition(this.plugin.tray, file.path);
+    if (position === null) {
+      new Notice("Could not find the card on the Desk.");
+      return;
+    }
+    if (
+      position.cardIndex > 0 &&
+      !this.plugin.tray.expandedPileIds.includes(position.pileId)
+    ) {
+      await this.plugin.setTrayPileExpanded(position.pileId, true);
+      position = cardPosition(this.plugin.tray, file.path);
+      if (position === null) {
+        new Notice("Could not find the card on the Desk.");
+        return;
+      }
+    }
+    const returnTarget: ViewedCardReturnTarget = {
+      surface: "desk",
+      pileId: position.pileId,
+    };
+    if (this.viewedCard?.path !== file.path) {
+      await this.viewCard(file, returnTarget, true);
+      return;
+    }
+
+    const retargeted = retargetViewedCardState(this.viewedCard, returnTarget);
+    if (retargeted !== this.viewedCard) {
+      this.viewedCard = retargeted;
+      await this.renderDeck(false);
+    }
+    this.focusViewedCard();
+    await this.beginInlineEditing(file, this.viewedCardBodyEl);
   }
 
   private async closeViewedCard(): Promise<void> {
@@ -2282,7 +2320,7 @@ export class DeckView extends ItemView {
         event.preventDefault();
         event.stopPropagation();
         this.focusDeckCard(card.path);
-        void this.viewCard(card.file, { surface: "deck" }, true);
+        void this.editCardOnDesk(card.file);
       });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
@@ -2426,7 +2464,7 @@ export class DeckView extends ItemView {
       event.preventDefault();
       event.stopPropagation();
       this.focusViewedCard();
-      void this.beginInlineEditing(file, body);
+      void this.editCardOnDesk(file);
     });
     this.viewedCardBodyEl = body;
     if (filed !== undefined) {

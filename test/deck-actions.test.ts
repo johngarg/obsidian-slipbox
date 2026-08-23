@@ -179,6 +179,7 @@ describe("Deck action availability", () => {
     );
     assert.deepEqual(show?.defaultBindings, [{ key: "Enter", modifiers: [] }]);
     assert.deepEqual(edit?.defaultBindings, [{ key: "e", modifiers: [] }]);
+    assert.equal(edit?.label, "Edit focused card on Desk");
     assert.equal(show?.target, "focused-card");
     assert.equal(show?.scope, "active-view");
     assert.equal(

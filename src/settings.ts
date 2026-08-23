@@ -299,7 +299,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "edit-card",
-    label: "Edit focused card",
+    label: "Edit focused card on Desk",
     repeatable: false,
     defaultBindings: [binding("e")],
   },

@@ -864,7 +864,11 @@ function cardHeaderActionPresentation(action, context) {
   }
   switch (definition.action) {
     case "edit-card":
-      return { action: definition.action, icon: "file-pen-line", label: "Edit card" };
+      return {
+        action: definition.action,
+        icon: "file-pen-line",
+        label: context.surface === "deck" || context.surface === "viewed" && context.viewedReturnSurface === "deck" ? "Edit on Desk" : "Edit card"
+      };
     case "open-note":
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };
     case "toggle-viewed-card":
@@ -1287,7 +1291,7 @@ var BASE_ACTION_DEFINITIONS = [
   },
   {
     id: "edit-card",
-    label: "Edit focused card",
+    label: "Edit focused card on Desk",
     repeatable: false,
     defaultBindings: [binding("e")]
   },
@@ -3768,6 +3772,15 @@ function resolveViewedCardReturnTarget(state, deckAvailable, deskPileId) {
   }
   return deckAvailable ? { surface: "deck" } : null;
 }
+function retargetViewedCardState(state, returnTarget) {
+  if (returnTarget.surface === "deck") {
+    return state.returnTarget.surface === "deck" ? state : { ...state, returnTarget };
+  }
+  if (state.returnTarget.surface === "desk" && state.returnTarget.pileId === returnTarget.pileId) {
+    return state;
+  }
+  return { ...state, returnTarget };
+}
 function moveViewedCardState(state, x, y, bounds) {
   const margin = Math.max(0, bounds.margin ?? 16);
   const maxX = Math.max(
@@ -4667,12 +4680,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         break;
       case "edit-card":
         if (file !== null) {
-          const returnTarget = this.viewedCardReturnTargetForFocus();
-          if (returnTarget === null) {
-            void this.beginInlineEditing(file, this.viewedCardBodyEl);
-          } else {
-            void this.viewCard(file, returnTarget, true);
-          }
+          void this.editCardOnDesk(file);
         }
         break;
       case "show-card-in-deck":
@@ -4906,6 +4914,43 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (editImmediately && this.viewedCardBodyEl !== null) {
       await this.beginInlineEditing(file, this.viewedCardBodyEl);
     }
+  }
+  async editCardOnDesk(file) {
+    if (this.filingFile !== null) {
+      new import_obsidian4.Notice("Finish filing before editing a card body.");
+      return;
+    }
+    if (!await this.plugin.putFileOnDesk(file)) {
+      return;
+    }
+    let position = cardPosition(this.plugin.tray, file.path);
+    if (position === null) {
+      new import_obsidian4.Notice("Could not find the card on the Desk.");
+      return;
+    }
+    if (position.cardIndex > 0 && !this.plugin.tray.expandedPileIds.includes(position.pileId)) {
+      await this.plugin.setTrayPileExpanded(position.pileId, true);
+      position = cardPosition(this.plugin.tray, file.path);
+      if (position === null) {
+        new import_obsidian4.Notice("Could not find the card on the Desk.");
+        return;
+      }
+    }
+    const returnTarget = {
+      surface: "desk",
+      pileId: position.pileId
+    };
+    if (this.viewedCard?.path !== file.path) {
+      await this.viewCard(file, returnTarget, true);
+      return;
+    }
+    const retargeted = retargetViewedCardState(this.viewedCard, returnTarget);
+    if (retargeted !== this.viewedCard) {
+      this.viewedCard = retargeted;
+      await this.renderDeck(false);
+    }
+    this.focusViewedCard();
+    await this.beginInlineEditing(file, this.viewedCardBodyEl);
   }
   async closeViewedCard() {
     const viewed = this.viewedCard;
@@ -5701,7 +5746,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         event.preventDefault();
         event.stopPropagation();
         this.focusDeckCard(card.path);
-        void this.viewCard(card.file, { surface: "deck" }, true);
+        void this.editCardOnDesk(card.file);
       });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
@@ -5831,7 +5876,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       event.preventDefault();
       event.stopPropagation();
       this.focusViewedCard();
-      void this.beginInlineEditing(file, body);
+      void this.editCardOnDesk(file);
     });
     this.viewedCardBodyEl = body;
     if (filed !== void 0) {
@@ -8644,6 +8689,24 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       this.createTrayPileId()
     );
     await this.refreshDeckViews();
+  }
+  async putFileOnDesk(file) {
+    if (trayContains(this.tray, file.path)) {
+      return true;
+    }
+    this.index.refresh();
+    const filed = this.index.filedByFile(file);
+    if (filed === void 0) {
+      new import_obsidian9.Notice("Only an available filed card can be put on the Desk.");
+      return false;
+    }
+    this.tray = toggleFiledCard(
+      this.tray,
+      { cardRef: file.path, kind: "filed" },
+      this.createTrayPileId()
+    );
+    await this.refreshDeckViews();
+    return trayContains(this.tray, file.path);
   }
   isFileInTray(file) {
     return trayContains(this.tray, file.path);

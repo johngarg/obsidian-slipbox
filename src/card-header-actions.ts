@@ -106,7 +106,14 @@ export function cardHeaderActionPresentation(
 
   switch (definition.action) {
     case "edit-card":
-      return { action: definition.action, icon: "file-pen-line", label: "Edit card" };
+      return {
+        action: definition.action,
+        icon: "file-pen-line",
+        label: context.surface === "deck" ||
+            (context.surface === "viewed" && context.viewedReturnSurface === "deck")
+          ? "Edit on Desk"
+          : "Edit card",
+      };
     case "open-note":
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };
     case "toggle-viewed-card":

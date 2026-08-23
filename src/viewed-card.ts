@@ -44,6 +44,24 @@ export function resolveViewedCardReturnTarget(
   return deckAvailable ? { surface: "deck" } : null;
 }
 
+export function retargetViewedCardState(
+  state: ViewedCardState,
+  returnTarget: ViewedCardReturnTarget,
+): ViewedCardState {
+  if (returnTarget.surface === "deck") {
+    return state.returnTarget.surface === "deck"
+      ? state
+      : { ...state, returnTarget };
+  }
+  if (
+    state.returnTarget.surface === "desk" &&
+    state.returnTarget.pileId === returnTarget.pileId
+  ) {
+    return state;
+  }
+  return { ...state, returnTarget };
+}
+
 export function moveViewedCardState(
   state: ViewedCardState,
   x: number,

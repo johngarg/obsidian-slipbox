@@ -810,7 +810,7 @@ button.slipbox-tray-pile-cycle svg {
 }
 
 /* Viewed and Desk cards share the same empty-slot filing affordance. */
-.slipbox-card-address.is-unfiled-slot {
+.slipbox-card-address.is-unfiled-slot:not(.is-editing) {
   width: 3.2ch;
   height: 1.3em;
   border: 1px dashed var(--background-modifier-border);
@@ -855,7 +855,22 @@ button.slipbox-tray-pile-cycle svg {
 
 .slipbox-viewed-card .slipbox-card-address.is-editing {
   width: 100%;
-  min-width: 8rem;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+}
+
+.slipbox-viewed-card
+  .slipbox-card-address.is-editing
+  .slipbox-tray-filing-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 24px;
+  min-height: 24px;
+  margin: 0;
 }
 
 .slipbox-viewed-card .slipbox-tray-filing-feedback {

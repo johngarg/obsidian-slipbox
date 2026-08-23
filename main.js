@@ -4752,6 +4752,17 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   runCommandAction(action) {
     const lastEvent = this.app.lastEvent;
     const keyboardEvent = lastEvent !== null && "key" in lastEvent ? lastEvent : void 0;
+    if (keyboardEvent !== void 0 && !shouldSuspendDeckShortcut(
+      keyboardEvent.target,
+      this.isFilingInputFocused
+    )) {
+      const configuredShortcut = this.configuredDeckShortcut(keyboardEvent);
+      if (configuredShortcut !== null && configuredShortcut.definition.id !== action) {
+        this.reportShortcutConflict(formatKeyBinding(
+          configuredShortcut.binding
+        ));
+      }
+    }
     const commandEvent = this.shortcutCommandTracker.record(action, keyboardEvent);
     const ran = this.runAction(action);
     if (ran && PENDING_COMMAND_ACTIONS.has(action) && commandEvent !== void 0) {
@@ -4763,17 +4774,25 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (this.deckKeybindingsSuspended || this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)) {
       return;
     }
-    const candidate = keyBindingFromKeyboardEvent(event, import_obsidian4.Platform.isMacOS);
-    const signature = keyBindingSignature(candidate);
+    const shortcut = this.configuredDeckShortcut(event);
+    if (shortcut !== null) {
+      this.deferDeckActionKey(event, shortcut.definition, shortcut.binding);
+    }
+  }
+  configuredDeckShortcut(event) {
+    const signature = keyBindingSignature(keyBindingFromKeyboardEvent(
+      event,
+      import_obsidian4.Platform.isMacOS
+    ));
     for (const definition of DECK_ACTION_DEFINITIONS) {
       const binding2 = this.plugin.settings.deckKeybindings[definition.id].find(
         (configured) => keyBindingSignature(configured) === signature
       );
       if (binding2 !== void 0) {
-        this.deferDeckActionKey(event, definition, binding2);
-        return;
+        return { definition, binding: binding2 };
       }
     }
+    return null;
   }
   deferDeckActionKey(event, definition, binding2) {
     if (this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)) {

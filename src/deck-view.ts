@@ -1031,6 +1031,23 @@ export class DeckView extends ItemView {
     const keyboardEvent = lastEvent !== null && "key" in lastEvent
       ? lastEvent
       : undefined;
+    if (
+      keyboardEvent !== undefined &&
+      !shouldSuspendDeckShortcut(
+        keyboardEvent.target,
+        this.isFilingInputFocused,
+      )
+    ) {
+      const configuredShortcut = this.configuredDeckShortcut(keyboardEvent);
+      if (
+        configuredShortcut !== null &&
+        configuredShortcut.definition.id !== action
+      ) {
+        this.reportShortcutConflict(formatKeyBinding(
+          configuredShortcut.binding,
+        ));
+      }
+    }
     const commandEvent = this.shortcutCommandTracker.record(action, keyboardEvent);
     const ran = this.runAction(action);
     if (
@@ -1052,17 +1069,29 @@ export class DeckView extends ItemView {
     ) {
       return;
     }
-    const candidate = keyBindingFromKeyboardEvent(event, Platform.isMacOS);
-    const signature = keyBindingSignature(candidate);
+    const shortcut = this.configuredDeckShortcut(event);
+    if (shortcut !== null) {
+      this.deferDeckActionKey(event, shortcut.definition, shortcut.binding);
+    }
+  }
+
+  private configuredDeckShortcut(event: KeyboardEvent): {
+    readonly definition: SlipboxActionDefinition;
+    readonly binding: DeckKeyBinding;
+  } | null {
+    const signature = keyBindingSignature(keyBindingFromKeyboardEvent(
+      event,
+      Platform.isMacOS,
+    ));
     for (const definition of DECK_ACTION_DEFINITIONS) {
       const binding = this.plugin.settings.deckKeybindings[definition.id].find(
         (configured) => keyBindingSignature(configured) === signature,
       );
       if (binding !== undefined) {
-        this.deferDeckActionKey(event, definition, binding);
-        return;
+        return { definition, binding };
       }
     }
+    return null;
   }
 
   private deferDeckActionKey(

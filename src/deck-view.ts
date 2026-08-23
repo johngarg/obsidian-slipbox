@@ -453,6 +453,21 @@ export class DeckView extends ItemView {
     this.setCardFocus(deskCardFocus(path, pileId));
   }
 
+  /**
+   * Focus a card that is currently placed on the Desk.
+   *
+   * Call this only after the Desk has been rendered, so that the focus classes
+   * land on a mounted card. Returns false when the path is not on the Desk.
+   */
+  focusDeskCardAtPath(path: string): boolean {
+    const position = cardPosition(this.plugin.tray, path);
+    if (position === null) {
+      return false;
+    }
+    this.focusDeskCard(path, position.pileId);
+    return true;
+  }
+
   private focusDeckCard(path: string): void {
     if (this.plugin.index.filedByPath(path) === undefined) {
       return;

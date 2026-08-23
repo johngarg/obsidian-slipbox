@@ -289,13 +289,20 @@ frontmatter-derived titles use the configured Moment timestamp filename and
 write the entered title property. Submitting a blank prompted title uses the
 same default-title behaviour, while cancelling creates nothing.
 
-**New card on Desk** creates an unfiled card with the default timestamp-derived
-title and opens no note at all. The card is placed by ordinary Desk
-reconciliation, so it joins the Desk's home pile exactly like any other newly
-discovered unfiled card. Slipbox is opened first if no Slipbox view is present.
-Creating a card from the Desk background uses the same immediate default-title
-workflow and likewise opens no note; it differs only in placing the card at the
-clicked position instead of the home pile.
+**New card on Desk** and **New card with title on Desk** create an unfiled card
+and open no note at all. The card is placed by ordinary Desk reconciliation, so
+it joins the Desk's home pile exactly like any other newly discovered unfiled
+card. Slipbox is opened first if no Slipbox view is present.
+
+The Desk background context menu offers the same two workflows as **New card
+here** and **New card with title here**, differing only in placing the card at
+the clicked position instead of the home pile.
+
+Every Desk creation path gives the new card the card focus, so `e` begins
+inline editing immediately. Both paths leave the card at the top of its pile,
+so that focus survives later reconciliation. A Desk card's title still comes
+from its filename or title property, and inline editing only edits the body, so
+changing the title means opening the note.
 
 **New card** and **New card with title** open the created note the way Obsidian
 itself opens a file. Slipbox reuses a navigable leaf rather than always spawning

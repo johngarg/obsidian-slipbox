@@ -2388,11 +2388,24 @@ var TrayRenderer = class {
         stage
       );
       menu.addItem((item) => {
-        item.setTitle("New card").setIcon("file-plus-2").setDisabled(position === null).onClick(() => {
+        item.setTitle("New card here").setIcon("file-plus-2").setDisabled(position === null).onClick(() => {
           if (position !== null) {
             void this.actions.runAfterEditing(
               "tray-new-card",
               () => this.plugin.createNewCardAtTrayPosition(position)
+            );
+          }
+        });
+      });
+      menu.addItem((item) => {
+        item.setTitle("New card with title here").setIcon("file-pen-line").setDisabled(position === null).onClick(() => {
+          if (position !== null) {
+            void this.actions.runAfterEditing(
+              "tray-new-card",
+              () => this.plugin.createNewCardAtTrayPosition(
+                position,
+                "prompt"
+              )
             );
           }
         });
@@ -4046,6 +4059,20 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   }
   focusDeskCard(path, pileId) {
     this.setCardFocus(deskCardFocus(path, pileId));
+  }
+  /**
+   * Focus a card that is currently placed on the Desk.
+   *
+   * Call this only after the Desk has been rendered, so that the focus classes
+   * land on a mounted card. Returns false when the path is not on the Desk.
+   */
+  focusDeskCardAtPath(path) {
+    const position = cardPosition(this.plugin.tray, path);
+    if (position === null) {
+      return false;
+    }
+    this.focusDeskCard(path, position.pileId);
+    return true;
   }
   focusDeckCard(path) {
     if (this.plugin.index.filedByPath(path) === void 0) {
@@ -8625,7 +8652,12 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     this.addCommand({
       id: "new-card-on-desk",
       name: "New card on Desk",
-      callback: () => void this.createNewCardOnDesk()
+      callback: () => void this.createNewCardOnDesk("default")
+    });
+    this.addCommand({
+      id: "new-card-with-title-on-desk",
+      name: "New card with title on Desk",
+      callback: () => void this.createNewCardOnDesk("prompt")
     });
     this.addCommand({
       id: "make-current-note-card",
@@ -8730,13 +8762,28 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       }
     });
   }
-  async createNewCardAtTrayPosition(position) {
-    await this.createNewCard("default", { kind: "desk", position });
+  async createNewCardAtTrayPosition(position, titleMode = "default") {
+    await this.createNewCard(titleMode, { kind: "desk", position });
   }
   /** Create an unfiled card on the Desk without opening its note. */
-  async createNewCardOnDesk() {
+  async createNewCardOnDesk(titleMode) {
     await this.openDeck();
-    await this.createNewCard("default", { kind: "desk" });
+    await this.createNewCard(titleMode, { kind: "desk" });
+  }
+  /**
+   * Focus a newly placed Desk card in every Slipbox view.
+   *
+   * The Desk is shared plugin state rendered per view, while card focus is per
+   * view, so each view focuses the card it has just rendered. Both Desk
+   * creation paths leave the new card at the top of its pile, so focus
+   * survives later reconciliation.
+   */
+  focusDeskCardInViews(path) {
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.focusDeskCardAtPath(path);
+      }
+    }
   }
   async createNewCard(titleMode, placement = { kind: "open" }) {
     try {
@@ -8760,6 +8807,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
           );
         }
         await this.refreshDeckViews();
+        this.focusDeskCardInViews(file.path);
       }
       this.queueIndexRefresh();
     } catch (error) {

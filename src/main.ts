@@ -895,7 +895,13 @@ export default class SlipboxPlugin extends Plugin {
     this.addCommand({
       id: "new-card-on-desk",
       name: "New card on Desk",
-      callback: () => void this.createNewCardOnDesk(),
+      callback: () => void this.createNewCardOnDesk("default"),
+    });
+
+    this.addCommand({
+      id: "new-card-with-title-on-desk",
+      name: "New card with title on Desk",
+      callback: () => void this.createNewCardOnDesk("prompt"),
     });
 
     this.addCommand({
@@ -1014,14 +1020,33 @@ export default class SlipboxPlugin extends Plugin {
 
   async createNewCardAtTrayPosition(
     position: TrayPilePosition,
+    titleMode: NewCardTitleMode = "default",
   ): Promise<void> {
-    await this.createNewCard("default", { kind: "desk", position });
+    await this.createNewCard(titleMode, { kind: "desk", position });
   }
 
   /** Create an unfiled card on the Desk without opening its note. */
-  private async createNewCardOnDesk(): Promise<void> {
+  private async createNewCardOnDesk(
+    titleMode: NewCardTitleMode,
+  ): Promise<void> {
     await this.openDeck();
-    await this.createNewCard("default", { kind: "desk" });
+    await this.createNewCard(titleMode, { kind: "desk" });
+  }
+
+  /**
+   * Focus a newly placed Desk card in every Slipbox view.
+   *
+   * The Desk is shared plugin state rendered per view, while card focus is per
+   * view, so each view focuses the card it has just rendered. Both Desk
+   * creation paths leave the new card at the top of its pile, so focus
+   * survives later reconciliation.
+   */
+  private focusDeskCardInViews(path: string): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.focusDeskCardAtPath(path);
+      }
+    }
   }
 
   private async createNewCard(
@@ -1051,6 +1076,7 @@ export default class SlipboxPlugin extends Plugin {
           );
         }
         await this.refreshDeckViews();
+        this.focusDeskCardInViews(file.path);
       }
       this.queueIndexRefresh();
     } catch (error) {

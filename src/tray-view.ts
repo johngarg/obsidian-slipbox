@@ -229,7 +229,7 @@ export class TrayRenderer {
       );
       menu.addItem((item) => {
         item
-          .setTitle("New card")
+          .setTitle("New card here")
           .setIcon("file-plus-2")
           .setDisabled(position === null)
           .onClick(() => {
@@ -237,6 +237,23 @@ export class TrayRenderer {
               void this.actions.runAfterEditing(
                 "tray-new-card",
                 () => this.plugin.createNewCardAtTrayPosition(position),
+              );
+            }
+          });
+      });
+      menu.addItem((item) => {
+        item
+          .setTitle("New card with title here")
+          .setIcon("file-pen-line")
+          .setDisabled(position === null)
+          .onClick(() => {
+            if (position !== null) {
+              void this.actions.runAfterEditing(
+                "tray-new-card",
+                () => this.plugin.createNewCardAtTrayPosition(
+                  position,
+                  "prompt",
+                ),
               );
             }
           });

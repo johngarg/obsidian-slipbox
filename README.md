@@ -208,6 +208,16 @@ failure keeps the textarea and draft available for copying or retrying and
 cancels the pending Slipbox action. Draft recovery lasts only while the plugin
 remains loaded; it is intentionally not persisted across reloads or crashes.
 
+The paper-workflow defaults apply only to this viewed-card textarea. Restricted
+paste accepts one trimmed word, one complete Wiki link/embed, or one complete
+inline/reference-style Markdown link/image; longer prose is reduced to its
+first non-whitespace token. Filed-card protection fixes the body present when
+the editing session begins as an ordered baseline. Text may be inserted or
+wrapped in Markdown anywhere, and text added during the current session may be
+revised or removed, but baseline text cannot be deleted, replaced, or reordered.
+Closing and reopening the editor establishes a new baseline from the saved body.
+Ordinary Obsidian Markdown editors are never subject to either policy.
+
 ## Canvas integration
 
 Right-click a pile to choose:
@@ -314,6 +324,18 @@ off choices.
 Main-card and Desk-card sizes each have small, medium, and large presets. Medium
 preserves the default 840 px main-card cap and 360 px Desk-card cap. Desk
 presets remain smaller than main-card presets, including on narrow views.
+
+`Paper workflow` contains four Slipbox-only controls. Fresh installations
+restrict viewed-card paste and protect a filed card's session-start text by
+default. Link previews and link following are off by default. Preview and follow
+are independent: disabling previews suppresses Page Preview hover events, while
+disabling following makes rendered body links and backlink links inert without
+hiding their text, footers, overflow entries, or context menus. The settings
+cover Deck, Desk, and viewed cards, including their backlink footers; explicit
+Slipbox actions such as **Open Markdown note**, header buttons, commands,
+bookmarks, and Deck navigation remain available. Link-setting changes refresh
+open Slipbox views, while paste and protection choices are captured when the
+next viewed-card editing session starts.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
 The empty default follows Obsidian's own **Default location for new notes**
@@ -507,6 +529,12 @@ Schema 9 silently purges the retired `useTemplatesForNewNotes` and
 `newNoteTemplatePath` settings, retaining every other compatible setting and all
 state. Card notes written while template support existed are unaffected; the
 template content is already part of those files.
+
+Schema 10 adds the four paper-workflow settings. Existing schema-9 and legacy
+plugin data migrate to the previous permissive behavior—unrestricted paste,
+link previews and following enabled, and no filed-text protection—unless an
+explicit boolean was already stored. Only genuinely fresh installations receive
+the paper-based defaults.
 
 ## Development
 

@@ -19,6 +19,7 @@ interface ScheduledJob {
 
 function harness(
   commit: (request: InlineEditCommitRequest) => Promise<InlineEditCommitResult>,
+  protectedBody: string | null = null,
 ) {
   const jobs: ScheduledJob[] = [];
   const failures: InlineEditFailure[] = [];
@@ -41,6 +42,7 @@ function harness(
       },
       reportFailure: (failure) => failures.push(failure),
     },
+    protectedBody,
   );
   return {
     controller,
@@ -174,6 +176,56 @@ describe("inline edit session controller", () => {
     assert.equal(await state.controller.finish(), true);
     assert.equal(requests[0]?.path, "renamed.md");
     assert.deepEqual(state.flushes, ["renamed.md"]);
+  });
+
+  test("keeps the protected session baseline fixed while the save base advances", async () => {
+    const requests: InlineEditCommitRequest[] = [];
+    const state = harness(async (request) => {
+      requests.push(request);
+      return { status: "saved" };
+    }, "fixed");
+
+    assert.equal(state.controller.updateDraft("fixed first"), true);
+    state.runNext();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.controller.snapshot.baseBody, "fixed first");
+    assert.equal(state.controller.snapshot.protectedBody, "fixed");
+
+    assert.equal(state.controller.updateDraft("fixed revised"), true);
+    assert.equal(await state.controller.finish(), true);
+    assert.deepEqual(requests.map((request) => request.protectedBody), [
+      "fixed",
+      "fixed",
+    ]);
+    assert.deepEqual(requests.map((request) => request.baseBody), [
+      "base",
+      "fixed first",
+    ]);
+  });
+
+  test("rejects drafts that remove protected text without changing session state", () => {
+    const state = harness(async () => ({ status: "saved" }), "base");
+    assert.equal(state.controller.updateDraft("bse"), false);
+    assert.equal(state.controller.snapshot.draft, "base");
+    assert.equal(state.controller.snapshot.version, 0);
+    assert.equal(state.jobs.length, 0);
+  });
+
+  test("retains an editable draft after a persistence policy backstop", async () => {
+    let reject = true;
+    const state = harness(async () => reject
+      ? {
+          status: "policy-violation",
+          message: "Protected text changed.",
+        }
+      : { status: "saved" });
+    state.controller.updateDraft("local draft");
+    assert.equal(await state.controller.finish(), false);
+    assert.equal(state.controller.snapshot.draft, "local draft");
+    assert.equal(state.controller.snapshot.failure?.kind, "policy");
+    reject = false;
+    state.controller.updateDraft("corrected draft");
+    assert.equal(await state.controller.finish(), true);
   });
 });
 

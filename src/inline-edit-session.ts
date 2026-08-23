@@ -1,3 +1,5 @@
+import { preservesProtectedText } from "./paper-workflow.js";
+
 export type InlineEditPhase =
   | "editing"
   | "saving"
@@ -7,6 +9,7 @@ export type InlineEditPhase =
 export interface InlineEditCommitRequest {
   readonly path: string;
   readonly baseBody: string;
+  readonly protectedBody: string | null;
   readonly draft: string;
   readonly version: number;
   readonly final: boolean;
@@ -14,10 +17,11 @@ export interface InlineEditCommitRequest {
 
 export type InlineEditCommitResult =
   | { readonly status: "saved" }
-  | { readonly status: "conflict"; readonly message: string };
+  | { readonly status: "conflict"; readonly message: string }
+  | { readonly status: "policy-violation"; readonly message: string };
 
 export interface InlineEditFailure {
-  readonly kind: "conflict" | "write";
+  readonly kind: "conflict" | "policy" | "write";
   readonly message: string;
   readonly error?: unknown;
 }
@@ -36,6 +40,7 @@ export interface InlineEditSessionEnvironment {
 export interface InlineEditSessionSnapshot {
   readonly path: string;
   readonly baseBody: string;
+  readonly protectedBody: string | null;
   readonly draft: string;
   readonly version: number;
   readonly committedVersion: number;
@@ -144,6 +149,7 @@ export class InlineEditSessionController {
     path: string,
     body: string,
     private readonly environment: InlineEditSessionEnvironment,
+    private readonly protectedBodyValue: string | null = null,
   ) {
     this.pathValue = path;
     this.baseBodyValue = body;
@@ -154,6 +160,7 @@ export class InlineEditSessionController {
     return {
       path: this.pathValue,
       baseBody: this.baseBodyValue,
+      protectedBody: this.protectedBodyValue,
       draft: this.draftValue,
       version: this.versionValue,
       committedVersion: this.committedVersionValue,
@@ -163,12 +170,19 @@ export class InlineEditSessionController {
     };
   }
 
-  updateDraft(draft: string): void {
+  acceptsDraft(draft: string): boolean {
+    return preservesProtectedText(this.protectedBodyValue, draft);
+  }
+
+  updateDraft(draft: string): boolean {
     if (this.phaseValue === "closed") {
-      return;
+      return false;
+    }
+    if (!this.acceptsDraft(draft)) {
+      return false;
     }
     if (draft === this.draftValue) {
-      return;
+      return true;
     }
     this.draftValue = draft;
     this.versionValue += 1;
@@ -179,6 +193,7 @@ export class InlineEditSessionController {
         this.scheduleDebouncedCommit();
       }
     }
+    return true;
   }
 
   renamePath(path: string): void {
@@ -279,6 +294,7 @@ export class InlineEditSessionController {
         result = await this.environment.commit({
           path: this.pathValue,
           baseBody: this.baseBodyValue,
+          protectedBody: this.protectedBodyValue,
           draft,
           version,
           final,
@@ -289,6 +305,17 @@ export class InlineEditSessionController {
 
       if (result.status === "conflict") {
         this.markConflict(result.message, true);
+        return false;
+      }
+      if (result.status === "policy-violation") {
+        const failure: InlineEditFailure = {
+          kind: "policy",
+          message: result.message,
+        };
+        this.phaseValue = "editing";
+        this.failureValue = failure;
+        this.conflictRetryableValue = false;
+        this.environment.reportFailure(failure);
         return false;
       }
       this.baseBodyValue = draft;

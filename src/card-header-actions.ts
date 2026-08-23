@@ -106,6 +106,9 @@ export function cardHeaderActionPresentation(
 
   switch (definition.action) {
     case "edit-card":
+      if (context.surface === "deck" && context.onDesk) {
+        return null;
+      }
       return {
         action: definition.action,
         icon: "file-pen-line",

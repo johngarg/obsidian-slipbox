@@ -387,9 +387,10 @@ function canRunDeckAction(action, context) {
     case "find-address-first":
       return context.hasActiveCard;
     case "open-note":
-    case "edit-card":
     case "delete-card":
       return context.hasFocusedCard;
+    case "edit-card":
+      return context.hasFocusedCard && !(context.focusedSurface === "deck" && context.focusedCardOnDesk);
     case "copy-link":
     case "toggle-tray":
     case "pull-into-pile":
@@ -399,7 +400,7 @@ function canRunDeckAction(action, context) {
     case "show-card-in-deck":
       return context.focusedCardFiled && context.focusedSurface !== "deck";
     case "toggle-viewed-card":
-      return context.hasFocusedCard && (context.focusedSurface === "deck" || context.focusedSurface === "desk" || context.focusedSurface === "viewed");
+      return context.hasFocusedCard && !(context.focusedSurface === "deck" && context.focusedCardOnDesk) && (context.focusedSurface === "deck" || context.focusedSurface === "desk" || context.focusedSurface === "viewed");
     case "file-card":
       return context.focusedCardUnfiled && context.focusedSurface !== "deck";
     case "move-desk-card-left":
@@ -864,6 +865,9 @@ function cardHeaderActionPresentation(action, context) {
   }
   switch (definition.action) {
     case "edit-card":
+      if (context.surface === "deck" && context.onDesk) {
+        return null;
+      }
       return {
         action: definition.action,
         icon: "file-pen-line",
@@ -4534,7 +4538,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const bookmarkIndices = needsBookmarkTarget && activeIndex >= 0 ? this.bookmarkIndices() : [];
     const focusedFile = target?.file ?? this.focusedCardFile;
     const focusedFiled = target ?? this.focusedFiledCard;
-    const focusedPosition = this.cardFocus?.surface === "desk" ? cardPosition(this.plugin.tray, this.cardFocus.path) : null;
+    const focusedSurface = target === void 0 ? this.cardFocus?.surface ?? null : "deck";
+    const focusedPosition = focusedFile === null ? null : cardPosition(this.plugin.tray, focusedFile.path);
+    const focusedDeskPosition = focusedSurface === "desk" ? focusedPosition : null;
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
@@ -4546,9 +4552,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       hasFocusedCard: focusedFile !== null,
       focusedCardFiled: focusedFiled !== null,
       focusedCardUnfiled: focusedFile !== null && focusedFiled === null && this.cardFocus?.surface !== "deck",
-      focusedSurface: target === void 0 ? this.cardFocus?.surface ?? null : "deck",
-      canMoveDeskCardLeft: focusedPosition !== null && focusedPosition.cardIndex > 0,
-      canMoveDeskCardRight: focusedPosition !== null && focusedPosition.cardIndex < focusedPosition.pileSize - 1,
+      focusedSurface,
+      focusedCardOnDesk: focusedPosition !== null,
+      canMoveDeskCardLeft: focusedDeskPosition !== null && focusedDeskPosition.cardIndex > 0,
+      canMoveDeskCardRight: focusedDeskPosition !== null && focusedDeskPosition.cardIndex < focusedDeskPosition.pileSize - 1,
       hasDeskPiles: this.plugin.tray.piles.length > 0,
       hasExpandedPiles: this.plugin.tray.expandedPileIds.length > 0,
       hasFiledDeskCards: trayHasFiledCards(this.plugin.tray)
@@ -4916,6 +4923,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
   }
   async editCardOnDesk(file) {
+    if (this.cardFocus?.surface === "deck" && this.plugin.isFileInTray(file)) {
+      return;
+    }
     if (this.filingFile !== null) {
       new import_obsidian4.Notice("Finish filing before editing a card body.");
       return;
@@ -5740,7 +5750,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
       scroll.addEventListener("dblclick", (event) => {
-        if (!isInlineEditBodyTarget(event.target, scroll)) {
+        if (isInTray || !isInlineEditBodyTarget(event.target, scroll)) {
           return;
         }
         event.preventDefault();

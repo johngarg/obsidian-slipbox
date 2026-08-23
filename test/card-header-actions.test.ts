@@ -50,9 +50,14 @@ describe("card header action presentation", () => {
       icon: "file-pen-line",
       label: "Edit card",
     });
+    assert.equal(cardHeaderActionPresentation("edit-card", {
+      ...FILED_DESK,
+      surface: "deck",
+    }), null);
     assert.deepEqual(cardHeaderActionPresentation("edit-card", {
       ...FILED_DESK,
       surface: "deck",
+      onDesk: false,
     }), {
       action: "edit-card",
       icon: "file-pen-line",

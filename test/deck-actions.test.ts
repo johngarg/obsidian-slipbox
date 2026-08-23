@@ -20,6 +20,7 @@ const READY: DeckActionContext = {
   focusedCardFiled: true,
   focusedCardUnfiled: false,
   focusedSurface: "desk",
+  focusedCardOnDesk: true,
   canMoveDeskCardLeft: true,
   canMoveDeskCardRight: true,
   hasDeskPiles: true,
@@ -53,6 +54,7 @@ describe("Deck action availability", () => {
       focusedCardFiled: false,
       focusedCardUnfiled: false,
       focusedSurface: null,
+      focusedCardOnDesk: false,
       canMoveDeskCardLeft: false,
       canMoveDeskCardRight: false,
       hasDeskPiles: false,
@@ -204,13 +206,37 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("edit-card", READY), true);
   });
 
-  test("views focused cards on every card surface", () => {
-    for (const focusedSurface of ["deck", "desk", "viewed"] as const) {
+  test("edits and views cards except for Deck copies already on the Desk", () => {
+    for (const focusedSurface of ["desk", "viewed"] as const) {
+      assert.equal(canRunDeckAction("edit-card", {
+        ...READY,
+        focusedSurface,
+      }), true);
       assert.equal(canRunDeckAction("toggle-viewed-card", {
         ...READY,
         focusedSurface,
       }), true);
     }
+    assert.equal(canRunDeckAction("edit-card", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardOnDesk: false,
+    }), true);
+    assert.equal(canRunDeckAction("toggle-viewed-card", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardOnDesk: false,
+    }), true);
+    assert.equal(canRunDeckAction("edit-card", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardOnDesk: true,
+    }), false);
+    assert.equal(canRunDeckAction("toggle-viewed-card", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardOnDesk: true,
+    }), false);
     assert.equal(canRunDeckAction("toggle-viewed-card", {
       ...READY,
       hasFocusedCard: false,

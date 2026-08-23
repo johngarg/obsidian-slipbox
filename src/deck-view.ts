@@ -899,8 +899,14 @@ export class DeckView extends ItemView {
       : [];
     const focusedFile = target?.file ?? this.focusedCardFile;
     const focusedFiled = target ?? this.focusedFiledCard;
-    const focusedPosition = this.cardFocus?.surface === "desk"
-      ? cardPosition(this.plugin.tray, this.cardFocus.path)
+    const focusedSurface = target === undefined
+      ? this.cardFocus?.surface ?? null
+      : "deck";
+    const focusedPosition = focusedFile === null
+      ? null
+      : cardPosition(this.plugin.tray, focusedFile.path);
+    const focusedDeskPosition = focusedSurface === "desk"
+      ? focusedPosition
       : null;
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
@@ -920,14 +926,13 @@ export class DeckView extends ItemView {
         focusedFile !== null &&
         focusedFiled === null &&
         this.cardFocus?.surface !== "deck",
-      focusedSurface: target === undefined
-        ? this.cardFocus?.surface ?? null
-        : "deck",
+      focusedSurface,
+      focusedCardOnDesk: focusedPosition !== null,
       canMoveDeskCardLeft:
-        focusedPosition !== null && focusedPosition.cardIndex > 0,
+        focusedDeskPosition !== null && focusedDeskPosition.cardIndex > 0,
       canMoveDeskCardRight:
-        focusedPosition !== null &&
-        focusedPosition.cardIndex < focusedPosition.pileSize - 1,
+        focusedDeskPosition !== null &&
+        focusedDeskPosition.cardIndex < focusedDeskPosition.pileSize - 1,
       hasDeskPiles: this.plugin.tray.piles.length > 0,
       hasExpandedPiles: this.plugin.tray.expandedPileIds.length > 0,
       hasFiledDeskCards: trayHasFiledCards(this.plugin.tray),
@@ -1342,6 +1347,12 @@ export class DeckView extends ItemView {
   }
 
   private async editCardOnDesk(file: TFile): Promise<void> {
+    if (
+      this.cardFocus?.surface === "deck" &&
+      this.plugin.isFileInTray(file)
+    ) {
+      return;
+    }
     if (this.filingFile !== null) {
       new Notice("Finish filing before editing a card body.");
       return;
@@ -2314,7 +2325,7 @@ export class DeckView extends ItemView {
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
       scroll.addEventListener("dblclick", (event) => {
-        if (!isInlineEditBodyTarget(event.target, scroll)) {
+        if (isInTray || !isInlineEditBodyTarget(event.target, scroll)) {
           return;
         }
         event.preventDefault();

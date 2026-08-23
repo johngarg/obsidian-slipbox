@@ -12,6 +12,7 @@ export interface DeckActionContext {
   readonly focusedCardFiled: boolean;
   readonly focusedCardUnfiled: boolean;
   readonly focusedSurface: "deck" | "desk" | "viewed" | null;
+  readonly focusedCardOnDesk: boolean;
   readonly canMoveDeskCardLeft: boolean;
   readonly canMoveDeskCardRight: boolean;
   readonly hasDeskPiles: boolean;
@@ -47,9 +48,12 @@ export function canRunDeckAction(
     case "find-address-first":
       return context.hasActiveCard;
     case "open-note":
-    case "edit-card":
     case "delete-card":
       return context.hasFocusedCard;
+    case "edit-card":
+      return context.hasFocusedCard && !(
+        context.focusedSurface === "deck" && context.focusedCardOnDesk
+      );
     case "copy-link":
     case "toggle-tray":
     case "pull-into-pile":
@@ -59,7 +63,8 @@ export function canRunDeckAction(
     case "show-card-in-deck":
       return context.focusedCardFiled && context.focusedSurface !== "deck";
     case "toggle-viewed-card":
-      return context.hasFocusedCard && (
+      return context.hasFocusedCard &&
+        !(context.focusedSurface === "deck" && context.focusedCardOnDesk) && (
         context.focusedSurface === "deck" ||
         context.focusedSurface === "desk" ||
         context.focusedSurface === "viewed"

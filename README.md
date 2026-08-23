@@ -118,8 +118,9 @@ centres a filed Desk or viewed card and transfers focus to its Deck
 presentation; a floating viewed card remains open. It does nothing for a
 Deck-focused or unfiled card. Removing or rebinding this action in Settings also
 removes or changes the Enter behaviour. `e` is the separate default editing
-shortcut, and `v` views a Desk card or returns a viewed card to the Desk.
-Returning a viewed card restores focus to that exact card in its Desk pile.
+shortcut, and `v` views a focused Deck or Desk card or returns a viewed card to
+the presentation that opened it. Returning restores the exact Deck card and
+anchor or the exact card in its Desk pile.
 
 ## Card header actions
 
@@ -138,10 +139,10 @@ The defaults keep the main workflow controls visible:
 - filed Desk: View, Edit, Open Markdown note, Show in Deck, and Return from
   Desk;
 - unfiled Desk: View, Edit, Open Markdown note, and File card;
-- filed viewed: Edit, Open Markdown note, Show in Deck, and Return to Desk; and
+- filed viewed: Edit, Open Markdown note, Show in Deck, and Return to source; and
 - unfiled viewed: Edit, Open Markdown note, File card, and Return to Desk.
 
-Copy on Desk/viewed cards, Desk movement, viewed-card Desk return, and Delete
+Copy on Desk/viewed cards, Desk movement, viewed-card return, and Delete
 are available as opt-in header buttons. Bookmarking is Deck-only: the bookmark
 button, command, and `b` shortcut act only when a filed Deck card has focus.
 When enabled actions do not
@@ -151,22 +152,24 @@ Slipbox shortcuts are unaffected by header visibility.
 
 ## Inline card editing
 
-Double-click the body of a card to edit its raw Markdown in place. With the
-Slipbox workspace focused, `e` edits the focused card. `Escape`, an
+The movable viewed card is Slipbox's only inline-editing surface. Double-click
+the body of a Deck or Desk card to view it and immediately edit its raw
+Markdown; with the Slipbox workspace focused, `e` does the same for the focused
+card. `Escape`, an
 outside Slipbox action, navigation, a view change, or closing Slipbox saves the
 latest draft before editing ends. Typing also saves after 500 ms of inactivity.
 Links, card controls, headers, footers, and filing/address fields keep their
 normal behavior instead of opening the editor.
 
-Double-clicking a Desk card first brings it into a single movable viewed
-card, then starts editing. The `View` action brings it closer without editing.
-Its original Desk position becomes a muted magnifying-glass placeholder; a
-filed card's Deck position does the same. Clicking away saves and ends editing
-but leaves the viewed card open, so the Deck can still be browsed behind it.
-Drag the viewed card by its header and press `v` anywhere in the active Slipbox
-view—or choose `Return to Desk`—when finished. Only one card can be viewed per Slipbox
-view. Filing an unfiled viewed card returns it to the Desk before opening its
-existing inline filing control.
+The Desk `View` action brings a card closer without editing, while `v` provides
+the same view-only transition for focused Deck and Desk cards. Deck headers and
+context menus do not add a separate View action. Other presentations of the
+viewed card become muted magnifying-glass placeholders. Clicking away saves and
+ends editing but leaves the viewed card open, so the Deck can still be browsed
+behind it. Drag the viewed card by its header and press `v` anywhere in the
+active Slipbox view—or choose `Return to Deck` or `Return to Desk`—when
+finished. Only one card can be viewed per Slipbox view. Filing an unfiled viewed
+card returns it to the Desk before opening its existing inline filing control.
 
 Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
 so comments, key order, spacing, and line endings remain byte-for-byte intact,
@@ -342,7 +345,7 @@ newly created card.
 | `c` | Centre the Deck anchor without transferring focus |
 | `Enter` | Show the focused filed Desk/viewed card in the Deck |
 | `e` | Edit the focused card |
-| `v` | View the focused Desk card, or return the focused viewed card to the Desk |
+| `v` | View the focused Deck/Desk card, or return the viewed card to its source |
 | `b` | Toggle the focused Deck card's bookmark |
 | `y` | Copy a link to the focused card |
 | `0` | Jump to the first card |

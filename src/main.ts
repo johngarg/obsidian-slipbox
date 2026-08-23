@@ -106,9 +106,9 @@ import {
   InlineEditPathLock,
   type InlineEditCommitRequest,
   type InlineEditCommitResult,
-  type InlineEditOrigin,
   type InlineEditSessionSnapshot,
 } from "./inline-edit-session.js";
+import type { ViewedCardReturnTarget } from "./viewed-card.js";
 import {
   NoteBodyConflictError,
   replaceNoteBodyIfUnchanged,
@@ -135,7 +135,7 @@ export interface InlineEditStartData {
 export interface DetachedInlineEditDraft {
   readonly path: string;
   readonly file: TFile;
-  readonly origin: InlineEditOrigin;
+  readonly returnTarget: ViewedCardReturnTarget;
   readonly baseBody: string;
   readonly draft: string;
   readonly conflictMessage: string | null;
@@ -147,6 +147,7 @@ export interface DetachedInlineEditDraft {
 }
 
 interface DetachedInlineEditPresentation {
+  readonly returnTarget: ViewedCardReturnTarget;
   readonly selectionStart: number;
   readonly selectionEnd: number;
   readonly textareaScrollTop: number;
@@ -382,7 +383,6 @@ export default class SlipboxPlugin extends Plugin {
     this.detachedInlineEditDrafts.set(snapshot.path, {
       path: snapshot.path,
       file,
-      origin: snapshot.origin,
       baseBody: snapshot.baseBody,
       draft: snapshot.draft,
       conflictMessage: snapshot.failure?.kind === "conflict"
@@ -468,6 +468,7 @@ export default class SlipboxPlugin extends Plugin {
     surface: CardHeaderActionContext["surface"],
     source: string,
     leaf: WorkspaceLeaf,
+    viewedReturnSurface: CardHeaderActionContext["viewedReturnSurface"] = null,
   ): void {
     event.preventDefault();
     event.stopPropagation();
@@ -485,6 +486,7 @@ export default class SlipboxPlugin extends Plugin {
 
     for (const presentation of applicableCardHeaderActions({
       surface,
+      viewedReturnSurface,
       filed: address !== null,
       onDesk: isInTray,
       bookmarked: isBookmarked,

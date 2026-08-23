@@ -311,7 +311,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "toggle-viewed-card",
-    label: "View focused card or return it to Desk",
+    label: "View focused card or return it to its source",
     repeatable: false,
     defaultBindings: [binding("v")],
   },

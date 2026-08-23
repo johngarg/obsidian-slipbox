@@ -59,7 +59,11 @@ export function canRunDeckAction(
     case "show-card-in-deck":
       return context.focusedCardFiled && context.focusedSurface !== "deck";
     case "toggle-viewed-card":
-      return context.focusedSurface === "desk" || context.focusedSurface === "viewed";
+      return context.hasFocusedCard && (
+        context.focusedSurface === "deck" ||
+        context.focusedSurface === "desk" ||
+        context.focusedSurface === "viewed"
+      );
     case "file-card":
       return context.focusedCardUnfiled && context.focusedSurface !== "deck";
     case "move-desk-card-left":

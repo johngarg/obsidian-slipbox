@@ -203,6 +203,20 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("edit-card", READY), true);
   });
 
+  test("views focused cards on every card surface", () => {
+    for (const focusedSurface of ["deck", "desk", "viewed"] as const) {
+      assert.equal(canRunDeckAction("toggle-viewed-card", {
+        ...READY,
+        focusedSurface,
+      }), true);
+    }
+    assert.equal(canRunDeckAction("toggle-viewed-card", {
+      ...READY,
+      hasFocusedCard: false,
+      focusedSurface: "deck",
+    }), false);
+  });
+
   test("marks held ten-card motion repeatable and prefixes discrete", () => {
     assert.equal(
       DECK_ACTION_DEFINITIONS.find((definition) =>

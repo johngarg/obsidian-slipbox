@@ -25,7 +25,6 @@ function harness(
   const flushes: string[] = [];
   const controller = new InlineEditSessionController(
     "card.md",
-    "deck",
     "base",
     {
       commit,
@@ -67,6 +66,7 @@ describe("inline edit session controller", () => {
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.draft, "second");
     assert.equal(state.controller.snapshot.baseBody, "second");
+    assert.equal("origin" in state.controller.snapshot, false);
   });
 
   test("serializes an older debounce before the final newest draft", async () => {

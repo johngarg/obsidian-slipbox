@@ -7,6 +7,7 @@ import type {
 
 export interface CardHeaderActionContext {
   readonly surface: CardButtonSurface;
+  readonly viewedReturnSurface: "deck" | "desk" | null;
   readonly filed: boolean;
   readonly onDesk: boolean;
   readonly bookmarked: boolean;
@@ -31,7 +32,7 @@ export interface CardHeaderButtonDefinition {
 export const CARD_BUTTON_DEFINITIONS: readonly CardHeaderButtonDefinition[] = [
   { action: "edit-card", settingLabel: "Edit card", surfaces: ["deck", "desk", "viewed"] },
   { action: "open-note", settingLabel: "Open Markdown note", surfaces: ["deck", "desk", "viewed"] },
-  { action: "toggle-viewed-card", settingLabel: "View or return card to Desk", surfaces: ["desk", "viewed"] },
+  { action: "toggle-viewed-card", settingLabel: "View or return card to its source", surfaces: ["desk", "viewed"] },
   { action: "show-card-in-deck", settingLabel: "Show card in Deck", surfaces: ["desk", "viewed"] },
   { action: "toggle-tray", settingLabel: "Put on or return from Desk", surfaces: ["deck", "desk", "viewed"] },
   { action: "file-card", settingLabel: "File card", surfaces: ["desk", "viewed"] },
@@ -110,7 +111,13 @@ export function cardHeaderActionPresentation(
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };
     case "toggle-viewed-card":
       return context.surface === "viewed"
-        ? { action: definition.action, icon: "minimize-2", label: "Return to Desk" }
+        ? {
+            action: definition.action,
+            icon: "minimize-2",
+            label: context.viewedReturnSurface === "deck"
+              ? "Return to Deck"
+              : "Return to Desk",
+          }
         : { action: definition.action, icon: "maximize-2", label: "View" };
     case "show-card-in-deck":
       return context.filed && context.surface !== "deck"

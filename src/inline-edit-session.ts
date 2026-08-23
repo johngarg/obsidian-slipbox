@@ -1,4 +1,3 @@
-export type InlineEditOrigin = "deck" | "tray";
 export type InlineEditPhase =
   | "editing"
   | "saving"
@@ -36,7 +35,6 @@ export interface InlineEditSessionEnvironment {
 
 export interface InlineEditSessionSnapshot {
   readonly path: string;
-  readonly origin: InlineEditOrigin;
   readonly baseBody: string;
   readonly draft: string;
   readonly version: number;
@@ -144,7 +142,6 @@ export class InlineEditSessionController {
 
   constructor(
     path: string,
-    readonly origin: InlineEditOrigin,
     body: string,
     private readonly environment: InlineEditSessionEnvironment,
   ) {
@@ -156,7 +153,6 @@ export class InlineEditSessionController {
   get snapshot(): InlineEditSessionSnapshot {
     return {
       path: this.pathValue,
-      origin: this.origin,
       baseBody: this.baseBodyValue,
       draft: this.draftValue,
       version: this.versionValue,

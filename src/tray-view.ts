@@ -567,6 +567,7 @@ export class TrayRenderer {
         container: controls,
         context: {
           surface: "desk",
+          viewedReturnSurface: null,
           filed: filed !== undefined,
           onDesk: true,
           bookmarked: filed !== undefined &&
@@ -905,6 +906,7 @@ export class TrayRenderer {
     };
     for (const presentation of applicableCardHeaderActions({
       surface: "desk",
+      viewedReturnSurface: null,
       filed: filed !== undefined,
       onDesk: true,
       bookmarked: filed !== undefined &&

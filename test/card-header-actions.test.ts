@@ -14,6 +14,7 @@ import { DEFAULT_CARD_HEADER_BUTTONS } from "../src/settings.js";
 
 const FILED_DESK = {
   surface: "desk",
+  viewedReturnSurface: null,
   filed: true,
   onDesk: true,
   bookmarked: false,
@@ -36,6 +37,11 @@ describe("card header action presentation", () => {
         true,
       );
     }
+    assert.equal(
+      cardHeaderButtonDefinitionsForSurface("deck")
+        .some(({ action }) => action === "toggle-viewed-card"),
+      false,
+    );
   });
 
   test("uses the distinct edit, open, view, and Desk icons", () => {
@@ -86,6 +92,23 @@ describe("card header action presentation", () => {
     assert.deepEqual(
       actions.find(({ action }) => action === "toggle-viewed-card"),
       { action: "toggle-viewed-card", icon: "minimize-2", label: "Return to Desk" },
+    );
+
+    const deckOriginViewed = {
+      ...FILED_DESK,
+      surface: "viewed",
+      viewedReturnSurface: "deck",
+    } as const;
+    assert.deepEqual(
+      cardHeaderActionPresentation("toggle-viewed-card", deckOriginViewed),
+      { action: "toggle-viewed-card", icon: "minimize-2", label: "Return to Deck" },
+    );
+    assert.equal(
+      cardHeaderActionPresentation("toggle-viewed-card", {
+        ...FILED_DESK,
+        surface: "deck",
+      }),
+      null,
     );
   });
 

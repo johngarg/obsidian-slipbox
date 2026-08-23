@@ -1,5 +1,10 @@
+export type ViewedCardReturnTarget =
+  | { readonly surface: "deck" }
+  | { readonly surface: "desk"; readonly pileId: string };
+
 export interface ViewedCardState {
   readonly path: string;
+  readonly returnTarget: ViewedCardReturnTarget;
   readonly x: number;
   readonly y: number;
   readonly scrollTop: number;
@@ -13,8 +18,30 @@ export interface ViewedCardBounds {
   readonly margin?: number;
 }
 
-export function createViewedCardState(path: string): ViewedCardState {
-  return { path, x: 0, y: 0, scrollTop: 0 };
+export function createViewedCardState(
+  path: string,
+  returnTarget: ViewedCardReturnTarget,
+): ViewedCardState {
+  return { path, returnTarget, x: 0, y: 0, scrollTop: 0 };
+}
+
+export function resolveViewedCardReturnTarget(
+  state: ViewedCardState,
+  deckAvailable: boolean,
+  deskPileId?: string,
+): ViewedCardReturnTarget | null {
+  if (state.returnTarget.surface === "deck") {
+    if (deckAvailable) {
+      return state.returnTarget;
+    }
+    return deskPileId === undefined
+      ? null
+      : { surface: "desk", pileId: deskPileId };
+  }
+  if (deskPileId !== undefined) {
+    return { surface: "desk", pileId: deskPileId };
+  }
+  return deckAvailable ? { surface: "deck" } : null;
 }
 
 export function moveViewedCardState(

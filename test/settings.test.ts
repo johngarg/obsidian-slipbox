@@ -98,6 +98,7 @@ describe("Slipbox settings", () => {
     ]);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["copy-link"], true);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["edit-card"], true);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["toggle-viewed-card"], false);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["delete-card"], false);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.desk["show-card-in-deck"], true);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.viewed["toggle-viewed-card"], true);

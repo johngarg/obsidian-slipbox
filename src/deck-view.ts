@@ -95,7 +95,6 @@ import {
   InlineEditSessionController,
   runAfterInlineEditing,
   type InlineEditFailure,
-  type InlineEditOrigin,
 } from "./inline-edit-session.js";
 import {
   consumeDeckEscape,
@@ -109,7 +108,9 @@ import {
   createViewedCardState,
   moveViewedCardState,
   renameViewedCardState,
+  resolveViewedCardReturnTarget,
   scrollViewedCardState,
+  type ViewedCardReturnTarget,
   type ViewedCardState,
 } from "./viewed-card.js";
 import {
@@ -150,7 +151,7 @@ let inlineEditStatusSequence = 0;
 interface MountedInlineEdit {
   readonly controller: InlineEditSessionController;
   file: TFile;
-  readonly origin: InlineEditOrigin;
+  readonly returnTarget: ViewedCardReturnTarget;
   readonly textarea: HTMLTextAreaElement;
   readonly statusEl: HTMLElement;
   readonly bodyEl: HTMLElement;
@@ -381,6 +382,7 @@ export class DeckView extends ItemView {
         editing.controller.snapshot,
         editing.file,
         {
+          returnTarget: editing.returnTarget,
           selectionStart: editing.textarea.selectionStart,
           selectionEnd: editing.textarea.selectionEnd,
           textareaScrollTop: editing.textarea.scrollTop,
@@ -504,6 +506,19 @@ export class DeckView extends ItemView {
       this.selectCardWithoutMoving(path);
     }
     this.setCardFocus(deckCardFocus(path));
+  }
+
+  private viewedCardReturnTargetForFocus(): ViewedCardReturnTarget | null {
+    if (this.cardFocus?.surface === "deck") {
+      return { surface: "deck" };
+    }
+    if (
+      this.cardFocus?.surface === "desk" &&
+      this.cardFocus.pileId !== undefined
+    ) {
+      return { surface: "desk", pileId: this.cardFocus.pileId };
+    }
+    return null;
   }
 
   private pileFocusLocation(): PileFocusLocation | null {
@@ -1052,12 +1067,11 @@ export class DeckView extends ItemView {
         break;
       case "edit-card":
         if (file !== null) {
-          if (this.cardFocus?.surface === "deck") {
-            void this.beginDeckInlineEditing(file, "deck");
-          } else if (this.cardFocus?.surface === "viewed") {
-            void this.beginInlineEditing(file, "tray", this.viewedCardBodyEl);
+          const returnTarget = this.viewedCardReturnTargetForFocus();
+          if (returnTarget === null) {
+            void this.beginInlineEditing(file, this.viewedCardBodyEl);
           } else {
-            void this.viewTrayCard(file, true);
+            void this.viewCard(file, returnTarget, true);
           }
         }
         break;
@@ -1068,9 +1082,12 @@ export class DeckView extends ItemView {
         break;
       case "toggle-viewed-card":
         if (this.cardFocus?.surface === "viewed") {
-          void this.returnViewedCardToDesk();
+          void this.closeViewedCard();
         } else if (file !== null) {
-          void this.viewTrayCard(file, false);
+          const returnTarget = this.viewedCardReturnTargetForFocus();
+          if (returnTarget !== null) {
+            void this.viewCard(file, returnTarget, false);
+          }
         }
         break;
       case "file-card":
@@ -1300,8 +1317,9 @@ export class DeckView extends ItemView {
     );
   }
 
-  private async viewTrayCard(
+  private async viewCard(
     file: TFile,
+    returnTarget: ViewedCardReturnTarget,
     editImmediately: boolean,
   ): Promise<void> {
     if (this.filingFile !== null) {
@@ -1310,10 +1328,10 @@ export class DeckView extends ItemView {
     }
     if (this.viewedCard?.path !== file.path) {
       const viewed = await this.runAfterInlineEditing(
-        "view-tray-card",
+        "view-card",
         async () => {
           this.rememberViewedCardScroll();
-          this.viewedCard = createViewedCardState(file.path);
+          this.viewedCard = createViewedCardState(file.path, returnTarget);
           await this.renderDeck(false);
         },
       );
@@ -1323,48 +1341,47 @@ export class DeckView extends ItemView {
     }
     this.focusViewedCard();
     if (editImmediately && this.viewedCardBodyEl !== null) {
-      await this.beginInlineEditing(file, "tray", this.viewedCardBodyEl);
+      await this.beginInlineEditing(file, this.viewedCardBodyEl);
     }
   }
 
-  private async returnViewedCardToDesk(): Promise<void> {
+  private async closeViewedCard(): Promise<void> {
     const viewed = this.viewedCard;
     if (viewed === null) {
       return;
     }
-    await this.runAfterInlineEditing("return-viewed-card-to-desk", async () => {
+    await this.runAfterInlineEditing("close-viewed-card", async () => {
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
       const position = cardPosition(this.plugin.tray, viewed.path);
-      this.assignCardFocus(position === null
-        ? null
-        : deskCardFocus(viewed.path, position.pileId));
-      this.reconcileCardFocus();
-      await this.renderDeck(false);
-      const deskCard = this.stageEl?.querySelector<HTMLElement>(
-        `.slipbox-tray-card[data-card-ref="${CSS.escape(viewed.path)}"]`,
+      const returnTarget = resolveViewedCardReturnTarget(
+        viewed,
+        this.plugin.index.filedByPath(viewed.path) !== undefined,
+        position?.pileId,
       );
+      if (returnTarget?.surface === "deck") {
+        this.setDeckAnchor(viewed.path);
+        this.assignCardFocus(deckCardFocus(viewed.path));
+        this.viewportOffset = 0;
+      } else if (returnTarget?.surface === "desk") {
+        this.assignCardFocus(deskCardFocus(viewed.path, returnTarget.pileId));
+      } else {
+        this.assignCardFocus(null);
+        this.reconcileCardFocus();
+      }
+      await this.renderDeck(false);
+      const deskCard = returnTarget?.surface === "desk"
+        ? this.stageEl?.querySelector<HTMLElement>(
+            `.slipbox-tray-card[data-card-ref="${CSS.escape(viewed.path)}"]`,
+          ) ?? null
+        : null;
       (deskCard ?? this.contentEl).focus({ preventScroll: true });
     });
   }
 
-  private async beginDeckInlineEditing(
-    file: TFile,
-    origin: InlineEditOrigin,
-    bodySurface?: HTMLElement,
-  ): Promise<void> {
-    const surface = bodySurface ?? this.cardBodyForPath(file.path);
-    if (surface === null) {
-      new Notice("The card is outside the current render window.");
-      return;
-    }
-    await this.beginInlineEditing(file, origin, surface);
-  }
-
   private async beginInlineEditing(
     file: TFile,
-    origin: InlineEditOrigin,
     bodySurface: HTMLElement | null,
     restored?: {
       readonly baseBody: string;
@@ -1404,7 +1421,6 @@ export class DeckView extends ItemView {
         : { file, body: restored.baseBody };
       const mounted = this.mountInlineEditing(
         prepared.file,
-        origin,
         prepared.body,
         bodySurface,
         restored?.renderedScrollTop,
@@ -1447,15 +1463,17 @@ export class DeckView extends ItemView {
 
   private mountInlineEditing(
     file: TFile,
-    origin: InlineEditOrigin,
     baseBody: string,
     requestedBodySurface: HTMLElement | null,
     restoredRenderedScrollTop?: number,
   ): MountedInlineEdit {
+    const returnTarget = this.viewedCard?.path === file.path
+      ? this.viewedCard.returnTarget
+      : null;
     const bodyEl = requestedBodySurface;
     const cardEl = bodyEl?.closest<HTMLElement>(".slipbox-card") ?? null;
-    if (bodyEl === null || cardEl === null) {
-      throw new Error("The card surface is unavailable");
+    if (returnTarget === null || bodyEl === null || cardEl === null) {
+      throw new Error("The viewed card surface is unavailable");
     }
 
     const renderedScrollTop = restoredRenderedScrollTop ?? bodyEl.scrollTop;
@@ -1487,7 +1505,6 @@ export class DeckView extends ItemView {
 
     const controller = new InlineEditSessionController(
       file.path,
-      origin,
       baseBody,
       {
         commit: async (request) => {
@@ -1519,7 +1536,7 @@ export class DeckView extends ItemView {
     return {
       controller,
       file,
-      origin,
+      returnTarget,
       textarea,
       statusEl,
       bodyEl,
@@ -1564,13 +1581,6 @@ export class DeckView extends ItemView {
     editing.statusEl.hidden = false;
   }
 
-  private cardBodyForPath(path: string): HTMLElement | null {
-    const escaped = CSS.escape(path);
-    return this.spaceEl?.querySelector<HTMLElement>(
-      `.slipbox-card[data-path="${escaped}"] .slipbox-card-scroll`,
-    ) ?? null;
-  }
-
   private async rerenderEditedPath(
     file: TFile,
     target: HTMLElement,
@@ -1606,19 +1616,11 @@ export class DeckView extends ItemView {
       return;
     }
     const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
-    const filed = this.plugin.index.filedByFile(file);
-    let bodySurface: HTMLElement | null = null;
-    if (draft.origin === "tray") {
-      this.viewedCard = createViewedCardState(draft.path);
-      const position = cardPosition(this.plugin.tray, draft.path);
-      this.cardFocus = viewedCardFocus(draft.path, position?.pileId);
-      await this.renderDeck(false);
-      bodySurface = this.viewedCardBodyEl;
-    } else if (filed !== undefined) {
-      await this.jumpToPath(filed.path);
-      bodySurface = this.cardBodyForPath(file.path);
-    }
-    await this.beginInlineEditing(file, draft.origin, bodySurface, {
+    this.viewedCard = createViewedCardState(draft.path, draft.returnTarget);
+    const position = cardPosition(this.plugin.tray, draft.path);
+    this.cardFocus = viewedCardFocus(draft.path, position?.pileId);
+    await this.renderDeck(false);
+    await this.beginInlineEditing(file, this.viewedCardBodyEl, {
       baseBody: draft.baseBody,
       draft: draft.draft,
       conflictMessage: draft.conflictMessage,
@@ -2231,6 +2233,7 @@ export class DeckView extends ItemView {
             "viewed",
             DECK_VIEW_TYPE,
             this.leaf,
+            this.viewedCard?.returnTarget.surface ?? null,
           );
         });
         continue;
@@ -2255,6 +2258,7 @@ export class DeckView extends ItemView {
         container: cardActions,
         context: {
           surface: "deck",
+          viewedReturnSurface: null,
           filed: true,
           onDesk: isInTray,
           bookmarked: isBookmarked,
@@ -2277,10 +2281,8 @@ export class DeckView extends ItemView {
         }
         event.preventDefault();
         event.stopPropagation();
-        void this.runAfterInlineEditing("body-double-click", async () => {
-          this.focusDeckCard(card.path);
-          await this.beginDeckInlineEditing(card.file, "deck", scroll);
-        });
+        this.focusDeckCard(card.path);
+        void this.viewCard(card.file, { surface: "deck" }, true);
       });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
@@ -2393,6 +2395,7 @@ export class DeckView extends ItemView {
       container: actions,
       context: {
         surface: "viewed",
+        viewedReturnSurface: state.returnTarget.surface,
         filed: filed !== undefined,
         onDesk: viewedPosition !== null,
         bookmarked: filed !== undefined &&
@@ -2423,7 +2426,7 @@ export class DeckView extends ItemView {
       event.preventDefault();
       event.stopPropagation();
       this.focusViewedCard();
-      void this.beginInlineEditing(file, "tray", body);
+      void this.beginInlineEditing(file, body);
     });
     this.viewedCardBodyEl = body;
     if (filed !== undefined) {
@@ -2450,6 +2453,7 @@ export class DeckView extends ItemView {
         "viewed",
         DECK_VIEW_TYPE,
         this.leaf,
+        state.returnTarget.surface,
       );
     });
     this.attachViewedCardDragging(addressRow, card);

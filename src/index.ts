@@ -14,6 +14,11 @@ export type {
   DeckOrdering,
 } from "./address-order.js";
 export {
+  renderCardAddress,
+  UNFILED_ADDRESS_LABEL,
+} from "./card-address.js";
+export type { CardAddressOptions } from "./card-address.js";
+export {
   buildFiledCardLookups,
   cardMetadataRecord,
   indexCardMetadata,

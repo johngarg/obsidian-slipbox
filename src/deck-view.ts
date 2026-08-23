@@ -29,6 +29,10 @@ import {
   CardFooterManager,
   type CardFooterEnvironment,
 } from "./card-footer.js";
+import {
+  renderCardAddress,
+  UNFILED_ADDRESS_LABEL,
+} from "./card-address.js";
 import { cardHeaderTitle } from "./card-title.js";
 import {
   renderedLinkAction,
@@ -2478,7 +2482,7 @@ export class DeckView extends ItemView {
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const address = filed?.address ?? "unfiled";
+    const address = filed?.address ?? null;
     const title = this.plugin.cardTitle(file);
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
@@ -2486,7 +2490,9 @@ export class DeckView extends ItemView {
       attr: {
         role: "group",
         tabindex: "0",
-        "aria-label": `Viewed card ${address} · ${title}`,
+        "aria-label": `Viewed card ${
+          address ?? UNFILED_ADDRESS_LABEL
+        } · ${title}`,
       },
     });
     card.toggleClass(
@@ -2512,7 +2518,7 @@ export class DeckView extends ItemView {
       delay: 500,
     });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-    identity.createSpan({ cls: "slipbox-card-address", text: address });
+    renderCardAddress(identity, { cls: "slipbox-card-address", address });
     const headerTitle = cardHeaderTitle(
       title,
       this.plugin.settings.showTitleInDeck,

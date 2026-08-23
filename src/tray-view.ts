@@ -19,6 +19,10 @@ import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
+import {
+  renderCardAddress,
+  UNFILED_ADDRESS_LABEL,
+} from "./card-address.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
 import {
@@ -478,7 +482,8 @@ export class TrayRenderer {
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const address = filed?.address ?? "unfiled";
+    const address = filed?.address ?? null;
+    const addressLabel = address ?? UNFILED_ADDRESS_LABEL;
     const title = this.plugin.cardTitle(file);
     const isViewed = viewedPath === card.cardRef;
     const miniature = parent.createDiv({
@@ -487,8 +492,8 @@ export class TrayRenderer {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== undefined ? "button" : "group",
         "aria-label": isViewed
-          ? `${address}, ${title}; viewed card placeholder. Activate to focus the viewed card.`
-          : `${address}, ${title}; card ${cardIndex + 1} of ${
+          ? `${addressLabel}, ${title}; viewed card placeholder. Activate to focus the viewed card.`
+          : `${addressLabel}, ${title}; card ${cardIndex + 1} of ${
               pile.cards.length
             } in pile ${pileIndex + 1}`,
       },
@@ -522,9 +527,9 @@ export class TrayRenderer {
     );
 
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
-    const addressEl = identity.createSpan({
+    const addressEl = renderCardAddress(identity, {
       cls: "slipbox-tray-card-address",
-      text: address,
+      address,
     });
     if (isFilingSource && filing !== null) {
       this.filingEditor = renderInlineFilingEditor(

@@ -12,7 +12,9 @@ zettel-id: ""
 
 An empty value is an unfiled card. Any trimmed, nonempty, single-line string
 without control characters is a filed address: `1/2b1`, `A/1`, `Project-17`,
-and `α/12` are all valid. Filed cards are identified internally by their
+and `α/12` are all valid. Because the address domain is that open, an unfiled
+card draws an empty dashed slot where its address would go rather than any
+placeholder word, which a card could equally hold as a real address. Filed cards are identified internally by their
 vault-relative Markdown path. Their address determines filing order, with the
 path as a deterministic tie-breaker when several files share one address.
 Addresses are case-sensitive, need not be unique, and have no other grammar.
@@ -404,7 +406,7 @@ Legacy Desk shortcut is removed rather than repurposed.
 `File active unfiled Markdown note`, the Desk-card File action, or a double-click
 on an unfiled address starts inline filing. The existing Desk card stays at its
 ordinary size and position, gains a light accent treatment, and replaces its
-`unfiled` label with an address field. The active filed card's address is
+empty address slot with an address field. The active filed card's address is
 prefilled when one is available. Validation and an expandable duplicate-path
 summary appear compactly on the same card; there is no separate card-in-hand,
 bottom bar, or Deck ghost.

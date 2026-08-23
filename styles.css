@@ -505,6 +505,28 @@ button.slipbox-tray-pile-cycle svg {
   cursor: text;
 }
 
+/* An unfiled card has an empty address slot rather than placeholder text,
+   which no reader could tell apart from a genuine address. */
+.slipbox-tray-card-address.is-unfiled-slot:not(.is-editing) {
+  width: 3.2ch;
+  height: 1.3em;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 3px;
+  transition:
+    border-color 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.slipbox-tray-card.is-unfiled:not(.is-filing-source)
+  .slipbox-tray-card-address.is-unfiled-slot:hover {
+  border-color: var(--interactive-accent);
+  background-color: color-mix(
+    in srgb,
+    var(--interactive-accent) 12%,
+    transparent
+  );
+}
+
 .slipbox-tray-card-address.is-editing {
   flex: 1 1 48%;
   min-width: 84px;
@@ -785,6 +807,15 @@ button.slipbox-tray-pile-cycle svg {
   font-weight: 600;
   letter-spacing: 0.075em;
   font-variant-numeric: tabular-nums;
+}
+
+/* The viewed card shows the same empty slot, without the Desk card's
+   double-click-to-file affordance. */
+.slipbox-card-address.is-unfiled-slot {
+  width: 3.2ch;
+  height: 1.3em;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 3px;
 }
 
 .slipbox-card-header-title {

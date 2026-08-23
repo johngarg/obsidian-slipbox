@@ -755,6 +755,19 @@ var CardFooterManager = class {
   }
 };
 
+// src/card-address.ts
+var HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+var UNFILED_ADDRESS_LABEL = "Unfiled";
+function renderCardAddress(parent, { cls, address }) {
+  const element = parent.ownerDocument.createElementNS(HTML_NAMESPACE, "span");
+  element.className = address === null ? `${cls} is-unfiled-slot` : cls;
+  if (address !== null) {
+    element.textContent = address;
+  }
+  parent.append(element);
+  return element;
+}
+
 // src/card-title.ts
 function cardHeaderTitle(resolvedTitle, showTitle) {
   return showTitle ? resolvedTitle : null;
@@ -1708,9 +1721,9 @@ function isDeskCardFocusTarget(target) {
 }
 
 // src/filing-editor.ts
-var HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+var HTML_NAMESPACE2 = "http://www.w3.org/1999/xhtml";
 function createHtmlElement(document2, tag) {
-  return document2.createElementNS(HTML_NAMESPACE, tag);
+  return document2.createElementNS(HTML_NAMESPACE2, tag);
 }
 function attachUnfiledAddressFiling(address, beginFiling) {
   address.addEventListener("pointerdown", (event) => event.stopPropagation());
@@ -2624,7 +2637,8 @@ var TrayRenderer = class {
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const address = filed?.address ?? "unfiled";
+    const address = filed?.address ?? null;
+    const addressLabel = address ?? UNFILED_ADDRESS_LABEL;
     const title = this.plugin.cardTitle(file);
     const isViewed = viewedPath === card.cardRef;
     const miniature = parent.createDiv({
@@ -2632,7 +2646,7 @@ var TrayRenderer = class {
       attr: {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== void 0 ? "button" : "group",
-        "aria-label": isViewed ? `${address}, ${title}; viewed card placeholder. Activate to focus the viewed card.` : `${address}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
+        "aria-label": isViewed ? `${addressLabel}, ${title}; viewed card placeholder. Activate to focus the viewed card.` : `${addressLabel}, ${title}; card ${cardIndex + 1} of ${pile.cards.length} in pile ${pileIndex + 1}`
       }
     });
     miniature.dataset.pileId = pile.id;
@@ -2663,9 +2677,9 @@ var TrayRenderer = class {
       filed !== void 0 && this.plugin.bookmarkAtPath(filed.path) !== void 0
     );
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
-    const addressEl = identity.createSpan({
+    const addressEl = renderCardAddress(identity, {
       cls: "slipbox-tray-card-address",
-      text: address
+      address
     });
     if (isFilingSource && filing !== null) {
       this.filingEditor = renderInlineFilingEditor(
@@ -5870,7 +5884,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const address = filed?.address ?? "unfiled";
+    const address = filed?.address ?? null;
     const title = this.plugin.cardTitle(file);
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
@@ -5878,7 +5892,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       attr: {
         role: "group",
         tabindex: "0",
-        "aria-label": `Viewed card ${address} \xB7 ${title}`
+        "aria-label": `Viewed card ${address ?? UNFILED_ADDRESS_LABEL} \xB7 ${title}`
       }
     });
     card.toggleClass(
@@ -5902,7 +5916,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       delay: 500
     });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-    identity.createSpan({ cls: "slipbox-card-address", text: address });
+    renderCardAddress(identity, { cls: "slipbox-card-address", address });
     const headerTitle = cardHeaderTitle(
       title,
       this.plugin.settings.showTitleInDeck

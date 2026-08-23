@@ -30,6 +30,13 @@ export const DEFAULT_DATA: SlipboxPluginData = {
   state: DEFAULT_STATE,
 };
 
+const LEGACY_PAPER_WORKFLOW_SETTINGS = {
+  restrictViewedCardPaste: false,
+  previewLinksOnHover: true,
+  followLinksFromCards: true,
+  protectFiledCardText: false,
+} as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -86,7 +93,14 @@ export function normalizePluginData(value: unknown): SlipboxPluginData {
     ? value.settings
     : {};
   const rawState = versioned && isRecord(value.state) ? value.state : value;
+  const schemaVersion = typeof value.schemaVersion === "number"
+    ? value.schemaVersion
+    : null;
+  const legacyPaperWorkflow = schemaVersion === null || schemaVersion < 10
+    ? LEGACY_PAPER_WORKFLOW_SETTINGS
+    : {};
   const settingsWithMigratedSpread = {
+    ...legacyPaperWorkflow,
     ...rawSettings,
     cardSpread: Object.prototype.hasOwnProperty.call(rawSettings, "cardSpread")
       ? rawSettings.cardSpread

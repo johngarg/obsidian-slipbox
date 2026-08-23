@@ -117,6 +117,10 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
+    assert.equal(DEFAULT_SETTINGS.restrictViewedCardPaste, true);
+    assert.equal(DEFAULT_SETTINGS.previewLinksOnHover, false);
+    assert.equal(DEFAULT_SETTINGS.followLinksFromCards, false);
+    assert.equal(DEFAULT_SETTINGS.protectFiledCardText, true);
     assert.equal(DEFAULT_SETTINGS.cardSpread, DEFAULT_CARD_SPREAD);
   });
 
@@ -456,6 +460,25 @@ describe("Slipbox settings", () => {
     assert.equal(normalizeSettings({ cardSpread: 0.42 }).cardSpread, 0.42);
     assert.equal(normalizeSettings({ cardSpread: 0 }).cardSpread, MIN_CARD_SPREAD);
     assert.equal(normalizeSettings({ cardSpread: 99 }).cardSpread, MAX_CARD_SPREAD);
+  });
+
+  test("normalizes and persists paper-workflow settings", () => {
+    const permissive = normalizeSettings({
+      restrictViewedCardPaste: false,
+      previewLinksOnHover: true,
+      followLinksFromCards: true,
+      protectFiledCardText: false,
+    });
+    assert.equal(permissive.restrictViewedCardPaste, false);
+    assert.equal(permissive.previewLinksOnHover, true);
+    assert.equal(permissive.followLinksFromCards, true);
+    assert.equal(permissive.protectFiledCardText, false);
+
+    const persisted = settingsForPersistence({}, permissive);
+    assert.equal(persisted.restrictViewedCardPaste, false);
+    assert.equal(persisted.previewLinksOnHover, true);
+    assert.equal(persisted.followLinksFromCards, true);
+    assert.equal(persisted.protectFiledCardText, false);
   });
 
   test("purges entry-point shortcuts while preserving other removed settings", () => {

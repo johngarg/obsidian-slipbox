@@ -64,14 +64,18 @@ describe("normalizePluginState", () => {
 });
 
 describe("normalizePluginData", () => {
-  test("migrates legacy flat state into schema-9 settings and state", () => {
+  test("migrates legacy flat state into schema-10 settings and state", () => {
     const data = normalizePluginData({
       entryPoints: [{ name: "Start", id: "1/1" }],
       bookmarks: [{ zettelId: "1/1" }],
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 9);
+    assert.equal(data.schemaVersion, 10);
+    assert.equal(data.settings.restrictViewedCardPaste, false);
+    assert.equal(data.settings.previewLinksOnHover, true);
+    assert.equal(data.settings.followLinksFromCards, true);
+    assert.equal(data.settings.protectFiledCardText, false);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.equal(data.settings.deckOrdering, "natural");
     assert.equal(data.settings.showDeckMap, true);
@@ -110,7 +114,7 @@ describe("normalizePluginData", () => {
         history: { entries: ["Cards/here.md"], index: 0 },
       },
     });
-    assert.equal(data.schemaVersion, 9);
+    assert.equal(data.schemaVersion, 10);
     assert.equal(data.settings.addressProperty, "signature");
     assert.equal(data.settings.titleProperty, "name");
     assert.equal(data.settings.newCardFolder, "Cards");
@@ -175,6 +179,56 @@ describe("normalizePluginData", () => {
 
   test("uses complete defaults for unknown data", () => {
     assert.deepEqual(normalizePluginData(null), DEFAULT_DATA);
+    assert.equal(DEFAULT_DATA.settings.restrictViewedCardPaste, true);
+    assert.equal(DEFAULT_DATA.settings.previewLinksOnHover, false);
+    assert.equal(DEFAULT_DATA.settings.followLinksFromCards, false);
+    assert.equal(DEFAULT_DATA.settings.protectFiledCardText, true);
+  });
+
+  test("preserves permissive paper-workflow behavior for existing data", () => {
+    for (const existing of [
+      {},
+      { schemaVersion: 9, settings: {}, state: {} },
+      { schemaVersion: 9, settings: { showDeckMap: false }, state: {} },
+    ]) {
+      const data = normalizePluginData(existing);
+      assert.equal(data.settings.restrictViewedCardPaste, false);
+      assert.equal(data.settings.previewLinksOnHover, true);
+      assert.equal(data.settings.followLinksFromCards, true);
+      assert.equal(data.settings.protectFiledCardText, false);
+    }
+
+    const explicit = normalizePluginData({
+      schemaVersion: 9,
+      settings: {
+        restrictViewedCardPaste: true,
+        previewLinksOnHover: false,
+        followLinksFromCards: false,
+        protectFiledCardText: true,
+      },
+      state: {},
+    });
+    assert.equal(explicit.settings.restrictViewedCardPaste, true);
+    assert.equal(explicit.settings.previewLinksOnHover, false);
+    assert.equal(explicit.settings.followLinksFromCards, false);
+    assert.equal(explicit.settings.protectFiledCardText, true);
+  });
+
+  test("uses paper defaults for schema-10 data with missing or invalid values", () => {
+    const data = normalizePluginData({
+      schemaVersion: 10,
+      settings: {
+        restrictViewedCardPaste: "yes",
+        previewLinksOnHover: null,
+        followLinksFromCards: 1,
+        protectFiledCardText: {},
+      },
+      state: {},
+    });
+    assert.equal(data.settings.restrictViewedCardPaste, true);
+    assert.equal(data.settings.previewLinksOnHover, false);
+    assert.equal(data.settings.followLinksFromCards, false);
+    assert.equal(data.settings.protectFiledCardText, true);
   });
 
   test("detects removed entry-point data for eager persistence cleanup", () => {
@@ -204,10 +258,11 @@ describe("normalizePluginData", () => {
     };
     assert.equal(needsPluginDataMigration(collision), true);
     assert.equal(hasTitleAddressCollisionData(collision), true);
-    assert.equal(normalizePluginData(collision).schemaVersion, 9);
+    assert.equal(normalizePluginData(collision).schemaVersion, 10);
     assert.equal(normalizePluginData(collision).settings.titleSource, "filename");
     assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 8 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 9 }), false);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 9 }), true);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 10 }), false);
     assert.equal(hasTitleAddressCollisionData(null), false);
   });
 });

@@ -118,6 +118,7 @@ import {
   replaceNoteBodyIfUnchanged,
   splitNoteBody,
 } from "./note-body.js";
+import { preservesProtectedText } from "./paper-workflow.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -141,6 +142,7 @@ export interface DetachedInlineEditDraft {
   readonly file: TFile;
   readonly returnTarget: ViewedCardReturnTarget;
   readonly baseBody: string;
+  readonly protectedBody: string | null;
   readonly draft: string;
   readonly conflictMessage: string | null;
   readonly conflictRetryable: boolean;
@@ -355,6 +357,12 @@ export default class SlipboxPlugin extends Plugin {
         message: "The card was deleted while it was being edited.",
       };
     }
+    if (!preservesProtectedText(request.protectedBody, request.draft)) {
+      return {
+        status: "policy-violation",
+        message: "Text present when editing began is protected.",
+      };
+    }
     try {
       await this.app.vault.process(file, (latest) => {
         const contentStart = getFrontMatterInfo(latest).contentStart;
@@ -397,6 +405,7 @@ export default class SlipboxPlugin extends Plugin {
       path: snapshot.path,
       file,
       baseBody: snapshot.baseBody,
+      protectedBody: snapshot.protectedBody,
       draft: snapshot.draft,
       conflictMessage: snapshot.failure?.kind === "conflict"
         ? snapshot.failure.message

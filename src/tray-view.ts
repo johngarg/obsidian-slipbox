@@ -53,6 +53,10 @@ import {
   pilePositionAtWorkspacePoint,
 } from "./tray-drop.js";
 import type { SlipboxAction } from "./settings.js";
+import {
+  applyRenderedLinkAccessibility,
+  attachRenderedLinkInteractions,
+} from "./rendered-link-interactions.js";
 
 const DRAG_THRESHOLD_PX = 5;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
@@ -78,6 +82,12 @@ export interface TrayViewActions {
     reason: string,
     action: () => void | Promise<void>,
   ): Promise<boolean>;
+  previewLink(
+    event: MouseEvent,
+    link: HTMLAnchorElement,
+    linktext: string,
+    sourcePath: string,
+  ): void;
 }
 
 export interface TrayFilingState extends InlineFilingEditorState {
@@ -168,6 +178,10 @@ export class TrayRenderer {
         preview,
         file.path,
         component,
+      );
+      applyRenderedLinkAccessibility(
+        preview,
+        this.plugin.settings.followLinksFromCards,
       );
     } catch {
       preview.setText("Preview unavailable");
@@ -651,6 +665,10 @@ export class TrayRenderer {
           file.path,
           component,
         );
+        applyRenderedLinkAccessibility(
+          preview,
+          this.plugin.settings.followLinksFromCards,
+        );
       }
     } catch {
       preview.setText("Preview unavailable");
@@ -736,47 +754,41 @@ export class TrayRenderer {
     preview: HTMLElement,
     sourcePath: string,
   ): void {
-    preview.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
-      }
-      const link = event.target.closest<HTMLAnchorElement>("a");
-      if (link === null) {
-        return;
-      }
-      const internal = link.matches(".internal-link");
-      const linktext = link.dataset.href ?? link.getAttribute("href") ?? "";
-      if (linktext === "") {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const newLeaf = event.metaKey || event.ctrlKey;
-      void this.actions.runAfterEditing("tray-rendered-link", async () => {
-        const filed = internal
-          ? resolveFiledCardLink(getLinkpath(linktext), sourcePath, {
-              resolveFile: (path, source) =>
-                this.app.metadataCache.getFirstLinkpathDest(path, source),
-              filedPathForFile: (file) =>
-                this.plugin.index.filedByFile(file)?.path,
-              firstFiledPathAtAddress: (address) =>
-                this.plugin.index.firstFiledAtAddress(address)?.path,
-            })
-          : undefined;
-        const action = renderedLinkAction(internal, newLeaf, linktext, filed);
-        if (action.kind === "card") {
-          await this.actions.jumpToFiledCard(action.path);
-        } else if (action.kind === "note") {
-          await this.app.workspace.openLinkText(
-            action.linktext,
-            sourcePath,
-            newLeaf,
-          );
-        } else {
-          window.open(link.href, "_blank", "noopener");
-        }
-      });
-    }, { capture: true });
+    attachRenderedLinkInteractions(preview, {
+      previewEnabled: this.plugin.settings.previewLinksOnHover,
+      followEnabled: this.plugin.settings.followLinksFromCards,
+      preview: (event, link, linktext) => {
+        this.actions.previewLink(event, link, linktext, sourcePath);
+      },
+      follow: (event, link, linktext) => {
+        const internal = link.matches(".internal-link");
+        const newLeaf = event.metaKey || event.ctrlKey || event.button === 1;
+        void this.actions.runAfterEditing("tray-rendered-link", async () => {
+          const filed = internal
+            ? resolveFiledCardLink(getLinkpath(linktext), sourcePath, {
+                resolveFile: (path, source) =>
+                  this.app.metadataCache.getFirstLinkpathDest(path, source),
+                filedPathForFile: (file) =>
+                  this.plugin.index.filedByFile(file)?.path,
+                firstFiledPathAtAddress: (address) =>
+                  this.plugin.index.firstFiledAtAddress(address)?.path,
+              })
+            : undefined;
+          const action = renderedLinkAction(internal, newLeaf, linktext, filed);
+          if (action.kind === "card") {
+            await this.actions.jumpToFiledCard(action.path);
+          } else if (action.kind === "note") {
+            await this.app.workspace.openLinkText(
+              action.linktext,
+              sourcePath,
+              newLeaf,
+            );
+          } else {
+            window.open(link.href, "_blank", "noopener");
+          }
+        });
+      },
+    });
   }
 
   private showPileMenu(

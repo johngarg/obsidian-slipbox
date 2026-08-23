@@ -103,6 +103,32 @@ export class SlipboxSettingTab extends PluginSettingTab {
       },
       {
         type: "group",
+        heading: "Paper workflow",
+        items: [
+          this.definition(
+            "Restrict pasting in viewed cards",
+            "In the Slipbox viewed-card editor, paste one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
+            (setting) => this.renderRestrictViewedCardPaste(setting),
+          ),
+          this.definition(
+            "Preview links on hover",
+            "Show Obsidian Page Preview popovers for links and backlinks inside Slipbox cards.",
+            (setting) => this.renderPreviewLinksOnHover(setting),
+          ),
+          this.definition(
+            "Follow links from cards",
+            "Allow links and backlinks inside Slipbox cards to navigate. Explicit Slipbox Open note actions remain available.",
+            (setting) => this.renderFollowLinksFromCards(setting),
+          ),
+          this.definition(
+            "Protect text present when editing begins",
+            "Prevent a filed card’s existing body text from being deleted, replaced, or reordered during a viewed-card editing session. Text added during that session remains editable. Ordinary Markdown views are unaffected.",
+            (setting) => this.renderProtectFiledCardText(setting),
+          ),
+        ],
+      },
+      {
+        type: "group",
         heading: "New cards",
         items: [
           this.definition(
@@ -249,6 +275,50 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .onChange((value) => void this.save({
           ...this.slipbox.settings,
           showDeckMap: value,
+        }));
+    });
+  }
+
+  private renderRestrictViewedCardPaste(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.restrictViewedCardPaste)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          restrictViewedCardPaste: value,
+        }));
+    });
+  }
+
+  private renderPreviewLinksOnHover(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.previewLinksOnHover)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          previewLinksOnHover: value,
+        }));
+    });
+  }
+
+  private renderFollowLinksFromCards(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.followLinksFromCards)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          followLinksFromCards: value,
+        }));
+    });
+  }
+
+  private renderProtectFiledCardText(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.protectFiledCardText)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          protectFiledCardText: value,
         }));
     });
   }

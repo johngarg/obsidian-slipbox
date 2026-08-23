@@ -1,7 +1,7 @@
 import type { DeckOrdering } from "./address-order.js";
 import type { DuplicateAddressPolicy } from "./card-metadata.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 9;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 10;
 
 export const DEFAULT_CARD_SPREAD = 0.58;
 export const MIN_CARD_SPREAD = 0.18;
@@ -426,6 +426,10 @@ export interface SlipboxSettings {
   readonly newNoteTimestampFormat: string;
   readonly showTitleInDeck: boolean;
   readonly showDeckMap: boolean;
+  readonly restrictViewedCardPaste: boolean;
+  readonly previewLinksOnHover: boolean;
+  readonly followLinksFromCards: boolean;
+  readonly protectFiledCardText: boolean;
   readonly cardSpread: number;
   readonly cardHeaderButtons: CardHeaderButtonSettings;
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
@@ -506,6 +510,10 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   showTitleInDeck: false,
   showDeckMap: true,
+  restrictViewedCardPaste: true,
+  previewLinksOnHover: false,
+  followLinksFromCards: false,
+  protectFiledCardText: true,
   cardSpread: DEFAULT_CARD_SPREAD,
   cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
@@ -787,6 +795,22 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap
         : DEFAULT_SETTINGS.showDeckMap,
+    restrictViewedCardPaste:
+      typeof source.restrictViewedCardPaste === "boolean"
+        ? source.restrictViewedCardPaste
+        : DEFAULT_SETTINGS.restrictViewedCardPaste,
+    previewLinksOnHover:
+      typeof source.previewLinksOnHover === "boolean"
+        ? source.previewLinksOnHover
+        : DEFAULT_SETTINGS.previewLinksOnHover,
+    followLinksFromCards:
+      typeof source.followLinksFromCards === "boolean"
+        ? source.followLinksFromCards
+        : DEFAULT_SETTINGS.followLinksFromCards,
+    protectFiledCardText:
+      typeof source.protectFiledCardText === "boolean"
+        ? source.protectFiledCardText
+        : DEFAULT_SETTINGS.protectFiledCardText,
     cardSpread: normalizeCardSpread(source.cardSpread),
     cardHeaderButtons: normalizeCardHeaderButtons(
       source.cardHeaderButtons,

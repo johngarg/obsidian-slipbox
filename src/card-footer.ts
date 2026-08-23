@@ -9,12 +9,18 @@ import {
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { trayToggleLabel } from "./deck-actions.js";
 import type { FiledCard } from "./card-index.js";
+import {
+  applyOwnedLinkAccessibility,
+  renderedLinkPolicy,
+} from "./rendered-link-interactions.js";
 import type { SlipboxAction } from "./settings.js";
 
 export interface CardFooterEnvironment {
   readonly app: App;
   readonly leaf: WorkspaceLeaf;
   readonly hoverSource: string;
+  readonly previewLinksOnHover: () => boolean;
+  readonly followLinksFromCards: () => boolean;
   readonly isInTray: (file: TFile) => boolean;
   readonly runAction: (action: SlipboxAction, target: FiledCard) => boolean;
   readonly runAfterEditing: (
@@ -268,10 +274,15 @@ export class CardFooterManager {
     });
     anchor.dataset.href = linktext;
     anchor.draggable = false;
-    anchor.tabIndex = tabbable && entry.interactive ? 0 : -1;
+    const policy = this.linkPolicy(entry);
+    applyOwnedLinkAccessibility(
+      anchor,
+      policy.follow,
+      tabbable,
+    );
 
     anchor.addEventListener("mouseover", (event) => {
-      if (!entry.interactive) {
+      if (!this.linkPolicy(entry).preview) {
         return;
       }
       this.environment.app.workspace.trigger("hover-link", {
@@ -288,7 +299,7 @@ export class CardFooterManager {
       this.activate(entry, backlink, linktext, event);
     });
     anchor.addEventListener("auxclick", (event) => {
-      if (event.button === 1) {
+      if (event.button === 1 || !this.linkPolicy(entry).follow) {
         this.activate(entry, backlink, linktext, event);
       }
     });
@@ -310,10 +321,11 @@ export class CardFooterManager {
   ): void {
     event.preventDefault();
     event.stopPropagation();
-    if (!entry.interactive) {
+    if (!this.linkPolicy(entry).follow) {
       return;
     }
-    const newLeaf = Keymap.isModEvent(event);
+    const newLeaf = Keymap.isModEvent(event) ||
+      (event instanceof MouseEvent && event.button === 1);
     this.environment.runAfterEditing("backlink", async () => {
       if (newLeaf) {
         await this.environment.app.workspace.openLinkText(
@@ -390,12 +402,12 @@ export class CardFooterManager {
   }
 
   private applyInteractiveState(entry: RenderedFooter): void {
+    const policy = this.linkPolicy(entry);
     entry.footer.toggleClass("is-interactive", entry.interactive);
     entry.footer
       .querySelectorAll<HTMLAnchorElement>(".slipbox-card-backlink")
       .forEach((anchor) => {
-        anchor.tabIndex = entry.interactive ? 0 : -1;
-        anchor.setAttr("aria-disabled", String(!entry.interactive));
+        applyOwnedLinkAccessibility(anchor, policy.follow);
       });
     entry.footer
       .querySelectorAll<HTMLButtonElement>(".slipbox-card-backlink-overflow")
@@ -405,6 +417,14 @@ export class CardFooterManager {
           button.tabIndex = entry.interactive ? 0 : -1;
         }
       });
+  }
+
+  private linkPolicy(entry: RenderedFooter) {
+    return renderedLinkPolicy(
+      this.environment.previewLinksOnHover(),
+      this.environment.followLinksFromCards(),
+      entry.interactive,
+    );
   }
 
   private closeOverflowMenu(): void {

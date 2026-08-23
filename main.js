@@ -433,6 +433,80 @@ function canRunDeckAction(action, context) {
   }
 }
 
+// src/rendered-link-interactions.ts
+function renderedLinkPolicy(previewEnabled, followEnabled, surfaceInteractive = true) {
+  return {
+    preview: surfaceInteractive && previewEnabled,
+    follow: surfaceInteractive && followEnabled
+  };
+}
+function applyOwnedLinkAccessibility(link, followEnabled, tabbable = true) {
+  if (followEnabled) {
+    link.removeAttribute("aria-disabled");
+    link.removeAttribute("data-slipbox-link-disabled");
+    link.tabIndex = tabbable ? 0 : -1;
+    return;
+  }
+  link.setAttribute("aria-disabled", "true");
+  link.dataset.slipboxLinkDisabled = "true";
+  link.tabIndex = -1;
+}
+function applyRenderedLinkAccessibility(target, followEnabled) {
+  target.querySelectorAll("a").forEach((link) => {
+    applyOwnedLinkAccessibility(link, followEnabled);
+  });
+}
+function attachRenderedLinkInteractions(target, options) {
+  const policy = renderedLinkPolicy(
+    options.previewEnabled,
+    options.followEnabled
+  );
+  applyRenderedLinkAccessibility(target, policy.follow);
+  target.addEventListener("mouseover", (event) => {
+    const ElementType = target.ownerDocument.defaultView?.Element;
+    if (!policy.preview || ElementType === void 0 || !(event.target instanceof ElementType)) {
+      return;
+    }
+    const link = event.target.closest("a.internal-link");
+    const linktext = renderedLinkText(link);
+    if (link !== null && linktext !== null) {
+      options.preview(event, link, linktext);
+    }
+  });
+  const activate = (event) => {
+    const ElementType = target.ownerDocument.defaultView?.Element;
+    if (ElementType === void 0 || !(event.target instanceof ElementType)) {
+      return;
+    }
+    const link = event.target.closest("a");
+    const linktext = renderedLinkText(link);
+    if (link === null || linktext === null) {
+      return;
+    }
+    if (event.type === "auxclick" && event.button !== 1) {
+      if (!policy.follow) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (policy.follow) {
+      options.follow(event, link, linktext);
+    }
+  };
+  target.addEventListener("click", activate, { capture: true });
+  target.addEventListener("auxclick", activate, { capture: true });
+}
+function renderedLinkText(link) {
+  if (link === null) {
+    return null;
+  }
+  const linktext = link.dataset.href ?? link.getAttribute("href") ?? "";
+  return linktext === "" ? null : linktext;
+}
+
 // src/card-footer.ts
 var BACKLINK_MEASUREMENT_LIMIT = 64;
 var CardFooterManager = class {
@@ -633,9 +707,14 @@ var CardFooterManager = class {
     });
     anchor.dataset.href = linktext;
     anchor.draggable = false;
-    anchor.tabIndex = tabbable && entry.interactive ? 0 : -1;
+    const policy = this.linkPolicy(entry);
+    applyOwnedLinkAccessibility(
+      anchor,
+      policy.follow,
+      tabbable
+    );
     anchor.addEventListener("mouseover", (event) => {
-      if (!entry.interactive) {
+      if (!this.linkPolicy(entry).preview) {
         return;
       }
       this.environment.app.workspace.trigger("hover-link", {
@@ -652,7 +731,7 @@ var CardFooterManager = class {
       this.activate(entry, backlink, linktext, event);
     });
     anchor.addEventListener("auxclick", (event) => {
-      if (event.button === 1) {
+      if (event.button === 1 || !this.linkPolicy(entry).follow) {
         this.activate(entry, backlink, linktext, event);
       }
     });
@@ -668,10 +747,10 @@ var CardFooterManager = class {
   activate(entry, backlink, linktext, event) {
     event.preventDefault();
     event.stopPropagation();
-    if (!entry.interactive) {
+    if (!this.linkPolicy(entry).follow) {
       return;
     }
-    const newLeaf = import_obsidian.Keymap.isModEvent(event);
+    const newLeaf = import_obsidian.Keymap.isModEvent(event) || event instanceof MouseEvent && event.button === 1;
     this.environment.runAfterEditing("backlink", async () => {
       if (newLeaf) {
         await this.environment.app.workspace.openLinkText(
@@ -735,10 +814,10 @@ var CardFooterManager = class {
     menu.showAtMouseEvent(event);
   }
   applyInteractiveState(entry) {
+    const policy = this.linkPolicy(entry);
     entry.footer.toggleClass("is-interactive", entry.interactive);
     entry.footer.querySelectorAll(".slipbox-card-backlink").forEach((anchor) => {
-      anchor.tabIndex = entry.interactive ? 0 : -1;
-      anchor.setAttr("aria-disabled", String(!entry.interactive));
+      applyOwnedLinkAccessibility(anchor, policy.follow);
     });
     entry.footer.querySelectorAll(".slipbox-card-backlink-overflow").forEach((button) => {
       if (!button.closest(".slipbox-card-footer-measure")) {
@@ -746,6 +825,13 @@ var CardFooterManager = class {
         button.tabIndex = entry.interactive ? 0 : -1;
       }
     });
+  }
+  linkPolicy(entry) {
+    return renderedLinkPolicy(
+      this.environment.previewLinksOnHover(),
+      this.environment.followLinksFromCards(),
+      entry.interactive
+    );
   }
   closeOverflowMenu() {
     const menu = this.overflowMenu;
@@ -1117,7 +1203,7 @@ function renderCardHeaderButtons(options) {
 }
 
 // src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 9;
+var SLIPBOX_DATA_SCHEMA_VERSION = 10;
 var DEFAULT_CARD_SPREAD = 0.58;
 var MIN_CARD_SPREAD = 0.18;
 var MAX_CARD_SPREAD = 1.12;
@@ -1469,6 +1555,10 @@ var DEFAULT_SETTINGS = {
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   showTitleInDeck: false,
   showDeckMap: true,
+  restrictViewedCardPaste: true,
+  previewLinksOnHover: false,
+  followLinksFromCards: false,
+  protectFiledCardText: true,
   cardSpread: DEFAULT_CARD_SPREAD,
   cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
   deckKeybindings: DEFAULT_DECK_KEYBINDINGS
@@ -1678,6 +1768,10 @@ function normalizeSettings(value) {
     ),
     showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
     showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
+    restrictViewedCardPaste: typeof source.restrictViewedCardPaste === "boolean" ? source.restrictViewedCardPaste : DEFAULT_SETTINGS.restrictViewedCardPaste,
+    previewLinksOnHover: typeof source.previewLinksOnHover === "boolean" ? source.previewLinksOnHover : DEFAULT_SETTINGS.previewLinksOnHover,
+    followLinksFromCards: typeof source.followLinksFromCards === "boolean" ? source.followLinksFromCards : DEFAULT_SETTINGS.followLinksFromCards,
+    protectFiledCardText: typeof source.protectFiledCardText === "boolean" ? source.protectFiledCardText : DEFAULT_SETTINGS.protectFiledCardText,
     cardSpread: normalizeCardSpread(source.cardSpread),
     cardHeaderButtons: normalizeCardHeaderButtons(
       source.cardHeaderButtons,
@@ -2408,6 +2502,10 @@ var TrayRenderer = class {
         file.path,
         component
       );
+      applyRenderedLinkAccessibility(
+        preview,
+        this.plugin.settings.followLinksFromCards
+      );
     } catch {
       preview.setText("Preview unavailable");
     }
@@ -2805,6 +2903,10 @@ var TrayRenderer = class {
           file.path,
           component
         );
+        applyRenderedLinkAccessibility(
+          preview,
+          this.plugin.settings.followLinksFromCards
+        );
       }
     } catch {
       preview.setText("Preview unavailable");
@@ -2875,42 +2977,36 @@ var TrayRenderer = class {
     });
   }
   attachPreviewLinkInteractions(preview, sourcePath) {
-    preview.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
+    attachRenderedLinkInteractions(preview, {
+      previewEnabled: this.plugin.settings.previewLinksOnHover,
+      followEnabled: this.plugin.settings.followLinksFromCards,
+      preview: (event, link, linktext) => {
+        this.actions.previewLink(event, link, linktext, sourcePath);
+      },
+      follow: (event, link, linktext) => {
+        const internal = link.matches(".internal-link");
+        const newLeaf = event.metaKey || event.ctrlKey || event.button === 1;
+        void this.actions.runAfterEditing("tray-rendered-link", async () => {
+          const filed = internal ? resolveFiledCardLink((0, import_obsidian3.getLinkpath)(linktext), sourcePath, {
+            resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
+            filedPathForFile: (file) => this.plugin.index.filedByFile(file)?.path,
+            firstFiledPathAtAddress: (address) => this.plugin.index.firstFiledAtAddress(address)?.path
+          }) : void 0;
+          const action = renderedLinkAction(internal, newLeaf, linktext, filed);
+          if (action.kind === "card") {
+            await this.actions.jumpToFiledCard(action.path);
+          } else if (action.kind === "note") {
+            await this.app.workspace.openLinkText(
+              action.linktext,
+              sourcePath,
+              newLeaf
+            );
+          } else {
+            window.open(link.href, "_blank", "noopener");
+          }
+        });
       }
-      const link = event.target.closest("a");
-      if (link === null) {
-        return;
-      }
-      const internal = link.matches(".internal-link");
-      const linktext = link.dataset.href ?? link.getAttribute("href") ?? "";
-      if (linktext === "") {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const newLeaf = event.metaKey || event.ctrlKey;
-      void this.actions.runAfterEditing("tray-rendered-link", async () => {
-        const filed = internal ? resolveFiledCardLink((0, import_obsidian3.getLinkpath)(linktext), sourcePath, {
-          resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
-          filedPathForFile: (file) => this.plugin.index.filedByFile(file)?.path,
-          firstFiledPathAtAddress: (address) => this.plugin.index.firstFiledAtAddress(address)?.path
-        }) : void 0;
-        const action = renderedLinkAction(internal, newLeaf, linktext, filed);
-        if (action.kind === "card") {
-          await this.actions.jumpToFiledCard(action.path);
-        } else if (action.kind === "note") {
-          await this.app.workspace.openLinkText(
-            action.linktext,
-            sourcePath,
-            newLeaf
-          );
-        } else {
-          window.open(link.href, "_blank", "noopener");
-        }
-      });
-    }, { capture: true });
+    });
   }
   showPileMenu(event, pile, visibleCard) {
     const menu = import_obsidian3.Menu.forEvent(event);
@@ -3492,6 +3588,291 @@ function applyDeckMapVisibility(deckMap, state, showDeckMapSetting, cardCount) {
   }
 }
 
+// src/paper-workflow.ts
+function normalizeEditorLineEndings(value) {
+  return value.replace(/\r\n?/g, "\n");
+}
+function preservesProtectedText(protectedBody, draft) {
+  if (protectedBody === null) {
+    return true;
+  }
+  const protectedPoints = Array.from(normalizeEditorLineEndings(protectedBody));
+  if (protectedPoints.length === 0) {
+    return true;
+  }
+  let protectedIndex = 0;
+  for (const point of Array.from(normalizeEditorLineEndings(draft))) {
+    if (point === protectedPoints[protectedIndex]) {
+      protectedIndex += 1;
+      if (protectedIndex === protectedPoints.length) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function applyTextReplacement(options) {
+  return options.value.slice(0, options.selectionStart) + options.replacement + options.value.slice(options.selectionEnd);
+}
+function beforeInputCandidate(value, selectionStart, selectionEnd, inputType, data) {
+  if (inputType === "insertLineBreak" || inputType === "insertParagraph") {
+    return applyTextReplacement({
+      value,
+      selectionStart,
+      selectionEnd,
+      replacement: "\n"
+    });
+  }
+  if (inputType.startsWith("insert") && data !== null) {
+    return applyTextReplacement({
+      value,
+      selectionStart,
+      selectionEnd,
+      replacement: data
+    });
+  }
+  if (!inputType.startsWith("delete")) {
+    return null;
+  }
+  if (selectionStart !== selectionEnd) {
+    return applyTextReplacement({
+      value,
+      selectionStart,
+      selectionEnd,
+      replacement: ""
+    });
+  }
+  if (inputType === "deleteContentBackward") {
+    const start = previousCodePointStart(value, selectionStart);
+    return applyTextReplacement({
+      value,
+      selectionStart: start,
+      selectionEnd,
+      replacement: ""
+    });
+  }
+  if (inputType === "deleteContentForward") {
+    const end = nextCodePointEnd(value, selectionEnd);
+    return applyTextReplacement({
+      value,
+      selectionStart,
+      selectionEnd: end,
+      replacement: ""
+    });
+  }
+  return null;
+}
+function restrictViewedCardPaste(value) {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return { text: "", truncated: false };
+  }
+  if (!/\s/u.test(trimmed) || isStandaloneCardLink(trimmed)) {
+    return { text: trimmed, truncated: false };
+  }
+  return {
+    text: /^\S+/u.exec(trimmed)?.[0] ?? "",
+    truncated: true
+  };
+}
+function isStandaloneCardLink(value) {
+  if (value === "" || /[\r\n]/u.test(value)) {
+    return false;
+  }
+  if (isStandaloneWikiLink(value)) {
+    return true;
+  }
+  const firstBracket = value.startsWith("!") ? 1 : 0;
+  if (value[firstBracket] !== "[") {
+    return false;
+  }
+  const labelEnd = balancedEnd(value, firstBracket, "[", "]");
+  if (labelEnd === null || labelEnd >= value.length) {
+    return false;
+  }
+  const suffixStart = labelEnd;
+  if (value[suffixStart] === "(") {
+    const suffixEnd = balancedEnd(value, suffixStart, "(", ")");
+    return suffixEnd === value.length && isValidInlineLinkSuffix(value.slice(suffixStart + 1, -1));
+  }
+  if (value[suffixStart] === "[") {
+    const suffixEnd = balancedEnd(value, suffixStart, "[", "]");
+    if (suffixEnd !== value.length) {
+      return false;
+    }
+    const reference = value.slice(suffixStart + 1, -1);
+    return reference === "" || reference.trim() !== "";
+  }
+  return false;
+}
+function isStandaloneWikiLink(value) {
+  const start = value.startsWith("![[") ? 1 : value.startsWith("[[") ? 0 : -1;
+  if (start < 0 || !value.endsWith("]]")) {
+    return false;
+  }
+  const inner = value.slice(start + 2, -2);
+  return inner.trim() !== "" && !inner.includes("[[") && !inner.includes("]]");
+}
+function isValidInlineLinkSuffix(value) {
+  if (/[\r\n]/u.test(value)) {
+    return false;
+  }
+  let index = skipWhitespace(value, 0);
+  if (index === value.length) {
+    return true;
+  }
+  if (value[index] === "<") {
+    index = angleDestinationEnd(value, index);
+    if (index < 0) {
+      return false;
+    }
+  } else {
+    index = bareDestinationEnd(value, index);
+    if (index < 0) {
+      return false;
+    }
+  }
+  const titleStart = skipWhitespace(value, index);
+  if (titleStart === value.length) {
+    return true;
+  }
+  if (titleStart === index) {
+    return false;
+  }
+  return markdownTitleEnd(value, titleStart) === value.length;
+}
+function angleDestinationEnd(value, start) {
+  let escaped = false;
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === "<") {
+      return -1;
+    }
+    if (character === ">") {
+      return index + 1;
+    }
+  }
+  return -1;
+}
+function bareDestinationEnd(value, start) {
+  let depth = 0;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value.charAt(index);
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (/\s/u.test(character)) {
+      return index;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) {
+        return -1;
+      }
+      depth -= 1;
+    }
+  }
+  return depth === 0 ? value.length : -1;
+}
+function markdownTitleEnd(value, start) {
+  const open = value.charAt(start);
+  const close = open === "(" ? ")" : open;
+  if (open !== '"' && open !== "'" && open !== "(") {
+    return -1;
+  }
+  let escaped = false;
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === close) {
+      return skipWhitespace(value, index + 1);
+    }
+  }
+  return -1;
+}
+function skipWhitespace(value, start) {
+  let index = start;
+  while (index < value.length && /\s/u.test(value.charAt(index))) {
+    index += 1;
+  }
+  return index;
+}
+function balancedEnd(value, start, open, close) {
+  if (value[start] !== open) {
+    return null;
+  }
+  let depth = 0;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === open) {
+      depth += 1;
+    } else if (character === close) {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return null;
+}
+function previousCodePointStart(value, offset) {
+  if (offset <= 0) {
+    return 0;
+  }
+  const final = value.charCodeAt(offset - 1);
+  if (final >= 56320 && final <= 57343 && offset >= 2) {
+    const first = value.charCodeAt(offset - 2);
+    if (first >= 55296 && first <= 56319) {
+      return offset - 2;
+    }
+  }
+  return offset - 1;
+}
+function nextCodePointEnd(value, offset) {
+  if (offset >= value.length) {
+    return value.length;
+  }
+  const first = value.charCodeAt(offset);
+  if (first >= 55296 && first <= 56319 && offset + 1 < value.length) {
+    const final = value.charCodeAt(offset + 1);
+    if (final >= 56320 && final <= 57343) {
+      return offset + 2;
+    }
+  }
+  return offset + 1;
+}
+
 // src/inline-edit-session.ts
 var InlineEditFinalizationCoordinator = class {
   active = null;
@@ -3552,8 +3933,9 @@ var InlineEditPathLock = class {
   }
 };
 var InlineEditSessionController = class {
-  constructor(path, body, environment) {
+  constructor(path, body, environment, protectedBodyValue = null) {
     this.environment = environment;
+    this.protectedBodyValue = protectedBodyValue;
     this.pathValue = path;
     this.baseBodyValue = body;
     this.draftValue = body;
@@ -3573,6 +3955,7 @@ var InlineEditSessionController = class {
     return {
       path: this.pathValue,
       baseBody: this.baseBodyValue,
+      protectedBody: this.protectedBodyValue,
       draft: this.draftValue,
       version: this.versionValue,
       committedVersion: this.committedVersionValue,
@@ -3581,12 +3964,18 @@ var InlineEditSessionController = class {
       conflictRetryable: this.conflictRetryableValue
     };
   }
+  acceptsDraft(draft) {
+    return preservesProtectedText(this.protectedBodyValue, draft);
+  }
   updateDraft(draft) {
     if (this.phaseValue === "closed") {
-      return;
+      return false;
+    }
+    if (!this.acceptsDraft(draft)) {
+      return false;
     }
     if (draft === this.draftValue) {
-      return;
+      return true;
     }
     this.draftValue = draft;
     this.versionValue += 1;
@@ -3597,6 +3986,7 @@ var InlineEditSessionController = class {
         this.scheduleDebouncedCommit();
       }
     }
+    return true;
   }
   renamePath(path) {
     if (this.phaseValue !== "closed") {
@@ -3685,6 +4075,7 @@ var InlineEditSessionController = class {
         result = await this.environment.commit({
           path: this.pathValue,
           baseBody: this.baseBodyValue,
+          protectedBody: this.protectedBodyValue,
           draft,
           version,
           final
@@ -3694,6 +4085,17 @@ var InlineEditSessionController = class {
       }
       if (result.status === "conflict") {
         this.markConflict(result.message, true);
+        return false;
+      }
+      if (result.status === "policy-violation") {
+        const failure = {
+          kind: "policy",
+          message: result.message
+        };
+        this.phaseValue = "editing";
+        this.failureValue = failure;
+        this.conflictRetryableValue = false;
+        this.environment.reportFailure(failure);
         return false;
       }
       this.baseBodyValue = draft;
@@ -3769,6 +4171,80 @@ function shouldNavigateDeckFromWheel(event, inlineEditor) {
     return false;
   }
   return Math.abs(event.deltaX) > Math.abs(event.deltaY);
+}
+
+// src/paper-workflow-dom.ts
+var PROTECTED_TEXT_MESSAGE = "Text present when editing began is protected.";
+var RESTRICTED_PASTE_MESSAGE = "Only the first word was pasted.";
+function attachPaperWorkflowTextarea(textarea, environment) {
+  let fallbackSelectionStart = textarea.selectionStart;
+  let fallbackSelectionEnd = textarea.selectionEnd;
+  const acceptTextareaDraft = () => {
+    if (!environment.updateDraft(textarea.value)) {
+      textarea.value = environment.currentDraft();
+      textarea.setSelectionRange(
+        Math.min(fallbackSelectionStart, textarea.value.length),
+        Math.min(fallbackSelectionEnd, textarea.value.length)
+      );
+      environment.message(PROTECTED_TEXT_MESSAGE);
+      return false;
+    }
+    fallbackSelectionStart = textarea.selectionStart;
+    fallbackSelectionEnd = textarea.selectionEnd;
+    environment.accepted();
+    return true;
+  };
+  textarea.addEventListener("beforeinput", (event) => {
+    fallbackSelectionStart = textarea.selectionStart;
+    fallbackSelectionEnd = textarea.selectionEnd;
+    if (event.inputType === "insertFromPaste") {
+      return;
+    }
+    const candidate = beforeInputCandidate(
+      textarea.value,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      event.inputType,
+      event.data
+    );
+    if (candidate !== null && !environment.acceptsDraft(candidate)) {
+      event.preventDefault();
+      environment.message(PROTECTED_TEXT_MESSAGE);
+    }
+  });
+  textarea.addEventListener("input", () => {
+    acceptTextareaDraft();
+  });
+  textarea.addEventListener("paste", (event) => {
+    const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
+    const pasted = environment.restrictPaste ? restrictViewedCardPaste(clipboardText) : { text: clipboardText, truncated: false };
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    const candidate = applyTextReplacement({
+      value: textarea.value,
+      selectionStart,
+      selectionEnd,
+      replacement: pasted.text
+    });
+    if (!environment.acceptsDraft(candidate)) {
+      event.preventDefault();
+      environment.message(PROTECTED_TEXT_MESSAGE);
+      return;
+    }
+    if (!environment.restrictPaste) {
+      return;
+    }
+    event.preventDefault();
+    textarea.value = candidate;
+    const caret = selectionStart + pasted.text.length;
+    textarea.setSelectionRange(caret, caret);
+    fallbackSelectionStart = caret;
+    fallbackSelectionEnd = caret;
+    acceptTextareaDraft();
+    if (pasted.truncated) {
+      environment.message(RESTRICTED_PASTE_MESSAGE);
+    }
+  });
 }
 
 // src/viewed-card.ts
@@ -3929,6 +4405,8 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       app: this.app,
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
+      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      followLinksFromCards: () => this.plugin.settings.followLinksFromCards,
       isInTray: (file) => this.plugin.isFileInTray(file),
       runAction: (action, target) => this.runAction(action, target),
       runAfterEditing: (reason, action) => {
@@ -3954,7 +4432,17 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       isDeskCardFocused: (path, pileId) => this.cardFocus?.surface === "desk" && this.cardFocus.path === path && this.cardFocus.pileId === pileId,
       canRunAction: (action) => this.canRunAction(action),
       runAction: (action) => this.runAction(action),
-      runAfterEditing: (reason, action) => this.runAfterInlineEditing(reason, action)
+      runAfterEditing: (reason, action) => this.runAfterInlineEditing(reason, action),
+      previewLink: (event, link, linktext, sourcePath) => {
+        this.app.workspace.trigger("hover-link", {
+          event,
+          source: DECK_VIEW_TYPE,
+          hoverParent: this.leaf,
+          targetEl: link,
+          linktext,
+          sourcePath
+        });
+      }
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => {
@@ -4146,6 +4634,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         }
       );
       this.plugin.releaseInlineEdit(editing.controller.snapshot.path, this);
+      this.clearInlineEditPolicyMessage();
       this.inlineEdit = null;
       this.setDeckKeybindingsSuspended(false);
     }
@@ -4930,6 +5419,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     const path = editing.controller.snapshot.path;
     const shouldSkipRender = ["view-close", "plugin-unload", "quit"].some((reason) => reasons.has(reason));
+    this.clearInlineEditPolicyMessage();
     this.inlineEdit = null;
     this.plugin.releaseInlineEdit(path, this);
     this.setDeckKeybindingsSuspended(false);
@@ -5080,9 +5570,11 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.inlineEditStarting = true;
     try {
       const prepared = restored === void 0 ? await this.plugin.prepareInlineEdit(file) : { file, body: restored.baseBody };
+      const protectedBody = restored === void 0 ? this.plugin.settings.protectFiledCardText && this.plugin.index.filedByFile(prepared.file) !== void 0 ? prepared.body : null : restored.protectedBody;
       const mounted = this.mountInlineEditing(
         prepared.file,
         prepared.body,
+        protectedBody,
         bodySurface,
         restored?.renderedScrollTop
       );
@@ -5121,7 +5613,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.inlineEditStarting = false;
     }
   }
-  mountInlineEditing(file, baseBody, requestedBodySurface, restoredRenderedScrollTop) {
+  mountInlineEditing(file, baseBody, protectedBody, requestedBodySurface, restoredRenderedScrollTop) {
     const returnTarget = this.viewedCard?.path === file.path ? this.viewedCard.returnTarget : null;
     const bodyEl = requestedBodySurface;
     const cardEl = bodyEl?.closest(".slipbox-card") ?? null;
@@ -5169,16 +5661,24 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
         cancelScheduled: (handle) => window.clearTimeout(handle),
         reportFailure: (failure) => this.reportInlineEditFailure(failure)
-      }
+      },
+      protectedBody
     );
-    textarea.addEventListener("input", () => {
-      controller.updateDraft(textarea.value);
-      if (controller.snapshot.phase !== "conflict") {
-        bodyEl.removeClass("has-inline-edit-error");
-        textarea.removeAttribute("aria-invalid");
-        statusEl.hidden = true;
-        statusEl.setText("");
-      }
+    attachPaperWorkflowTextarea(textarea, {
+      restrictPaste: this.plugin.settings.restrictViewedCardPaste,
+      acceptsDraft: (draft) => controller.acceptsDraft(draft),
+      updateDraft: (draft) => controller.updateDraft(draft),
+      currentDraft: () => controller.snapshot.draft,
+      accepted: () => {
+        if (controller.snapshot.phase !== "conflict") {
+          this.clearInlineEditPolicyMessage();
+          bodyEl.removeClass("has-inline-edit-error");
+          textarea.removeAttribute("aria-invalid");
+          statusEl.hidden = true;
+          statusEl.setText("");
+        }
+      },
+      message: (message) => this.showInlineEditPolicyMessage(message)
     });
     textarea.addEventListener("pointerdown", (event) => event.stopPropagation());
     textarea.addEventListener("click", (event) => event.stopPropagation());
@@ -5188,6 +5688,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       returnTarget,
       textarea,
       statusEl,
+      policyStatusTimer: null,
       bodyEl,
       cardEl,
       renderedScrollTop
@@ -5207,6 +5708,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     void this.finishInlineEditing("outside-pointer");
   }
   reportInlineEditFailure(failure) {
+    if (failure.kind === "policy") {
+      this.showInlineEditPolicyMessage(failure.message);
+      return;
+    }
     this.applyInlineEditFailure(failure);
     const detail = failure.error === void 0 ? failure.message : `${failure.message} ${errorMessage(failure.error)}`;
     new import_obsidian4.Notice(`${detail} Your draft remains in the card and can be copied.`);
@@ -5216,10 +5721,54 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (editing === null || failure === null) {
       return;
     }
+    if (failure.kind === "policy") {
+      this.showInlineEditPolicyMessage(failure.message);
+      return;
+    }
+    this.clearInlineEditPolicyMessage();
     editing.bodyEl.addClass("has-inline-edit-error");
     editing.textarea.setAttr("aria-invalid", "true");
     editing.statusEl.setText(failure.message);
     editing.statusEl.hidden = false;
+  }
+  showInlineEditPolicyMessage(message) {
+    const editing = this.inlineEdit;
+    if (editing === null) {
+      return;
+    }
+    const failure = editing.controller.snapshot.failure;
+    if (failure !== null && failure.kind !== "policy") {
+      return;
+    }
+    if (editing.policyStatusTimer !== null) {
+      window.clearTimeout(editing.policyStatusTimer);
+    }
+    editing.statusEl.addClass("is-policy-message");
+    editing.statusEl.setAttr("aria-live", "polite");
+    editing.statusEl.setText(message);
+    editing.statusEl.hidden = false;
+    editing.policyStatusTimer = window.setTimeout(() => {
+      if (this.inlineEdit === editing) {
+        this.clearInlineEditPolicyMessage();
+      }
+    }, 2e3);
+  }
+  clearInlineEditPolicyMessage() {
+    const editing = this.inlineEdit;
+    if (editing === null) {
+      return;
+    }
+    if (editing.policyStatusTimer !== null) {
+      window.clearTimeout(editing.policyStatusTimer);
+      editing.policyStatusTimer = null;
+    }
+    if (!editing.statusEl.hasClass("is-policy-message")) {
+      return;
+    }
+    editing.statusEl.removeClass("is-policy-message");
+    editing.statusEl.setAttr("aria-live", "assertive");
+    editing.statusEl.setText("");
+    editing.statusEl.hidden = true;
   }
   async rerenderEditedPath(file, target, scrollTop) {
     if (!target.isConnected) {
@@ -5254,6 +5803,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     await this.renderDeck(false);
     await this.beginInlineEditing(file, this.viewedCardBodyEl, {
       baseBody: draft.baseBody,
+      protectedBody: draft.protectedBody,
       draft: draft.draft,
       conflictMessage: draft.conflictMessage,
       conflictRetryable: draft.conflictRetryable,
@@ -6177,39 +6727,22 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     await this.plugin.toggleBookmark(path);
   }
   attachInternalLinkInteractions(target, sourcePath) {
-    target.addEventListener("mouseover", (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
-      }
-      const link = event.target.closest("a.internal-link");
-      const linktext = link?.dataset.href ?? link?.getAttribute("href") ?? void 0;
-      if (link === null || linktext === void 0 || linktext === "") {
-        return;
-      }
-      this.app.workspace.trigger("hover-link", {
-        event,
-        source: DECK_VIEW_TYPE,
-        hoverParent: this.leaf,
-        targetEl: link,
-        linktext,
-        sourcePath
-      });
-    });
-    target.addEventListener(
-      "click",
-      (event) => {
-        if (!(event.target instanceof Element)) {
-          return;
-        }
-        const link = event.target.closest("a");
-        const linkPath = link?.dataset.href ?? link?.getAttribute("href") ?? void 0;
-        if (link === null || linkPath === void 0 || linkPath === "") {
-          return;
-        }
+    attachRenderedLinkInteractions(target, {
+      previewEnabled: this.plugin.settings.previewLinksOnHover,
+      followEnabled: this.plugin.settings.followLinksFromCards,
+      preview: (event, link, linktext) => {
+        this.app.workspace.trigger("hover-link", {
+          event,
+          source: DECK_VIEW_TYPE,
+          hoverParent: this.leaf,
+          targetEl: link,
+          linktext,
+          sourcePath
+        });
+      },
+      follow: (event, link, linkPath) => {
         const internal = link.matches(".internal-link");
-        const newLeaf = event.metaKey || event.ctrlKey;
-        event.preventDefault();
-        event.stopImmediatePropagation();
+        const newLeaf = event.metaKey || event.ctrlKey || event.button === 1;
         void this.runAfterInlineEditing("rendered-link", async () => {
           const filed = internal ? resolveFiledCardLink((0, import_obsidian4.getLinkpath)(linkPath), sourcePath, {
             resolveFile: (path, source) => this.app.metadataCache.getFirstLinkpathDest(path, source),
@@ -6229,9 +6762,8 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
             window.open(link.href, "_blank", "noopener");
           }
         });
-      },
-      { capture: true }
-    );
+      }
+    });
   }
   recalculateFilingPreview() {
     const file = this.filingFile;
@@ -7622,6 +8154,12 @@ var DEFAULT_DATA = {
   settings: DEFAULT_SETTINGS,
   state: DEFAULT_STATE
 };
+var LEGACY_PAPER_WORKFLOW_SETTINGS = {
+  restrictViewedCardPaste: false,
+  previewLinksOnHover: true,
+  followLinksFromCards: true,
+  protectFiledCardText: false
+};
 function isRecord4(value) {
   return typeof value === "object" && value !== null;
 }
@@ -7663,7 +8201,10 @@ function normalizePluginData(value) {
   const versioned = isRecord4(value.state) || isRecord4(value.settings);
   const rawSettings = versioned && isRecord4(value.settings) ? value.settings : {};
   const rawState = versioned && isRecord4(value.state) ? value.state : value;
+  const schemaVersion = typeof value.schemaVersion === "number" ? value.schemaVersion : null;
+  const legacyPaperWorkflow = schemaVersion === null || schemaVersion < 10 ? LEGACY_PAPER_WORKFLOW_SETTINGS : {};
   const settingsWithMigratedSpread = {
+    ...legacyPaperWorkflow,
     ...rawSettings,
     cardSpread: Object.prototype.hasOwnProperty.call(rawSettings, "cardSpread") ? rawSettings.cardSpread : isRecord4(rawState) ? rawState.spread : void 0
   };
@@ -7742,6 +8283,32 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
             "Desk card size",
             "Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Desk cards remain smaller than main cards.",
             (setting) => this.renderDeskCardSize(setting)
+          )
+        ]
+      },
+      {
+        type: "group",
+        heading: "Paper workflow",
+        items: [
+          this.definition(
+            "Restrict pasting in viewed cards",
+            "In the Slipbox viewed-card editor, paste one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
+            (setting) => this.renderRestrictViewedCardPaste(setting)
+          ),
+          this.definition(
+            "Preview links on hover",
+            "Show Obsidian Page Preview popovers for links and backlinks inside Slipbox cards.",
+            (setting) => this.renderPreviewLinksOnHover(setting)
+          ),
+          this.definition(
+            "Follow links from cards",
+            "Allow links and backlinks inside Slipbox cards to navigate. Explicit Slipbox Open note actions remain available.",
+            (setting) => this.renderFollowLinksFromCards(setting)
+          ),
+          this.definition(
+            "Protect text present when editing begins",
+            "Prevent a filed card\u2019s existing body text from being deleted, replaced, or reordered during a viewed-card editing session. Text added during that session remains editable. Ordinary Markdown views are unaffected.",
+            (setting) => this.renderProtectFiledCardText(setting)
           )
         ]
       },
@@ -7857,6 +8424,38 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
       toggle.setValue(this.slipbox.settings.showDeckMap).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showDeckMap: value
+      }));
+    });
+  }
+  renderRestrictViewedCardPaste(setting) {
+    setting.addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.restrictViewedCardPaste).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        restrictViewedCardPaste: value
+      }));
+    });
+  }
+  renderPreviewLinksOnHover(setting) {
+    setting.addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.previewLinksOnHover).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        previewLinksOnHover: value
+      }));
+    });
+  }
+  renderFollowLinksFromCards(setting) {
+    setting.addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.followLinksFromCards).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        followLinksFromCards: value
+      }));
+    });
+  }
+  renderProtectFiledCardText(setting) {
+    setting.addToggle((toggle) => {
+      toggle.setValue(this.slipbox.settings.protectFiledCardText).onChange((value) => void this.save({
+        ...this.slipbox.settings,
+        protectFiledCardText: value
       }));
     });
   }
@@ -8758,6 +9357,12 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
         message: "The card was deleted while it was being edited."
       };
     }
+    if (!preservesProtectedText(request.protectedBody, request.draft)) {
+      return {
+        status: "policy-violation",
+        message: "Text present when editing began is protected."
+      };
+    }
     try {
       await this.app.vault.process(file, (latest) => {
         const contentStart = (0, import_obsidian9.getFrontMatterInfo)(latest).contentStart;
@@ -8794,6 +9399,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       path: snapshot.path,
       file,
       baseBody: snapshot.baseBody,
+      protectedBody: snapshot.protectedBody,
       draft: snapshot.draft,
       conflictMessage: snapshot.failure?.kind === "conflict" ? snapshot.failure.message : null,
       conflictRetryable: snapshot.conflictRetryable,

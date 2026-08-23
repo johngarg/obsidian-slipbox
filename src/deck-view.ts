@@ -110,6 +110,8 @@ import {
   shouldNavigateDeckFromWheel,
 } from "./inline-edit-interactions.js";
 import { beginThresholdPointerDrag } from "./pointer-drag.js";
+import { attachPaperWorkflowTextarea } from "./paper-workflow-dom.js";
+import { attachRenderedLinkInteractions } from "./rendered-link-interactions.js";
 import {
   createViewedCardState,
   moveViewedCardState,
@@ -160,6 +162,7 @@ interface MountedInlineEdit {
   readonly returnTarget: ViewedCardReturnTarget;
   readonly textarea: HTMLTextAreaElement;
   readonly statusEl: HTMLElement;
+  policyStatusTimer: number | null;
   readonly bodyEl: HTMLElement;
   readonly cardEl: HTMLElement;
   readonly renderedScrollTop: number;
@@ -250,6 +253,8 @@ export class DeckView extends ItemView {
       app: this.app,
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
+      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      followLinksFromCards: () => this.plugin.settings.followLinksFromCards,
       isInTray: (file) => this.plugin.isFileInTray(file),
       runAction: (action, target) => this.runAction(action, target),
       runAfterEditing: (reason, action) => {
@@ -280,6 +285,16 @@ export class DeckView extends ItemView {
       runAction: (action) => this.runAction(action),
       runAfterEditing: (reason, action) =>
         this.runAfterInlineEditing(reason, action),
+      previewLink: (event, link, linktext, sourcePath) => {
+        this.app.workspace.trigger("hover-link", {
+          event,
+          source: DECK_VIEW_TYPE,
+          hoverParent: this.leaf,
+          targetEl: link,
+          linktext,
+          sourcePath,
+        });
+      },
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => {
@@ -410,6 +425,7 @@ export class DeckView extends ItemView {
         },
       );
       this.plugin.releaseInlineEdit(editing.controller.snapshot.path, this);
+      this.clearInlineEditPolicyMessage();
       this.inlineEdit = null;
       this.setDeckKeybindingsSuspended(false);
     }
@@ -1345,6 +1361,7 @@ export class DeckView extends ItemView {
     const path = editing.controller.snapshot.path;
     const shouldSkipRender = ["view-close", "plugin-unload", "quit"]
       .some((reason) => reasons.has(reason));
+    this.clearInlineEditPolicyMessage();
     this.inlineEdit = null;
     this.plugin.releaseInlineEdit(path, this);
     this.setDeckKeybindingsSuspended(false);
@@ -1499,6 +1516,7 @@ export class DeckView extends ItemView {
     bodySurface: HTMLElement | null,
     restored?: {
       readonly baseBody: string;
+      readonly protectedBody: string | null;
       readonly draft: string;
       readonly conflictMessage: string | null;
       readonly conflictRetryable: boolean;
@@ -1533,9 +1551,16 @@ export class DeckView extends ItemView {
       const prepared = restored === undefined
         ? await this.plugin.prepareInlineEdit(file)
         : { file, body: restored.baseBody };
+      const protectedBody = restored === undefined
+        ? this.plugin.settings.protectFiledCardText &&
+            this.plugin.index.filedByFile(prepared.file) !== undefined
+          ? prepared.body
+          : null
+        : restored.protectedBody;
       const mounted = this.mountInlineEditing(
         prepared.file,
         prepared.body,
+        protectedBody,
         bodySurface,
         restored?.renderedScrollTop,
       );
@@ -1578,6 +1603,7 @@ export class DeckView extends ItemView {
   private mountInlineEditing(
     file: TFile,
     baseBody: string,
+    protectedBody: string | null,
     requestedBodySurface: HTMLElement | null,
     restoredRenderedScrollTop?: number,
   ): MountedInlineEdit {
@@ -1633,15 +1659,23 @@ export class DeckView extends ItemView {
         cancelScheduled: (handle) => window.clearTimeout(handle as number),
         reportFailure: (failure) => this.reportInlineEditFailure(failure),
       },
+      protectedBody,
     );
-    textarea.addEventListener("input", () => {
-      controller.updateDraft(textarea.value);
-      if (controller.snapshot.phase !== "conflict") {
-        bodyEl.removeClass("has-inline-edit-error");
-        textarea.removeAttribute("aria-invalid");
-        statusEl.hidden = true;
-        statusEl.setText("");
-      }
+    attachPaperWorkflowTextarea(textarea, {
+      restrictPaste: this.plugin.settings.restrictViewedCardPaste,
+      acceptsDraft: (draft) => controller.acceptsDraft(draft),
+      updateDraft: (draft) => controller.updateDraft(draft),
+      currentDraft: () => controller.snapshot.draft,
+      accepted: () => {
+        if (controller.snapshot.phase !== "conflict") {
+          this.clearInlineEditPolicyMessage();
+          bodyEl.removeClass("has-inline-edit-error");
+          textarea.removeAttribute("aria-invalid");
+          statusEl.hidden = true;
+          statusEl.setText("");
+        }
+      },
+      message: (message) => this.showInlineEditPolicyMessage(message),
     });
     textarea.addEventListener("pointerdown", (event) => event.stopPropagation());
     textarea.addEventListener("click", (event) => event.stopPropagation());
@@ -1652,6 +1686,7 @@ export class DeckView extends ItemView {
       returnTarget,
       textarea,
       statusEl,
+      policyStatusTimer: null,
       bodyEl,
       cardEl,
       renderedScrollTop,
@@ -1676,6 +1711,10 @@ export class DeckView extends ItemView {
   }
 
   private reportInlineEditFailure(failure: InlineEditFailure): void {
+    if (failure.kind === "policy") {
+      this.showInlineEditPolicyMessage(failure.message);
+      return;
+    }
     this.applyInlineEditFailure(failure);
     const detail = failure.error === undefined
       ? failure.message
@@ -1688,10 +1727,56 @@ export class DeckView extends ItemView {
     if (editing === null || failure === null) {
       return;
     }
+    if (failure.kind === "policy") {
+      this.showInlineEditPolicyMessage(failure.message);
+      return;
+    }
+    this.clearInlineEditPolicyMessage();
     editing.bodyEl.addClass("has-inline-edit-error");
     editing.textarea.setAttr("aria-invalid", "true");
     editing.statusEl.setText(failure.message);
     editing.statusEl.hidden = false;
+  }
+
+  private showInlineEditPolicyMessage(message: string): void {
+    const editing = this.inlineEdit;
+    if (editing === null) {
+      return;
+    }
+    const failure = editing.controller.snapshot.failure;
+    if (failure !== null && failure.kind !== "policy") {
+      return;
+    }
+    if (editing.policyStatusTimer !== null) {
+      window.clearTimeout(editing.policyStatusTimer);
+    }
+    editing.statusEl.addClass("is-policy-message");
+    editing.statusEl.setAttr("aria-live", "polite");
+    editing.statusEl.setText(message);
+    editing.statusEl.hidden = false;
+    editing.policyStatusTimer = window.setTimeout(() => {
+      if (this.inlineEdit === editing) {
+        this.clearInlineEditPolicyMessage();
+      }
+    }, 2_000);
+  }
+
+  private clearInlineEditPolicyMessage(): void {
+    const editing = this.inlineEdit;
+    if (editing === null) {
+      return;
+    }
+    if (editing.policyStatusTimer !== null) {
+      window.clearTimeout(editing.policyStatusTimer);
+      editing.policyStatusTimer = null;
+    }
+    if (!editing.statusEl.hasClass("is-policy-message")) {
+      return;
+    }
+    editing.statusEl.removeClass("is-policy-message");
+    editing.statusEl.setAttr("aria-live", "assertive");
+    editing.statusEl.setText("");
+    editing.statusEl.hidden = true;
   }
 
   private async rerenderEditedPath(
@@ -1735,6 +1820,7 @@ export class DeckView extends ItemView {
     await this.renderDeck(false);
     await this.beginInlineEditing(file, this.viewedCardBodyEl, {
       baseBody: draft.baseBody,
+      protectedBody: draft.protectedBody,
       draft: draft.draft,
       conflictMessage: draft.conflictMessage,
       conflictRetryable: draft.conflictRetryable,
@@ -2808,40 +2894,22 @@ export class DeckView extends ItemView {
     target: HTMLElement,
     sourcePath: string,
   ): void {
-    target.addEventListener("mouseover", (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
-      }
-      const link = event.target.closest<HTMLAnchorElement>("a.internal-link");
-      const linktext = link?.dataset.href ?? link?.getAttribute("href") ?? undefined;
-      if (link === null || linktext === undefined || linktext === "") {
-        return;
-      }
-      this.app.workspace.trigger("hover-link", {
-        event,
-        source: DECK_VIEW_TYPE,
-        hoverParent: this.leaf,
-        targetEl: link,
-        linktext,
-        sourcePath,
-      });
-    });
-
-    target.addEventListener(
-      "click",
-      (event) => {
-        if (!(event.target instanceof Element)) {
-          return;
-        }
-        const link = event.target.closest<HTMLAnchorElement>("a");
-        const linkPath = link?.dataset.href ?? link?.getAttribute("href") ?? undefined;
-        if (link === null || linkPath === undefined || linkPath === "") {
-          return;
-        }
+    attachRenderedLinkInteractions(target, {
+      previewEnabled: this.plugin.settings.previewLinksOnHover,
+      followEnabled: this.plugin.settings.followLinksFromCards,
+      preview: (event, link, linktext) => {
+        this.app.workspace.trigger("hover-link", {
+          event,
+          source: DECK_VIEW_TYPE,
+          hoverParent: this.leaf,
+          targetEl: link,
+          linktext,
+          sourcePath,
+        });
+      },
+      follow: (event, link, linkPath) => {
         const internal = link.matches(".internal-link");
-        const newLeaf = event.metaKey || event.ctrlKey;
-        event.preventDefault();
-        event.stopImmediatePropagation();
+        const newLeaf = event.metaKey || event.ctrlKey || event.button === 1;
         void this.runAfterInlineEditing("rendered-link", async () => {
           const filed = internal
             ? resolveFiledCardLink(getLinkpath(linkPath), sourcePath, {
@@ -2867,8 +2935,7 @@ export class DeckView extends ItemView {
           }
         });
       },
-      { capture: true },
-    );
+    });
   }
 
   private recalculateFilingPreview(): void {

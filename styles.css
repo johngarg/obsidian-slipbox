@@ -946,6 +946,11 @@ button.slipbox-tray-pile-cycle svg {
   display: none;
 }
 
+.slipbox-inline-edit-status.is-policy-message {
+  color: var(--text-muted);
+  font-weight: var(--font-normal);
+}
+
 .slipbox-inline-editor {
   display: block;
   width: 100%;
@@ -1132,11 +1137,16 @@ a.slipbox-card-backlink {
   cursor: pointer;
 }
 
-.slipbox-card-footer.is-interactive a.slipbox-card-backlink:hover,
-.menu-item-title a.slipbox-card-backlink:hover {
+.slipbox-card-footer.is-interactive a.slipbox-card-backlink:not([aria-disabled="true"]):hover,
+.menu-item-title a.slipbox-card-backlink:not([aria-disabled="true"]):hover {
   color: var(--text-normal);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+a.slipbox-card-backlink[aria-disabled="true"],
+.slipbox-card a[data-slipbox-link-disabled="true"] {
+  cursor: text;
 }
 
 button.slipbox-card-backlink-overflow,

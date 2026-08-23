@@ -2248,6 +2248,10 @@ export class DeckView extends ItemView {
     this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
+    this.contentEl.toggleClass(
+      "is-empty-startup-position",
+      this.plugin.deckIsCenteredAtEmptyStartup,
+    );
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     this.renderDeckMap(shell);

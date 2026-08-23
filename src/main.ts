@@ -114,6 +114,10 @@ import {
 } from "./inline-edit-session.js";
 import type { ViewedCardReturnTarget } from "./viewed-card.js";
 import {
+  deckPositionModeAfterPileCount,
+  type DeckPositionMode,
+} from "./workspace-layout.js";
+import {
   NoteBodyConflictError,
   replaceNoteBodyIfUnchanged,
   splitNoteBody,
@@ -173,6 +177,7 @@ export default class SlipboxPlugin extends Plugin {
   private filingWriteInProgress = false;
   private persistQueue: Promise<void> = Promise.resolve();
   private trayPileSequence = 0;
+  private deckPositionMode: DeckPositionMode = "startup-centered";
   private rawSettings: unknown = {};
   private readonly inlineEditOwners = new InlineEditPathLock<DeckView>();
   private readonly detachedInlineEditDrafts = new Map<
@@ -1440,6 +1445,10 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async refreshDeckViews(): Promise<void> {
+    this.deckPositionMode = deckPositionModeAfterPileCount(
+      this.deckPositionMode,
+      this.tray.piles.length,
+    );
     this.updateProblemStatusBarItem();
     await Promise.all(
       this.app.workspace
@@ -1448,6 +1457,10 @@ export default class SlipboxPlugin extends Plugin {
           leaf.view instanceof DeckView ? [leaf.view.refresh()] : [],
         ),
     );
+  }
+
+  get deckIsCenteredAtEmptyStartup(): boolean {
+    return this.deckPositionMode === "startup-centered";
   }
 
   private refreshBookmarkUi(): void {

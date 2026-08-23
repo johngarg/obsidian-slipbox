@@ -2,9 +2,30 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  deckPositionModeAfterPileCount,
   deckTopForPileAnchor,
   defaultPilePosition,
 } from "../src/workspace-layout.js";
+
+describe("startup Deck position", () => {
+  test("centres only while the startup session has never contained a pile", () => {
+    assert.equal(
+      deckPositionModeAfterPileCount("startup-centered", 0),
+      "startup-centered",
+    );
+    assert.equal(
+      deckPositionModeAfterPileCount("startup-centered", 1),
+      "lowered",
+    );
+  });
+
+  test("does not recenter after the last pile is removed", () => {
+    assert.equal(
+      deckPositionModeAfterPileCount("lowered", 0),
+      "lowered",
+    );
+  });
+});
 
 describe("size-aware pile anchor", () => {
   test("keeps the home pile centred and cascades later piles right and down", () => {

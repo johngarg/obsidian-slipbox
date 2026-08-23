@@ -72,10 +72,12 @@ Piles are anonymous and float directly beside the filed cards in the same
 workspace. The home pile initially sits 24 px above the actual Deck footprint,
 so the clearance follows the configured card sizes; later automatic piles
 cascade right and down, leaving each preceding header visible. Adding or
-removing piles never moves or resizes the fixed Deck, whose lower initial
-position leaves more room for pile manipulation above it. Piles may clip at the
-workspace edges or overlap the Deck. Manually positioned piles stay where they
-are placed. A collapsed pile shows its
+removing piles never raises the Deck again: an empty startup begins centred,
+then the first pile moves the Deck to its lower working position for the rest
+of the session. A startup that reconstructs unfiled cards begins in that lower
+position immediately. This leaves more room for pile manipulation above it.
+Piles may clip at the workspace edges or overlap the Deck. Manually positioned
+piles stay where they are placed. A collapsed pile shows its
 readable top card and count, with the slightly varied corners of the cards
 beneath it exposed. Hover a multi-card pile and use the side arrows to
 cycle its top card without opening it. Click the pile itself to expand its

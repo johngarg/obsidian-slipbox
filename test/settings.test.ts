@@ -122,6 +122,8 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.previewLinksOnHover, false);
     assert.equal(DEFAULT_SETTINGS.followLinksFromCards, false);
     assert.equal(DEFAULT_SETTINGS.protectFiledCardText, true);
+    assert.equal(DEFAULT_SETTINGS.showAutomaticBacklinks, true);
+    assert.equal(DEFAULT_SETTINGS.allowCardScrolling, true);
     assert.equal(DEFAULT_SETTINGS.cardSpread, DEFAULT_CARD_SPREAD);
   });
 
@@ -488,17 +490,23 @@ describe("Slipbox settings", () => {
       previewLinksOnHover: true,
       followLinksFromCards: true,
       protectFiledCardText: false,
+      showAutomaticBacklinks: false,
+      allowCardScrolling: false,
     });
     assert.equal(permissive.restrictViewedCardPaste, false);
     assert.equal(permissive.previewLinksOnHover, true);
     assert.equal(permissive.followLinksFromCards, true);
     assert.equal(permissive.protectFiledCardText, false);
+    assert.equal(permissive.showAutomaticBacklinks, false);
+    assert.equal(permissive.allowCardScrolling, false);
 
     const persisted = settingsForPersistence({}, permissive);
     assert.equal(persisted.restrictViewedCardPaste, false);
     assert.equal(persisted.previewLinksOnHover, true);
     assert.equal(persisted.followLinksFromCards, true);
     assert.equal(persisted.protectFiledCardText, false);
+    assert.equal(persisted.showAutomaticBacklinks, false);
+    assert.equal(persisted.allowCardScrolling, false);
   });
 
   test("purges entry-point shortcuts while preserving other removed settings", () => {

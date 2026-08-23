@@ -982,6 +982,12 @@ button.slipbox-tray-pile-cycle svg {
   scrollbar-gutter: stable;
 }
 
+.slipbox-card-scroll.markdown-rendered.is-card-scroll-clipped {
+  overflow: clip;
+  overscroll-behavior: auto;
+  scrollbar-gutter: auto;
+}
+
 .slipbox-card-scroll.is-inline-editing {
   position: relative;
   padding: 0;

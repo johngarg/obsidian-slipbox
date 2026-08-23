@@ -247,8 +247,8 @@ longer exist.
 
 ## Other features
 
-- Rendered Markdown cards with raw-Markdown inline editing, internal scrolling,
-  and fixed backlink footers.
+- Rendered Markdown cards with raw-Markdown inline editing and optional
+  scrolling and automatic-backlink footers.
 - Free background panning, horizontal trackpad browsing, minimal-reveal arrow
   navigation, and persistent card spread configured in Settings.
 - A subtle ordinal Deck map with at most 512 evenly sampled neutral markers,
@@ -325,7 +325,7 @@ Main-card and Desk-card sizes each have small, medium, and large presets. Medium
 preserves the default 840 px main-card cap and 360 px Desk-card cap. Desk
 presets remain smaller than main-card presets, including on narrow views.
 
-`Paper workflow` contains four Slipbox-only controls. Fresh installations
+`Paper workflow` contains six Slipbox-only controls. Fresh installations
 restrict viewed-card paste and protect a filed card's session-start text by
 default. Link previews and link following are off by default. Preview and follow
 are independent: disabling previews suppresses Page Preview hover events, while
@@ -336,6 +336,15 @@ Slipbox actions such as **Open Markdown note**, header buttons, commands,
 bookmarks, and Deck navigation remain available. Link-setting changes refresh
 open Slipbox views, while paste and protection choices are captured when the
 next viewed-card editing session starts.
+
+`Show automatic backlinks` is on by default. Turning it off removes the complete
+36 px backlink footer from filed Deck and viewed cards, including its blank
+geometry when no backlinks exist. Obsidian's link graph and links written in the
+card body are unchanged. `Allow scrolling in cards` is also on by default.
+Turning it off resets remembered positions and clips excess rendered content at
+the bottom edge of Deck and viewed cards. Desk cards already clip. The raw
+viewed-card editor and ordinary Obsidian Markdown views remain scrollable.
+Both display settings refresh open Slipbox views immediately.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
 The empty default follows Obsidian's own **Default location for new notes**
@@ -535,6 +544,10 @@ plugin data migrate to the previous permissive behavior—unrestricted paste,
 link previews and following enabled, and no filed-text protection—unless an
 explicit boolean was already stored. Only genuinely fresh installations receive
 the paper-based defaults.
+
+Schema 11 adds automatic-backlink visibility and rendered-card scrolling.
+Missing or invalid values preserve the previous display: automatic backlink
+footers and scrolling remain enabled.
 
 ## Development
 

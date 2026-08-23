@@ -25,6 +25,10 @@ import {
 } from "./deck-motion.js";
 import type { FiledCard } from "./card-index.js";
 import {
+  configureRenderedCardBody,
+  shouldRenderAutomaticBacklinks,
+} from "./card-display.js";
+import {
   CardFooterManager,
   type CardFooterEnvironment,
 } from "./card-footer.js";
@@ -2065,22 +2069,32 @@ export class DeckView extends ItemView {
     target.empty();
     target.removeClasses(["is-inline-editing", "has-inline-edit-error"]);
     target.addClass("markdown-rendered");
+    const effectiveScrollTop = configureRenderedCardBody(
+      target,
+      this.plugin.settings.allowCardScrolling,
+      scrollTop,
+    );
     if (
       this.viewedCard?.path === file.path &&
       target.closest(".slipbox-viewed-card") !== null
     ) {
-      this.viewedCard = scrollViewedCardState(this.viewedCard, scrollTop);
+      this.viewedCard = scrollViewedCardState(
+        this.viewedCard,
+        effectiveScrollTop,
+      );
       await this.renderViewedMarkdownCard(file, target);
-      target.scrollTop = scrollTop;
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
     if (filed === undefined) {
       return;
     }
-    this.cardScrollPositions.set(file.path, scrollTop);
+    if (this.plugin.settings.allowCardScrolling) {
+      this.cardScrollPositions.set(file.path, effectiveScrollTop);
+    } else {
+      this.cardScrollPositions.delete(file.path);
+    }
     await this.renderMarkdownCard(filed, target, this.deckRenderVersion);
-    target.scrollTop = scrollTop;
   }
 
   private async restoreDetachedInlineEdit(): Promise<void> {
@@ -2194,8 +2208,15 @@ export class DeckView extends ItemView {
     }
     const version = ++this.renderVersion;
     const deckVersion = ++this.deckRenderVersion;
-    this.rememberScrollPositions();
-    this.rememberViewedCardScroll();
+    if (this.plugin.settings.allowCardScrolling) {
+      this.rememberScrollPositions();
+      this.rememberViewedCardScroll();
+    } else {
+      this.cardScrollPositions.clear();
+      if (this.viewedCard !== null) {
+        this.viewedCard = scrollViewedCardState(this.viewedCard, 0);
+      }
+    }
     if (
       this.viewedCard !== null &&
       this.plugin.index.fileAtPath(this.viewedCard.path) === undefined
@@ -2772,13 +2793,22 @@ export class DeckView extends ItemView {
       }));
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
-      scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
-      this.cardFooters.render(frame, {
-        sourcePath: card.path,
-        backlinks: this.plugin.index.backlinksForPath(card.path),
-        interactive: filedIndex === activeIndex,
-        activate: (backlink) => this.jumpToPath(backlink.path),
-      });
+      configureRenderedCardBody(
+        scroll,
+        this.plugin.settings.allowCardScrolling,
+        this.cardScrollPositions.get(card.path) ?? 0,
+      );
+      if (shouldRenderAutomaticBacklinks(
+        this.plugin.settings.showAutomaticBacklinks,
+        true,
+      )) {
+        this.cardFooters.render(frame, {
+          sourcePath: card.path,
+          backlinks: this.plugin.index.backlinksForPath(card.path),
+          interactive: filedIndex === activeIndex,
+          activate: (backlink) => this.jumpToPath(backlink.path),
+        });
+      }
       jobs.push(this.renderMarkdownCard(card, scroll, deckVersion));
       cardEl.addEventListener("contextmenu", (event) => {
         const target = event.target;
@@ -2955,7 +2985,11 @@ export class DeckView extends ItemView {
     }
 
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
-    body.scrollTop = state.scrollTop;
+    configureRenderedCardBody(
+      body,
+      this.plugin.settings.allowCardScrolling,
+      state.scrollTop,
+    );
     body.addEventListener("scroll", () => {
       if (this.viewedCard?.path === file.path) {
         this.viewedCard = scrollViewedCardState(this.viewedCard, body.scrollTop);
@@ -2971,7 +3005,10 @@ export class DeckView extends ItemView {
       void this.editCardOnDesk(file);
     });
     this.viewedCardBodyEl = body;
-    if (filed !== undefined) {
+    if (shouldRenderAutomaticBacklinks(
+      this.plugin.settings.showAutomaticBacklinks,
+      filed !== undefined,
+    ) && filed !== undefined) {
       this.viewedCardFooter.render(frame, {
         sourcePath: filed.path,
         backlinks: this.plugin.index.backlinksForPath(filed.path),
@@ -3034,7 +3071,11 @@ export class DeckView extends ItemView {
         component,
       );
       this.attachInternalLinkInteractions(target, file.path);
-      target.scrollTop = this.viewedCard.scrollTop;
+      configureRenderedCardBody(
+        target,
+        this.plugin.settings.allowCardScrolling,
+        this.viewedCard.scrollTop,
+      );
     } catch (error) {
       target.createEl("p", {
         cls: "slipbox-render-error",
@@ -3181,7 +3222,11 @@ export class DeckView extends ItemView {
         component,
       );
       this.attachInternalLinkInteractions(target, card.file.path);
-      target.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
+      configureRenderedCardBody(
+        target,
+        this.plugin.settings.allowCardScrolling,
+        this.cardScrollPositions.get(card.path) ?? 0,
+      );
     } catch (error) {
       target.createEl("p", {
         cls: "slipbox-render-error",

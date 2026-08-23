@@ -125,6 +125,16 @@ export class SlipboxSettingTab extends PluginSettingTab {
             "Prevent a filed card’s existing body text from being deleted, replaced, or reordered during a viewed-card editing session. Text added during that session remains editable. Ordinary Markdown views are unaffected.",
             (setting) => this.renderProtectFiledCardText(setting),
           ),
+          this.definition(
+            "Show automatic backlinks",
+            "Reserve a footer on filed Deck and viewed cards for backlinks from Obsidian’s link graph. Turn off to remove the footer entirely; links written in card bodies are unaffected.",
+            (setting) => this.renderShowAutomaticBacklinks(setting),
+          ),
+          this.definition(
+            "Allow scrolling in cards",
+            "Allow rendered Deck and viewed cards to scroll when their content does not fit. Turn off to show each card from the top and clip content beyond its bottom edge. Desk cards already clip; the viewed-card editor and ordinary Markdown views remain scrollable.",
+            (setting) => this.renderAllowCardScrolling(setting),
+          ),
         ],
       },
       {
@@ -319,6 +329,28 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .onChange((value) => void this.save({
           ...this.slipbox.settings,
           protectFiledCardText: value,
+        }));
+    });
+  }
+
+  private renderShowAutomaticBacklinks(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.showAutomaticBacklinks)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          showAutomaticBacklinks: value,
+        }));
+    });
+  }
+
+  private renderAllowCardScrolling(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.allowCardScrolling)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          allowCardScrolling: value,
         }));
     });
   }

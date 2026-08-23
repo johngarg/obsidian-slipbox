@@ -368,6 +368,18 @@ function fitMeasuredBacklinkPrefix(availableWidth, itemWidths, totalCount, separ
 function trayToggleLabel(inTray) {
   return inTray ? "Return from Desk" : "Put on Desk";
 }
+function deskToggleFocusTarget(surface, onDesk, focusPulledCard) {
+  if (!focusPulledCard) {
+    return "preserve";
+  }
+  if (!onDesk && surface === "deck") {
+    return "desk";
+  }
+  if (onDesk && (surface === "desk" || surface === "viewed")) {
+    return "deck";
+  }
+  return "preserve";
+}
 function canRunDeckAction(action, context) {
   switch (action) {
     case "previous-card":
@@ -388,17 +400,19 @@ function canRunDeckAction(action, context) {
     case "delete-card":
       return context.hasFocusedCard;
     case "edit-card":
-      return context.hasFocusedCard && !(context.focusedSurface === "deck" && context.focusedCardOnDesk);
+      return context.hasFocusedCard && context.focusedSurface !== "deck";
     case "copy-link":
     case "toggle-tray":
     case "pull-into-pile":
       return context.focusedCardFiled;
+    case "toggle-tray-without-focus":
+      return context.focusedCardFiled && context.focusedSurface === "deck";
     case "toggle-bookmark":
       return context.focusedCardFiled && context.focusedSurface === "deck";
     case "show-card-in-deck":
       return context.focusedCardFiled && context.focusedSurface !== "deck";
     case "toggle-viewed-card":
-      return context.hasFocusedCard && !(context.focusedSurface === "deck" && context.focusedCardOnDesk) && (context.focusedSurface === "deck" || context.focusedSurface === "desk" || context.focusedSurface === "viewed");
+      return context.hasFocusedCard && (context.focusedSurface === "desk" || context.focusedSurface === "viewed");
     case "file-card":
       return context.focusedCardUnfiled && context.focusedSurface !== "deck";
     case "move-desk-card-left":
@@ -816,7 +830,7 @@ var import_obsidian2 = require("obsidian");
 
 // src/card-header-actions.ts
 var CARD_BUTTON_DEFINITIONS = [
-  { action: "edit-card", settingLabel: "Edit card", surfaces: ["deck", "desk", "viewed"] },
+  { action: "edit-card", settingLabel: "Edit card", surfaces: ["desk", "viewed"] },
   { action: "open-note", settingLabel: "Open Markdown note", surfaces: ["deck", "desk", "viewed"] },
   { action: "toggle-viewed-card", settingLabel: "View or return card to its source", surfaces: ["desk", "viewed"] },
   { action: "show-card-in-deck", settingLabel: "Show card in Deck", surfaces: ["desk", "viewed"] },
@@ -830,7 +844,6 @@ var CARD_BUTTON_DEFINITIONS = [
 ];
 var CARD_BUTTON_ORDER = {
   deck: [
-    "edit-card",
     "open-note",
     "toggle-tray",
     "copy-link",
@@ -876,13 +889,10 @@ function cardHeaderActionPresentation(action, context) {
   }
   switch (definition.action) {
     case "edit-card":
-      if (context.surface === "deck" && context.onDesk) {
-        return null;
-      }
       return {
         action: definition.action,
         icon: "file-pen-line",
-        label: context.surface === "deck" || context.surface === "viewed" && context.viewedReturnSurface === "deck" ? "Edit on Desk" : "Edit card"
+        label: "Edit card"
       };
     case "open-note":
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };
@@ -1212,6 +1222,12 @@ var BASE_ACTION_DEFINITIONS = [
     defaultBindings: [binding("p")]
   },
   {
+    id: "toggle-tray-without-focus",
+    label: "Put focused Deck card on or return it from Desk without moving focus",
+    repeatable: false,
+    defaultBindings: [binding("p", ["Alt"])]
+  },
+  {
     id: "toggle-bookmark",
     label: "Toggle bookmark on focused Deck card",
     repeatable: false,
@@ -1375,6 +1391,7 @@ var FOCUSED_CARD_ACTIONS = /* @__PURE__ */ new Set([
   "open-note",
   "copy-link",
   "toggle-tray",
+  "toggle-tray-without-focus",
   "toggle-bookmark",
   "pull-into-pile",
   "toggle-pile",
@@ -1412,7 +1429,6 @@ var allCardHeaderButtons = (enabled) => Object.fromEntries(
 );
 var DEFAULT_CARD_HEADER_BUTTONS = {
   deck: allCardHeaderButtons([
-    "edit-card",
     "open-note",
     "toggle-tray",
     "copy-link",
@@ -4312,6 +4328,38 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.focusDeskCard(path, position.pileId);
     return true;
   }
+  async toggleFocusedCardOnDesk(card, focusPulledCard) {
+    const wasOnDesk = this.plugin.isFileInTray(card.file);
+    const focusTarget = deskToggleFocusTarget(
+      this.cardFocus?.surface ?? null,
+      wasOnDesk,
+      focusPulledCard
+    );
+    if (focusTarget === "deck") {
+      if (this.cardFocus?.surface === "viewed") {
+        this.viewedCard = null;
+        this.viewedCardEl = null;
+        this.viewedCardBodyEl = null;
+      }
+      this.setDeckAnchor(card.path);
+      this.assignCardFocus(deckCardFocus(card.path));
+      this.viewportOffset = 0;
+    }
+    const refresh = this.plugin.toggleFileInTray(card.file);
+    if (focusTarget === "desk") {
+      const position = cardPosition(this.plugin.tray, card.path);
+      if (position !== null) {
+        this.assignCardFocus(deskCardFocus(card.path, position.pileId));
+      }
+    }
+    await refresh;
+    if (focusTarget !== "desk" || !this.focusDeskCardAtPath(card.path)) {
+      return;
+    }
+    this.stageEl?.querySelector(
+      `.slipbox-tray-card[data-card-ref="${CSS.escape(card.path)}"]`
+    )?.focus({ preventScroll: true });
+  }
   focusDeckCard(path) {
     if (this.plugin.index.filedByPath(path) === void 0) {
       return;
@@ -4770,12 +4818,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         break;
       case "toggle-tray":
         if (card !== null) {
-          if (this.cardFocus?.surface === "desk" && this.plugin.isFileInTray(card.file)) {
-            this.setDeckAnchor(card.path);
-            this.assignCardFocus(deckCardFocus(card.path));
-            this.viewportOffset = 0;
-          }
-          void this.plugin.toggleFileInTray(card.file);
+          void this.toggleFocusedCardOnDesk(card, true);
+        }
+        break;
+      case "toggle-tray-without-focus":
+        if (card !== null) {
+          void this.toggleFocusedCardOnDesk(card, false);
         }
         break;
       case "toggle-bookmark":
@@ -5050,6 +5098,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     );
   }
   async viewCard(file, returnTarget, editImmediately) {
+    if (!this.plugin.isFileInTray(file)) {
+      new import_obsidian4.Notice("Put the card on the Desk before viewing it.");
+      return;
+    }
     if (this.filingFile !== null) {
       new import_obsidian4.Notice("Finish filing before viewing another card.");
       return;
@@ -5073,14 +5125,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
   }
   async editCardOnDesk(file) {
-    if (this.cardFocus?.surface === "deck" && this.plugin.isFileInTray(file)) {
+    if (!this.plugin.isFileInTray(file)) {
+      new import_obsidian4.Notice("Put the card on the Desk before editing it.");
       return;
     }
     if (this.filingFile !== null) {
       new import_obsidian4.Notice("Finish filing before editing a card body.");
-      return;
-    }
-    if (!await this.plugin.putFileOnDesk(file)) {
       return;
     }
     let position = cardPosition(this.plugin.tray, file.path);
@@ -5928,15 +5978,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       }));
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
-      scroll.addEventListener("dblclick", (event) => {
-        if (isInTray || !isInlineEditBodyTarget(event.target, scroll)) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        this.focusDeckCard(card.path);
-        void this.editCardOnDesk(card.file);
-      });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),

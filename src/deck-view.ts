@@ -38,7 +38,10 @@ import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
-import { canRunDeckAction } from "./deck-actions.js";
+import {
+  canRunDeckAction,
+  deskToggleFocusTarget,
+} from "./deck-actions.js";
 import {
   renderCardHeaderButtons,
   type CardHeaderButtonController,
@@ -558,6 +561,48 @@ export class DeckView extends ItemView {
     }
     this.focusDeskCard(path, position.pileId);
     return true;
+  }
+
+  private async toggleFocusedCardOnDesk(
+    card: FiledCard,
+    focusPulledCard: boolean,
+  ): Promise<void> {
+    const wasOnDesk = this.plugin.isFileInTray(card.file);
+    const focusTarget = deskToggleFocusTarget(
+      this.cardFocus?.surface ?? null,
+      wasOnDesk,
+      focusPulledCard,
+    );
+
+    if (focusTarget === "deck") {
+      if (this.cardFocus?.surface === "viewed") {
+        this.viewedCard = null;
+        this.viewedCardEl = null;
+        this.viewedCardBodyEl = null;
+      }
+      this.setDeckAnchor(card.path);
+      this.assignCardFocus(deckCardFocus(card.path));
+      this.viewportOffset = 0;
+    }
+
+    // toggleFileInTray updates the shared tray synchronously before refreshing
+    // views. Assigning logical Desk focus immediately makes a quick p, e chord
+    // reliable even while the refreshed card presentation is mounting.
+    const refresh = this.plugin.toggleFileInTray(card.file);
+    if (focusTarget === "desk") {
+      const position = cardPosition(this.plugin.tray, card.path);
+      if (position !== null) {
+        this.assignCardFocus(deskCardFocus(card.path, position.pileId));
+      }
+    }
+    await refresh;
+
+    if (focusTarget !== "desk" || !this.focusDeskCardAtPath(card.path)) {
+      return;
+    }
+    this.stageEl?.querySelector<HTMLElement>(
+      `.slipbox-tray-card[data-card-ref="${CSS.escape(card.path)}"]`,
+    )?.focus({ preventScroll: true });
   }
 
   private focusDeckCard(path: string): void {
@@ -1134,15 +1179,12 @@ export class DeckView extends ItemView {
         break;
       case "toggle-tray":
         if (card !== null) {
-          if (
-            this.cardFocus?.surface === "desk" &&
-            this.plugin.isFileInTray(card.file)
-          ) {
-            this.setDeckAnchor(card.path);
-            this.assignCardFocus(deckCardFocus(card.path));
-            this.viewportOffset = 0;
-          }
-          void this.plugin.toggleFileInTray(card.file);
+          void this.toggleFocusedCardOnDesk(card, true);
+        }
+        break;
+      case "toggle-tray-without-focus":
+        if (card !== null) {
+          void this.toggleFocusedCardOnDesk(card, false);
         }
         break;
       case "toggle-bookmark":
@@ -1462,6 +1504,10 @@ export class DeckView extends ItemView {
     returnTarget: ViewedCardReturnTarget,
     editImmediately: boolean,
   ): Promise<void> {
+    if (!this.plugin.isFileInTray(file)) {
+      new Notice("Put the card on the Desk before viewing it.");
+      return;
+    }
     if (this.filingFile !== null) {
       new Notice("Finish filing before viewing another card.");
       return;
@@ -1486,17 +1532,12 @@ export class DeckView extends ItemView {
   }
 
   private async editCardOnDesk(file: TFile): Promise<void> {
-    if (
-      this.cardFocus?.surface === "deck" &&
-      this.plugin.isFileInTray(file)
-    ) {
+    if (!this.plugin.isFileInTray(file)) {
+      new Notice("Put the card on the Desk before editing it.");
       return;
     }
     if (this.filingFile !== null) {
       new Notice("Finish filing before editing a card body.");
-      return;
-    }
-    if (!(await this.plugin.putFileOnDesk(file))) {
       return;
     }
     let position = cardPosition(this.plugin.tray, file.path);
@@ -2493,15 +2534,6 @@ export class DeckView extends ItemView {
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
-      scroll.addEventListener("dblclick", (event) => {
-        if (isInTray || !isInlineEditBodyTarget(event.target, scroll)) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        this.focusDeckCard(card.path);
-        void this.editCardOnDesk(card.file);
-      });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),

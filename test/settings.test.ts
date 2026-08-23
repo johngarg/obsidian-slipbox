@@ -52,6 +52,9 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray"], [
       { key: "p", modifiers: [] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray-without-focus"], [
+      { key: "p", modifiers: ["Alt"] },
+    ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["copy-link"], [
       { key: "y", modifiers: [] },
     ]);
@@ -106,7 +109,7 @@ describe("Slipbox settings", () => {
       { key: "m", modifiers: [] },
     ]);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["copy-link"], true);
-    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["edit-card"], true);
+    assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["edit-card"], false);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["toggle-viewed-card"], false);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["delete-card"], false);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.desk["show-card-in-deck"], true);
@@ -255,6 +258,17 @@ describe("Slipbox settings", () => {
     }]);
     assert.deepEqual(settings.deckKeybindings["previous-card-in-pile"], []);
     assert.deepEqual(settings.deckKeybindings["toggle-pile"], []);
+  });
+
+  test("does not let the new background-pull default displace an existing Alt+p", () => {
+    const normalized = normalizeDeckKeybindings({
+      "open-note": [{ key: "p", modifiers: ["Alt"] }],
+    });
+    assert.deepEqual(normalized["open-note"], [{
+      key: "p",
+      modifiers: ["Alt"],
+    }]);
+    assert.deepEqual(normalized["toggle-tray-without-focus"], []);
   });
 
   test("formats shifted pile-navigation symbols without redundant Shift text", () => {

@@ -30,7 +30,7 @@ export interface CardHeaderButtonDefinition {
 }
 
 export const CARD_BUTTON_DEFINITIONS: readonly CardHeaderButtonDefinition[] = [
-  { action: "edit-card", settingLabel: "Edit card", surfaces: ["deck", "desk", "viewed"] },
+  { action: "edit-card", settingLabel: "Edit card", surfaces: ["desk", "viewed"] },
   { action: "open-note", settingLabel: "Open Markdown note", surfaces: ["deck", "desk", "viewed"] },
   { action: "toggle-viewed-card", settingLabel: "View or return card to its source", surfaces: ["desk", "viewed"] },
   { action: "show-card-in-deck", settingLabel: "Show card in Deck", surfaces: ["desk", "viewed"] },
@@ -48,7 +48,6 @@ export const CARD_BUTTON_ORDER: Readonly<Record<
   readonly CardHeaderButtonAction[]
 >> = {
   deck: [
-    "edit-card",
     "open-note",
     "toggle-tray",
     "copy-link",
@@ -106,16 +105,10 @@ export function cardHeaderActionPresentation(
 
   switch (definition.action) {
     case "edit-card":
-      if (context.surface === "deck" && context.onDesk) {
-        return null;
-      }
       return {
         action: definition.action,
         icon: "file-pen-line",
-        label: context.surface === "deck" ||
-            (context.surface === "viewed" && context.viewedReturnSurface === "deck")
-          ? "Edit on Desk"
-          : "Edit card",
+        label: "Edit card",
       };
     case "open-note":
       return { action: definition.action, icon: "file-text", label: "Open Markdown note" };

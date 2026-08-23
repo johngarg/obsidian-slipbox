@@ -1740,6 +1740,12 @@ function keyBindingConflict(keybindings, action, bindingValue) {
 }
 
 // src/shortcut-arbitration.ts
+function installEarlyShortcutObserver(ownerWindow, observer) {
+  ownerWindow.addEventListener("keydown", observer, { capture: true });
+  return () => ownerWindow.removeEventListener("keydown", observer, {
+    capture: true
+  });
+}
 var ShortcutCommandTracker = class {
   observedEvent;
   pendingDispatch;
@@ -4175,6 +4181,13 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   async onOpen() {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (ownerWindow !== null) {
+      this.register(installEarlyShortcutObserver(
+        ownerWindow,
+        (event) => this.deferConfiguredDeckShortcut(event)
+      ));
+    }
     this.register(installPendingDeckCommandKeyCapture(
       this.contentEl.ownerDocument,
       {
@@ -4192,12 +4205,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         }
       }
     ));
-    this.registerDomEvent(
-      this.contentEl.ownerDocument,
-      "keydown",
-      (event) => this.deferConfiguredDeckShortcut(event),
-      { capture: true }
-    );
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (this.handleDeckEscape(event)) {
         return;
@@ -4242,7 +4249,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         }
       })
     );
-    const ownerWindow = this.contentEl.ownerDocument.defaultView;
     if (ownerWindow !== null) {
       this.registerDomEvent(ownerWindow, "blur", () => {
         if (this.inlineEdit !== null) {

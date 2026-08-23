@@ -1,13 +1,40 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { Window as HappyWindow } from "happy-dom";
 
 import {
   arbitrateShortcut,
   classifyShortcutClaim,
+  installEarlyShortcutObserver,
   ShortcutCommandTracker,
 } from "../src/shortcut-arbitration.js";
 
 describe("Slipbox shortcut arbitration", () => {
+  test("observes a shortcut before Obsidian consumes it at document capture", () => {
+    const testWindow = new HappyWindow();
+    let observations = 0;
+    let laterDocumentListeners = 0;
+    const uninstall = installEarlyShortcutObserver(
+      testWindow as unknown as Window,
+      () => { observations += 1; },
+    );
+    testWindow.document.addEventListener("keydown", (event) => {
+      event.stopImmediatePropagation();
+    }, { capture: true });
+    testWindow.document.addEventListener("keydown", () => {
+      laterDocumentListeners += 1;
+    }, { capture: true });
+
+    testWindow.document.body.dispatchEvent(new testWindow.KeyboardEvent(
+      "keydown",
+      { bubbles: true, key: "ArrowLeft" },
+    ));
+
+    assert.equal(observations, 1);
+    assert.equal(laterDocumentListeners, 0);
+    uninstall();
+  });
+
   test("associates a dispatched command with the observed key event", () => {
     const tracker = new ShortcutCommandTracker<object, string>();
     const observedEvent = {};

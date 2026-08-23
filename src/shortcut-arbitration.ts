@@ -8,6 +8,16 @@ export type ShortcutClaim =
   | "other-command"
   | "unclaimed";
 
+export function installEarlyShortcutObserver(
+  ownerWindow: Window,
+  observer: (event: KeyboardEvent) => void,
+): () => void {
+  ownerWindow.addEventListener("keydown", observer, { capture: true });
+  return () => ownerWindow.removeEventListener("keydown", observer, {
+    capture: true,
+  });
+}
+
 export class ShortcutCommandTracker<TEvent extends object, TAction> {
   private observedEvent: TEvent | undefined;
   private pendingDispatch: {

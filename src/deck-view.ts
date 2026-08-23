@@ -57,6 +57,7 @@ import {
 import {
   arbitrateShortcut,
   classifyShortcutClaim,
+  installEarlyShortcutObserver,
   ShortcutCommandTracker,
 } from "./shortcut-arbitration.js";
 import {
@@ -331,6 +332,13 @@ export class DeckView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (ownerWindow !== null) {
+      this.register(installEarlyShortcutObserver(
+        ownerWindow,
+        (event) => this.deferConfiguredDeckShortcut(event),
+      ));
+    }
     this.register(installPendingDeckCommandKeyCapture(
       this.contentEl.ownerDocument,
       {
@@ -348,12 +356,6 @@ export class DeckView extends ItemView {
         },
       },
     ));
-    this.registerDomEvent(
-      this.contentEl.ownerDocument,
-      "keydown",
-      (event) => this.deferConfiguredDeckShortcut(event),
-      { capture: true },
-    );
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (this.handleDeckEscape(event)) {
         return;
@@ -403,7 +405,6 @@ export class DeckView extends ItemView {
         }
       }),
     );
-    const ownerWindow = this.contentEl.ownerDocument.defaultView;
     if (ownerWindow !== null) {
       this.registerDomEvent(ownerWindow, "blur", () => {
         if (this.inlineEdit !== null) {

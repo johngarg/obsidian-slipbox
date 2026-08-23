@@ -109,7 +109,7 @@ The Deck anchor is separate. It records the Deck position used by scrolling,
 the map, bookmark jumps, and Deck navigation. When card focus is on the
 Desk or a viewed card, the anchor keeps a neutral grey outline while the focused
 presentation alone keeps the accent outline. Horizontal scrolling, `Left`/
-`Right`, `j`/`k`, address jumps, and bookmark jumps always move the
+`Right`, `j`/`k`, the address-initial jump, and bookmark jumps always move the
 anchor. Focus follows only if it already belongs to the Deck. `c` centres the
 anchor without transferring focus.
 
@@ -371,8 +371,6 @@ newly created card.
 | `Space` | Expand or collapse the focused Desk card's pile |
 | `h` / `l` | Focus the previous/next card in a pile, wrapping at both ends |
 | `Alt+←` / `Alt+→` | Move the focused Desk card within its pile |
-| `f` then a character | Find the next card whose address begins with that character |
-| `F` then a character | Find the previous card whose address begins with that character |
 | `g` then a character | Find the first card from the start whose address begins with that character |
 | `P` then a pile number and `Enter` | Put or move the focused filed card into that one-based visible pile |
 | `m` | Toggle this Slipbox view's Deck map |

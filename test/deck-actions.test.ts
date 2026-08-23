@@ -122,7 +122,7 @@ describe("Deck action availability", () => {
     }
   });
 
-  test("does not expose removed creation actions or reuse the a shortcut", () => {
+  test("does not expose removed creation or directional address-search actions", () => {
     const definitions = DECK_ACTION_DEFINITIONS as readonly {
       readonly id: string;
       readonly defaultBindings: readonly { readonly key: string }[];
@@ -131,6 +131,14 @@ describe("Deck action availability", () => {
     assert.equal(definitions.some((definition) => definition.id === "new-section"), false);
     assert.equal(definitions.some((definition) => definition.id === "file-here"), false);
     assert.equal(definitions.some((definition) => definition.id === "entry-points"), false);
+    assert.equal(
+      definitions.some((definition) => definition.id === "find-address-forward"),
+      false,
+    );
+    assert.equal(
+      definitions.some((definition) => definition.id === "find-address-backward"),
+      false,
+    );
     assert.equal(
       definitions.some((definition) =>
         definition.defaultBindings.some((binding) => binding.key === "a")),
@@ -256,8 +264,6 @@ describe("Deck action availability", () => {
       true,
     );
     for (const action of [
-      "find-address-forward",
-      "find-address-backward",
       "find-address-first",
       "pull-into-pile",
     ]) {

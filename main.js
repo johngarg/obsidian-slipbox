@@ -382,8 +382,6 @@ function canRunDeckAction(action, context) {
     case "backward-ten-cards":
       return context.hasActiveCard;
     case "centre-card":
-    case "find-address-forward":
-    case "find-address-backward":
     case "find-address-first":
       return context.hasActiveCard;
     case "open-note":
@@ -1194,20 +1192,6 @@ var BASE_ACTION_DEFINITIONS = [
     defaultBindings: [binding("b")]
   },
   {
-    id: "find-address-forward",
-    label: "Move Deck anchor to next address initial",
-    description: "Type the address's first character after this prefix.",
-    repeatable: false,
-    defaultBindings: [binding("f")]
-  },
-  {
-    id: "find-address-backward",
-    label: "Move Deck anchor to previous address initial",
-    description: "Type the address's first character after this prefix.",
-    repeatable: false,
-    defaultBindings: [binding("f", ["Shift"])]
-  },
-  {
     id: "find-address-first",
     label: "Move Deck anchor to first address initial",
     description: "Type the address's first character after this prefix.",
@@ -1354,8 +1338,6 @@ var ACTION_COMMAND_IDS = {
   "copy-link": "copy-current-card-link",
   "toggle-tray": "toggle-tray",
   "toggle-bookmark": "add-bookmark-current-card",
-  "find-address-forward": "find-next-address-initial",
-  "find-address-backward": "find-previous-address-initial",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
   "toggle-deck-map": "toggle-deck-map-visibility",
@@ -1688,7 +1670,7 @@ function settingsForPersistence(rawValue, settings) {
   const rawKeybindingsSource = isRecord2(raw.deckKeybindings) ? raw.deckKeybindings : {};
   const rawKeybindings = Object.fromEntries(
     Object.entries(rawKeybindingsSource).filter(
-      ([key]) => key !== "entry-points" && key !== "back" && key !== "forward" && key !== "toggle-toolbar"
+      ([key]) => key !== "entry-points" && key !== "back" && key !== "forward" && key !== "toggle-toolbar" && key !== "find-address-forward" && key !== "find-address-backward"
     )
   );
   return {
@@ -3397,15 +3379,12 @@ function installPendingDeckCommandKeyCapture(target, capture) {
 function firstUnicodeCharacter(value) {
   return Array.from(value)[0] ?? null;
 }
-function findAddressInitialIndex(cards, activeIndex, initial, mode) {
+function findAddressInitialIndex(cards, initial) {
   const targetInitial = firstUnicodeCharacter(initial);
   if (targetInitial === null) {
     return null;
   }
-  const start = mode === "absolute" ? 0 : mode === "forward" ? Math.max(0, activeIndex + 1) : Math.min(cards.length - 1, activeIndex - 1);
-  const end = mode === "backward" ? 0 : cards.length - 1;
-  const step = mode === "backward" ? -1 : 1;
-  for (let index = start; mode === "backward" ? index >= end : index <= end; index += step) {
+  for (let index = 0; index < cards.length; index += 1) {
     const card = cards[index];
     if (card !== void 0 && firstUnicodeCharacter(card.address) === targetInitial) {
       return index;
@@ -3413,8 +3392,8 @@ function findAddressInitialIndex(cards, activeIndex, initial, mode) {
   }
   return null;
 }
-function startAddressCommand(mode) {
-  return { kind: "address", mode };
+function startAddressCommand() {
+  return { kind: "address" };
 }
 function startPileCommand() {
   return { kind: "pile", digits: "" };
@@ -3437,7 +3416,7 @@ function advancePendingDeckCommand(state, key) {
     return {
       consumed: true,
       state: IDLE_DECK_COMMAND,
-      completion: { kind: "address", mode: state.mode, initial }
+      completion: { kind: "address", initial }
     };
   }
   if (/^[0-9]$/.test(key)) {
@@ -3897,8 +3876,6 @@ var DECK_MAP_MARKER_BUDGET = 512;
 var COMMAND_FEEDBACK_DURATION_MS = 1800;
 var VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
 var PENDING_COMMAND_ACTIONS = /* @__PURE__ */ new Set([
-  "find-address-forward",
-  "find-address-backward",
   "find-address-first",
   "pull-into-pile"
 ]);
@@ -4636,14 +4613,8 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
           void this.toggleCardBookmark(card.path);
         }
         break;
-      case "find-address-forward":
-        this.beginAddressCommand("forward");
-        break;
-      case "find-address-backward":
-        this.beginAddressCommand("backward");
-        break;
       case "find-address-first":
-        this.beginAddressCommand("absolute");
+        this.beginAddressCommand();
         break;
       case "pull-into-pile":
         this.beginPileCommand();
@@ -5440,7 +5411,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     let instruction = "";
     if (this.pendingCommand.kind === "address") {
-      instruction = this.pendingCommand.mode === "forward" ? "Find next: type an address initial \xB7 Esc to cancel" : this.pendingCommand.mode === "backward" ? "Find previous: type an address initial \xB7 Esc to cancel" : "Find from start: type an address initial \xB7 Esc to cancel";
+      instruction = "Find from start: type an address initial \xB7 Esc to cancel";
     } else if (this.pendingCommand.kind === "pile") {
       const digits = this.pendingCommand.digits === "" ? "\u2026" : this.pendingCommand.digits;
       instruction = `Pile number: ${digits} \xB7 Enter to confirm \xB7 Esc to cancel`;
@@ -5470,10 +5441,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.updatePendingCommandStatus();
     }, COMMAND_FEEDBACK_DURATION_MS);
   }
-  beginAddressCommand(mode) {
+  beginAddressCommand() {
     this.pendingCommandStartEvent = null;
     this.clearPendingCommand();
-    this.pendingCommand = startAddressCommand(mode);
+    this.pendingCommand = startAddressCommand();
     this.updatePendingCommandStatus();
   }
   beginPileCommand() {
@@ -5482,19 +5453,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.pendingCommand = startPileCommand();
     this.updatePendingCommandStatus();
   }
-  completeAddressCommand(mode, initial) {
+  completeAddressCommand(initial) {
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    const targetIndex = findAddressInitialIndex(
-      filed,
-      activeIndex,
-      initial,
-      mode
-    );
+    const targetIndex = findAddressInitialIndex(filed, initial);
     const target = targetIndex === null ? void 0 : filed[targetIndex];
     if (target === void 0) {
-      const position = mode === "forward" ? "later" : mode === "backward" ? "earlier" : "filed";
-      this.showCommandFeedback(`No ${position} card begins with \u201C${initial}\u201D.`);
+      this.showCommandFeedback(`No filed card begins with \u201C${initial}\u201D.`);
       return;
     }
     void this.jumpToPath(target.path);
@@ -6583,10 +6547,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         this.showCommandFeedback("Command cancelled.");
       } else if ("completion" in step) {
         if (step.completion.kind === "address") {
-          this.completeAddressCommand(
-            step.completion.mode,
-            step.completion.initial
-          );
+          this.completeAddressCommand(step.completion.initial);
         } else {
           this.completePileCommand(step.completion.digits);
         }

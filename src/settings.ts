@@ -63,8 +63,6 @@ export type SlipboxAction =
   | "copy-link"
   | "toggle-tray"
   | "toggle-bookmark"
-  | "find-address-forward"
-  | "find-address-backward"
   | "find-address-first"
   | "pull-into-pile"
   | "next-pile"
@@ -196,20 +194,6 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     label: "Toggle bookmark on focused Deck card",
     repeatable: false,
     defaultBindings: [binding("b")],
-  },
-  {
-    id: "find-address-forward",
-    label: "Move Deck anchor to next address initial",
-    description: "Type the address's first character after this prefix.",
-    repeatable: false,
-    defaultBindings: [binding("f")],
-  },
-  {
-    id: "find-address-backward",
-    label: "Move Deck anchor to previous address initial",
-    description: "Type the address's first character after this prefix.",
-    repeatable: false,
-    defaultBindings: [binding("f", ["Shift"])],
   },
   {
     id: "find-address-first",
@@ -359,8 +343,6 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   "copy-link": "copy-current-card-link",
   "toggle-tray": "toggle-tray",
   "toggle-bookmark": "add-bookmark-current-card",
-  "find-address-forward": "find-next-address-initial",
-  "find-address-backward": "find-previous-address-initial",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
   "toggle-deck-map": "toggle-deck-map-visibility",
@@ -817,7 +799,9 @@ export function settingsForPersistence(
       key !== "entry-points" &&
       key !== "back" &&
       key !== "forward" &&
-      key !== "toggle-toolbar"
+      key !== "toggle-toolbar" &&
+      key !== "find-address-forward" &&
+      key !== "find-address-backward"
     ),
   );
   return {

@@ -81,7 +81,6 @@ import {
   installPendingDeckCommandKeyCapture,
   startAddressCommand,
   startPileCommand,
-  type AddressInitialMode,
   type PendingDeckCommand,
 } from "./deck-commands.js";
 import {
@@ -142,8 +141,6 @@ const DECK_MAP_MARKER_BUDGET = 512;
 const COMMAND_FEEDBACK_DURATION_MS = 1_800;
 const VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
 const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
-  "find-address-forward",
-  "find-address-backward",
   "find-address-first",
   "pull-into-pile",
 ]);
@@ -1022,14 +1019,8 @@ export class DeckView extends ItemView {
           void this.toggleCardBookmark(card.path);
         }
         break;
-      case "find-address-forward":
-        this.beginAddressCommand("forward");
-        break;
-      case "find-address-backward":
-        this.beginAddressCommand("backward");
-        break;
       case "find-address-first":
-        this.beginAddressCommand("absolute");
+        this.beginAddressCommand();
         break;
       case "pull-into-pile":
         this.beginPileCommand();
@@ -1964,11 +1955,7 @@ export class DeckView extends ItemView {
     }
     let instruction = "";
     if (this.pendingCommand.kind === "address") {
-      instruction = this.pendingCommand.mode === "forward"
-        ? "Find next: type an address initial · Esc to cancel"
-        : this.pendingCommand.mode === "backward"
-          ? "Find previous: type an address initial · Esc to cancel"
-          : "Find from start: type an address initial · Esc to cancel";
+      instruction = "Find from start: type an address initial · Esc to cancel";
     } else if (this.pendingCommand.kind === "pile") {
       const digits = this.pendingCommand.digits === ""
         ? "…"
@@ -2003,10 +1990,10 @@ export class DeckView extends ItemView {
     }, COMMAND_FEEDBACK_DURATION_MS);
   }
 
-  private beginAddressCommand(mode: AddressInitialMode): void {
+  private beginAddressCommand(): void {
     this.pendingCommandStartEvent = null;
     this.clearPendingCommand();
-    this.pendingCommand = startAddressCommand(mode);
+    this.pendingCommand = startAddressCommand();
     this.updatePendingCommandStatus();
   }
 
@@ -2017,23 +2004,12 @@ export class DeckView extends ItemView {
     this.updatePendingCommandStatus();
   }
 
-  private completeAddressCommand(mode: AddressInitialMode, initial: string): void {
+  private completeAddressCommand(initial: string): void {
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    const targetIndex = findAddressInitialIndex(
-      filed,
-      activeIndex,
-      initial,
-      mode,
-    );
+    const targetIndex = findAddressInitialIndex(filed, initial);
     const target = targetIndex === null ? undefined : filed[targetIndex];
     if (target === undefined) {
-      const position = mode === "forward"
-        ? "later"
-        : mode === "backward"
-          ? "earlier"
-          : "filed";
-      this.showCommandFeedback(`No ${position} card begins with “${initial}”.`);
+      this.showCommandFeedback(`No filed card begins with “${initial}”.`);
       return;
     }
     void this.jumpToPath(target.path);
@@ -3287,10 +3263,7 @@ export class DeckView extends ItemView {
         this.showCommandFeedback("Command cancelled.");
       } else if ("completion" in step) {
         if (step.completion.kind === "address") {
-          this.completeAddressCommand(
-            step.completion.mode,
-            step.completion.initial,
-          );
+          this.completeAddressCommand(step.completion.initial);
         } else {
           this.completePileCommand(step.completion.digits);
         }

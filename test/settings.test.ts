@@ -63,12 +63,8 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["backward-ten-cards"], [
       { key: "u", modifiers: ["Ctrl"] },
     ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-forward"], [
-      { key: "f", modifiers: [] },
-    ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-backward"], [
-      { key: "f", modifiers: ["Shift"] },
-    ]);
+    assert.equal("find-address-forward" in DEFAULT_SETTINGS.deckKeybindings, false);
+    assert.equal("find-address-backward" in DEFAULT_SETTINGS.deckKeybindings, false);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-first"], [
       { key: "g", modifiers: [] },
     ]);
@@ -343,10 +339,8 @@ describe("Slipbox settings", () => {
     assert.equal("forward" in normalized, false);
     assert.deepEqual(normalized["toggle-bookmark"], []);
     assert.deepEqual(normalized["find-address-first"], []);
-    assert.deepEqual(normalized["find-address-backward"], [{
-      key: "f",
-      modifiers: ["Shift"],
-    }]);
+    assert.equal("find-address-forward" in normalized, false);
+    assert.equal("find-address-backward" in normalized, false);
     assert.equal("toggle-toolbar" in normalized, false);
   });
 
@@ -410,6 +404,8 @@ describe("Slipbox settings", () => {
         back: [{ key: "h", modifiers: ["Shift"] }],
         forward: [{ key: "r", modifiers: ["Alt"] }],
         "toggle-toolbar": [],
+        "find-address-forward": [{ key: "f", modifiers: [] }],
+        "find-address-backward": [{ key: "f", modifiers: ["Shift"] }],
       },
     };
     const persisted = settingsForPersistence(raw, DEFAULT_SETTINGS);
@@ -418,6 +414,8 @@ describe("Slipbox settings", () => {
     assert.equal("back" in bindings, false);
     assert.equal("forward" in bindings, false);
     assert.equal("toggle-toolbar" in bindings, false);
+    assert.equal("find-address-forward" in bindings, false);
+    assert.equal("find-address-backward" in bindings, false);
     assert.equal("showDeckToolbar" in persisted, false);
     assert.deepEqual(bindings["last-card"], [{ key: "$", modifiers: ["Shift"] }]);
     assert.deepEqual(bindings["forward-ten-cards"], [{ key: "d", modifiers: ["Ctrl"] }]);

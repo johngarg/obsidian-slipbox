@@ -43,8 +43,6 @@ export function canRunDeckAction(
     case "backward-ten-cards":
       return context.hasActiveCard;
     case "centre-card":
-    case "find-address-forward":
-    case "find-address-backward":
     case "find-address-first":
       return context.hasActiveCard;
     case "open-note":

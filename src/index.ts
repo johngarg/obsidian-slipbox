@@ -215,7 +215,6 @@ export type {
   PileNavigationDirection,
 } from "./pile-navigation.js";
 export type {
-  AddressInitialMode,
   AddressedDeckCard,
   PendingDeckCommand,
   PendingDeckCommandStep,

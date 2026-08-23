@@ -21,37 +21,23 @@ const cards = [
 ] as const;
 
 describe("address-initial Deck navigation", () => {
-  test("searches forward strictly after the active card without wrapping", () => {
-    assert.equal(findAddressInitialIndex(cards, 0, "A", "forward"), 2);
-    assert.equal(findAddressInitialIndex(cards, 2, "A", "forward"), null);
-    assert.equal(findAddressInitialIndex(cards, cards.length - 1, "A", "forward"), null);
+  test("searches from the beginning and remains case-sensitive", () => {
+    assert.equal(findAddressInitialIndex(cards, "A"), 0);
+    assert.equal(findAddressInitialIndex(cards, "a"), 3);
+    assert.equal(findAddressInitialIndex(cards, "B"), null);
   });
 
-  test("searches backward strictly before the active card without wrapping", () => {
-    assert.equal(findAddressInitialIndex(cards, 4, "A", "backward"), 2);
-    assert.equal(findAddressInitialIndex(cards, 2, "A", "backward"), 0);
-    assert.equal(findAddressInitialIndex(cards, 0, "A", "backward"), null);
-  });
-
-  test("searches absolutely from the beginning and remains case-sensitive", () => {
-    assert.equal(findAddressInitialIndex(cards, 4, "A", "absolute"), 0);
-    assert.equal(findAddressInitialIndex(cards, 0, "a", "absolute"), 3);
-    assert.equal(findAddressInitialIndex(cards, 0, "B", "absolute"), null);
-  });
-
-  test("matches the first Unicode character and keeps duplicate paths distinct", () => {
+  test("matches the first Unicode character and chooses the first duplicate", () => {
     assert.equal(firstUnicodeCharacter("😀/1"), "😀");
-    assert.equal(findAddressInitialIndex(cards, 3, "😀", "forward"), 4);
-    assert.equal(findAddressInitialIndex(cards, 4, "😀", "forward"), 5);
+    assert.equal(findAddressInitialIndex(cards, "😀"), 4);
     assert.equal(cards[4]?.path, "emoji-one.md");
     assert.equal(cards[5]?.path, "emoji-two.md");
   });
 
   test("uses the supplied Deck order rather than path or title order", () => {
     const reordered = [cards[5], cards[1], cards[4], cards[0]];
-    assert.equal(findAddressInitialIndex(reordered, -1, "😀", "absolute"), 0);
+    assert.equal(findAddressInitialIndex(reordered, "😀"), 0);
     assert.equal(reordered[0]?.path, "emoji-two.md");
-    assert.equal(findAddressInitialIndex(reordered, 0, "😀", "forward"), 2);
   });
 });
 
@@ -70,7 +56,7 @@ describe("pending Deck command state", () => {
 
     // Obsidian's pre-existing scope listener runs before the Deck listener.
     documentValue.addEventListener("keydown", (event) => {
-      if (event.key === "f") {
+      if (event.key === "g") {
         pending = true;
         startingEvent = event;
       }
@@ -83,7 +69,7 @@ describe("pending Deck command state", () => {
     });
 
     outside.dispatchEvent(new window.KeyboardEvent("keydown", {
-      key: "f",
+      key: "g",
       bubbles: true,
     }));
     assert.deepEqual(captured, []);
@@ -157,25 +143,24 @@ describe("pending Deck command state", () => {
   });
 
   test("consumes a bound continuation before it can become an ordinary shortcut", () => {
-    const step = advancePendingDeckCommand(startAddressCommand("forward"), "j");
+    const step = advancePendingDeckCommand(startAddressCommand(), "j");
     assert.equal(step.consumed, true);
     assert.deepEqual("completion" in step ? step.completion : null, {
       kind: "address",
-      mode: "forward",
       initial: "j",
     });
     assert.deepEqual(step.state, { kind: "idle" });
   });
 
   test("preserves case and accepts a Unicode continuation character", () => {
-    const upper = advancePendingDeckCommand(startAddressCommand("backward"), "J");
+    const upper = advancePendingDeckCommand(startAddressCommand(), "J");
     assert.equal(
       "completion" in upper && upper.completion.kind === "address"
         ? upper.completion.initial
         : null,
       "J",
     );
-    const emoji = advancePendingDeckCommand(startAddressCommand("absolute"), "😀");
+    const emoji = advancePendingDeckCommand(startAddressCommand(), "😀");
     assert.equal(
       "completion" in emoji && emoji.completion.kind === "address"
         ? emoji.completion.initial
@@ -185,7 +170,7 @@ describe("pending Deck command state", () => {
   });
 
   test("cancels with Escape and ignores modifier-only events", () => {
-    const pending = startAddressCommand("absolute");
+    const pending = startAddressCommand();
     const modifier = advancePendingDeckCommand(pending, "Shift");
     assert.equal(modifier.consumed, false);
     assert.deepEqual(modifier.state, pending);

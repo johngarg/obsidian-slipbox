@@ -1,5 +1,3 @@
-export type AddressInitialMode = "forward" | "backward" | "absolute";
-
 export interface AddressedDeckCard {
   readonly address: string;
   readonly path: string;
@@ -7,7 +5,7 @@ export interface AddressedDeckCard {
 
 export type PendingDeckCommand =
   | { readonly kind: "idle" }
-  | { readonly kind: "address"; readonly mode: AddressInitialMode }
+  | { readonly kind: "address" }
   | { readonly kind: "pile"; readonly digits: string };
 
 export type PendingDeckCommandStep =
@@ -17,7 +15,7 @@ export type PendingDeckCommandStep =
       readonly consumed: true;
       readonly state: PendingDeckCommand;
       readonly completion:
-        | { readonly kind: "address"; readonly mode: AddressInitialMode; readonly initial: string }
+        | { readonly kind: "address"; readonly initial: string }
         | { readonly kind: "pile"; readonly digits: string };
     }
   | { readonly consumed: true; readonly state: PendingDeckCommand; readonly cancelled: true };
@@ -57,24 +55,14 @@ export function firstUnicodeCharacter(value: string): string | null {
 
 export function findAddressInitialIndex(
   cards: readonly AddressedDeckCard[],
-  activeIndex: number,
   initial: string,
-  mode: AddressInitialMode,
 ): number | null {
   const targetInitial = firstUnicodeCharacter(initial);
   if (targetInitial === null) {
     return null;
   }
 
-  const start = mode === "absolute"
-    ? 0
-    : mode === "forward"
-      ? Math.max(0, activeIndex + 1)
-      : Math.min(cards.length - 1, activeIndex - 1);
-  const end = mode === "backward" ? 0 : cards.length - 1;
-  const step = mode === "backward" ? -1 : 1;
-
-  for (let index = start; mode === "backward" ? index >= end : index <= end; index += step) {
+  for (let index = 0; index < cards.length; index += 1) {
     const card = cards[index];
     if (card !== undefined && firstUnicodeCharacter(card.address) === targetInitial) {
       return index;
@@ -83,8 +71,8 @@ export function findAddressInitialIndex(
   return null;
 }
 
-export function startAddressCommand(mode: AddressInitialMode): PendingDeckCommand {
-  return { kind: "address", mode };
+export function startAddressCommand(): PendingDeckCommand {
+  return { kind: "address" };
 }
 
 export function startPileCommand(): PendingDeckCommand {
@@ -113,7 +101,7 @@ export function advancePendingDeckCommand(
     return {
       consumed: true,
       state: IDLE_DECK_COMMAND,
-      completion: { kind: "address", mode: state.mode, initial },
+      completion: { kind: "address", initial },
     };
   }
 

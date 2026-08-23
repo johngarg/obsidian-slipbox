@@ -183,34 +183,29 @@ describe("inline edit entry interactions", () => {
 });
 
 describe("inline-aware Deck action dispatch", () => {
-  test("starts g and f prefix commands synchronously before recording their events", () => {
-    for (const fixture of [
-      { prefix: "g", mode: "absolute" as const, initial: "f" },
-      { prefix: "f", mode: "forward" as const, initial: "g" },
-    ]) {
-      let pending: PendingDeckCommand = IDLE_DECK_COMMAND;
-      const prefixEvent = { key: fixture.prefix };
-      let pendingStartEvent: typeof prefixEvent | null = null;
+  test("starts the g prefix command synchronously before recording its event", () => {
+    let pending: PendingDeckCommand = IDLE_DECK_COMMAND;
+    const prefixEvent = { key: "g" };
+    let pendingStartEvent: typeof prefixEvent | null = null;
 
-      const accepted = dispatchInlineAwareDeckAction(
-        { editing: false, starting: false },
-        async () => true,
-        () => {
-          pendingStartEvent = null;
-          pending = startAddressCommand(fixture.mode);
-        },
-      );
-      pendingStartEvent = prefixEvent;
+    const accepted = dispatchInlineAwareDeckAction(
+      { editing: false, starting: false },
+      async () => true,
+      () => {
+        pendingStartEvent = null;
+        pending = startAddressCommand();
+      },
+    );
+    pendingStartEvent = prefixEvent;
 
-      assert.equal(accepted, true);
-      assert.deepEqual(pending, { kind: "address", mode: fixture.mode });
-      assert.equal(pendingStartEvent, prefixEvent);
-      const continuation = advancePendingDeckCommand(pending, fixture.initial);
-      assert.deepEqual(
-        "completion" in continuation ? continuation.completion : null,
-        { kind: "address", mode: fixture.mode, initial: fixture.initial },
-      );
-    }
+    assert.equal(accepted, true);
+    assert.deepEqual(pending, { kind: "address" });
+    assert.equal(pendingStartEvent, prefixEvent);
+    const continuation = advancePendingDeckCommand(pending, "f");
+    assert.deepEqual(
+      "completion" in continuation ? continuation.completion : null,
+      { kind: "address", initial: "f" },
+    );
   });
 
   test("gates only a mounted editor and blocks actions during startup", async () => {

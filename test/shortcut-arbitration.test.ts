@@ -4,9 +4,30 @@ import { describe, test } from "node:test";
 import {
   arbitrateShortcut,
   classifyShortcutClaim,
+  ShortcutCommandTracker,
 } from "../src/shortcut-arbitration.js";
 
 describe("Slipbox shortcut arbitration", () => {
+  test("associates a dispatched command with the observed key event", () => {
+    const tracker = new ShortcutCommandTracker<object, string>();
+    const observedEvent = {};
+    const staleLastEvent = {};
+    tracker.observe(observedEvent);
+    assert.equal(
+      tracker.record("centre-card", staleLastEvent),
+      observedEvent,
+    );
+    assert.equal(tracker.take(observedEvent), "centre-card");
+    assert.equal(tracker.take(staleLastEvent), undefined);
+  });
+
+  test("falls back to Obsidian's last event outside an observed shortcut", () => {
+    const tracker = new ShortcutCommandTracker<object, string>();
+    const lastEvent = {};
+    assert.equal(tracker.record("centre-card", lastEvent), lastEvent);
+    assert.equal(tracker.take(lastEvent), "centre-card");
+  });
+
   test("lets a customized Obsidian hotkey win and reports the conflict", () => {
     let runs = 0;
     let warnings = 0;

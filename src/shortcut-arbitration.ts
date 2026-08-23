@@ -8,6 +8,32 @@ export type ShortcutClaim =
   | "other-command"
   | "unclaimed";
 
+export class ShortcutCommandTracker<TEvent extends object, TAction> {
+  private observedEvent: TEvent | undefined;
+  private readonly handledActions = new WeakMap<TEvent, TAction>();
+
+  observe(event: TEvent): void {
+    this.observedEvent = event;
+  }
+
+  record(action: TAction, fallbackEvent?: TEvent): TEvent | undefined {
+    const event = this.observedEvent ?? fallbackEvent;
+    if (event !== undefined) {
+      this.handledActions.set(event, action);
+    }
+    return event;
+  }
+
+  take(event: TEvent): TAction | undefined {
+    const action = this.handledActions.get(event);
+    this.handledActions.delete(event);
+    if (this.observedEvent === event) {
+      this.observedEvent = undefined;
+    }
+    return action;
+  }
+}
+
 export function classifyShortcutClaim(
   defaultPrevented: boolean,
   configuredAction: string,

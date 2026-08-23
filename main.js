@@ -1740,6 +1740,28 @@ function keyBindingConflict(keybindings, action, bindingValue) {
 }
 
 // src/shortcut-arbitration.ts
+var ShortcutCommandTracker = class {
+  observedEvent;
+  handledActions = /* @__PURE__ */ new WeakMap();
+  observe(event) {
+    this.observedEvent = event;
+  }
+  record(action, fallbackEvent) {
+    const event = this.observedEvent ?? fallbackEvent;
+    if (event !== void 0) {
+      this.handledActions.set(event, action);
+    }
+    return event;
+  }
+  take(event) {
+    const action = this.handledActions.get(event);
+    this.handledActions.delete(event);
+    if (this.observedEvent === event) {
+      this.observedEvent = void 0;
+    }
+    return action;
+  }
+};
 function classifyShortcutClaim(defaultPrevented, configuredAction, handledSlipboxAction) {
   if (handledSlipboxAction === configuredAction) {
     return "same-slipbox-command";
@@ -4103,7 +4125,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   viewedCardFooter;
   trayRenderer;
   deckKeybindingsSuspended = false;
-  commandHandledActions = /* @__PURE__ */ new WeakMap();
+  shortcutCommandTracker = new ShortcutCommandTracker();
   shortcutConflictNoticeTimes = /* @__PURE__ */ new Map();
   pendingCommand = IDLE_DECK_COMMAND;
   pendingCommandStartEvent = null;
@@ -4702,13 +4724,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     return this.canRunAction(action);
   }
   runCommandAction(action) {
-    const event = this.app.lastEvent;
-    if (event !== null && "key" in event) {
-      this.commandHandledActions.set(event, action);
-    }
+    const lastEvent = this.app.lastEvent;
+    const keyboardEvent = lastEvent !== null && "key" in lastEvent ? lastEvent : void 0;
+    const commandEvent = this.shortcutCommandTracker.record(action, keyboardEvent);
     const ran = this.runAction(action);
-    if (ran && PENDING_COMMAND_ACTIONS.has(action) && this.app.lastEvent !== null && "key" in this.app.lastEvent) {
-      this.pendingCommandStartEvent = this.app.lastEvent;
+    if (ran && PENDING_COMMAND_ACTIONS.has(action) && commandEvent !== void 0) {
+      this.pendingCommandStartEvent = commandEvent;
     }
     return ran;
   }
@@ -4732,11 +4753,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) || !this.canRunAction(definition.id)) {
       return;
     }
+    this.shortcutCommandTracker.observe(event);
     queueMicrotask(() => {
+      const commandAction = this.shortcutCommandTracker.take(event);
       if (this.app.workspace.getActiveViewOfType(_DeckView) !== this) {
         return;
       }
-      const commandAction = this.commandHandledActions.get(event);
       const claim = classifyShortcutClaim(
         event.defaultPrevented,
         definition.id,

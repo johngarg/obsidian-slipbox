@@ -57,6 +57,7 @@ import {
 import {
   arbitrateShortcut,
   classifyShortcutClaim,
+  ShortcutCommandTracker,
 } from "./shortcut-arbitration.js";
 import {
   TrayRenderer,
@@ -244,7 +245,8 @@ export class DeckView extends ItemView {
   private readonly viewedCardFooter: CardFooterManager;
   private readonly trayRenderer: TrayRenderer;
   private deckKeybindingsSuspended = false;
-  private readonly commandHandledActions = new WeakMap<KeyboardEvent, DeckAction>();
+  private readonly shortcutCommandTracker =
+    new ShortcutCommandTracker<KeyboardEvent, DeckAction>();
   private readonly shortcutConflictNoticeTimes = new Map<string, number>();
   private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
   private pendingCommandStartEvent: KeyboardEvent | null = null;
@@ -1024,18 +1026,18 @@ export class DeckView extends ItemView {
   }
 
   runCommandAction(action: DeckAction): boolean {
-    const event = this.app.lastEvent;
-    if (event !== null && "key" in event) {
-      this.commandHandledActions.set(event, action);
-    }
+    const lastEvent = this.app.lastEvent;
+    const keyboardEvent = lastEvent !== null && "key" in lastEvent
+      ? lastEvent
+      : undefined;
+    const commandEvent = this.shortcutCommandTracker.record(action, keyboardEvent);
     const ran = this.runAction(action);
     if (
       ran &&
       PENDING_COMMAND_ACTIONS.has(action) &&
-      this.app.lastEvent !== null &&
-      "key" in this.app.lastEvent
+      commandEvent !== undefined
     ) {
-      this.pendingCommandStartEvent = this.app.lastEvent;
+      this.pendingCommandStartEvent = commandEvent;
     }
     return ran;
   }
@@ -1075,11 +1077,12 @@ export class DeckView extends ItemView {
     ) {
       return;
     }
+    this.shortcutCommandTracker.observe(event);
     queueMicrotask(() => {
+      const commandAction = this.shortcutCommandTracker.take(event);
       if (this.app.workspace.getActiveViewOfType(DeckView) !== this) {
         return;
       }
-      const commandAction = this.commandHandledActions.get(event);
       const claim = classifyShortcutClaim(
         event.defaultPrevented,
         definition.id,

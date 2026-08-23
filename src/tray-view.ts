@@ -224,14 +224,13 @@ export class TrayRenderer {
       return;
     }
 
-    stage.addClass("has-tray");
     const jobs: Promise<void>[] = [];
     state.piles.forEach((pile, pileIndex) => {
       jobs.push(...this.renderPile(
         piles,
         pile,
         pileIndex,
-        pile.position ?? defaultPilePosition(pileIndex),
+        pile.position ?? null,
         state.expandedPileIds.includes(pile.id),
         filing,
         viewedPath,
@@ -308,7 +307,7 @@ export class TrayRenderer {
     parent: HTMLElement,
     pile: TrayPile,
     pileIndex: number,
-    position: TrayPilePosition,
+    position: TrayPilePosition | null,
     expanded: boolean,
     filing: TrayFilingState | null,
     viewedPath: string | null,
@@ -324,8 +323,14 @@ export class TrayRenderer {
       },
     });
     pileEl.tabIndex = expanded ? -1 : 0;
-    pileEl.style.setProperty("--slipbox-pile-x", `${position.x}px`);
-    pileEl.style.setProperty("--slipbox-pile-y", `${position.y}px`);
+    const renderedPosition = position ?? defaultPilePosition(pileIndex);
+    pileEl.style.setProperty(
+      "--slipbox-pile-x",
+      "xPercent" in renderedPosition
+        ? `${renderedPosition.xPercent}%`
+        : `${renderedPosition.x}px`,
+    );
+    pileEl.style.setProperty("--slipbox-pile-y", `${renderedPosition.y}px`);
 
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
@@ -437,7 +442,7 @@ export class TrayRenderer {
       }
       this.showPileMenu(event, pile);
     });
-    this.attachPileDragging(pileEl, dragSurface, pile, position);
+    this.attachPileDragging(pileEl, dragSurface, pile);
     return jobs;
   }
 
@@ -869,6 +874,12 @@ export class TrayRenderer {
     if (position === null) {
       return;
     }
+    const pileEl = (event.currentTarget as HTMLElement | null)
+      ?.closest<HTMLElement>(".slipbox-tray-pile") ?? null;
+    const pileOrigin = pile.position ?? this.renderedPilePosition(pileEl) ?? {
+      x: 0,
+      y: 0,
+    };
     const menu = Menu.forEvent(event);
     if (this.addCardFileMenuItems(menu, card, pile.id)) {
       menu.addSeparator();
@@ -910,12 +921,11 @@ export class TrayRenderer {
         .setDisabled(pile.cards.length <= 1)
         .onClick(() => {
           const newPileId = this.plugin.createTrayPileId();
-          const origin = pile.position ?? defaultPilePosition(position.pileIndex);
           const split = splitCardIntoNewPile(state, card.cardRef, newPileId);
           this.moveAndFocus(
             setPilePosition(split, newPileId, {
-              x: origin.x + 38,
-              y: origin.y + 38,
+              x: pileOrigin.x + 38,
+              y: pileOrigin.y + 38,
             }),
             card.cardRef,
           );
@@ -1026,7 +1036,6 @@ export class TrayRenderer {
     element: HTMLElement,
     dragSurface: HTMLElement,
     pile: TrayPile,
-    position: TrayPilePosition,
   ): void {
     dragSurface.addEventListener("pointerdown", (event) => {
       if (
@@ -1043,6 +1052,10 @@ export class TrayRenderer {
       const startY = event.clientY;
       const pointerId = event.pointerId;
       this.startPointerActionAfterEditing(event, "tray-pile-drag", () => {
+        const origin = this.renderedPilePosition(element) ?? pile.position ?? {
+          x: 0,
+          y: 0,
+        };
         beginThresholdPointerDrag({
           captureTarget: dragSurface,
           pointerId,
@@ -1062,8 +1075,8 @@ export class TrayRenderer {
               upEvent.clientY,
               element,
               {
-                x: position.x + upEvent.clientX - startX,
-                y: position.y + upEvent.clientY - startY,
+                x: origin.x + upEvent.clientX - startX,
+                y: origin.y + upEvent.clientY - startY,
               },
             );
             this.clearDropCues();
@@ -1209,6 +1222,25 @@ export class TrayRenderer {
       return null;
     }
     return pilePositionAtWorkspacePoint(x, y, rect, hitBounds);
+  }
+
+  private renderedPilePosition(
+    pile: HTMLElement | null,
+  ): TrayPilePosition | null {
+    const anchor = this.pilesAnchorEl;
+    if (pile === null || anchor === null) {
+      return null;
+    }
+    const pileRect = pile.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    return {
+      x:
+        pileRect.left + pileRect.width / 2 -
+        (anchorRect.left + anchorRect.width / 2),
+      y:
+        pileRect.top + pileRect.height / 2 -
+        (anchorRect.top + anchorRect.height / 2),
+    };
   }
 
   private clearDropCues(except?: HTMLElement): void {

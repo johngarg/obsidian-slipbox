@@ -7,18 +7,15 @@ import {
 } from "../src/workspace-layout.js";
 
 describe("size-aware pile anchor", () => {
-  test("keeps the home pile closest to the Deck and stacks later piles upward", () => {
-    assert.deepEqual(defaultPilePosition(0), { x: 0, y: 0 });
-    assert.deepEqual(defaultPilePosition(1), { x: 0, y: -42 });
-    assert.deepEqual(defaultPilePosition(3), { x: 0, y: -126 });
+  test("keeps the home pile centred and cascades later piles to the left", () => {
+    assert.deepEqual(defaultPilePosition(0), { xPercent: 0, y: 0 });
+    assert.deepEqual(defaultPilePosition(1), { xPercent: -12, y: 0 });
+    assert.deepEqual(defaultPilePosition(3), { xPercent: -36, y: 0 });
   });
 
-  test("uses the measured Deck footprint at the preserved 62 percent centre", () => {
-    assert.equal(deckTopForPileAnchor(1000, 500), 370);
-  });
-
-  test("caps a pre-pile Deck to its future with-piles height", () => {
-    assert.equal(deckTopForPileAnchor(800, 700), 248);
+  test("uses the measured Deck footprint at its permanent centre", () => {
+    assert.equal(deckTopForPileAnchor(1000, 500), 250);
+    assert.equal(deckTopForPileAnchor(800, 700), 50);
   });
 
   test("rejects unavailable or invalid layout measurements", () => {

@@ -1,28 +1,27 @@
-const DECK_WITH_PILES_CENTER_RATIO = 0.62;
-const DECK_WITH_PILES_MAX_HEIGHT_RATIO = 0.62;
-const DEFAULT_PILE_VERTICAL_STEP_PX = 42;
+const DECK_CENTER_RATIO = 0.5;
+const DEFAULT_PILE_HORIZONTAL_STEP_PERCENT = 12;
 
-export interface WorkspacePoint {
-  readonly x: number;
+export interface AutomaticPilePosition {
+  readonly xPercent: number;
   readonly y: number;
 }
 
-/** Keep the home pile closest to the Deck and stack later automatic piles upward. */
-export function defaultPilePosition(pileIndex: number): WorkspacePoint {
+/** Keep the home pile centred and cascade later automatic piles to the left. */
+export function defaultPilePosition(
+  pileIndex: number,
+): AutomaticPilePosition {
   const index = Number.isFinite(pileIndex)
     ? Math.max(0, Math.trunc(pileIndex))
     : 0;
   return {
-    x: 0,
-    y: index === 0 ? 0 : -index * DEFAULT_PILE_VERTICAL_STEP_PX,
+    xPercent: index === 0
+      ? 0
+      : -index * DEFAULT_PILE_HORIZONTAL_STEP_PERCENT,
+    y: 0,
   };
 }
 
-/**
- * Return the untransformed top edge of the Deck footprint used when piles are
- * present. Before the first pile exists, cap the measured card to its future
- * with-piles height so pointer-chosen positions do not jump when the Deck moves.
- */
+/** Return the untransformed top edge of the permanently centred Deck. */
 export function deckTopForPileAnchor(
   stageHeight: number,
   measuredDeckHeight: number,
@@ -35,9 +34,5 @@ export function deckTopForPileAnchor(
   ) {
     return null;
   }
-  const deckHeight = Math.min(
-    measuredDeckHeight,
-    stageHeight * DECK_WITH_PILES_MAX_HEIGHT_RATIO,
-  );
-  return stageHeight * DECK_WITH_PILES_CENTER_RATIO - deckHeight / 2;
+  return stageHeight * DECK_CENTER_RATIO - measuredDeckHeight / 2;
 }

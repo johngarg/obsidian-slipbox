@@ -8,6 +8,8 @@ import {
   WorkspaceLeaf,
   getLinkpath,
   setTooltip,
+  type KeymapEventHandler,
+  type Modifier,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
@@ -44,7 +46,14 @@ import {
   renderCardHeaderButtons,
   type CardHeaderButtonController,
 } from "./card-header-buttons.js";
-import type { DeckAction } from "./settings.js";
+import {
+  DECK_ACTION_DEFINITIONS,
+  formatKeyBinding,
+  type DeckAction,
+  type DeckKeyBinding,
+  type SlipboxActionDefinition,
+} from "./settings.js";
+import { arbitrateShortcut } from "./shortcut-arbitration.js";
 import {
   TrayRenderer,
   type TrayFilingState,
@@ -154,8 +163,6 @@ const DECK_MAP_SECTION_LABEL_SPACING = 14;
 const DECK_MAP_MARKER_BUDGET = 512;
 const COMMAND_FEEDBACK_DURATION_MS = 1_800;
 const VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
-const isDomNode = (value: EventTarget | null): value is Node =>
-  value !== null && "nodeType" in value;
 const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
   "find-address-first",
   "pull-into-pile",
@@ -233,6 +240,9 @@ export class DeckView extends ItemView {
   private readonly viewedCardFooter: CardFooterManager;
   private readonly trayRenderer: TrayRenderer;
   private deckKeybindingsSuspended = false;
+  private keymapHandlers: KeymapEventHandler[] = [];
+  private readonly commandHandledEvents = new WeakSet<KeyboardEvent>();
+  private readonly shortcutConflictNoticeTimes = new Map<string, number>();
   private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
   private pendingCommandStartEvent: KeyboardEvent | null = null;
   private pendingCommandEl: HTMLElement | null = null;
@@ -297,8 +307,7 @@ export class DeckView extends ItemView {
       }),
     );
     this.scope = new Scope(this.app.scope);
-    this.scope.register([], "Escape", (event) =>
-      this.handleDeckEscape(event) ? false : undefined);
+    this.updateKeybindings();
   }
 
   getViewType(): string {
@@ -987,6 +996,37 @@ export class DeckView extends ItemView {
       this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
+    this.updateKeybindings();
+  }
+
+  updateKeybindings(): void {
+    const scope = this.scope;
+    if (scope === null) {
+      return;
+    }
+    for (const handler of this.keymapHandlers) {
+      scope.unregister(handler);
+    }
+    this.keymapHandlers = [];
+    this.keymapHandlers.push(scope.register([], "Escape", (event) =>
+      this.handleDeckEscape(event) ? false : undefined));
+    if (this.deckKeybindingsSuspended) {
+      return;
+    }
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
+        this.keymapHandlers.push(scope.register(
+          [...binding.modifiers] as Modifier[],
+          binding.key,
+          (event) => {
+            this.deferDeckActionKey(event, definition, binding);
+            // Yield to Obsidian's parent scope. Slipbox runs in a microtask
+            // only when no Obsidian hotkey has claimed this event.
+            return undefined;
+          },
+        ));
+      }
+    }
   }
 
   canRunCommandAction(action: DeckAction): boolean {
@@ -994,8 +1034,6 @@ export class DeckView extends ItemView {
     if (
       event !== null &&
       "key" in event &&
-      isDomNode(event.target) &&
-      this.contentEl.contains(event.target) &&
       (
         this.deckKeybindingsSuspended ||
         shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
@@ -1007,6 +1045,10 @@ export class DeckView extends ItemView {
   }
 
   runCommandAction(action: DeckAction): boolean {
+    const event = this.app.lastEvent;
+    if (event !== null && "key" in event) {
+      this.commandHandledEvents.add(event);
+    }
     const ran = this.runAction(action);
     if (
       ran &&
@@ -1017,6 +1059,48 @@ export class DeckView extends ItemView {
       this.pendingCommandStartEvent = this.app.lastEvent;
     }
     return ran;
+  }
+
+  private deferDeckActionKey(
+    event: KeyboardEvent,
+    definition: SlipboxActionDefinition,
+    binding: DeckKeyBinding,
+  ): void {
+    if (
+      this.pendingCommand.kind !== "idle" ||
+      this.app.workspace.getActiveViewOfType(DeckView) !== this ||
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
+      !this.canRunAction(definition.id)
+    ) {
+      return;
+    }
+    queueMicrotask(() => {
+      if (this.app.workspace.getActiveViewOfType(DeckView) !== this) {
+        return;
+      }
+      arbitrateShortcut(
+        event.defaultPrevented,
+        this.commandHandledEvents.has(event),
+        () => this.handleDeckActionKey(
+          event,
+          definition.id,
+          definition.repeatable,
+        ),
+        () => this.reportShortcutConflict(formatKeyBinding(binding)),
+      );
+    });
+  }
+
+  private reportShortcutConflict(shortcut: string): void {
+    const message = `${shortcut} is already handled by an Obsidian hotkey; Slipbox left it unchanged.`;
+    this.showCommandFeedback(message);
+    const now = Date.now();
+    const lastNotice = this.shortcutConflictNoticeTimes.get(shortcut) ?? 0;
+    if (now - lastNotice < 5_000) {
+      return;
+    }
+    this.shortcutConflictNoticeTimes.set(shortcut, now);
+    new Notice(`Slipbox shortcut conflict: ${message}`, 6_000);
   }
 
   private handleDeckEscape(event: KeyboardEvent): boolean {
@@ -3502,6 +3586,27 @@ export class DeckView extends ItemView {
       return;
     }
     void this.goToPath(target.path);
+  }
+
+  private handleDeckActionKey(
+    event: KeyboardEvent,
+    action: DeckAction,
+    repeatable = false,
+  ): void {
+    if (
+      this.pendingCommand.kind !== "idle" ||
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
+      !this.canRunAction(action)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (!event.repeat || repeatable) {
+      this.runAction(action);
+      if (!event.repeat && PENDING_COMMAND_ACTIONS.has(action)) {
+        this.pendingCommandStartEvent = event;
+      }
+    }
   }
 
   private handleDeckCommandContinuation(event: KeyboardEvent): boolean {

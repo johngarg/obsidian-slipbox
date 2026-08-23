@@ -1,6 +1,5 @@
 import type { DeckOrdering } from "./address-order.js";
 import type { DuplicateAddressPolicy } from "./card-metadata.js";
-import type { Hotkey, Modifier } from "obsidian";
 
 export const SLIPBOX_DATA_SCHEMA_VERSION = 9;
 
@@ -584,17 +583,6 @@ export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
 
 export function keyBindingSignature(bindingValue: DeckKeyBinding): string {
   return `${bindingValue.modifiers.join("+")}::${bindingValue.key}`;
-}
-
-/** Copy configured Slipbox bindings into Obsidian command-hotkey records. */
-export function commandHotkeysForAction(
-  settings: SlipboxSettings,
-  action: SlipboxAction,
-): Hotkey[] {
-  return settings.deckKeybindings[action].map((bindingValue) => ({
-    key: bindingValue.key,
-    modifiers: [...bindingValue.modifiers] as Modifier[],
-  }));
 }
 
 export function formatKeyBinding(bindingValue: DeckKeyBinding): string {

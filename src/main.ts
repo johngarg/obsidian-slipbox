@@ -14,7 +14,6 @@ import {
   setTooltip,
   stringifyYaml,
   type Editor,
-  type Command,
   type EventRef,
   type MarkdownFileInfo,
   type WorkspaceLeaf,
@@ -72,14 +71,12 @@ import {
 import { resolveCardTitle } from "./card-title.js";
 import {
   DEFAULT_SETTINGS,
-  commandHotkeysForAction,
   normalizeCardSpread,
   SLIPBOX_DATA_SCHEMA_VERSION,
   normalizeSettings,
   settingsForPersistence,
   SLIPBOX_ACTION_DEFINITIONS,
   type SlipboxActionDefinition,
-  type SlipboxAction,
   type SlipboxSettings,
 } from "./settings.js";
 import { SlipboxSettingTab } from "./settings-tab.js";
@@ -175,7 +172,6 @@ export default class SlipboxPlugin extends Plugin {
   private persistQueue: Promise<void> = Promise.resolve();
   private trayPileSequence = 0;
   private rawSettings: unknown = {};
-  private readonly slipboxActionCommands = new Map<SlipboxAction, Command>();
   private readonly inlineEditOwners = new InlineEditPathLock<DeckView>();
   private readonly detachedInlineEditDrafts = new Map<
     string,
@@ -454,11 +450,15 @@ export default class SlipboxPlugin extends Plugin {
     const previousOrdering = this.settings.deckOrdering;
     const previousDuplicatePolicy = this.settings.duplicateAddresses;
     this.settings = normalizeSettings(value);
-    this.syncSlipboxActionCommandHotkeys();
     this.index.setAddressProperty(this.settings.addressProperty);
     this.index.setDeckOrdering(this.settings.deckOrdering);
     this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
+    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+      if (leaf.view instanceof DeckView) {
+        leaf.view.updateKeybindings();
+      }
+    }
     if (
       this.settings.addressProperty !== previousAddressProperty ||
       this.settings.deckOrdering !== previousOrdering ||
@@ -1072,19 +1072,18 @@ export default class SlipboxPlugin extends Plugin {
       id: definition.commandId,
       name: definition.commandName,
       repeatable: definition.repeatable,
-      hotkeys: commandHotkeysForAction(this.settings, definition.id),
-    } satisfies Pick<Command, "id" | "name" | "repeatable" | "hotkeys">;
+    };
     if (definition.id === "bookmarks") {
-      this.slipboxActionCommands.set(definition.id, this.addCommand({
+      this.addCommand({
         ...command,
         callback: () => void this.openDeck().then((view) => {
           view.runAction(definition.id);
         }),
-      }));
+      });
       return;
     }
     if (definition.id === "problems") {
-      this.slipboxActionCommands.set(definition.id, this.addCommand({
+      this.addCommand({
         ...command,
         checkCallback: (checking) => {
           const available = this.index.snapshot.issues.length > 0;
@@ -1093,10 +1092,10 @@ export default class SlipboxPlugin extends Plugin {
           }
           return available;
         },
-      }));
+      });
       return;
     }
-    this.slipboxActionCommands.set(definition.id, this.addCommand({
+    this.addCommand({
       ...command,
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType(DeckView);
@@ -1109,16 +1108,7 @@ export default class SlipboxPlugin extends Plugin {
         }
         return available;
       },
-    }));
-  }
-
-  private syncSlipboxActionCommandHotkeys(): void {
-    for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
-      const command = this.slipboxActionCommands.get(definition.id);
-      if (command !== undefined) {
-        command.hotkeys = commandHotkeysForAction(this.settings, definition.id);
-      }
-    }
+    });
   }
 
   async createNewCardAtTrayPosition(

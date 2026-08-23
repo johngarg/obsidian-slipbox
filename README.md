@@ -408,12 +408,13 @@ On macOS, `Ctrl+d` and `Ctrl+u` use the literal Control key, not Command. Slipbo
 keeps `Ctrl` distinct from the platform-aware `Mod` modifier in custom bindings.
 
 Every stable Slipbox action can have multiple scoped shortcuts. Changes apply to
-open Slipbox views immediately, and duplicate bindings are rejected. Slipbox
-publishes these settings as default hotkeys on its Obsidian commands instead of
-intercepting them in a private view scope. Obsidian’s Hotkeys settings therefore
-reports conflicts and has final authority: user-assigned hotkeys take priority,
-and Slipbox does not override them. The previous Legacy Desk shortcut is removed
-rather than repurposed.
+open Slipbox views immediately, and duplicate bindings are rejected. They remain
+scoped to the active Slipbox view, so ordinary typing and editor navigation are
+unaffected in Markdown and viewed-card editors. Slipbox yields each candidate
+key to Obsidian first. If an Obsidian hotkey handles it, Slipbox leaves the key
+alone and shows a conflict warning; otherwise the scoped Slipbox action runs.
+Slipbox actions are also exposed as unassigned commands in Obsidian's Hotkeys
+settings. The previous Legacy Desk shortcut is removed rather than repurposed.
 
 ## Manual filing and address domain
 

@@ -1133,8 +1133,9 @@ export default class SlipboxPlugin extends Plugin {
     let sequence = 0;
     let path: string;
 
+    // Numbering starts at 1 to match Obsidian's own collision suffixes.
     do {
-      const suffix = sequence === 0 ? "" : ` ${sequence + 1}`;
+      const suffix = sequence === 0 ? "" : ` ${sequence}`;
       path = normalizePath(`${prefix}${basename}${suffix}.md`);
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);

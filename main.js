@@ -8857,7 +8857,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     let sequence = 0;
     let path;
     do {
-      const suffix = sequence === 0 ? "" : ` ${sequence + 1}`;
+      const suffix = sequence === 0 ? "" : ` ${sequence}`;
       path = (0, import_obsidian9.normalizePath)(`${prefix}${basename}${suffix}.md`);
       sequence += 1;
     } while (this.app.vault.getAbstractFileByPath(path) !== null);

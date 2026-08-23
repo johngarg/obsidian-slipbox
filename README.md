@@ -287,7 +287,9 @@ does not open the title prompt. **New card with title** asks for a title;
 filename-derived titles use a sanitised nonblank title as the filename, while
 frontmatter-derived titles use the configured Moment timestamp filename and
 write the entered title property. Submitting a blank prompted title uses the
-same default-title behaviour, while cancelling creates nothing.
+same default-title behaviour, while cancelling creates nothing. A filename
+already in use gains a numeric suffix starting at 1, matching Obsidian's own
+collision numbering.
 
 **New card on Desk** and **New card with title on Desk** create an unfiled card
 and open no note at all. The card is placed by ordinary Desk reconciliation, so

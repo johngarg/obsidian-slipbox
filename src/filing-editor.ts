@@ -7,6 +7,17 @@ export interface InlineFilingEditorState {
   readonly duplicatePaths: readonly string[];
 }
 
+export type FilingSourceSurface = "desk" | "viewed";
+
+export function filingEditorMatchesSource(
+  sourcePath: string,
+  sourceSurface: FilingSourceSurface,
+  cardPath: string,
+  cardSurface: FilingSourceSurface,
+): boolean {
+  return sourcePath === cardPath && sourceSurface === cardSurface;
+}
+
 export interface InlineFilingEditorActions {
   readonly onInput: (value: string) => void;
   readonly onConfirm: () => void;

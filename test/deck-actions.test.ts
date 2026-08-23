@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   canRunDeckAction,
+  deskToggleFocusTarget,
   trayToggleLabel,
   type DeckActionContext,
 } from "../src/deck-actions.js";
@@ -20,6 +21,7 @@ const READY: DeckActionContext = {
   focusedCardFiled: true,
   focusedCardUnfiled: false,
   focusedSurface: "desk",
+  viewedReturnSurface: null,
   focusedCardOnDesk: true,
   canMoveDeskCardLeft: true,
   canMoveDeskCardRight: true,
@@ -36,6 +38,7 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("open-note", READY), true);
     assert.equal(canRunDeckAction("copy-link", READY), true);
     assert.equal(canRunDeckAction("toggle-tray", READY), true);
+    assert.equal(canRunDeckAction("toggle-tray-without-focus", READY), false);
     assert.equal(canRunDeckAction("problems", READY), true);
     assert.equal(canRunDeckAction("confirm-filing", READY), true);
     assert.equal(canRunDeckAction("cancel-filing", READY), true);
@@ -54,6 +57,7 @@ describe("Deck action availability", () => {
       focusedCardFiled: false,
       focusedCardUnfiled: false,
       focusedSurface: null,
+      viewedReturnSurface: null,
       focusedCardOnDesk: false,
       canMoveDeskCardLeft: false,
       canMoveDeskCardRight: false,
@@ -68,6 +72,7 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);
     assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
+    assert.equal(canRunDeckAction("toggle-tray-without-focus", unavailable), false);
     assert.equal(canRunDeckAction("problems", unavailable), false);
     assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
@@ -120,6 +125,12 @@ describe("Deck action availability", () => {
       focusedSurface: "viewed",
       focusedCardOnDesk: false,
     }), false);
+    assert.equal(canRunDeckAction("swap-deck-pile", {
+      ...READY,
+      focusedSurface: "viewed",
+      viewedReturnSurface: "deck",
+      focusedCardOnDesk: false,
+    }), true);
     for (const action of [
       "toggle-pile",
       "previous-card-in-pile",
@@ -190,6 +201,36 @@ describe("Deck action availability", () => {
     assert.deepEqual(copy?.defaultBindings, [{ key: "y", modifiers: [] }]);
   });
 
+  test("leaves the Deck-only background toggle unbound by default", () => {
+    const backgroundToggle = DECK_ACTION_DEFINITIONS.find(
+      (definition) => definition.id === "toggle-tray-without-focus",
+    );
+    assert.deepEqual(backgroundToggle?.defaultBindings, []);
+    assert.equal(backgroundToggle?.target, "focused-card");
+    assert.equal(canRunDeckAction("toggle-tray-without-focus", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardOnDesk: false,
+    }), true);
+    assert.equal(canRunDeckAction("toggle-tray-without-focus", {
+      ...READY,
+      focusedSurface: "deck",
+      focusedCardOnDesk: true,
+    }), true);
+    assert.equal(canRunDeckAction("toggle-tray-without-focus", {
+      ...READY,
+      focusedSurface: "viewed",
+    }), false);
+  });
+
+  test("moves ordinary pull focus with the card but preserves background focus", () => {
+    assert.equal(deskToggleFocusTarget("deck", false, true), "desk");
+    assert.equal(deskToggleFocusTarget("desk", true, true), "deck");
+    assert.equal(deskToggleFocusTarget("viewed", true, true), "deck");
+    assert.equal(deskToggleFocusTarget("deck", false, false), "preserve");
+    assert.equal(deskToggleFocusTarget("deck", true, false), "preserve");
+  });
+
   test("registers Enter only for Show in Deck and e only for focused editing", () => {
     const show = DECK_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "show-card-in-deck",
@@ -224,7 +265,7 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("edit-card", READY), true);
   });
 
-  test("edits and views cards except for Deck copies already on the Desk", () => {
+  test("edits and views cards only after focus has moved off the Deck", () => {
     for (const focusedSurface of ["desk", "viewed"] as const) {
       assert.equal(canRunDeckAction("edit-card", {
         ...READY,
@@ -239,12 +280,12 @@ describe("Deck action availability", () => {
       ...READY,
       focusedSurface: "deck",
       focusedCardOnDesk: false,
-    }), true);
+    }), false);
     assert.equal(canRunDeckAction("toggle-viewed-card", {
       ...READY,
       focusedSurface: "deck",
       focusedCardOnDesk: false,
-    }), true);
+    }), false);
     assert.equal(canRunDeckAction("edit-card", {
       ...READY,
       focusedSurface: "deck",

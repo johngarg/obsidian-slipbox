@@ -40,6 +40,20 @@ export function filingPreviewFocusPath(preview: FilingPreview): string | null {
   return preview.previousPath ?? preview.nextPath;
 }
 
+/** Explain the keyboard preview relative to the candidate's current position. */
+export function filingPreviewGuidance(preview: FilingPreview | null): string {
+  if (preview === null) {
+    return "Enter a valid address. Tab previews its Deck position; Enter files.";
+  }
+  if (preview.previousPath !== null) {
+    return "Tab focuses the Deck card this card will be filed after. Shift+Tab returns here; Enter files.";
+  }
+  if (preview.nextPath !== null) {
+    return "Tab focuses the first Deck card; this card will be filed before it. Shift+Tab returns here; Enter files.";
+  }
+  return "The Deck is empty. Enter files this card as its first card.";
+}
+
 export function createFilingPreview<T extends AddressedPath>(
   filed: readonly T[],
   candidate: AddressedPath,

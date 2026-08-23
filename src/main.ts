@@ -454,11 +454,6 @@ export default class SlipboxPlugin extends Plugin {
     this.index.setDeckOrdering(this.settings.deckOrdering);
     this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.updateKeybindings();
-      }
-    }
     if (
       this.settings.addressProperty !== previousAddressProperty ||
       this.settings.deckOrdering !== previousOrdering ||
@@ -1068,10 +1063,14 @@ export default class SlipboxPlugin extends Plugin {
   private registerSlipboxActionCommand(
     definition: SlipboxActionDefinition,
   ): void {
+    const command = {
+      id: definition.commandId,
+      name: definition.commandName,
+      repeatable: definition.repeatable,
+    };
     if (definition.id === "bookmarks") {
       this.addCommand({
-        id: definition.commandId,
-        name: definition.commandName,
+        ...command,
         callback: () => void this.openDeck().then((view) => {
           view.runAction(definition.id);
         }),
@@ -1080,8 +1079,7 @@ export default class SlipboxPlugin extends Plugin {
     }
     if (definition.id === "problems") {
       this.addCommand({
-        id: definition.commandId,
-        name: definition.commandName,
+        ...command,
         checkCallback: (checking) => {
           const available = this.index.snapshot.issues.length > 0;
           if (!checking && available) {
@@ -1093,16 +1091,15 @@ export default class SlipboxPlugin extends Plugin {
       return;
     }
     this.addCommand({
-      id: definition.commandId,
-      name: definition.commandName,
+      ...command,
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType(DeckView);
-        const available = view?.canRunAction(definition.id) ?? false;
+        const available = view?.canRunCommandAction(definition.id) ?? false;
         if (checking) {
           return available;
         }
         if (available && view !== null) {
-          view.runAction(definition.id);
+          view.runCommandAction(definition.id);
         }
         return available;
       },

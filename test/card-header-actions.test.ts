@@ -42,6 +42,11 @@ describe("card header action presentation", () => {
         .some(({ action }) => action === "toggle-viewed-card"),
       false,
     );
+    assert.equal(
+      cardHeaderButtonDefinitionsForSurface("deck")
+        .some(({ action }) => action === "edit-card"),
+      false,
+    );
   });
 
   test("uses the distinct edit, open, view, and Desk icons", () => {
@@ -54,15 +59,11 @@ describe("card header action presentation", () => {
       ...FILED_DESK,
       surface: "deck",
     }), null);
-    assert.deepEqual(cardHeaderActionPresentation("edit-card", {
+    assert.equal(cardHeaderActionPresentation("edit-card", {
       ...FILED_DESK,
       surface: "deck",
       onDesk: false,
-    }), {
-      action: "edit-card",
-      icon: "file-pen-line",
-      label: "Edit on Desk",
-    });
+    }), null);
     assert.deepEqual(cardHeaderActionPresentation("edit-card", {
       ...FILED_DESK,
       surface: "viewed",
@@ -70,7 +71,7 @@ describe("card header action presentation", () => {
     }), {
       action: "edit-card",
       icon: "file-pen-line",
-      label: "Edit on Desk",
+      label: "Edit card",
     });
     assert.deepEqual(cardHeaderActionPresentation("open-note", FILED_DESK), {
       action: "open-note",

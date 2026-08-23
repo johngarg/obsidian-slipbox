@@ -3,13 +3,12 @@ import {
   ItemView,
   MarkdownRenderer,
   Notice,
+  Platform,
   Scope,
   TFile,
   WorkspaceLeaf,
   getLinkpath,
   setTooltip,
-  type KeymapEventHandler,
-  type Modifier,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
@@ -38,15 +37,29 @@ import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
-import { canRunDeckAction } from "./deck-actions.js";
+import {
+  canRunDeckAction,
+  deskToggleFocusTarget,
+} from "./deck-actions.js";
 import {
   renderCardHeaderButtons,
   type CardHeaderButtonController,
 } from "./card-header-buttons.js";
 import {
   DECK_ACTION_DEFINITIONS,
+  formatKeyBinding,
+  keyBindingFromKeyboardEvent,
+  keyBindingSignature,
   type DeckAction,
+  type DeckKeyBinding,
+  type SlipboxActionDefinition,
 } from "./settings.js";
+import {
+  arbitrateShortcut,
+  classifyShortcutClaim,
+  installEarlyShortcutObserver,
+  ShortcutCommandTracker,
+} from "./shortcut-arbitration.js";
 import {
   TrayRenderer,
   type TrayFilingState,
@@ -66,12 +79,19 @@ import {
 import { normalizeAddressInput } from "./address-order.js";
 import {
   duplicateFilingMessage,
+  filingPreviewGuidance,
   filingPreviewFocusPath,
   initialFilingAddress,
   type FilingPreview,
 } from "./filing-preview.js";
 import {
+  attachUnfiledAddressFiling,
+  filingEditorMatchesSource,
+  renderInlineFilingEditor,
   shouldSuspendDeckShortcut,
+  updateInlineFilingEditor,
+  type FilingSourceSurface,
+  type InlineFilingEditorElements,
 } from "./filing-editor.js";
 import {
   buildDeckMapSectionMarkers,
@@ -132,6 +152,7 @@ import {
 } from "./card-focus.js";
 import {
   cyclePileFocusTarget,
+  pileFocusLocationForSwap,
   swapPileFocusTarget,
   wrappedPileCardNeighbour,
   type PileFocusLocation,
@@ -183,6 +204,7 @@ export class DeckView extends ItemView {
   private lastPileFocusWasViewed = false;
   private filingFile: TFile | null = null;
   private filingSourcePath: string | null = null;
+  private filingSourceSurface: FilingSourceSurface | null = null;
   private filingInputValue = "";
   private filingPreview: FilingPreview | null = null;
   private filingMessage = "Enter an address.";
@@ -223,8 +245,14 @@ export class DeckView extends ItemView {
   private readonly cardFooters: CardFooterManager;
   private readonly viewedCardFooter: CardFooterManager;
   private readonly trayRenderer: TrayRenderer;
-  private keymapHandlers: KeymapEventHandler[] = [];
   private deckKeybindingsSuspended = false;
+  private readonly shortcutCommandTracker =
+    new ShortcutCommandTracker<KeyboardEvent, DeckAction>();
+  private commandActionAwaitingKeyup: {
+    readonly action: DeckAction;
+    readonly timestamp: number;
+  } | null = null;
+  private readonly shortcutConflictNoticeTimes = new Map<string, number>();
   private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
   private pendingCommandStartEvent: KeyboardEvent | null = null;
   private pendingCommandEl: HTMLElement | null = null;
@@ -239,6 +267,7 @@ export class DeckView extends ItemView {
   private viewedCardEl: HTMLElement | null = null;
   private viewedCardBodyEl: HTMLElement | null = null;
   private viewedCardComponent: Component | null = null;
+  private viewedFilingEditor: InlineFilingEditorElements | null = null;
   private viewedFocusFromDeckNavigation = false;
 
   constructor(
@@ -288,7 +317,8 @@ export class DeckView extends ItemView {
       }),
     );
     this.scope = new Scope(this.app.scope);
-    this.updateKeybindings();
+    this.scope.register([], "Escape", (event) =>
+      this.handleDeckEscape(event) ? false : undefined);
   }
 
   getViewType(): string {
@@ -306,6 +336,16 @@ export class DeckView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (ownerWindow !== null) {
+      this.register(installEarlyShortcutObserver(
+        ownerWindow,
+        (event) => this.deferConfiguredDeckShortcut(event),
+      ));
+      this.registerDomEvent(ownerWindow, "keyup", (event) => {
+        this.reportCommandShortcutConflictOnKeyup(event);
+      }, { capture: true });
+    }
     this.register(installPendingDeckCommandKeyCapture(
       this.contentEl.ownerDocument,
       {
@@ -331,11 +371,11 @@ export class DeckView extends ItemView {
         this.filingFile !== null &&
         event.key === "Tab" &&
         event.shiftKey &&
-        event.target !== this.trayRenderer.filingInput
+        event.target !== this.filingInput
       ) {
         event.preventDefault();
         this.restoreFilingSourceFocus();
-        this.trayRenderer.focusFilingInputNow();
+        this.focusFilingInputNow();
       }
     }, { capture: true });
     this.registerDomEvent(
@@ -372,7 +412,6 @@ export class DeckView extends ItemView {
         }
       }),
     );
-    const ownerWindow = this.contentEl.ownerDocument.defaultView;
     if (ownerWindow !== null) {
       this.registerDomEvent(ownerWindow, "blur", () => {
         if (this.inlineEdit !== null) {
@@ -433,6 +472,7 @@ export class DeckView extends ItemView {
     this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
+    this.filingSourceSurface = null;
     this.filingPreview = null;
     this.filingConfirmationInProgress = false;
     this.stageEl = null;
@@ -441,6 +481,7 @@ export class DeckView extends ItemView {
     this.viewedCard = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
+    this.viewedFilingEditor = null;
     this.cardFocus = null;
     this.viewedFocusFromDeckNavigation = false;
     this.lastFocusedPileId = null;
@@ -548,6 +589,48 @@ export class DeckView extends ItemView {
     return true;
   }
 
+  private async toggleFocusedCardOnDesk(
+    card: FiledCard,
+    focusPulledCard: boolean,
+  ): Promise<void> {
+    const wasOnDesk = this.plugin.isFileInTray(card.file);
+    const focusTarget = deskToggleFocusTarget(
+      this.cardFocus?.surface ?? null,
+      wasOnDesk,
+      focusPulledCard,
+    );
+
+    if (focusTarget === "deck") {
+      if (this.cardFocus?.surface === "viewed") {
+        this.viewedCard = null;
+        this.viewedCardEl = null;
+        this.viewedCardBodyEl = null;
+      }
+      this.setDeckAnchor(card.path);
+      this.assignCardFocus(deckCardFocus(card.path));
+      this.viewportOffset = 0;
+    }
+
+    // toggleFileInTray updates the shared tray synchronously before refreshing
+    // views. Assigning logical Desk focus immediately makes a quick p, e chord
+    // reliable even while the refreshed card presentation is mounting.
+    const refresh = this.plugin.toggleFileInTray(card.file);
+    if (focusTarget === "desk") {
+      const position = cardPosition(this.plugin.tray, card.path);
+      if (position !== null) {
+        this.assignCardFocus(deskCardFocus(card.path, position.pileId));
+      }
+    }
+    await refresh;
+
+    if (focusTarget !== "desk" || !this.focusDeskCardAtPath(card.path)) {
+      return;
+    }
+    this.stageEl?.querySelector<HTMLElement>(
+      `.slipbox-tray-card[data-card-ref="${CSS.escape(card.path)}"]`,
+    )?.focus({ preventScroll: true });
+  }
+
   private focusDeckCard(path: string): void {
     if (this.plugin.index.filedByPath(path) === undefined) {
       return;
@@ -628,7 +711,12 @@ export class DeckView extends ItemView {
   }
 
   private swapDeckPileFocus(): void {
-    const current = this.pileFocusLocation();
+    const current = pileFocusLocationForSwap(
+      this.cardFocus,
+      this.cardFocus?.surface === "viewed"
+        ? this.viewedCard?.returnTarget.surface ?? null
+        : null,
+    );
     if (current === null) {
       return;
     }
@@ -780,6 +868,43 @@ export class DeckView extends ItemView {
     return this.filingFile !== null;
   }
 
+  private get filingInput(): HTMLInputElement | null {
+    return this.filingSourceSurface === "viewed"
+      ? this.viewedFilingEditor?.input ?? null
+      : this.trayRenderer.filingInput;
+  }
+
+  private get isFilingInputFocused(): boolean {
+    const input = this.filingInput;
+    return input !== null && input.ownerDocument.activeElement === input;
+  }
+
+  private focusFilingInput(): void {
+    window.requestAnimationFrame(() => this.focusFilingInputNow());
+  }
+
+  private focusFilingInputNow(): void {
+    const input = this.filingInput;
+    if (input === null) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  private updateRenderedFilingState(state: TrayFilingState): void {
+    this.trayRenderer.updateFilingState(state);
+    if (this.viewedFilingEditor !== null) {
+      updateInlineFilingEditor(this.viewedFilingEditor, state);
+      this.applyFilingGuidance(this.viewedFilingEditor.input, state.guidance);
+    }
+  }
+
+  private applyFilingGuidance(input: HTMLInputElement, guidance: string): void {
+    input.setAttribute("aria-description", guidance);
+    setTooltip(input, guidance, { placement: "bottom", delay: 350 });
+  }
+
   handlePathRename(oldPath: string, newPath: string): void {
     const editing = this.inlineEdit;
     const editingPath = editing?.controller.snapshot.path ?? null;
@@ -883,37 +1008,6 @@ export class DeckView extends ItemView {
     }
   }
 
-  updateKeybindings(): void {
-    const scope = this.scope;
-    if (scope === null) {
-      return;
-    }
-    for (const handler of this.keymapHandlers) {
-      scope.unregister(handler);
-    }
-    this.keymapHandlers = [];
-    const escapeHandler = scope.register([], "Escape", (event) => {
-      return this.handleDeckEscape(event) ? false : undefined;
-    });
-    this.keymapHandlers.push(escapeHandler);
-    if (!this.deckKeybindingsSuspended) {
-      for (const definition of DECK_ACTION_DEFINITIONS) {
-        for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
-          const handler = scope.register(
-            [...binding.modifiers] as Modifier[],
-            binding.key,
-            (event) => this.handleDeckActionKey(
-              event,
-              definition.id,
-              definition.repeatable,
-            ),
-          );
-          this.keymapHandlers.push(handler);
-        }
-      }
-    }
-  }
-
   private setDeckKeybindingsSuspended(suspended: boolean): void {
     if (this.deckKeybindingsSuspended === suspended) {
       return;
@@ -922,7 +1016,165 @@ export class DeckView extends ItemView {
       this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
-    this.updateKeybindings();
+  }
+
+  canRunCommandAction(action: DeckAction): boolean {
+    const event = this.app.lastEvent;
+    if (
+      event !== null &&
+      "key" in event &&
+      (
+        this.deckKeybindingsSuspended ||
+        shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
+      )
+    ) {
+      return false;
+    }
+    return this.canRunAction(action);
+  }
+
+  runCommandAction(action: DeckAction): boolean {
+    this.commandActionAwaitingKeyup = {
+      action,
+      timestamp: Date.now(),
+    };
+    const lastEvent = this.app.lastEvent;
+    const keyboardEvent = lastEvent !== null && "key" in lastEvent
+      ? lastEvent
+      : undefined;
+    if (
+      keyboardEvent !== undefined &&
+      !shouldSuspendDeckShortcut(
+        keyboardEvent.target,
+        this.isFilingInputFocused,
+      )
+    ) {
+      const configuredShortcut = this.configuredDeckShortcut(keyboardEvent);
+      if (
+        configuredShortcut !== null &&
+        configuredShortcut.definition.id !== action
+      ) {
+        this.reportShortcutConflict(formatKeyBinding(
+          configuredShortcut.binding,
+        ));
+      }
+    }
+    const commandEvent = this.shortcutCommandTracker.record(action, keyboardEvent);
+    const ran = this.runAction(action);
+    if (
+      ran &&
+      PENDING_COMMAND_ACTIONS.has(action) &&
+      commandEvent !== undefined
+    ) {
+      this.pendingCommandStartEvent = commandEvent;
+    }
+    return ran;
+  }
+
+  private reportCommandShortcutConflictOnKeyup(event: KeyboardEvent): void {
+    const dispatched = this.commandActionAwaitingKeyup;
+    if (dispatched === null) {
+      return;
+    }
+    if (Date.now() - dispatched.timestamp > 2_000) {
+      this.commandActionAwaitingKeyup = null;
+      return;
+    }
+    const configuredShortcut = this.configuredDeckShortcut(event);
+    if (configuredShortcut === null) {
+      return;
+    }
+    this.commandActionAwaitingKeyup = null;
+    if (
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
+      configuredShortcut.definition.id === dispatched.action
+    ) {
+      return;
+    }
+    this.reportShortcutConflict(formatKeyBinding(configuredShortcut.binding));
+  }
+
+  private deferConfiguredDeckShortcut(event: KeyboardEvent): void {
+    if (
+      this.deckKeybindingsSuspended ||
+      this.pendingCommand.kind !== "idle" ||
+      this.app.workspace.getActiveViewOfType(DeckView) !== this ||
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
+    ) {
+      return;
+    }
+    const shortcut = this.configuredDeckShortcut(event);
+    if (shortcut !== null) {
+      this.deferDeckActionKey(event, shortcut.definition, shortcut.binding);
+    }
+  }
+
+  private configuredDeckShortcut(event: KeyboardEvent): {
+    readonly definition: SlipboxActionDefinition;
+    readonly binding: DeckKeyBinding;
+  } | null {
+    const signature = keyBindingSignature(keyBindingFromKeyboardEvent(
+      event,
+      Platform.isMacOS,
+    ));
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      const binding = this.plugin.settings.deckKeybindings[definition.id].find(
+        (configured) => keyBindingSignature(configured) === signature,
+      );
+      if (binding !== undefined) {
+        return { definition, binding };
+      }
+    }
+    return null;
+  }
+
+  private deferDeckActionKey(
+    event: KeyboardEvent,
+    definition: SlipboxActionDefinition,
+    binding: DeckKeyBinding,
+  ): void {
+    if (
+      this.pendingCommand.kind !== "idle" ||
+      this.app.workspace.getActiveViewOfType(DeckView) !== this ||
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
+    ) {
+      return;
+    }
+    // Observe every configured collision. Contextual action availability is
+    // checked only if Obsidian leaves the shortcut unclaimed.
+    this.shortcutCommandTracker.observe(event);
+    queueMicrotask(() => {
+      const commandAction = this.shortcutCommandTracker.take(event);
+      if (this.app.workspace.getActiveViewOfType(DeckView) !== this) {
+        return;
+      }
+      const claim = classifyShortcutClaim(
+        event.defaultPrevented,
+        definition.id,
+        commandAction,
+      );
+      arbitrateShortcut(
+        claim,
+        () => this.handleDeckActionKey(
+          event,
+          definition.id,
+          definition.repeatable,
+        ),
+        () => this.reportShortcutConflict(formatKeyBinding(binding)),
+      );
+    });
+  }
+
+  private reportShortcutConflict(shortcut: string): void {
+    const message = `${shortcut} is already handled by an Obsidian hotkey; Slipbox left it unchanged.`;
+    this.showCommandFeedback(message);
+    const now = Date.now();
+    const lastNotice = this.shortcutConflictNoticeTimes.get(shortcut) ?? 0;
+    if (now - lastNotice < 5_000) {
+      return;
+    }
+    this.shortcutConflictNoticeTimes.set(shortcut, now);
+    new Notice(`Slipbox shortcut conflict: ${message}`, 6_000);
   }
 
   private handleDeckEscape(event: KeyboardEvent): boolean {
@@ -998,6 +1250,9 @@ export class DeckView extends ItemView {
         focusedFiled === null &&
         this.cardFocus?.surface !== "deck",
       focusedSurface,
+      viewedReturnSurface: focusedSurface === "viewed"
+        ? this.viewedCard?.returnTarget.surface ?? null
+        : null,
       focusedCardOnDesk: focusedPosition !== null,
       canMoveDeskCardLeft:
         focusedDeskPosition !== null && focusedDeskPosition.cardIndex > 0,
@@ -1077,15 +1332,12 @@ export class DeckView extends ItemView {
         break;
       case "toggle-tray":
         if (card !== null) {
-          if (
-            this.cardFocus?.surface === "desk" &&
-            this.plugin.isFileInTray(card.file)
-          ) {
-            this.setDeckAnchor(card.path);
-            this.assignCardFocus(deckCardFocus(card.path));
-            this.viewportOffset = 0;
-          }
-          void this.plugin.toggleFileInTray(card.file);
+          void this.toggleFocusedCardOnDesk(card, true);
+        }
+        break;
+      case "toggle-tray-without-focus":
+        if (card !== null) {
+          void this.toggleFocusedCardOnDesk(card, false);
         }
         break;
       case "toggle-bookmark":
@@ -1203,7 +1455,7 @@ export class DeckView extends ItemView {
       this.renderRefreshDeferred = true;
       return;
     }
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
     this.cancelViewportCentering();
     this.recalculateFilingPreview();
     const previousActivePath = this.activePath;
@@ -1217,12 +1469,18 @@ export class DeckView extends ItemView {
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
   }
 
-  async startFiling(file: TFile): Promise<void> {
+  async startFiling(
+    file: TFile,
+    sourceSurface: FilingSourceSurface = "desk",
+  ): Promise<void> {
     const trayPosition = cardPosition(this.plugin.tray, file.path);
-    if (trayPosition !== null) {
+    if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
+      this.assignCardFocus(viewedCardFocus(file.path, trayPosition?.pileId));
+    } else if (trayPosition !== null) {
       this.assignCardFocus(deskCardFocus(file.path, trayPosition.pileId));
     }
     if (
+      sourceSurface === "desk" &&
       trayPosition !== null &&
       trayPosition.cardIndex > 0 &&
       !this.plugin.tray.expandedPileIds.includes(trayPosition.pileId)
@@ -1232,30 +1490,41 @@ export class DeckView extends ItemView {
     const initialAddress = initialFilingAddress(this.activeCard);
     this.filingFile = file;
     this.filingSourcePath = file.path;
+    this.filingSourceSurface = sourceSurface;
     this.filingInputValue = initialAddress;
     this.filingPreview = null;
     this.filingMessage = "Enter an address.";
     this.filingConfirmationInProgress = false;
     this.recalculateFilingPreview();
     await this.renderDeck();
-    this.trayRenderer.focusFilingInput();
+    this.focusFilingInput();
   }
 
   async cancelFiling(): Promise<void> {
     if (this.filingConfirmationInProgress) {
       return;
     }
+    const sourcePath = this.filingSourcePath;
+    const sourceSurface = this.filingSourceSurface;
     this.filingFile = null;
     this.filingSourcePath = null;
+    this.filingSourceSurface = null;
     this.filingPreview = null;
     this.filingInputValue = "";
     this.filingConfirmationInProgress = false;
     await this.renderDeck(false);
+    if (
+      sourceSurface === "viewed" &&
+      sourcePath !== null &&
+      this.viewedCard?.path === sourcePath
+    ) {
+      this.focusViewedCard();
+    }
     new Notice("Filing cancelled. The card remains in its pile.");
   }
 
   async handleDeckOrderingChanged(): Promise<void> {
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
     this.recalculateFilingPreview();
     this.viewportOffset = 0;
     await this.renderDeck(restoreFilingInputFocus);
@@ -1388,6 +1657,10 @@ export class DeckView extends ItemView {
     returnTarget: ViewedCardReturnTarget,
     editImmediately: boolean,
   ): Promise<void> {
+    if (!this.plugin.isFileInTray(file)) {
+      new Notice("Put the card on the Desk before viewing it.");
+      return;
+    }
     if (this.filingFile !== null) {
       new Notice("Finish filing before viewing another card.");
       return;
@@ -1412,17 +1685,12 @@ export class DeckView extends ItemView {
   }
 
   private async editCardOnDesk(file: TFile): Promise<void> {
-    if (
-      this.cardFocus?.surface === "deck" &&
-      this.plugin.isFileInTray(file)
-    ) {
+    if (!this.plugin.isFileInTray(file)) {
+      new Notice("Put the card on the Desk before editing it.");
       return;
     }
     if (this.filingFile !== null) {
       new Notice("Finish filing before editing a card body.");
-      return;
-    }
-    if (!(await this.plugin.putFileOnDesk(file))) {
       return;
     }
     let position = cardPosition(this.plugin.tray, file.path);
@@ -1462,6 +1730,13 @@ export class DeckView extends ItemView {
   private async closeViewedCard(): Promise<void> {
     const viewed = this.viewedCard;
     if (viewed === null) {
+      return;
+    }
+    if (
+      this.filingSourceSurface === "viewed" &&
+      this.filingSourcePath === viewed.path
+    ) {
+      new Notice("Finish or cancel filing before closing the viewed card.");
       return;
     }
     await this.runAfterInlineEditing("close-viewed-card", async () => {
@@ -1757,7 +2032,7 @@ export class DeckView extends ItemView {
     this.cancelViewportCentering();
     this.setDeckAnchor(path);
     this.viewportOffset = 0;
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
     if (this.filingFile !== null && !restoreFilingInputFocus) {
       this.contentEl.focus({ preventScroll: true });
@@ -1862,6 +2137,7 @@ export class DeckView extends ItemView {
     this.pendingCommandEl = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
+    this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
 
@@ -1881,7 +2157,7 @@ export class DeckView extends ItemView {
     const trayJob = this.trayRenderer.render(
       stage,
       space,
-      this.currentTrayFilingState(),
+      this.currentFilingState(),
       this.viewedCard?.path ?? null,
       () => version === this.renderVersion,
     );
@@ -1913,7 +2189,7 @@ export class DeckView extends ItemView {
     this.cardFooters.scheduleLayout();
     this.viewedCardFooter.scheduleLayout();
     if (focusFilingInput) {
-      this.trayRenderer.focusFilingInput();
+      this.focusFilingInput();
     }
   }
 
@@ -2411,15 +2687,6 @@ export class DeckView extends ItemView {
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       scroll.scrollTop = this.cardScrollPositions.get(card.path) ?? 0;
-      scroll.addEventListener("dblclick", (event) => {
-        if (isInTray || !isInlineEditBodyTarget(event.target, scroll)) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        this.focusDeckCard(card.path);
-        void this.editCardOnDesk(card.file);
-      });
       this.cardFooters.render(frame, {
         sourcePath: card.path,
         backlinks: this.plugin.index.backlinksForPath(card.path),
@@ -2484,6 +2751,15 @@ export class DeckView extends ItemView {
     }
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? null;
+    const filing = this.currentFilingState();
+    const isFilingSource = filed === undefined &&
+      filing !== null &&
+      filingEditorMatchesSource(
+        filing.sourcePath,
+        filing.sourceSurface,
+        file.path,
+        "viewed",
+      );
     const title = this.plugin.cardTitle(file);
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
@@ -2500,6 +2776,7 @@ export class DeckView extends ItemView {
       "is-card-focused",
       this.cardFocus?.surface === "viewed" && this.cardFocus.path === file.path,
     );
+    card.toggleClass("is-filing-source", isFilingSource);
     card.addEventListener("focusin", () => {
       const position = cardPosition(this.plugin.tray, file.path);
       this.setCardFocus(viewedCardFocus(file.path, position?.pileId));
@@ -2519,7 +2796,46 @@ export class DeckView extends ItemView {
       delay: 500,
     });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-    renderCardAddress(identity, { cls: "slipbox-card-address", address });
+    const addressEl = renderCardAddress(identity, {
+      cls: "slipbox-card-address",
+      address,
+    });
+    if (isFilingSource && filing !== null) {
+      this.viewedFilingEditor = renderInlineFilingEditor(
+        addressEl,
+        card,
+        filing,
+        {
+          onInput: (value) => this.updateFilingInput(value),
+          onConfirm: () => void this.confirmFiling(),
+          onCancel: () => void this.cancelFiling(),
+          onPreview: () => void this.previewFilingPlacement(),
+          onFocusChange: (focused) => {
+            this.setDeckKeybindingsSuspended(focused);
+            if (focused) {
+              this.restoreFilingSourceFocus();
+            }
+          },
+        },
+      );
+      this.applyFilingGuidance(
+        this.viewedFilingEditor.input,
+        filing.guidance,
+      );
+    } else if (filed === undefined) {
+      addressEl.setAttr(
+        "aria-label",
+        "Unfiled card address; double-click to enter an address",
+      );
+      setTooltip(addressEl, "Double-click to enter an address.", {
+        placement: "bottom",
+        delay: 350,
+      });
+      attachUnfiledAddressFiling(addressEl, () => {
+        this.focusViewedCard();
+        this.runAction("file-card");
+      });
+    }
     const headerTitle = cardHeaderTitle(
       title,
       this.plugin.settings.showTitleInDeck,
@@ -2527,28 +2843,30 @@ export class DeckView extends ItemView {
     if (headerTitle !== null) {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
-    const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
     const viewedPosition = cardPosition(this.plugin.tray, file.path);
-    this.viewedCardHeaderButtonController = renderCardHeaderButtons({
-      container: actions,
-      context: {
-        surface: "viewed",
-        viewedReturnSurface: state.returnTarget.surface,
-        filed: filed !== undefined,
-        onDesk: viewedPosition !== null,
-        bookmarked: filed !== undefined &&
-          this.plugin.bookmarkAtPath(filed.path) !== undefined,
-        canMoveLeft: false,
-        canMoveRight: false,
-      },
-      settings: this.plugin.settings.cardHeaderButtons,
-      buttonClass: "slipbox-card-toggle",
-      tooltipPlacement: "bottom",
-      run: (action) => {
-        this.focusViewedCard();
-        this.runAction(action);
-      },
-    });
+    if (!isFilingSource) {
+      const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      this.viewedCardHeaderButtonController = renderCardHeaderButtons({
+        container: actions,
+        context: {
+          surface: "viewed",
+          viewedReturnSurface: state.returnTarget.surface,
+          filed: filed !== undefined,
+          onDesk: viewedPosition !== null,
+          bookmarked: filed !== undefined &&
+            this.plugin.bookmarkAtPath(filed.path) !== undefined,
+          canMoveLeft: false,
+          canMoveRight: false,
+        },
+        settings: this.plugin.settings.cardHeaderButtons,
+        buttonClass: "slipbox-card-toggle",
+        tooltipPlacement: "bottom",
+        run: (action) => {
+          this.focusViewedCard();
+          this.runAction(action);
+        },
+      });
+    }
 
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
     body.scrollTop = state.scrollTop;
@@ -2736,14 +3054,7 @@ export class DeckView extends ItemView {
 
   private async beginFilingViewedCard(file: TFile): Promise<void> {
     await this.runAfterInlineEditing("viewed-file-card", async () => {
-      const position = cardPosition(this.plugin.tray, file.path);
-      this.viewedCard = null;
-      this.viewedCardEl = null;
-      this.viewedCardBodyEl = null;
-      if (position !== null) {
-        this.assignCardFocus(deskCardFocus(file.path, position.pileId));
-      }
-      await this.startFiling(file);
+      await this.startFiling(file, "viewed");
     });
   }
 
@@ -2911,15 +3222,16 @@ export class DeckView extends ItemView {
     }
     this.filingInputValue = value;
     this.recalculateFilingPreview();
-    const filing = this.currentTrayFilingState();
+    const filing = this.currentFilingState();
     if (filing !== null) {
-      this.trayRenderer.updateFilingState(filing);
+      this.updateRenderedFilingState(filing);
     }
   }
 
-  private currentTrayFilingState(): TrayFilingState | null {
+  private currentFilingState(): TrayFilingState | null {
     const sourcePath = this.filingSourcePath;
-    if (sourcePath === null) {
+    const sourceSurface = this.filingSourceSurface;
+    if (sourcePath === null || sourceSurface === null) {
       return null;
     }
     const preview = this.filingPreview;
@@ -2930,6 +3242,7 @@ export class DeckView extends ItemView {
       this.plugin.duplicateOccupants(preview.address).length > 0;
     return {
       sourcePath,
+      sourceSurface,
       value: this.filingInputValue,
       address: preview?.address ?? null,
       message: blockedByDuplicate && preview !== null
@@ -2939,6 +3252,7 @@ export class DeckView extends ItemView {
         (preview === null && this.filingMessage !== "Enter an address."),
       confirmationInProgress: this.filingConfirmationInProgress,
       duplicatePaths,
+      guidance: filingPreviewGuidance(preview),
     };
   }
 
@@ -2963,7 +3277,12 @@ export class DeckView extends ItemView {
       return;
     }
     const position = cardPosition(this.plugin.tray, path);
-    if (position !== null) {
+    if (
+      this.filingSourceSurface === "viewed" &&
+      this.viewedCard?.path === path
+    ) {
+      this.setCardFocus(viewedCardFocus(path, position?.pileId));
+    } else if (position !== null) {
       this.setCardFocus(deskCardFocus(path, position.pileId));
     }
   }
@@ -2977,24 +3296,25 @@ export class DeckView extends ItemView {
       this.filingConfirmationInProgress
     ) {
       this.recalculateFilingPreview();
-      const filing = this.currentTrayFilingState();
+      const filing = this.currentFilingState();
       if (filing !== null) {
-        this.trayRenderer.updateFilingState(filing);
+        this.updateRenderedFilingState(filing);
       }
       return;
     }
     if (this.plugin.duplicateOccupants(preview.address).length > 0) {
-      const filing = this.currentTrayFilingState();
+      const filing = this.currentFilingState();
       if (filing !== null) {
-        this.trayRenderer.updateFilingState(filing);
+        this.updateRenderedFilingState(filing);
       }
       return;
     }
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
+    const sourceSurface = this.filingSourceSurface;
     this.filingConfirmationInProgress = true;
-    const pending = this.currentTrayFilingState();
+    const pending = this.currentFilingState();
     if (pending !== null) {
-      this.trayRenderer.updateFilingState(pending);
+      this.updateRenderedFilingState(pending);
     }
     try {
       const result = await this.plugin.fileCard(file, preview);
@@ -3011,17 +3331,25 @@ export class DeckView extends ItemView {
       }
       this.filingFile = null;
       this.filingSourcePath = null;
+      this.filingSourceSurface = null;
       this.filingPreview = null;
       this.filingInputValue = "";
+      if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
+        this.viewedCard = null;
+        this.viewedCardEl = null;
+        this.viewedCardBodyEl = null;
+        this.viewedFilingEditor = null;
+        this.unloadViewedCardComponent();
+      }
       this.setDeckAnchor(file.path);
       this.assignCardFocus(deckCardFocus(file.path));
       this.viewportOffset = 0;
       await this.plugin.refreshDeckViews();
     } finally {
       this.filingConfirmationInProgress = false;
-      const filing = this.currentTrayFilingState();
+      const filing = this.currentFilingState();
       if (filing !== null) {
-        this.trayRenderer.updateFilingState(filing);
+        this.updateRenderedFilingState(filing);
       }
     }
   }
@@ -3338,21 +3666,14 @@ export class DeckView extends ItemView {
     event: KeyboardEvent,
     action: DeckAction,
     repeatable = false,
-  ): boolean {
-    if (this.pendingCommand.kind !== "idle") {
-      return this.handleDeckCommandContinuation(event);
+  ): void {
+    if (
+      this.pendingCommand.kind !== "idle" ||
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
+      !this.canRunAction(action)
+    ) {
+      return;
     }
-    if (shouldSuspendDeckShortcut(
-      event.target,
-      this.trayRenderer.isFilingInputFocused,
-    )) {
-      return false;
-    }
-
-    if (!this.canRunAction(action)) {
-      return false;
-    }
-
     event.preventDefault();
     if (!event.repeat || repeatable) {
       this.runAction(action);
@@ -3360,7 +3681,6 @@ export class DeckView extends ItemView {
         this.pendingCommandStartEvent = event;
       }
     }
-    return true;
   }
 
   private handleDeckCommandContinuation(event: KeyboardEvent): boolean {
@@ -3372,7 +3692,7 @@ export class DeckView extends ItemView {
     if (this.pendingCommand.kind !== "idle") {
       if (shouldSuspendDeckShortcut(
         event.target,
-        this.trayRenderer.isFilingInputFocused,
+        this.isFilingInputFocused,
       )) {
         this.clearPendingCommand();
         return false;

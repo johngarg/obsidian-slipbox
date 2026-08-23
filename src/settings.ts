@@ -76,6 +76,7 @@ export type SlipboxAction =
   | "open-note"
   | "copy-link"
   | "toggle-tray"
+  | "toggle-tray-without-focus"
   | "toggle-bookmark"
   | "find-address-first"
   | "pull-into-pile"
@@ -202,6 +203,12 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     label: "Put focused card on or return it from Desk",
     repeatable: false,
     defaultBindings: [binding("p")],
+  },
+  {
+    id: "toggle-tray-without-focus",
+    label: "Put focused Deck card on or return it from Desk without moving focus",
+    repeatable: false,
+    defaultBindings: [],
   },
   {
     id: "toggle-bookmark",
@@ -369,6 +376,7 @@ const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
   "open-note",
   "copy-link",
   "toggle-tray",
+  "toggle-tray-without-focus",
   "toggle-bookmark",
   "pull-into-pile",
   "toggle-pile",
@@ -446,7 +454,6 @@ const allCardHeaderButtons = (
 
 export const DEFAULT_CARD_HEADER_BUTTONS: CardHeaderButtonSettings = {
   deck: allCardHeaderButtons([
-    "edit-card",
     "open-note",
     "toggle-tray",
     "copy-link",

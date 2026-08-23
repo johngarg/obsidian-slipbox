@@ -60,7 +60,9 @@ visible pile, wrapping at both ends and landing on each pile's top card without
 expanding it. If the Deck has no filed cards, cycling skips it. `%` swaps between
 the Deck and the last pile that received card focus, falling back to the first
 pile when that history is absent or stale; swap is unavailable when the Deck is
-empty. `Space` expands or collapses the pile containing the focused Desk card.
+empty. When a viewed card was the last focus in a pile, `%` returns to that
+viewed card rather than its placeholder. `Space` expands or collapses the pile
+containing the focused Desk card.
 In an expanded pile, `h` and `l` move card focus through its cards and wrap at
 both ends. In a collapsed pile they rotate the top card exactly like the hover
 arrows.
@@ -114,13 +116,14 @@ anchor. Focus follows only if it already belongs to the Deck. `c` centres the
 anchor without transferring focus.
 
 `Enter` is only the configurable shortcut for **Show focused card in Deck**. It
-centres a filed Desk or viewed card and transfers focus to its Deck
-presentation; a floating viewed card remains open. It does nothing for a
-Deck-focused or unfiled card. Removing or rebinding this action in Settings also
-removes or changes the Enter behaviour. `e` is the separate default editing
-shortcut, and `v` views a focused Desk card or a Deck card not already on the
-Desk, or returns a viewed card to the presentation that opened it. Returning
-restores the exact Deck card and anchor or the exact card in its Desk pile.
+centres a filed Desk or viewed card. A normal Desk card transfers focus to its
+Deck presentation; a viewed card keeps focus because its Deck representation is
+only a placeholder. It does nothing for a Deck-focused or unfiled card.
+Removing or rebinding this action in Settings also removes or changes the Enter
+behaviour. `e` is the separate default editing shortcut, and `v` views a
+focused Desk card or a Deck card not already on the Desk, or returns a viewed
+card to the presentation that opened it. Returning restores the exact Deck card
+and anchor or the exact card in its Desk pile.
 Editing is Desk-only: using `e` on a Deck card not yet on the Desk first puts it
 there, and closing the viewed card then returns to that Desk position. Once a
 card is in a Desk pile, its Deck copy has no Edit action and ignores `e`, `v`,
@@ -175,8 +178,9 @@ on the Desk. Deck headers and context menus do not add a separate View action.
 A Deck-origin view remains
 read-only and returns to the Deck unless editing is requested; editing first
 puts the card on the Desk and changes its return target to that exact pile.
-Other presentations of the viewed card become muted magnifying-glass
-placeholders. Clicking away saves and ends editing but leaves the viewed card
+Other presentations of the viewed card become muted placeholders. Attempts to
+focus either placeholder return focus to the viewed card. Clicking away saves
+and ends editing but leaves the viewed card
 open, so the Deck can still be browsed behind it. Drag the viewed card by its
 header and press `v` anywhere in the active Slipbox view—or choose `Return to
 Deck` or `Return to Desk`—when finished. Only one card can be viewed per Slipbox
@@ -367,7 +371,7 @@ newly created card.
 | `o` | Open the focused card in Markdown |
 | `p` | Put the focused filed card on the Desk, or return it from the Desk |
 | `{` / `}` | Cycle card focus backward/forward through the Deck and Desk piles |
-| `%` | Swap card focus between the Deck and the last focused pile |
+| `%` | Swap focus between the Deck and the last focused pile or viewed Desk card |
 | `Space` | Expand or collapse the focused Desk card's pile |
 | `h` / `l` | Focus the previous/next card in a pile, wrapping at both ends |
 | `Alt+←` / `Alt+→` | Move the focused Desk card within its pile |

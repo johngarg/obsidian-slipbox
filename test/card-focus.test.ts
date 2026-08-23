@@ -6,6 +6,7 @@ import {
   deckCardFocus,
   deskCardFocus,
   moveDeckFocusWithAnchor,
+  redirectViewedCardGhostFocus,
   renameCardFocus,
   viewedCardFocus,
 } from "../src/card-focus.js";
@@ -21,6 +22,35 @@ describe("single card focus", () => {
     assert.equal(moveDeckFocusWithAnchor(desk, "two.md"), desk);
     assert.equal(moveDeckFocusWithAnchor(viewed, "two.md"), viewed);
     assert.equal(moveDeckFocusWithAnchor(null, "two.md"), null);
+  });
+
+  test("redirects Deck and Desk placeholders to the viewed presentation", () => {
+    assert.deepEqual(
+      redirectViewedCardGhostFocus(
+        deckCardFocus("viewed.md"),
+        "viewed.md",
+        "pile-2",
+      ),
+      viewedCardFocus("viewed.md", "pile-2"),
+    );
+    assert.deepEqual(
+      redirectViewedCardGhostFocus(
+        deskCardFocus("viewed.md", "pile-1"),
+        "viewed.md",
+        "pile-2",
+      ),
+      viewedCardFocus("viewed.md", "pile-2"),
+    );
+    const viewed = viewedCardFocus("viewed.md", "pile-2");
+    assert.equal(
+      redirectViewedCardGhostFocus(viewed, "viewed.md", "pile-2"),
+      viewed,
+    );
+    const other = deckCardFocus("other.md");
+    assert.equal(
+      redirectViewedCardGhostFocus(other, "viewed.md", "pile-2"),
+      other,
+    );
   });
 
   test("keeps presentation identity while renaming exact paths and folders", () => {

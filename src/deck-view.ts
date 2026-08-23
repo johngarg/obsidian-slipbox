@@ -7,7 +7,6 @@ import {
   TFile,
   WorkspaceLeaf,
   getLinkpath,
-  setIcon,
   setTooltip,
   type KeymapEventHandler,
   type Modifier,
@@ -118,6 +117,7 @@ import {
   deckCardFocus,
   deskCardFocus,
   moveDeckFocusWithAnchor,
+  redirectViewedCardGhostFocus,
   renameCardFocus,
   viewedCardFocus,
   type CardFocus,
@@ -172,6 +172,7 @@ export class DeckView extends ItemView {
   private activePath: string | null = null;
   private cardFocus: CardFocus | null = null;
   private lastFocusedPileId: string | null = null;
+  private lastPileFocusWasViewed = false;
   private filingFile: TFile | null = null;
   private filingSourcePath: string | null = null;
   private filingInputValue = "";
@@ -417,6 +418,7 @@ export class DeckView extends ItemView {
     this.viewedCardBodyEl = null;
     this.cardFocus = null;
     this.lastFocusedPileId = null;
+    this.lastPileFocusWasViewed = false;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
@@ -466,9 +468,24 @@ export class DeckView extends ItemView {
   }
 
   private assignCardFocus(focus: CardFocus | null): void {
-    this.cardFocus = focus;
-    if (focus?.surface === "desk" && focus.pileId !== undefined) {
-      this.lastFocusedPileId = focus.pileId;
+    const viewedPath = this.viewedCard?.path ?? null;
+    const viewedPosition = viewedPath === null
+      ? null
+      : cardPosition(this.plugin.tray, viewedPath);
+    const resolved = redirectViewedCardGhostFocus(
+      focus,
+      viewedPath,
+      viewedPosition?.pileId,
+    );
+    this.cardFocus = resolved;
+    if (resolved?.surface === "desk" && resolved.pileId !== undefined) {
+      this.lastFocusedPileId = resolved.pileId;
+      this.lastPileFocusWasViewed = false;
+    } else if (resolved?.surface === "viewed") {
+      this.lastPileFocusWasViewed = resolved.pileId !== undefined;
+      if (resolved.pileId !== undefined) {
+        this.lastFocusedPileId = resolved.pileId;
+      }
     }
   }
 
@@ -478,6 +495,10 @@ export class DeckView extends ItemView {
   }
 
   private focusDeskCard(path: string, pileId: string): void {
+    if (this.viewedCard?.path === path) {
+      this.focusViewedCard();
+      return;
+    }
     this.setCardFocus(deskCardFocus(path, pileId));
   }
 
@@ -503,6 +524,10 @@ export class DeckView extends ItemView {
     if (path !== this.activePath) {
       this.selectCardWithoutMoving(path);
     }
+    if (this.viewedCard?.path === path) {
+      this.focusViewedCard();
+      return;
+    }
     this.setCardFocus(deckCardFocus(path));
   }
 
@@ -524,7 +549,8 @@ export class DeckView extends ItemView {
       return { surface: "deck" };
     }
     if (
-      this.cardFocus?.surface === "desk" &&
+      (this.cardFocus?.surface === "desk" ||
+        this.cardFocus?.surface === "viewed") &&
       this.cardFocus.pileId !== undefined
     ) {
       return { surface: "desk", pileId: this.cardFocus.pileId };
@@ -532,19 +558,29 @@ export class DeckView extends ItemView {
     return null;
   }
 
-  private focusPileNavigationTarget(target: PileFocusLocation): void {
+  private focusPileNavigationTarget(
+    target: PileFocusLocation,
+    preferredPath?: string,
+  ): void {
     if (target.surface === "deck") {
       if (this.activePath !== null) {
-        this.setCardFocus(deckCardFocus(this.activePath));
+        if (this.viewedCard?.path === this.activePath) {
+          this.focusViewedCard();
+        } else {
+          this.setCardFocus(deckCardFocus(this.activePath));
+        }
       }
       return;
     }
     const pile = this.plugin.tray.piles.find((candidate) =>
       candidate.id === target.pileId
     );
-    const top = pile?.cards[0];
-    if (pile !== undefined && top !== undefined) {
-      this.setCardFocus(deskCardFocus(top.cardRef, pile.id));
+    const preferred = preferredPath === undefined
+      ? undefined
+      : pile?.cards.find((card) => card.cardRef === preferredPath);
+    const card = preferred ?? pile?.cards[0];
+    if (pile !== undefined && card !== undefined) {
+      this.focusDeskCard(card.cardRef, pile.id);
     }
   }
 
@@ -572,7 +608,13 @@ export class DeckView extends ItemView {
       this.activePath !== null,
     );
     if (target !== null) {
-      this.focusPileNavigationTarget(target);
+      const viewedPath = target.surface === "desk" &&
+          this.lastPileFocusWasViewed &&
+          this.lastFocusedPileId === target.pileId &&
+          this.viewedCard !== null
+        ? this.viewedCard.path
+        : undefined;
+      this.focusPileNavigationTarget(target, viewedPath);
     }
   }
 
@@ -619,7 +661,7 @@ export class DeckView extends ItemView {
 
   private setDeckAnchor(path: string): void {
     this.activePath = path;
-    this.cardFocus = moveDeckFocusWithAnchor(this.cardFocus, path);
+    this.assignCardFocus(moveDeckFocusWithAnchor(this.cardFocus, path));
   }
 
   private applyCardFocusClasses(): void {
@@ -660,7 +702,7 @@ export class DeckView extends ItemView {
   private reconcileCardFocus(): void {
     const focus = this.cardFocus;
     if (focus?.surface === "deck" && this.activePath !== null) {
-      this.cardFocus = deckCardFocus(this.activePath);
+      this.assignCardFocus(deckCardFocus(this.activePath));
       return;
     }
     if (
@@ -668,6 +710,8 @@ export class DeckView extends ItemView {
       this.viewedCard?.path === focus.path &&
       this.plugin.index.fileAtPath(focus.path) !== undefined
     ) {
+      const position = cardPosition(this.plugin.tray, focus.path);
+      this.assignCardFocus(viewedCardFocus(focus.path, position?.pileId));
       return;
     }
     if (focus?.surface === "desk") {
@@ -687,7 +731,7 @@ export class DeckView extends ItemView {
       }
     }
     if (this.activePath !== null) {
-      this.cardFocus = deckCardFocus(this.activePath);
+      this.assignCardFocus(deckCardFocus(this.activePath));
       return;
     }
     const firstPile = this.plugin.tray.piles[0];
@@ -1008,7 +1052,7 @@ export class DeckView extends ItemView {
             this.plugin.isFileInTray(card.file)
           ) {
             this.setDeckAnchor(card.path);
-            this.cardFocus = deckCardFocus(card.path);
+            this.assignCardFocus(deckCardFocus(card.path));
             this.viewportOffset = 0;
           }
           void this.plugin.toggleFileInTray(card.file);
@@ -1116,7 +1160,7 @@ export class DeckView extends ItemView {
           this.plugin.isFileInTray(card.file)
         ) {
           this.setDeckAnchor(card.path);
-          this.cardFocus = deckCardFocus(card.path);
+          this.assignCardFocus(deckCardFocus(card.path));
           this.viewportOffset = 0;
         }
         void this.plugin.clearTray();
@@ -1658,7 +1702,7 @@ export class DeckView extends ItemView {
     const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
     this.viewedCard = createViewedCardState(draft.path, draft.returnTarget);
     const position = cardPosition(this.plugin.tray, draft.path);
-    this.cardFocus = viewedCardFocus(draft.path, position?.pileId);
+    this.assignCardFocus(viewedCardFocus(draft.path, position?.pileId));
     await this.renderDeck(false);
     await this.beginInlineEditing(file, this.viewedCardBodyEl, {
       baseBody: draft.baseBody,
@@ -1704,10 +1748,14 @@ export class DeckView extends ItemView {
   }
 
   private async showFocusedCardInDeck(path: string): Promise<void> {
-    this.cardFocus = deckCardFocus(path);
+    this.assignCardFocus(deckCardFocus(path));
     await this.jumpToPath(path);
-    this.contentEl.focus({ preventScroll: true });
-    this.applyCardFocusClasses();
+    if (this.viewedCard?.path === path) {
+      this.focusViewedCard();
+    } else {
+      this.contentEl.focus({ preventScroll: true });
+      this.applyCardFocusClasses();
+    }
   }
 
   private async deleteFocusedCard(file: TFile): Promise<void> {
@@ -1741,10 +1789,10 @@ export class DeckView extends ItemView {
       this.assignCardFocus(deskCardFocus(nextDeskPath, position.pileId));
     } else if (nextDeckPath !== null) {
       this.setDeckAnchor(nextDeckPath);
-      this.cardFocus = deckCardFocus(nextDeckPath);
+      this.assignCardFocus(deckCardFocus(nextDeckPath));
       this.viewportOffset = 0;
     } else {
-      this.cardFocus = null;
+      this.assignCardFocus(null);
     }
     this.applyCardFocusClasses();
   }
@@ -2227,23 +2275,6 @@ export class DeckView extends ItemView {
           "aria-label",
           `${card.address} · ${title}; viewed card placeholder. Activate to focus the viewed card.`,
         );
-        const ghost = cardEl.createEl("button", {
-          cls: "clickable-icon slipbox-card-ghost-control",
-          attr: {
-            type: "button",
-            "aria-label": `Focus viewed card ${title}`,
-          },
-        });
-        setIcon(ghost, "search");
-        setTooltip(ghost, "Focus viewed card", {
-          placement: "bottom",
-          delay: 250,
-        });
-        ghost.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          this.focusViewedCard();
-        });
         cardEl.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -2831,7 +2862,7 @@ export class DeckView extends ItemView {
     if (targetPath === null) {
       return;
     }
-    this.cardFocus = deckCardFocus(targetPath);
+    this.assignCardFocus(deckCardFocus(targetPath));
     await this.jumpToPath(targetPath);
     this.contentEl.focus({ preventScroll: true });
   }
@@ -2886,7 +2917,7 @@ export class DeckView extends ItemView {
       this.filingPreview = null;
       this.filingInputValue = "";
       this.setDeckAnchor(file.path);
-      this.cardFocus = deckCardFocus(file.path);
+      this.assignCardFocus(deckCardFocus(file.path));
       this.viewportOffset = 0;
       await this.plugin.refreshDeckViews();
     } finally {

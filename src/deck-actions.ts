@@ -79,7 +79,7 @@ export function canRunDeckAction(
     case "swap-deck-pile":
       return context.hasDeskPiles &&
         context.hasActiveCard &&
-        context.focusedSurface !== "viewed";
+        (context.focusedSurface !== "viewed" || context.focusedCardOnDesk);
     case "toggle-pile":
     case "previous-card-in-pile":
     case "next-card-in-pile":

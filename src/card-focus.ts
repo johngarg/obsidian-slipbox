@@ -20,6 +20,25 @@ export function viewedCardFocus(path: string, pileId?: string): CardFocus {
     : { surface: "viewed", path, pileId };
 }
 
+/** Redirect focus from either placeholder to the card's viewed presentation. */
+export function redirectViewedCardGhostFocus(
+  focus: CardFocus | null,
+  viewedPath: string | null,
+  viewedPileId?: string,
+): CardFocus | null {
+  if (
+    focus === null ||
+    viewedPath === null ||
+    focus.path !== viewedPath
+  ) {
+    return focus;
+  }
+  if (focus.surface === "viewed" && focus.pileId === viewedPileId) {
+    return focus;
+  }
+  return viewedCardFocus(viewedPath, viewedPileId);
+}
+
 export function moveDeckFocusWithAnchor(
   focus: CardFocus | null,
   path: string,

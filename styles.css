@@ -747,36 +747,6 @@ button.slipbox-tray-pile-cycle svg {
     0 7px 22px rgb(0 0 0 / 0.08);
 }
 
-.slipbox-card-ghost-control {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 2;
-  display: inline-flex;
-  width: 52px;
-  height: 52px;
-  align-items: center;
-  justify-content: center;
-  padding: 13px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 26%, transparent);
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--background-primary) 46%, transparent);
-  opacity: 0.68;
-  transform: translate(-50%, -50%);
-}
-
-.slipbox-card-ghost-control:hover,
-.slipbox-card-ghost-control:focus-visible {
-  color: var(--text-normal);
-  opacity: 1;
-}
-
-.slipbox-card-ghost-control svg {
-  width: 100%;
-  height: 100%;
-}
-
 .slipbox-card-address-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);

@@ -106,6 +106,7 @@ export {
   deckCardFocus,
   deskCardFocus,
   moveDeckFocusWithAnchor,
+  redirectViewedCardGhostFocus,
   renameCardFocus,
   viewedCardFocus,
 } from "./card-focus.js";

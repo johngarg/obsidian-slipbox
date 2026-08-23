@@ -109,6 +109,11 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("swap-deck-pile", {
       ...READY,
       focusedSurface: "viewed",
+    }), true);
+    assert.equal(canRunDeckAction("swap-deck-pile", {
+      ...READY,
+      focusedSurface: "viewed",
+      focusedCardOnDesk: false,
     }), false);
     for (const action of [
       "toggle-pile",

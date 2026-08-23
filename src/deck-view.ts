@@ -1072,11 +1072,12 @@ export class DeckView extends ItemView {
     if (
       this.pendingCommand.kind !== "idle" ||
       this.app.workspace.getActiveViewOfType(DeckView) !== this ||
-      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
-      !this.canRunAction(definition.id)
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
     ) {
       return;
     }
+    // Observe every configured collision. Contextual action availability is
+    // checked only if Obsidian leaves the shortcut unclaimed.
     this.shortcutCommandTracker.observe(event);
     queueMicrotask(() => {
       const commandAction = this.shortcutCommandTracker.take(event);

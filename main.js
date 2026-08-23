@@ -4750,7 +4750,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
   }
   deferDeckActionKey(event, definition, binding2) {
-    if (this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) || !this.canRunAction(definition.id)) {
+    if (this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)) {
       return;
     }
     this.shortcutCommandTracker.observe(event);

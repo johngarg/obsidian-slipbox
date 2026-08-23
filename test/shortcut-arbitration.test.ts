@@ -40,6 +40,23 @@ describe("Slipbox shortcut arbitration", () => {
     assert.equal(warnings, 1);
   });
 
+  test("reports a claimed binding without running an unavailable local action", () => {
+    let localRuns = 0;
+    let warnings = 0;
+    const localActionAvailable = false;
+    assert.equal(arbitrateShortcut(
+      "other-command",
+      () => {
+        if (localActionAvailable) {
+          localRuns += 1;
+        }
+      },
+      () => { warnings += 1; },
+    ), "conflict");
+    assert.equal(localRuns, 0);
+    assert.equal(warnings, 1);
+  });
+
   test("does not rerun an action already dispatched as an Obsidian command", () => {
     let runs = 0;
     let warnings = 0;

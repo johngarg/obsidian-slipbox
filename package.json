@@ -15,7 +15,7 @@
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "rm -rf dist && tsc -p tsconfig.test.json && node --test dist/test/*.test.js",
+    "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
     "check": "npm run typecheck && npm test && npm run lint && npm run build && npm run validate:release",
     "validate:release": "node scripts/validate-release.mjs",

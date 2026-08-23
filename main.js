@@ -8108,8 +8108,15 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       void this.persistState().then(() => this.refreshDeckViews());
     }, 160);
   }
+  /**
+   * Open a card's note the way Obsidian itself opens a file.
+   *
+   * `getLeaf(false)` reuses a navigable leaf and honours pinning, so opening a
+   * card matches the core New note and link-following behaviour rather than
+   * always spawning a tab.
+   */
   openMarkdownFile(file) {
-    return this.app.workspace.getLeaf("tab").openFile(file);
+    return this.app.workspace.getLeaf(false).openFile(file);
   }
   acquireInlineEdit(path, owner) {
     const existing = this.inlineEditOwners.ownerAt(path);
@@ -8616,6 +8623,11 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       callback: () => void this.createNewCard("prompt")
     });
     this.addCommand({
+      id: "new-card-on-desk",
+      name: "New card on Desk",
+      callback: () => void this.createNewCardOnDesk()
+    });
+    this.addCommand({
       id: "make-current-note-card",
       name: "Make active Markdown note a card",
       checkCallback: (checking) => {
@@ -8719,25 +8731,34 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     });
   }
   async createNewCardAtTrayPosition(position) {
-    await this.createNewCard("default", position);
+    await this.createNewCard("default", { kind: "desk", position });
   }
-  async createNewCard(titleMode, trayPosition) {
+  /** Create an unfiled card on the Desk without opening its note. */
+  async createNewCardOnDesk() {
+    await this.openDeck();
+    await this.createNewCard("default", { kind: "desk" });
+  }
+  async createNewCard(titleMode, placement = { kind: "open" }) {
     try {
-      const file = await this.createCardFile(titleMode);
+      const file = await this.createCardFile(
+        titleMode,
+        placement.kind === "open"
+      );
       if (file === null) {
         return;
       }
-      if (trayPosition !== void 0) {
+      if (placement.kind === "desk") {
         await this.waitForCachedAddress(file, "");
         this.index.refresh();
         this.reconcileSessionTray();
-        const pileId = this.createTrayPileId();
-        this.tray = placeUnfiledCardAtPosition(
-          this.tray,
-          file.path,
-          pileId,
-          trayPosition
-        );
+        if (placement.position !== void 0) {
+          this.tray = placeUnfiledCardAtPosition(
+            this.tray,
+            file.path,
+            this.createTrayPileId(),
+            placement.position
+          );
+        }
         await this.refreshDeckViews();
       }
       this.queueIndexRefresh();
@@ -8763,7 +8784,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       new import_obsidian9.Notice(`Could not make this note a card: ${errorMessage4(error)}`);
     }
   }
-  async createCardFile(titleMode, sourcePath) {
+  async createCardFile(titleMode, open, sourcePath) {
     const timestamp = newNoteBasename(
       "",
       (0, import_obsidian9.moment)().format(this.settings.newNoteTimestampFormat)
@@ -8812,7 +8833,9 @@ ${frontmatter}---
 
 `
     );
-    await this.openMarkdownFile(file);
+    if (open) {
+      await this.openMarkdownFile(file);
+    }
     return file;
   }
   activeCreationSourcePath() {

@@ -283,8 +283,20 @@ does not open the title prompt. **New card with title** asks for a title;
 filename-derived titles use a sanitised nonblank title as the filename, while
 frontmatter-derived titles use the configured Moment timestamp filename and
 write the entered title property. Submitting a blank prompted title uses the
-same default-title behaviour, while cancelling creates nothing. Creating a card
-from the Desk background also uses the immediate default-title workflow.
+same default-title behaviour, while cancelling creates nothing.
+
+**New card on Desk** creates an unfiled card with the default timestamp-derived
+title and opens no note at all. The card is placed by ordinary Desk
+reconciliation, so it joins the Desk's home pile exactly like any other newly
+discovered unfiled card. Slipbox is opened first if no Slipbox view is present.
+Creating a card from the Desk background uses the same immediate default-title
+workflow and likewise opens no note; it differs only in placing the card at the
+clicked position instead of the home pile.
+
+**New card** and **New card with title** open the created note the way Obsidian
+itself opens a file. Slipbox reuses a navigable leaf rather than always spawning
+a tab, so the result matches the core New note command and respects a pinned
+tab.
 
 Slipbox applies no template of its own. Obsidian's Templates core plugin
 provides an **Insert template** command that works in any editor, including a

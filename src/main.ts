@@ -122,6 +122,11 @@ export type FileCardResult =
   | { readonly status: "preview-changed" }
   | { readonly status: "failed" };
 
+/** Where a newly created card goes, and whether its note is opened. */
+type NewCardPlacement =
+  | { readonly kind: "open" }
+  | { readonly kind: "desk"; readonly position?: TrayPilePosition };
+
 export interface InlineEditStartData {
   readonly file: TFile;
   readonly body: string;
@@ -270,8 +275,15 @@ export default class SlipboxPlugin extends Plugin {
     }, 160);
   }
 
+  /**
+   * Open a card's note the way Obsidian itself opens a file.
+   *
+   * `getLeaf(false)` reuses a navigable leaf and honours pinning, so opening a
+   * card matches the core New note and link-following behaviour rather than
+   * always spawning a tab.
+   */
   openMarkdownFile(file: TFile): Promise<void> {
-    return this.app.workspace.getLeaf("tab").openFile(file);
+    return this.app.workspace.getLeaf(false).openFile(file);
   }
 
   acquireInlineEdit(path: string, owner: DeckView): boolean {
@@ -881,6 +893,12 @@ export default class SlipboxPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "new-card-on-desk",
+      name: "New card on Desk",
+      callback: () => void this.createNewCardOnDesk(),
+    });
+
+    this.addCommand({
       id: "make-current-note-card",
       name: "Make active Markdown note a card",
       checkCallback: (checking) => {
@@ -997,29 +1015,41 @@ export default class SlipboxPlugin extends Plugin {
   async createNewCardAtTrayPosition(
     position: TrayPilePosition,
   ): Promise<void> {
-    await this.createNewCard("default", position);
+    await this.createNewCard("default", { kind: "desk", position });
+  }
+
+  /** Create an unfiled card on the Desk without opening its note. */
+  private async createNewCardOnDesk(): Promise<void> {
+    await this.openDeck();
+    await this.createNewCard("default", { kind: "desk" });
   }
 
   private async createNewCard(
     titleMode: NewCardTitleMode,
-    trayPosition?: TrayPilePosition,
+    placement: NewCardPlacement = { kind: "open" },
   ): Promise<void> {
     try {
-      const file = await this.createCardFile(titleMode);
+      const file = await this.createCardFile(
+        titleMode,
+        placement.kind === "open",
+      );
       if (file === null) {
         return;
       }
-      if (trayPosition !== undefined) {
+      if (placement.kind === "desk") {
         await this.waitForCachedAddress(file, "");
         this.index.refresh();
+        // Reconciliation alone places the card in the Desk's home pile, which
+        // is where every other newly discovered unfiled card lands.
         this.reconcileSessionTray();
-        const pileId = this.createTrayPileId();
-        this.tray = placeUnfiledCardAtPosition(
-          this.tray,
-          file.path,
-          pileId,
-          trayPosition,
-        );
+        if (placement.position !== undefined) {
+          this.tray = placeUnfiledCardAtPosition(
+            this.tray,
+            file.path,
+            this.createTrayPileId(),
+            placement.position,
+          );
+        }
         await this.refreshDeckViews();
       }
       this.queueIndexRefresh();
@@ -1049,6 +1079,7 @@ export default class SlipboxPlugin extends Plugin {
 
   private async createCardFile(
     titleMode: NewCardTitleMode,
+    open: boolean,
     sourcePath?: string,
   ): Promise<TFile | null> {
     const timestamp = newNoteBasename(
@@ -1098,7 +1129,9 @@ export default class SlipboxPlugin extends Plugin {
       path,
       `---\n${frontmatter}---\n\n`,
     );
-    await this.openMarkdownFile(file);
+    if (open) {
+      await this.openMarkdownFile(file);
+    }
     return file;
   }
 

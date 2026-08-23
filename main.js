@@ -406,6 +406,15 @@ function canRunDeckAction(action, context) {
       return context.canMoveDeskCardLeft;
     case "move-desk-card-right":
       return context.canMoveDeskCardRight;
+    case "next-pile":
+    case "previous-pile":
+      return context.hasDeskPiles && context.focusedSurface !== "viewed";
+    case "swap-deck-pile":
+      return context.hasDeskPiles && context.hasActiveCard && context.focusedSurface !== "viewed";
+    case "toggle-pile":
+    case "previous-card-in-pile":
+    case "next-card-in-pile":
+      return context.hasDeskPiles && context.focusedSurface === "desk";
     case "collapse-all-piles":
       return context.hasExpandedPiles;
     case "return-all-filed-cards":
@@ -1201,6 +1210,42 @@ var BASE_ACTION_DEFINITIONS = [
     defaultBindings: [binding("p", ["Shift"])]
   },
   {
+    id: "next-pile",
+    label: "Focus the next Desk pile",
+    repeatable: true,
+    defaultBindings: [binding("}", ["Shift"])]
+  },
+  {
+    id: "previous-pile",
+    label: "Focus the previous Desk pile",
+    repeatable: true,
+    defaultBindings: [binding("{", ["Shift"])]
+  },
+  {
+    id: "swap-deck-pile",
+    label: "Swap focus between the Deck and the last pile",
+    repeatable: false,
+    defaultBindings: [binding("%", ["Shift"])]
+  },
+  {
+    id: "toggle-pile",
+    label: "Expand or collapse the focused card's pile",
+    repeatable: false,
+    defaultBindings: [binding(" ")]
+  },
+  {
+    id: "previous-card-in-pile",
+    label: "Focus the previous card in the pile",
+    repeatable: true,
+    defaultBindings: [binding("h")]
+  },
+  {
+    id: "next-card-in-pile",
+    label: "Focus the next card in the pile",
+    repeatable: true,
+    defaultBindings: [binding("l")]
+  },
+  {
     id: "toggle-deck-map",
     label: "Toggle Deck-map visibility",
     repeatable: false,
@@ -1312,6 +1357,9 @@ var FOCUSED_CARD_ACTIONS = /* @__PURE__ */ new Set([
   "toggle-tray",
   "toggle-bookmark",
   "pull-into-pile",
+  "toggle-pile",
+  "previous-card-in-pile",
+  "next-card-in-pile",
   "edit-card",
   "show-card-in-deck",
   "toggle-viewed-card",
@@ -1326,7 +1374,10 @@ var VIEW_ACTIONS = /* @__PURE__ */ new Set([
   "confirm-filing",
   "cancel-filing",
   "collapse-all-piles",
-  "return-all-filed-cards"
+  "return-all-filed-cards",
+  "next-pile",
+  "previous-pile",
+  "swap-deck-pile"
 ]);
 var SLIPBOX_ACTION_DEFINITIONS = BASE_ACTION_DEFINITIONS.map((definition) => ({
   ...definition,
@@ -1453,7 +1504,7 @@ function keyBindingSignature(bindingValue) {
 }
 function formatKeyBinding(bindingValue) {
   const key = bindingValue.key === " " ? "Space" : bindingValue.key;
-  if (bindingValue.modifiers.length === 1 && bindingValue.modifiers[0] === "Shift" && key === "$") {
+  if (bindingValue.modifiers.length === 1 && bindingValue.modifiers[0] === "Shift" && (key === "$" || key === "%" || key === "{" || key === "}")) {
     return key;
   }
   return [...bindingValue.modifiers, key].join("+");
@@ -2512,19 +2563,6 @@ var TrayRenderer = class {
       event.stopPropagation();
       void this.actions.runAfterEditing(
         "tray-toggle-pile",
-        () => this.plugin.setTrayPileExpanded(pile.id, !expanded)
-      );
-    });
-    pileEl.addEventListener("keydown", (event) => {
-      if (event.target !== pileEl) {
-        return;
-      }
-      if (event.key !== " ") {
-        return;
-      }
-      event.preventDefault();
-      void this.actions.runAfterEditing(
-        "tray-toggle-pile-key",
         () => this.plugin.setTrayPileExpanded(pile.id, !expanded)
       );
     });
@@ -3771,6 +3809,50 @@ function cardFocusDeleted(focus, deletedPath) {
   return focus.path === deletedPath || focus.path.startsWith(prefix);
 }
 
+// src/pile-navigation.ts
+function pileTarget(pileId) {
+  return { surface: "desk", pileId };
+}
+function cyclePileFocusTarget(pileIds, current, deckAvailable, direction) {
+  if (pileIds.length === 0) {
+    return null;
+  }
+  const targets = [
+    ...deckAvailable ? [{ surface: "deck" }] : [],
+    ...pileIds.map(pileTarget)
+  ];
+  const currentIndex = targets.findIndex(
+    (target) => target.surface === current?.surface && (target.surface === "deck" || current?.surface === "desk" && target.pileId === current.pileId)
+  );
+  if (currentIndex < 0) {
+    return direction === 1 ? targets[0] ?? null : targets[targets.length - 1] ?? null;
+  }
+  const targetIndex = (currentIndex + direction + targets.length) % targets.length;
+  return targets[targetIndex] ?? null;
+}
+function swapPileFocusTarget(pileIds, current, lastFocusedPileId, deckAvailable) {
+  if (pileIds.length === 0) {
+    return null;
+  }
+  if (current.surface === "desk") {
+    return deckAvailable ? { surface: "deck" } : null;
+  }
+  const fallback = pileIds[0];
+  if (fallback === void 0) {
+    return null;
+  }
+  const remembered = lastFocusedPileId === null ? void 0 : pileIds.find((pileId) => pileId === lastFocusedPileId);
+  return pileTarget(remembered ?? fallback);
+}
+function wrappedPileCardNeighbour(pile, cardRef, direction) {
+  const index = pile.cards.findIndex((card) => card.cardRef === cardRef);
+  if (index < 0 || pile.cards.length === 0) {
+    return null;
+  }
+  const targetIndex = (index + direction + pile.cards.length) % pile.cards.length;
+  return pile.cards[targetIndex]?.cardRef ?? null;
+}
+
 // src/deck-view.ts
 var DECK_VIEW_TYPE = "slipbox-deck";
 var RENDER_EDGE_BUFFER = 2;
@@ -3840,6 +3922,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   navigation = false;
   activePath = null;
   cardFocus = null;
+  lastFocusedPileId = null;
   filingFile = null;
   filingSourcePath = null;
   filingInputValue = "";
@@ -4025,6 +4108,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.cardFocus = null;
+    this.lastFocusedPileId = null;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
@@ -4064,8 +4148,14 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   get focusedDeckCardPath() {
     return this.cardFocus?.surface === "deck" ? this.cardFocus.path : null;
   }
-  setCardFocus(focus) {
+  assignCardFocus(focus) {
     this.cardFocus = focus;
+    if (focus?.surface === "desk" && focus.pileId !== void 0) {
+      this.lastFocusedPileId = focus.pileId;
+    }
+  }
+  setCardFocus(focus) {
+    this.assignCardFocus(focus);
     this.applyCardFocusClasses();
   }
   focusDeskCard(path, pileId) {
@@ -4093,6 +4183,89 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.selectCardWithoutMoving(path);
     }
     this.setCardFocus(deckCardFocus(path));
+  }
+  pileFocusLocation() {
+    if (this.cardFocus?.surface === "deck") {
+      return { surface: "deck" };
+    }
+    if (this.cardFocus?.surface === "desk" && this.cardFocus.pileId !== void 0) {
+      return { surface: "desk", pileId: this.cardFocus.pileId };
+    }
+    return null;
+  }
+  focusPileNavigationTarget(target) {
+    if (target.surface === "deck") {
+      if (this.activePath !== null) {
+        this.setCardFocus(deckCardFocus(this.activePath));
+      }
+      return;
+    }
+    const pile = this.plugin.tray.piles.find(
+      (candidate) => candidate.id === target.pileId
+    );
+    const top = pile?.cards[0];
+    if (pile !== void 0 && top !== void 0) {
+      this.setCardFocus(deskCardFocus(top.cardRef, pile.id));
+    }
+  }
+  cyclePileFocus(direction) {
+    const target = cyclePileFocusTarget(
+      this.plugin.tray.piles.map((pile) => pile.id),
+      this.pileFocusLocation(),
+      this.activePath !== null,
+      direction
+    );
+    if (target !== null) {
+      this.focusPileNavigationTarget(target);
+    }
+  }
+  swapDeckPileFocus() {
+    const current = this.pileFocusLocation();
+    if (current === null) {
+      return;
+    }
+    const target = swapPileFocusTarget(
+      this.plugin.tray.piles.map((pile) => pile.id),
+      current,
+      this.lastFocusedPileId,
+      this.activePath !== null
+    );
+    if (target !== null) {
+      this.focusPileNavigationTarget(target);
+    }
+  }
+  toggleFocusedPile() {
+    if (this.cardFocus?.surface !== "desk" || this.cardFocus.pileId === void 0) {
+      return;
+    }
+    const pileId = this.cardFocus.pileId;
+    if (!this.plugin.tray.piles.some((pile) => pile.id === pileId)) {
+      return;
+    }
+    const expanded = this.plugin.tray.expandedPileIds.includes(pileId);
+    void this.plugin.setTrayPileExpanded(pileId, !expanded);
+  }
+  moveFocusWithinPile(direction) {
+    if (this.cardFocus?.surface !== "desk" || this.cardFocus.pileId === void 0) {
+      return;
+    }
+    const pile = this.plugin.tray.piles.find(
+      (candidate) => candidate.id === this.cardFocus?.pileId
+    );
+    if (pile === void 0) {
+      return;
+    }
+    if (!this.plugin.tray.expandedPileIds.includes(pile.id)) {
+      const next = cyclePileTopCard(this.plugin.tray, pile.id, direction);
+      if (next !== this.plugin.tray) {
+        void this.plugin.updateTray(next);
+      }
+      return;
+    }
+    const target = wrappedPileCardNeighbour(pile, this.cardFocus.path, direction);
+    if (target !== null) {
+      this.setCardFocus(deskCardFocus(target, pile.id));
+    }
   }
   setDeckAnchor(path) {
     this.activePath = path;
@@ -4142,7 +4315,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         }
         const top = pile.cards[0];
         if (top !== void 0) {
-          this.cardFocus = deskCardFocus(top.cardRef, pile.id);
+          this.assignCardFocus(deskCardFocus(top.cardRef, pile.id));
           return;
         }
       }
@@ -4153,7 +4326,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     const firstPile = this.plugin.tray.piles[0];
     const firstCard = firstPile?.cards[0];
-    this.cardFocus = firstPile !== void 0 && firstCard !== void 0 ? deskCardFocus(firstCard.cardRef, firstPile.id) : null;
+    this.assignCardFocus(firstPile !== void 0 && firstCard !== void 0 ? deskCardFocus(firstCard.cardRef, firstPile.id) : null);
   }
   get isFiling() {
     return this.filingFile !== null;
@@ -4337,6 +4510,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       focusedSurface: target === void 0 ? this.cardFocus?.surface ?? null : "deck",
       canMoveDeskCardLeft: focusedPosition !== null && focusedPosition.cardIndex > 0,
       canMoveDeskCardRight: focusedPosition !== null && focusedPosition.cardIndex < focusedPosition.pileSize - 1,
+      hasDeskPiles: this.plugin.tray.piles.length > 0,
       hasExpandedPiles: this.plugin.tray.expandedPileIds.length > 0,
       hasFiledDeskCards: trayHasFiledCards(this.plugin.tray)
     });
@@ -4427,6 +4601,24 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         break;
       case "pull-into-pile":
         this.beginPileCommand();
+        break;
+      case "next-pile":
+        this.cyclePileFocus(1);
+        break;
+      case "previous-pile":
+        this.cyclePileFocus(-1);
+        break;
+      case "swap-deck-pile":
+        this.swapDeckPileFocus();
+        break;
+      case "toggle-pile":
+        this.toggleFocusedPile();
+        break;
+      case "previous-card-in-pile":
+        this.moveFocusWithinPile(-1);
+        break;
+      case "next-card-in-pile":
+        this.moveFocusWithinPile(1);
         break;
       case "toggle-deck-map":
         this.deckMapVisibility = toggleDeckMapVisibility(
@@ -4528,7 +4720,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   async startFiling(file) {
     const trayPosition = cardPosition(this.plugin.tray, file.path);
     if (trayPosition !== null) {
-      this.cardFocus = deskCardFocus(file.path, trayPosition.pileId);
+      this.assignCardFocus(deskCardFocus(file.path, trayPosition.pileId));
     }
     if (trayPosition !== null && trayPosition.cardIndex > 0 && !this.plugin.tray.expandedPileIds.includes(trayPosition.pileId)) {
       await this.plugin.setTrayPileExpanded(trayPosition.pileId, true);
@@ -4697,7 +4889,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
       const position = cardPosition(this.plugin.tray, viewed.path);
-      this.cardFocus = position === null ? null : deskCardFocus(viewed.path, position.pileId);
+      this.assignCardFocus(position === null ? null : deskCardFocus(viewed.path, position.pileId));
       this.reconcileCardFocus();
       await this.renderDeck(false);
       const deskCard = this.stageEl?.querySelector(
@@ -4984,7 +5176,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       return;
     }
     if (focus.surface !== "deck" && nextDeskPath !== null && position !== null) {
-      this.cardFocus = deskCardFocus(nextDeskPath, position.pileId);
+      this.assignCardFocus(deskCardFocus(nextDeskPath, position.pileId));
     } else if (nextDeckPath !== null) {
       this.setDeckAnchor(nextDeckPath);
       this.cardFocus = deckCardFocus(nextDeckPath);
@@ -5264,7 +5456,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     );
     const targetPile = this.plugin.tray.piles[ordinal - 1];
     if (targetPile !== void 0) {
-      this.cardFocus = deskCardFocus(card.path, targetPile.id);
+      this.assignCardFocus(deskCardFocus(card.path, targetPile.id));
     }
     void this.plugin.updateTray(next);
   }
@@ -5771,7 +5963,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
       if (position !== null) {
-        this.cardFocus = deskCardFocus(file.path, position.pileId);
+        this.assignCardFocus(deskCardFocus(file.path, position.pileId));
       }
       await this.startFiling(file);
     });

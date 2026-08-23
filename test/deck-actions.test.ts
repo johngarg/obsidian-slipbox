@@ -22,6 +22,7 @@ const READY: DeckActionContext = {
   focusedSurface: "desk",
   canMoveDeskCardLeft: true,
   canMoveDeskCardRight: true,
+  hasDeskPiles: true,
   hasExpandedPiles: true,
   hasFiledDeskCards: true,
 };
@@ -54,6 +55,7 @@ describe("Deck action availability", () => {
       focusedSurface: null,
       canMoveDeskCardLeft: false,
       canMoveDeskCardRight: false,
+      hasDeskPiles: false,
       hasExpandedPiles: false,
       hasFiledDeskCards: false,
     };
@@ -85,6 +87,37 @@ describe("Deck action availability", () => {
       focusedSurface: "deck",
       focusedCardFiled: false,
     }), false);
+  });
+
+  test("guards pile navigation by Desk, Deck, and focus state", () => {
+    for (const action of ["next-pile", "previous-pile"] as const) {
+      assert.equal(canRunDeckAction(action, READY), true);
+      assert.equal(canRunDeckAction(action, { ...READY, hasDeskPiles: false }), false);
+      assert.equal(canRunDeckAction(action, { ...READY, focusedSurface: "viewed" }), false);
+    }
+    assert.equal(canRunDeckAction("swap-deck-pile", READY), true);
+    assert.equal(canRunDeckAction("swap-deck-pile", {
+      ...READY,
+      hasActiveCard: false,
+    }), false);
+    assert.equal(canRunDeckAction("swap-deck-pile", {
+      ...READY,
+      hasDeskPiles: false,
+    }), false);
+    assert.equal(canRunDeckAction("swap-deck-pile", {
+      ...READY,
+      focusedSurface: "viewed",
+    }), false);
+    for (const action of [
+      "toggle-pile",
+      "previous-card-in-pile",
+      "next-card-in-pile",
+    ] as const) {
+      assert.equal(canRunDeckAction(action, READY), true);
+      assert.equal(canRunDeckAction(action, { ...READY, focusedSurface: "deck" }), false);
+      assert.equal(canRunDeckAction(action, { ...READY, focusedSurface: "viewed" }), false);
+      assert.equal(canRunDeckAction(action, { ...READY, hasDeskPiles: false }), false);
+    }
   });
 
   test("does not expose removed creation actions or reuse the a shortcut", () => {

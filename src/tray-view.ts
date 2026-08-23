@@ -395,19 +395,6 @@ export class TrayRenderer {
         () => this.plugin.setTrayPileExpanded(pile.id, !expanded),
       );
     });
-    pileEl.addEventListener("keydown", (event) => {
-      if (event.target !== pileEl) {
-        return;
-      }
-      if (event.key !== " ") {
-        return;
-      }
-      event.preventDefault();
-      void this.actions.runAfterEditing(
-        "tray-toggle-pile-key",
-        () => this.plugin.setTrayPileExpanded(pile.id, !expanded),
-      );
-    });
     pileEl.addEventListener("contextmenu", (event) => {
       if (
         event.target instanceof Element &&

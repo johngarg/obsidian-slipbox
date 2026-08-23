@@ -67,6 +67,12 @@ export type SlipboxAction =
   | "find-address-backward"
   | "find-address-first"
   | "pull-into-pile"
+  | "next-pile"
+  | "previous-pile"
+  | "swap-deck-pile"
+  | "toggle-pile"
+  | "previous-card-in-pile"
+  | "next-card-in-pile"
   | "toggle-deck-map"
   | "bookmarks"
   | "problems"
@@ -220,6 +226,42 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     defaultBindings: [binding("p", ["Shift"])],
   },
   {
+    id: "next-pile",
+    label: "Focus the next Desk pile",
+    repeatable: true,
+    defaultBindings: [binding("}", ["Shift"])],
+  },
+  {
+    id: "previous-pile",
+    label: "Focus the previous Desk pile",
+    repeatable: true,
+    defaultBindings: [binding("{", ["Shift"])],
+  },
+  {
+    id: "swap-deck-pile",
+    label: "Swap focus between the Deck and the last pile",
+    repeatable: false,
+    defaultBindings: [binding("%", ["Shift"])],
+  },
+  {
+    id: "toggle-pile",
+    label: "Expand or collapse the focused card's pile",
+    repeatable: false,
+    defaultBindings: [binding(" ")],
+  },
+  {
+    id: "previous-card-in-pile",
+    label: "Focus the previous card in the pile",
+    repeatable: true,
+    defaultBindings: [binding("h")],
+  },
+  {
+    id: "next-card-in-pile",
+    label: "Focus the next card in the pile",
+    repeatable: true,
+    defaultBindings: [binding("l")],
+  },
+  {
     id: "toggle-deck-map",
     label: "Toggle Deck-map visibility",
     repeatable: false,
@@ -333,6 +375,9 @@ const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
   "toggle-tray",
   "toggle-bookmark",
   "pull-into-pile",
+  "toggle-pile",
+  "previous-card-in-pile",
+  "next-card-in-pile",
   "edit-card",
   "show-card-in-deck",
   "toggle-viewed-card",
@@ -350,6 +395,9 @@ const VIEW_ACTIONS = new Set<SlipboxAction>([
   "cancel-filing",
   "collapse-all-piles",
   "return-all-filed-cards",
+  "next-pile",
+  "previous-pile",
+  "swap-deck-pile",
 ]);
 
 export const SLIPBOX_ACTION_DEFINITIONS: readonly SlipboxActionDefinition[] =
@@ -537,7 +585,7 @@ export function formatKeyBinding(bindingValue: DeckKeyBinding): string {
   if (
     bindingValue.modifiers.length === 1 &&
     bindingValue.modifiers[0] === "Shift" &&
-    key === "$"
+    (key === "$" || key === "%" || key === "{" || key === "}")
   ) {
     return key;
   }

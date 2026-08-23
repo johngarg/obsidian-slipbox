@@ -46,6 +46,12 @@ export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
 export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
 export {
+  cyclePileFocusTarget,
+  rememberPileFocus,
+  swapPileFocusTarget,
+  wrappedPileCardNeighbour,
+} from "./pile-navigation.js";
+export {
   CARD_BUTTON_DEFINITIONS,
   CARD_BUTTON_ORDER,
   applicableCardHeaderActions,
@@ -203,6 +209,11 @@ export type {
 } from "./tray-state.js";
 export type { DeskCardState } from "./desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
+export type {
+  NavigablePile,
+  PileFocusLocation,
+  PileNavigationDirection,
+} from "./pile-navigation.js";
 export type {
   AddressInitialMode,
   AddressedDeckCard,

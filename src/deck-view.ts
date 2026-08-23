@@ -48,6 +48,7 @@ import {
 import {
   collapseAllPiles,
   cardPosition,
+  cyclePileTopCard,
   moveCardWithinPile,
   placeFiledCardInPileOrdinal,
   trayHasFiledCards,
@@ -120,6 +121,13 @@ import {
   viewedCardFocus,
   type CardFocus,
 } from "./card-focus.js";
+import {
+  cyclePileFocusTarget,
+  swapPileFocusTarget,
+  wrappedPileCardNeighbour,
+  type PileFocusLocation,
+  type PileNavigationDirection,
+} from "./pile-navigation.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -164,6 +172,7 @@ export class DeckView extends ItemView {
   navigation = false;
   private activePath: string | null = null;
   private cardFocus: CardFocus | null = null;
+  private lastFocusedPileId: string | null = null;
   private filingFile: TFile | null = null;
   private filingSourcePath: string | null = null;
   private filingInputValue = "";
@@ -407,6 +416,7 @@ export class DeckView extends ItemView {
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.cardFocus = null;
+    this.lastFocusedPileId = null;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
@@ -455,8 +465,15 @@ export class DeckView extends ItemView {
     return this.cardFocus?.surface === "deck" ? this.cardFocus.path : null;
   }
 
-  private setCardFocus(focus: CardFocus | null): void {
+  private assignCardFocus(focus: CardFocus | null): void {
     this.cardFocus = focus;
+    if (focus?.surface === "desk" && focus.pileId !== undefined) {
+      this.lastFocusedPileId = focus.pileId;
+    }
+  }
+
+  private setCardFocus(focus: CardFocus | null): void {
+    this.assignCardFocus(focus);
     this.applyCardFocusClasses();
   }
 
@@ -487,6 +504,104 @@ export class DeckView extends ItemView {
       this.selectCardWithoutMoving(path);
     }
     this.setCardFocus(deckCardFocus(path));
+  }
+
+  private pileFocusLocation(): PileFocusLocation | null {
+    if (this.cardFocus?.surface === "deck") {
+      return { surface: "deck" };
+    }
+    if (
+      this.cardFocus?.surface === "desk" &&
+      this.cardFocus.pileId !== undefined
+    ) {
+      return { surface: "desk", pileId: this.cardFocus.pileId };
+    }
+    return null;
+  }
+
+  private focusPileNavigationTarget(target: PileFocusLocation): void {
+    if (target.surface === "deck") {
+      if (this.activePath !== null) {
+        this.setCardFocus(deckCardFocus(this.activePath));
+      }
+      return;
+    }
+    const pile = this.plugin.tray.piles.find((candidate) =>
+      candidate.id === target.pileId
+    );
+    const top = pile?.cards[0];
+    if (pile !== undefined && top !== undefined) {
+      this.setCardFocus(deskCardFocus(top.cardRef, pile.id));
+    }
+  }
+
+  private cyclePileFocus(direction: PileNavigationDirection): void {
+    const target = cyclePileFocusTarget(
+      this.plugin.tray.piles.map((pile) => pile.id),
+      this.pileFocusLocation(),
+      this.activePath !== null,
+      direction,
+    );
+    if (target !== null) {
+      this.focusPileNavigationTarget(target);
+    }
+  }
+
+  private swapDeckPileFocus(): void {
+    const current = this.pileFocusLocation();
+    if (current === null) {
+      return;
+    }
+    const target = swapPileFocusTarget(
+      this.plugin.tray.piles.map((pile) => pile.id),
+      current,
+      this.lastFocusedPileId,
+      this.activePath !== null,
+    );
+    if (target !== null) {
+      this.focusPileNavigationTarget(target);
+    }
+  }
+
+  private toggleFocusedPile(): void {
+    if (
+      this.cardFocus?.surface !== "desk" ||
+      this.cardFocus.pileId === undefined
+    ) {
+      return;
+    }
+    const pileId = this.cardFocus.pileId;
+    if (!this.plugin.tray.piles.some((pile) => pile.id === pileId)) {
+      return;
+    }
+    const expanded = this.plugin.tray.expandedPileIds.includes(pileId);
+    void this.plugin.setTrayPileExpanded(pileId, !expanded);
+  }
+
+  private moveFocusWithinPile(direction: PileNavigationDirection): void {
+    if (
+      this.cardFocus?.surface !== "desk" ||
+      this.cardFocus.pileId === undefined
+    ) {
+      return;
+    }
+    const pile = this.plugin.tray.piles.find((candidate) =>
+      candidate.id === this.cardFocus?.pileId
+    );
+    if (pile === undefined) {
+      return;
+    }
+    if (!this.plugin.tray.expandedPileIds.includes(pile.id)) {
+      const next = cyclePileTopCard(this.plugin.tray, pile.id, direction);
+      if (next !== this.plugin.tray) {
+        void this.plugin.updateTray(next);
+      }
+      return;
+    }
+    const target = wrappedPileCardNeighbour(pile, this.cardFocus.path, direction);
+    if (target !== null) {
+      this.setCardFocus(deskCardFocus(target, pile.id));
+    }
   }
 
   private setDeckAnchor(path: string): void {
@@ -553,7 +668,7 @@ export class DeckView extends ItemView {
         }
         const top = pile.cards[0];
         if (top !== undefined) {
-          this.cardFocus = deskCardFocus(top.cardRef, pile.id);
+          this.assignCardFocus(deskCardFocus(top.cardRef, pile.id));
           return;
         }
       }
@@ -564,9 +679,9 @@ export class DeckView extends ItemView {
     }
     const firstPile = this.plugin.tray.piles[0];
     const firstCard = firstPile?.cards[0];
-    this.cardFocus = firstPile !== undefined && firstCard !== undefined
+    this.assignCardFocus(firstPile !== undefined && firstCard !== undefined
       ? deskCardFocus(firstCard.cardRef, firstPile.id)
-      : null;
+      : null);
   }
 
   get isFiling(): boolean {
@@ -797,6 +912,7 @@ export class DeckView extends ItemView {
       canMoveDeskCardRight:
         focusedPosition !== null &&
         focusedPosition.cardIndex < focusedPosition.pileSize - 1,
+      hasDeskPiles: this.plugin.tray.piles.length > 0,
       hasExpandedPiles: this.plugin.tray.expandedPileIds.length > 0,
       hasFiledDeskCards: trayHasFiledCards(this.plugin.tray),
     });
@@ -896,6 +1012,24 @@ export class DeckView extends ItemView {
         break;
       case "pull-into-pile":
         this.beginPileCommand();
+        break;
+      case "next-pile":
+        this.cyclePileFocus(1);
+        break;
+      case "previous-pile":
+        this.cyclePileFocus(-1);
+        break;
+      case "swap-deck-pile":
+        this.swapDeckPileFocus();
+        break;
+      case "toggle-pile":
+        this.toggleFocusedPile();
+        break;
+      case "previous-card-in-pile":
+        this.moveFocusWithinPile(-1);
+        break;
+      case "next-card-in-pile":
+        this.moveFocusWithinPile(1);
         break;
       case "toggle-deck-map":
         this.deckMapVisibility = toggleDeckMapVisibility(
@@ -1003,7 +1137,7 @@ export class DeckView extends ItemView {
   async startFiling(file: TFile): Promise<void> {
     const trayPosition = cardPosition(this.plugin.tray, file.path);
     if (trayPosition !== null) {
-      this.cardFocus = deskCardFocus(file.path, trayPosition.pileId);
+      this.assignCardFocus(deskCardFocus(file.path, trayPosition.pileId));
     }
     if (
       trayPosition !== null &&
@@ -1203,9 +1337,9 @@ export class DeckView extends ItemView {
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
       const position = cardPosition(this.plugin.tray, viewed.path);
-      this.cardFocus = position === null
+      this.assignCardFocus(position === null
         ? null
-        : deskCardFocus(viewed.path, position.pileId);
+        : deskCardFocus(viewed.path, position.pileId));
       this.reconcileCardFocus();
       await this.renderDeck(false);
       const deskCard = this.stageEl?.querySelector<HTMLElement>(
@@ -1562,7 +1696,7 @@ export class DeckView extends ItemView {
       nextDeskPath !== null &&
       position !== null
     ) {
-      this.cardFocus = deskCardFocus(nextDeskPath, position.pileId);
+      this.assignCardFocus(deskCardFocus(nextDeskPath, position.pileId));
     } else if (nextDeckPath !== null) {
       this.setDeckAnchor(nextDeckPath);
       this.cardFocus = deckCardFocus(nextDeckPath);
@@ -1896,7 +2030,7 @@ export class DeckView extends ItemView {
     );
     const targetPile = this.plugin.tray.piles[ordinal - 1];
     if (targetPile !== undefined) {
-      this.cardFocus = deskCardFocus(card.path, targetPile.id);
+      this.assignCardFocus(deskCardFocus(card.path, targetPile.id));
     }
     void this.plugin.updateTray(next);
   }
@@ -2467,7 +2601,7 @@ export class DeckView extends ItemView {
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
       if (position !== null) {
-        this.cardFocus = deskCardFocus(file.path, position.pileId);
+        this.assignCardFocus(deskCardFocus(file.path, position.pileId));
       }
       await this.startFiling(file);
     });

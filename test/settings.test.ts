@@ -75,6 +75,24 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["pull-into-pile"], [
       { key: "p", modifiers: ["Shift"] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["next-pile"], [
+      { key: "}", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["previous-pile"], [
+      { key: "{", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["swap-deck-pile"], [
+      { key: "%", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-pile"], [
+      { key: " ", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["previous-card-in-pile"], [
+      { key: "h", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["next-card-in-pile"], [
+      { key: "l", modifiers: [] },
+    ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-deck-map"], [
       { key: "m", modifiers: [] },
     ]);
@@ -171,6 +189,24 @@ describe("Slipbox settings", () => {
       ),
       true,
     );
+    for (const action of ["next-pile", "previous-pile", "swap-deck-pile"] as const) {
+      const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
+        candidate.id === action
+      );
+      assert.equal(definition?.scope, "active-view");
+      assert.equal(definition?.target, "view");
+    }
+    for (const action of [
+      "toggle-pile",
+      "previous-card-in-pile",
+      "next-card-in-pile",
+    ] as const) {
+      const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
+        candidate.id === action
+      );
+      assert.equal(definition?.scope, "active-view");
+      assert.equal(definition?.target, "focused-card");
+    }
   });
 
   test("preserves customized and deliberately empty copy-link settings", () => {
@@ -190,6 +226,32 @@ describe("Slipbox settings", () => {
       deckKeybindings: { "copy-link": [] },
     });
     assert.deepEqual(empty.deckKeybindings["copy-link"], []);
+  });
+
+  test("does not let new pile-navigation defaults displace existing bindings", () => {
+    const settings = normalizeSettings({
+      deckKeybindings: {
+        "open-note": [{ key: "h", modifiers: [] }],
+        "toggle-tray": [{ key: " ", modifiers: [] }],
+      },
+    });
+    assert.deepEqual(settings.deckKeybindings["open-note"], [{
+      key: "h",
+      modifiers: [],
+    }]);
+    assert.deepEqual(settings.deckKeybindings["toggle-tray"], [{
+      key: " ",
+      modifiers: [],
+    }]);
+    assert.deepEqual(settings.deckKeybindings["previous-card-in-pile"], []);
+    assert.deepEqual(settings.deckKeybindings["toggle-pile"], []);
+  });
+
+  test("formats shifted pile-navigation symbols without redundant Shift text", () => {
+    for (const key of ["$", "%", "{", "}"]) {
+      assert.equal(formatKeyBinding({ key, modifiers: ["Shift"] }), key);
+    }
+    assert.equal(formatKeyBinding({ key: " ", modifiers: [] }), "Space");
   });
 
   test("normalizes per-surface button settings and preserves explicit false", () => {

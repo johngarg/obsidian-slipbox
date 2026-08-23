@@ -14,6 +14,7 @@ export interface DeckActionContext {
   readonly focusedSurface: "deck" | "desk" | "viewed" | null;
   readonly canMoveDeskCardLeft: boolean;
   readonly canMoveDeskCardRight: boolean;
+  readonly hasDeskPiles: boolean;
   readonly hasExpandedPiles: boolean;
   readonly hasFiledDeskCards: boolean;
 }
@@ -65,6 +66,17 @@ export function canRunDeckAction(
       return context.canMoveDeskCardLeft;
     case "move-desk-card-right":
       return context.canMoveDeskCardRight;
+    case "next-pile":
+    case "previous-pile":
+      return context.hasDeskPiles && context.focusedSurface !== "viewed";
+    case "swap-deck-pile":
+      return context.hasDeskPiles &&
+        context.hasActiveCard &&
+        context.focusedSurface !== "viewed";
+    case "toggle-pile":
+    case "previous-card-in-pile":
+    case "next-card-in-pile":
+      return context.hasDeskPiles && context.focusedSurface === "desk";
     case "collapse-all-piles":
       return context.hasExpandedPiles;
     case "return-all-filed-cards":

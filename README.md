@@ -54,6 +54,17 @@ complete expanded row. Piles expand and collapse independently, so several can
 remain open at once. Card actions appear in each miniature's header, matching
 the filed-card controls.
 
+Card focus can also move between the Deck and Desk piles without changing the
+Deck anchor. `{` and `}` cycle backward and forward through the Deck and every
+visible pile, wrapping at both ends and landing on each pile's top card without
+expanding it. If the Deck has no filed cards, cycling skips it. `%` swaps between
+the Deck and the last pile that received card focus, falling back to the first
+pile when that history is absent or stale; swap is unavailable when the Deck is
+empty. `Space` expands or collapses the pile containing the focused Desk card.
+In an expanded pile, `h` and `l` move card focus through its cards and wrap at
+both ends. In a collapsed pile they rotate the top card exactly like the hover
+arrows.
+
 Drag empty background to pan the whole workspace, including both filed cards
 and piles. This makes overlapped or off-centre piles reachable without changing
 their positions relative to the filed cards. Horizontal trackpad gestures still
@@ -340,6 +351,10 @@ newly created card.
 | `Ctrl+u` | Move backward ten Deck positions |
 | `o` | Open the focused card in Markdown |
 | `p` | Put the focused filed card on the Desk, or return it from the Desk |
+| `{` / `}` | Cycle card focus backward/forward through the Deck and Desk piles |
+| `%` | Swap card focus between the Deck and the last focused pile |
+| `Space` | Expand or collapse the focused Desk card's pile |
+| `h` / `l` | Focus the previous/next card in a pile, wrapping at both ends |
 | `Alt+←` / `Alt+→` | Move the focused Desk card within its pile |
 | `f` then a character | Find the next card whose address begins with that character |
 | `F` then a character | Find the previous card whose address begins with that character |

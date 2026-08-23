@@ -207,8 +207,8 @@ longer exist.
   filing, Desk placement, Deck location, links, bookmarks, movement, and deletion.
 - Inline manual filing in the existing working card, with optional real-Deck
   placement inspection, plus ordinary-note conversion workflows.
-- Filename- or frontmatter-derived centred titles, configurable new-card folder
-  and timestamp naming, and Obsidian Templates integration.
+- Filename- or frontmatter-derived centred titles, with a configurable new-card
+  folder and timestamp naming.
 - Visible malformed-address errors and non-blocking duplicate-address warnings.
 - Windowed Slipbox rendering around the Deck anchor rather than the whole vault.
 - `Return` activates the affirmative action in Slipbox prompt and confirmation
@@ -285,7 +285,10 @@ frontmatter-derived titles use the configured Moment timestamp filename and
 write the entered title property. Submitting a blank prompted title uses the
 same default-title behaviour, while cancelling creates nothing. Creating a card
 from the Desk background also uses the immediate default-title workflow.
-Templates support is optional and uses Obsidian's Templates core plugin.
+
+Slipbox applies no template of its own. Obsidian's Templates core plugin
+provides an **Insert template** command that works in any editor, including a
+newly created card.
 
 ## Default Slipbox keys
 
@@ -416,6 +419,11 @@ renumbered. The default Natural comparator intentionally differs from the old
 Luhmann comparator in alphabetic rollover cases—for example, `1/1aa` may now
 precede `1/1z`. Renaming a file may reorder it within an exact-address duplicate
 group because path order is the deterministic tie-breaker.
+
+Schema 9 silently purges the retired `useTemplatesForNewNotes` and
+`newNoteTemplatePath` settings, retaining every other compatible setting and all
+state. Card notes written while template support existed are unaffected; the
+template content is already part of those files.
 
 ## Development
 

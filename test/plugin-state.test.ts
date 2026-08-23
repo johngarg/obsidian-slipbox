@@ -64,14 +64,14 @@ describe("normalizePluginState", () => {
 });
 
 describe("normalizePluginData", () => {
-  test("migrates legacy flat state into schema-8 settings and state", () => {
+  test("migrates legacy flat state into schema-9 settings and state", () => {
     const data = normalizePluginData({
       entryPoints: [{ name: "Start", id: "1/1" }],
       bookmarks: [{ zettelId: "1/1" }],
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 8);
+    assert.equal(data.schemaVersion, 9);
     assert.equal(data.settings.addressProperty, "zettel-id");
     assert.equal(data.settings.deckOrdering, "natural");
     assert.equal(data.settings.showDeckMap, true);
@@ -84,7 +84,7 @@ describe("normalizePluginData", () => {
     ]);
   });
 
-  test("migrates schema 7 spread and removes history and toolbar settings", () => {
+  test("migrates schema 7 spread and removes history, toolbar, and template settings", () => {
     const data = normalizePluginData({
       schemaVersion: 7,
       settings: {
@@ -95,6 +95,8 @@ describe("normalizePluginData", () => {
         showTitleInDeck: true,
         showDeckToolbar: false,
         showDeckMap: false,
+        useTemplatesForNewNotes: true,
+        newNoteTemplatePath: "Templates/Zettel.md",
         deckKeybindings: {
           back: [{ key: "h", modifiers: ["Shift"] }],
           forward: [{ key: "r", modifiers: ["Alt"] }],
@@ -108,7 +110,7 @@ describe("normalizePluginData", () => {
         history: { entries: ["Cards/here.md"], index: 0 },
       },
     });
-    assert.equal(data.schemaVersion, 8);
+    assert.equal(data.schemaVersion, 9);
     assert.equal(data.settings.addressProperty, "signature");
     assert.equal(data.settings.titleProperty, "name");
     assert.equal(data.settings.newCardFolder, "Cards");
@@ -116,6 +118,8 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.showDeckMap, false);
     assert.equal(data.settings.cardSpread, 0.42);
     assert.equal("showDeckToolbar" in data.settings, false);
+    assert.equal("useTemplatesForNewNotes" in data.settings, false);
+    assert.equal("newNoteTemplatePath" in data.settings, false);
     assert.equal("back" in data.settings.deckKeybindings, false);
     assert.equal("forward" in data.settings.deckKeybindings, false);
     assert.equal("toggle-toolbar" in data.settings.deckKeybindings, false);
@@ -200,10 +204,10 @@ describe("normalizePluginData", () => {
     };
     assert.equal(needsPluginDataMigration(collision), true);
     assert.equal(hasTitleAddressCollisionData(collision), true);
-    assert.equal(normalizePluginData(collision).schemaVersion, 8);
+    assert.equal(normalizePluginData(collision).schemaVersion, 9);
     assert.equal(normalizePluginData(collision).settings.titleSource, "filename");
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 7 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 8 }), false);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 8 }), true);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 9 }), false);
     assert.equal(hasTitleAddressCollisionData(null), false);
   });
 });

@@ -43,7 +43,6 @@ import {
   promptForCanvas,
   promptForCardLink,
   promptForNewCardTitle,
-  promptForTemplate,
   promptForText,
 } from "./modals.js";
 import {
@@ -122,17 +121,6 @@ export type FileCardResult =
   | { readonly status: "filed"; readonly address: string; readonly index: number }
   | { readonly status: "preview-changed" }
   | { readonly status: "failed" };
-
-interface TemplatesCorePlugin {
-  readonly options?: { readonly folder?: unknown };
-  insertTemplate(file: TFile): Promise<void> | void;
-}
-
-export interface TemplatesInfo {
-  readonly enabled: boolean;
-  readonly folder: string;
-  readonly files: readonly TFile[];
-}
 
 export interface InlineEditStartData {
   readonly file: TFile;
@@ -430,24 +418,6 @@ export default class SlipboxPlugin extends Plugin {
     return card === undefined
       ? path
       : `${card.address} · ${this.cardTitle(card.file)}`;
-  }
-
-  templatesInfo(): TemplatesInfo {
-    const plugin = this.templatesPlugin();
-    const configuredFolder = plugin?.options?.folder;
-    if (plugin === null || typeof configuredFolder !== "string") {
-      return { enabled: plugin !== null, folder: "", files: [] };
-    }
-    const folder = normalizePath(configuredFolder);
-    if (folder === "") {
-      return { enabled: true, folder, files: [] };
-    }
-    const prefix = `${folder}/`;
-    const files = this.app.vault
-      .getMarkdownFiles()
-      .filter((file) => file.path.startsWith(prefix))
-      .sort((left, right) => left.path.localeCompare(right.path));
-    return { enabled: true, folder, files };
   }
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
@@ -1103,7 +1073,6 @@ export default class SlipboxPlugin extends Plugin {
     const parent = this.newCardParent(
       sourcePath ?? this.activeCreationSourcePath(),
     );
-    const template = await this.resolveNewNoteTemplate();
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;
     let sequence = 0;
     let path: string;
@@ -1130,23 +1099,6 @@ export default class SlipboxPlugin extends Plugin {
       `---\n${frontmatter}---\n\n`,
     );
     await this.openMarkdownFile(file);
-    if (template !== null) {
-      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-      if (view?.file?.path !== file.path) {
-        new Notice("Could not apply the new-card template: the note editor is not active.");
-      } else {
-        const lastLine = view.editor.lastLine();
-        view.editor.setCursor({
-          line: lastLine,
-          ch: view.editor.getLine(lastLine).length,
-        });
-        try {
-          await template.plugin.insertTemplate(template.file);
-        } catch (error) {
-          new Notice(`Could not apply the new-card template: ${errorMessage(error)}`);
-        }
-      }
-    }
     return file;
   }
 
@@ -1173,57 +1125,6 @@ export default class SlipboxPlugin extends Plugin {
       );
     }
     return folder;
-  }
-
-  private templatesPlugin(): TemplatesCorePlugin | null {
-    const app = this.app as typeof this.app & {
-      readonly internalPlugins?: {
-        getEnabledPluginById(id: string): unknown;
-      };
-    };
-    const candidate = app.internalPlugins?.getEnabledPluginById("templates");
-    if (
-      typeof candidate !== "object" ||
-      candidate === null ||
-      !("insertTemplate" in candidate) ||
-      typeof candidate.insertTemplate !== "function"
-    ) {
-      return null;
-    }
-    return candidate as TemplatesCorePlugin;
-  }
-
-  private async resolveNewNoteTemplate(): Promise<{
-    readonly plugin: TemplatesCorePlugin;
-    readonly file: TFile;
-  } | null> {
-    if (!this.settings.useTemplatesForNewNotes) {
-      return null;
-    }
-    const plugin = this.templatesPlugin();
-    const info = this.templatesInfo();
-    if (plugin === null) {
-      new Notice("Enable Obsidian’s templates core plugin to apply templates to new cards.");
-      return null;
-    }
-    if (info.folder === "" || info.files.length === 0) {
-      new Notice("Configure a templates folder containing at least one template to use it for new cards.");
-      return null;
-    }
-
-    let file: TFile | null = null;
-    if (this.settings.newNoteTemplatePath !== "") {
-      file = info.files.find(
-        (candidate) => candidate.path === this.settings.newNoteTemplatePath,
-      ) ?? null;
-      if (file === null) {
-        new Notice("The configured new-card template is missing. Choose another template.");
-      }
-    }
-    if (file === null) {
-      file = await promptForTemplate(this.app, info.files, info.folder);
-    }
-    return file === null ? null : { plugin, file };
   }
 
   private cardMetadataState(file: TFile): CardMetadataState {

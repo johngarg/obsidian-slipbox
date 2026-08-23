@@ -1081,7 +1081,7 @@ function renderCardHeaderButtons(options) {
 }
 
 // src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 8;
+var SLIPBOX_DATA_SCHEMA_VERSION = 9;
 var DEFAULT_CARD_SPREAD = 0.58;
 var MIN_CARD_SPREAD = 0.18;
 var MAX_CARD_SPREAD = 1.12;
@@ -1395,8 +1395,6 @@ var DEFAULT_SETTINGS = {
   trayCardSize: "medium",
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
-  useTemplatesForNewNotes: false,
-  newNoteTemplatePath: "",
   showTitleInDeck: false,
   showDeckMap: true,
   cardSpread: DEFAULT_CARD_SPREAD,
@@ -1605,8 +1603,6 @@ function normalizeSettings(value) {
       source.newNoteTimestampFormat,
       DEFAULT_SETTINGS.newNoteTimestampFormat
     ),
-    useTemplatesForNewNotes: typeof source.useTemplatesForNewNotes === "boolean" ? source.useTemplatesForNewNotes : DEFAULT_SETTINGS.useTemplatesForNewNotes,
-    newNoteTemplatePath: typeof source.newNoteTemplatePath === "string" ? source.newNoteTemplatePath.trim() : DEFAULT_SETTINGS.newNoteTemplatePath,
     showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
     showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
     cardSpread: normalizeCardSpread(source.cardSpread),
@@ -1622,6 +1618,8 @@ function settingsForPersistence(rawValue, settings) {
   const {
     deckHeaderButtons: _legacyDeckHeaderButtons,
     showDeckToolbar: _showDeckToolbar,
+    useTemplatesForNewNotes: _useTemplatesForNewNotes,
+    newNoteTemplatePath: _newNoteTemplatePath,
     ...retainedRaw
   } = raw;
   const rawKeybindingsSource = isRecord2(raw.deckKeybindings) ? raw.deckKeybindings : {};
@@ -6740,39 +6738,6 @@ function promptForNewCardTitle(app, placeholder) {
     window.setTimeout(() => modal.open());
   });
 }
-var TemplatePromptModal = class extends import_obsidian5.FuzzySuggestModal {
-  constructor(app, files, folder, resolveFile) {
-    super(app);
-    this.files = files;
-    this.folder = folder;
-    this.resolveFile = resolveFile;
-    this.setPlaceholder("Choose a template (Esc to skip)");
-  }
-  settled = false;
-  getItems() {
-    return [...this.files];
-  }
-  getItemText(file) {
-    const prefix = `${this.folder}/`;
-    return file.path.startsWith(prefix) ? file.path.slice(prefix.length, -3) : file.basename;
-  }
-  onChooseItem(file) {
-    this.settled = true;
-    this.resolveFile(file);
-  }
-  onClose() {
-    super.onClose();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveFile(null);
-    }
-  }
-};
-function promptForTemplate(app, files, folder) {
-  return new Promise((resolve) => {
-    new TemplatePromptModal(app, files, folder, resolve).open();
-  });
-}
 var CanvasPromptModal = class extends import_obsidian5.FuzzySuggestModal {
   constructor(app, files, resolveFile) {
     super(app);
@@ -7311,45 +7276,6 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         );
         queueCommit();
       });
-    });
-    const info = this.slipbox.templatesInfo();
-    let templateSetting = null;
-    new import_obsidian6.Setting(container).setName("Apply a template to new cards").setDesc("Use Obsidian\u2019s templates core plugin after Slipbox creates and opens the note.").addToggle((toggle) => {
-      toggle.setValue(this.slipbox.settings.useTemplatesForNewNotes).onChange((value) => void this.save({
-        ...this.slipbox.settings,
-        useTemplatesForNewNotes: value
-      }).then(() => {
-        templateSetting?.setDisabled(
-          !value || !info.enabled || info.files.length === 0
-        );
-      }));
-    });
-    let description = "Choose a fixed template, or ask each time a card is created.";
-    if (!info.enabled) {
-      description = "Enable Obsidian\u2019s Templates core plugin to choose a template.";
-    } else if (info.folder === "") {
-      description = "Choose a template folder in the Templates core plugin settings first.";
-    } else if (info.files.length === 0) {
-      description = `No Markdown templates were found in ${info.folder}.`;
-    }
-    const templateDisabled = !this.slipbox.settings.useTemplatesForNewNotes || !info.enabled || info.files.length === 0;
-    const template = new import_obsidian6.Setting(container).setName("New card template").setDesc(description).setDisabled(templateDisabled);
-    templateSetting = template;
-    template.addDropdown((dropdown) => {
-      dropdown.addOption("", "Ask each time");
-      for (const file of info.files) {
-        const prefix = `${info.folder}/`;
-        const label = file.path.startsWith(prefix) ? file.path.slice(prefix.length, -3) : file.basename;
-        dropdown.addOption(file.path, label);
-      }
-      const current = this.slipbox.settings.newNoteTemplatePath;
-      if (current !== "" && !info.files.some((file) => file.path === current)) {
-        dropdown.addOption(current, `${current} (missing)`);
-      }
-      dropdown.setValue(current).setDisabled(templateDisabled).onChange((value) => void this.save({
-        ...this.slipbox.settings,
-        newNoteTemplatePath: value
-      }));
     });
   }
   renderAddressProperty(container) {
@@ -8305,20 +8231,6 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     const card = this.index.filedByPath(path);
     return card === void 0 ? path : `${card.address} \xB7 ${this.cardTitle(card.file)}`;
   }
-  templatesInfo() {
-    const plugin = this.templatesPlugin();
-    const configuredFolder = plugin?.options?.folder;
-    if (plugin === null || typeof configuredFolder !== "string") {
-      return { enabled: plugin !== null, folder: "", files: [] };
-    }
-    const folder = (0, import_obsidian9.normalizePath)(configuredFolder);
-    if (folder === "") {
-      return { enabled: true, folder, files: [] };
-    }
-    const prefix = `${folder}/`;
-    const files = this.app.vault.getMarkdownFiles().filter((file) => file.path.startsWith(prefix)).sort((left, right) => left.path.localeCompare(right.path));
-    return { enabled: true, folder, files };
-  }
   async updateSettings(value) {
     const previousAddressProperty = this.settings.addressProperty;
     const previousOrdering = this.settings.deckOrdering;
@@ -8874,7 +8786,6 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     const parent = this.newCardParent(
       sourcePath ?? this.activeCreationSourcePath()
     );
-    const template = await this.resolveNewNoteTemplate();
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;
     let sequence = 0;
     let path;
@@ -8902,23 +8813,6 @@ ${frontmatter}---
 `
     );
     await this.openMarkdownFile(file);
-    if (template !== null) {
-      const view = this.app.workspace.getActiveViewOfType(import_obsidian9.MarkdownView);
-      if (view?.file?.path !== file.path) {
-        new import_obsidian9.Notice("Could not apply the new-card template: the note editor is not active.");
-      } else {
-        const lastLine = view.editor.lastLine();
-        view.editor.setCursor({
-          line: lastLine,
-          ch: view.editor.getLine(lastLine).length
-        });
-        try {
-          await template.plugin.insertTemplate(template.file);
-        } catch (error) {
-          new import_obsidian9.Notice(`Could not apply the new-card template: ${errorMessage4(error)}`);
-        }
-      }
-    }
     return file;
   }
   activeCreationSourcePath() {
@@ -8937,42 +8831,6 @@ ${frontmatter}---
       );
     }
     return folder;
-  }
-  templatesPlugin() {
-    const app = this.app;
-    const candidate = app.internalPlugins?.getEnabledPluginById("templates");
-    if (typeof candidate !== "object" || candidate === null || !("insertTemplate" in candidate) || typeof candidate.insertTemplate !== "function") {
-      return null;
-    }
-    return candidate;
-  }
-  async resolveNewNoteTemplate() {
-    if (!this.settings.useTemplatesForNewNotes) {
-      return null;
-    }
-    const plugin = this.templatesPlugin();
-    const info = this.templatesInfo();
-    if (plugin === null) {
-      new import_obsidian9.Notice("Enable Obsidian\u2019s templates core plugin to apply templates to new cards.");
-      return null;
-    }
-    if (info.folder === "" || info.files.length === 0) {
-      new import_obsidian9.Notice("Configure a templates folder containing at least one template to use it for new cards.");
-      return null;
-    }
-    let file = null;
-    if (this.settings.newNoteTemplatePath !== "") {
-      file = info.files.find(
-        (candidate) => candidate.path === this.settings.newNoteTemplatePath
-      ) ?? null;
-      if (file === null) {
-        new import_obsidian9.Notice("The configured new-card template is missing. Choose another template.");
-      }
-    }
-    if (file === null) {
-      file = await promptForTemplate(this.app, info.files, info.folder);
-    }
-    return file === null ? null : { plugin, file };
   }
   cardMetadataState(file) {
     const rawFrontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;

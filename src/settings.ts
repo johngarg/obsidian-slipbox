@@ -1,6 +1,6 @@
 import type { DeckOrdering } from "./address-order.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 8;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 9;
 
 export const DEFAULT_CARD_SPREAD = 0.58;
 export const MIN_CARD_SPREAD = 0.18;
@@ -379,8 +379,6 @@ export interface SlipboxSettings {
   readonly trayCardSize: CardSize;
   readonly newCardFolder: string;
   readonly newNoteTimestampFormat: string;
-  readonly useTemplatesForNewNotes: boolean;
-  readonly newNoteTemplatePath: string;
   readonly showTitleInDeck: boolean;
   readonly showDeckMap: boolean;
   readonly cardSpread: number;
@@ -460,8 +458,6 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   trayCardSize: "medium",
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
-  useTemplatesForNewNotes: false,
-  newNoteTemplatePath: "",
   showTitleInDeck: false,
   showDeckMap: true,
   cardSpread: DEFAULT_CARD_SPREAD,
@@ -735,14 +731,6 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       source.newNoteTimestampFormat,
       DEFAULT_SETTINGS.newNoteTimestampFormat,
     ),
-    useTemplatesForNewNotes:
-      typeof source.useTemplatesForNewNotes === "boolean"
-        ? source.useTemplatesForNewNotes
-        : DEFAULT_SETTINGS.useTemplatesForNewNotes,
-    newNoteTemplatePath:
-      typeof source.newNoteTemplatePath === "string"
-        ? source.newNoteTemplatePath.trim()
-        : DEFAULT_SETTINGS.newNoteTemplatePath,
     showTitleInDeck:
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
@@ -769,6 +757,8 @@ export function settingsForPersistence(
   const {
     deckHeaderButtons: _legacyDeckHeaderButtons,
     showDeckToolbar: _showDeckToolbar,
+    useTemplatesForNewNotes: _useTemplatesForNewNotes,
+    newNoteTemplatePath: _newNoteTemplatePath,
     ...retainedRaw
   } = raw;
   const rawKeybindingsSource = isRecord(raw.deckKeybindings)

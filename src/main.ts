@@ -1244,15 +1244,16 @@ export default class SlipboxPlugin extends Plugin {
       new Notice("Could not insert the card link: the card no longer exists.");
       return;
     }
-    editor.replaceSelection(
-      generateFiledCardLink(
-        this.app,
-        file,
-        ctx.file?.path ?? "",
-        chosen.address,
-      ),
+    const link = generateFiledCardLink(
+      this.app,
+      file,
+      ctx.file?.path ?? "",
+      chosen.address,
     );
+    // Focus first: replaceSelection acts on the editor's current selection, and
+    // the editor has just lost focus to the suggester.
     editor.focus();
+    editor.replaceSelection(link);
   }
 
   async copyCardLink(card: FiledCard): Promise<void> {

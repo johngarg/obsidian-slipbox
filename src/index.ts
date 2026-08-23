@@ -34,6 +34,8 @@ export {
   buildCardLinkSuggestions,
   matchCardLinkSuggestions,
 } from "./card-link-suggestions.js";
+export { modalChoice } from "./modal-choice.js";
+export type { ModalChoice } from "./modal-choice.js";
 export type {
   CardLinkCandidate,
   CardLinkSuggestion,

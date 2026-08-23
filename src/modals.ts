@@ -14,6 +14,7 @@ import {
   matchCardLinkSuggestions,
   type CardLinkSuggestion,
 } from "./card-link-suggestions.js";
+import { modalChoice, type ModalChoice } from "./modal-choice.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -151,16 +152,17 @@ export function promptForCanvas(
 }
 
 class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
-  private settled = false;
+  private readonly choice: ModalChoice<CardLinkSuggestion>;
 
   constructor(
     app: App,
     private readonly suggestions: readonly CardLinkSuggestion[],
-    private readonly resolveSuggestion: (
-      suggestion: CardLinkSuggestion | null,
-    ) => void,
+    resolveSuggestion: (suggestion: CardLinkSuggestion | null) => void,
   ) {
     super(app);
+    this.choice = modalChoice(resolveSuggestion, (task) => {
+      window.setTimeout(task);
+    });
     this.setPlaceholder("Card address or title (Esc to cancel)");
     this.emptyStateText = "No filed card matches.";
   }
@@ -182,16 +184,12 @@ class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
   }
 
   onChooseSuggestion(suggestion: CardLinkSuggestion): void {
-    this.settled = true;
-    this.resolveSuggestion(suggestion);
+    this.choice.choose(suggestion);
   }
 
   onClose(): void {
     super.onClose();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveSuggestion(null);
-    }
+    this.choice.cancel();
   }
 }
 

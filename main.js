@@ -6689,6 +6689,22 @@ function matchCardLinkSuggestions(candidates, query) {
   return tiers.flat();
 }
 
+// src/modal-choice.ts
+function modalChoice(resolve, schedule) {
+  let settled = false;
+  const settleWith = (value) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    schedule(() => resolve(value));
+  };
+  return {
+    choose: (value) => settleWith(value),
+    cancel: () => schedule(() => settleWith(null))
+  };
+}
+
 // src/modals.ts
 var TextPromptModal = class extends import_obsidian5.Modal {
   constructor(app, heading, placeholder, initialValue, resolveValue, allowBlank = false, submitLabel = "Save") {
@@ -6800,11 +6816,13 @@ var CardLinkSuggestModal = class extends import_obsidian5.SuggestModal {
   constructor(app, suggestions, resolveSuggestion) {
     super(app);
     this.suggestions = suggestions;
-    this.resolveSuggestion = resolveSuggestion;
+    this.choice = modalChoice(resolveSuggestion, (task) => {
+      window.setTimeout(task);
+    });
     this.setPlaceholder("Card address or title (Esc to cancel)");
     this.emptyStateText = "No filed card matches.";
   }
-  settled = false;
+  choice;
   getSuggestions(query) {
     return [...matchCardLinkSuggestions(this.suggestions, query)];
   }
@@ -6820,15 +6838,11 @@ var CardLinkSuggestModal = class extends import_obsidian5.SuggestModal {
     }
   }
   onChooseSuggestion(suggestion) {
-    this.settled = true;
-    this.resolveSuggestion(suggestion);
+    this.choice.choose(suggestion);
   }
   onClose() {
     super.onClose();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveSuggestion(null);
-    }
+    this.choice.cancel();
   }
 };
 function promptForCardLink(app, suggestions) {
@@ -8954,15 +8968,14 @@ ${frontmatter}---
       new import_obsidian9.Notice("Could not insert the card link: the card no longer exists.");
       return;
     }
-    editor.replaceSelection(
-      generateFiledCardLink(
-        this.app,
-        file,
-        ctx.file?.path ?? "",
-        chosen.address
-      )
+    const link = generateFiledCardLink(
+      this.app,
+      file,
+      ctx.file?.path ?? "",
+      chosen.address
     );
     editor.focus();
+    editor.replaceSelection(link);
   }
   async copyCardLink(card) {
     const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";

@@ -319,8 +319,8 @@ export default class SlipboxPlugin extends Plugin {
 
   async prepareInlineEdit(file: TFile): Promise<InlineEditStartData> {
     await this.flushOpenTextViews(file.path);
-    const latest = this.app.vault.getAbstractFileByPath(file.path);
-    if (!(latest instanceof TFile)) {
+    const latest = this.app.vault.getFileByPath(file.path);
+    if (latest === null) {
       throw new Error("The card no longer exists.");
     }
     const source = await this.app.vault.read(latest);
@@ -334,8 +334,8 @@ export default class SlipboxPlugin extends Plugin {
   async commitInlineEdit(
     request: InlineEditCommitRequest,
   ): Promise<InlineEditCommitResult> {
-    const file = this.app.vault.getAbstractFileByPath(request.path);
-    if (!(file instanceof TFile)) {
+    const file = this.app.vault.getFileByPath(request.path);
+    if (file === null) {
       return {
         status: "conflict",
         message: "The card was deleted while it was being edited.",
@@ -715,10 +715,9 @@ export default class SlipboxPlugin extends Plugin {
       return;
     }
 
-    const available = legacy.filter((card) => {
-      const file = this.app.vault.getAbstractFileByPath(card.cardRef);
-      return file instanceof TFile && file.extension === "md";
-    });
+    const available = legacy.filter(
+      (card) => this.app.vault.getFileByPath(card.cardRef)?.extension === "md",
+    );
     const missingCount = legacy.length - available.length;
     if (available.length === 0) {
       new Notice("None of the cards in the legacy Desk layout still exist. The layout was kept.");

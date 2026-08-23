@@ -7724,8 +7724,7 @@ var CardIndex = class {
     return path === null ? -1 : this.filedIndexByPathMap.get(path) ?? -1;
   }
   fileAtPath(path) {
-    const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian7.TFile ? file : void 0;
+    return this.app.vault.getFileByPath(path) ?? void 0;
   }
   backlinksForPath(path) {
     return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
@@ -8171,8 +8170,8 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
   }
   async prepareInlineEdit(file) {
     await this.flushOpenTextViews(file.path);
-    const latest = this.app.vault.getAbstractFileByPath(file.path);
-    if (!(latest instanceof import_obsidian9.TFile)) {
+    const latest = this.app.vault.getFileByPath(file.path);
+    if (latest === null) {
       throw new Error("The card no longer exists.");
     }
     const source = await this.app.vault.read(latest);
@@ -8183,8 +8182,8 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     return { file: latest, body };
   }
   async commitInlineEdit(request) {
-    const file = this.app.vault.getAbstractFileByPath(request.path);
-    if (!(file instanceof import_obsidian9.TFile)) {
+    const file = this.app.vault.getFileByPath(request.path);
+    if (file === null) {
       return {
         status: "conflict",
         message: "The card was deleted while it was being edited."
@@ -8502,10 +8501,9 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
       new import_obsidian9.Notice("Enter a valid Canvas filename or vault-relative path.");
       return;
     }
-    const available = legacy.filter((card) => {
-      const file = this.app.vault.getAbstractFileByPath(card.cardRef);
-      return file instanceof import_obsidian9.TFile && file.extension === "md";
-    });
+    const available = legacy.filter(
+      (card) => this.app.vault.getFileByPath(card.cardRef)?.extension === "md"
+    );
     const missingCount = legacy.length - available.length;
     if (available.length === 0) {
       new import_obsidian9.Notice("None of the cards in the legacy Desk layout still exist. The layout was kept.");

@@ -248,6 +248,10 @@ export class DeckView extends ItemView {
   private deckKeybindingsSuspended = false;
   private readonly shortcutCommandTracker =
     new ShortcutCommandTracker<KeyboardEvent, DeckAction>();
+  private commandActionAwaitingKeyup: {
+    readonly action: DeckAction;
+    readonly timestamp: number;
+  } | null = null;
   private readonly shortcutConflictNoticeTimes = new Map<string, number>();
   private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
   private pendingCommandStartEvent: KeyboardEvent | null = null;
@@ -338,6 +342,9 @@ export class DeckView extends ItemView {
         ownerWindow,
         (event) => this.deferConfiguredDeckShortcut(event),
       ));
+      this.registerDomEvent(ownerWindow, "keyup", (event) => {
+        this.reportCommandShortcutConflictOnKeyup(event);
+      }, { capture: true });
     }
     this.register(installPendingDeckCommandKeyCapture(
       this.contentEl.ownerDocument,
@@ -1027,6 +1034,10 @@ export class DeckView extends ItemView {
   }
 
   runCommandAction(action: DeckAction): boolean {
+    this.commandActionAwaitingKeyup = {
+      action,
+      timestamp: Date.now(),
+    };
     const lastEvent = this.app.lastEvent;
     const keyboardEvent = lastEvent !== null && "key" in lastEvent
       ? lastEvent
@@ -1058,6 +1069,29 @@ export class DeckView extends ItemView {
       this.pendingCommandStartEvent = commandEvent;
     }
     return ran;
+  }
+
+  private reportCommandShortcutConflictOnKeyup(event: KeyboardEvent): void {
+    const dispatched = this.commandActionAwaitingKeyup;
+    if (dispatched === null) {
+      return;
+    }
+    if (Date.now() - dispatched.timestamp > 2_000) {
+      this.commandActionAwaitingKeyup = null;
+      return;
+    }
+    const configuredShortcut = this.configuredDeckShortcut(event);
+    if (configuredShortcut === null) {
+      return;
+    }
+    this.commandActionAwaitingKeyup = null;
+    if (
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
+      configuredShortcut.definition.id === dispatched.action
+    ) {
+      return;
+    }
+    this.reportShortcutConflict(formatKeyBinding(configuredShortcut.binding));
   }
 
   private deferConfiguredDeckShortcut(event: KeyboardEvent): void {

@@ -4152,6 +4152,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   trayRenderer;
   deckKeybindingsSuspended = false;
   shortcutCommandTracker = new ShortcutCommandTracker();
+  commandActionAwaitingKeyup = null;
   shortcutConflictNoticeTimes = /* @__PURE__ */ new Map();
   pendingCommand = IDLE_DECK_COMMAND;
   pendingCommandStartEvent = null;
@@ -4187,6 +4188,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         ownerWindow,
         (event) => this.deferConfiguredDeckShortcut(event)
       ));
+      this.registerDomEvent(ownerWindow, "keyup", (event) => {
+        this.reportCommandShortcutConflictOnKeyup(event);
+      }, { capture: true });
     }
     this.register(installPendingDeckCommandKeyCapture(
       this.contentEl.ownerDocument,
@@ -4750,6 +4754,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     return this.canRunAction(action);
   }
   runCommandAction(action) {
+    this.commandActionAwaitingKeyup = {
+      action,
+      timestamp: Date.now()
+    };
     const lastEvent = this.app.lastEvent;
     const keyboardEvent = lastEvent !== null && "key" in lastEvent ? lastEvent : void 0;
     if (keyboardEvent !== void 0 && !shouldSuspendDeckShortcut(
@@ -4769,6 +4777,25 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.pendingCommandStartEvent = commandEvent;
     }
     return ran;
+  }
+  reportCommandShortcutConflictOnKeyup(event) {
+    const dispatched = this.commandActionAwaitingKeyup;
+    if (dispatched === null) {
+      return;
+    }
+    if (Date.now() - dispatched.timestamp > 2e3) {
+      this.commandActionAwaitingKeyup = null;
+      return;
+    }
+    const configuredShortcut = this.configuredDeckShortcut(event);
+    if (configuredShortcut === null) {
+      return;
+    }
+    this.commandActionAwaitingKeyup = null;
+    if (shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) || configuredShortcut.definition.id === dispatched.action) {
+      return;
+    }
+    this.reportShortcutConflict(formatKeyBinding(configuredShortcut.binding));
   }
   deferConfiguredDeckShortcut(event) {
     if (this.deckKeybindingsSuspended || this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)) {

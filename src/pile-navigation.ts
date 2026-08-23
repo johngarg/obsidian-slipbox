@@ -8,8 +8,37 @@ export interface NavigablePile {
   readonly cards: readonly { readonly cardRef: string }[];
 }
 
+export interface PileNavigationFocus {
+  readonly surface: "deck" | "desk" | "viewed";
+  readonly pileId?: string;
+}
+
 function pileTarget(pileId: string): PileFocusLocation {
   return { surface: "desk", pileId };
+}
+
+/**
+ * Interpret viewed-card focus only for the Deck/remembered-pile swap.
+ * A viewed card opened from the Deck still belongs to the Deck side, while a
+ * viewed Desk card retains its pile. Other pile-cycling behavior is unchanged.
+ */
+export function pileFocusLocationForSwap(
+  focus: PileNavigationFocus | null,
+  viewedReturnSurface: "deck" | "desk" | null,
+): PileFocusLocation | null {
+  if (focus?.surface === "deck") {
+    return { surface: "deck" };
+  }
+  if (
+    (focus?.surface === "desk" || focus?.surface === "viewed") &&
+    focus.pileId !== undefined
+  ) {
+    return { surface: "desk", pileId: focus.pileId };
+  }
+  if (focus?.surface === "viewed" && viewedReturnSurface === "deck") {
+    return { surface: "deck" };
+  }
+  return null;
 }
 
 /**

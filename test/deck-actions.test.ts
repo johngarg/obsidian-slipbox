@@ -20,6 +20,7 @@ const READY: DeckActionContext = {
   focusedCardFiled: true,
   focusedCardUnfiled: false,
   focusedSurface: "desk",
+  viewedReturnSurface: null,
   focusedCardOnDesk: true,
   canMoveDeskCardLeft: true,
   canMoveDeskCardRight: true,
@@ -54,6 +55,7 @@ describe("Deck action availability", () => {
       focusedCardFiled: false,
       focusedCardUnfiled: false,
       focusedSurface: null,
+      viewedReturnSurface: null,
       focusedCardOnDesk: false,
       canMoveDeskCardLeft: false,
       canMoveDeskCardRight: false,
@@ -120,6 +122,12 @@ describe("Deck action availability", () => {
       focusedSurface: "viewed",
       focusedCardOnDesk: false,
     }), false);
+    assert.equal(canRunDeckAction("swap-deck-pile", {
+      ...READY,
+      focusedSurface: "viewed",
+      viewedReturnSurface: "deck",
+      focusedCardOnDesk: false,
+    }), true);
     for (const action of [
       "toggle-pile",
       "previous-card-in-pile",

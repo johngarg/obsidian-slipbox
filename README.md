@@ -79,8 +79,10 @@ the Deck has no filed cards, cycling skips it. `%` swaps between the Deck and th
 last pile that received card focus, falling back to the first pile when that
 history is absent or stale; swap is unavailable when the Deck is empty. When a
 viewed card was the last focus in a pile, `%` returns to that viewed card rather
-than its placeholder. `Space` expands or collapses the pile containing the
-focused Desk card.
+than its placeholder. A card viewed directly from the Deck still counts as the
+Deck side of the swap: `%` moves to the remembered pile, and the next `%`
+returns to the open viewed card. `Space` expands or collapses the pile containing
+the focused Desk card.
 In an expanded pile, `h` and `l` move card focus through its cards and wrap at
 both ends. In a collapsed pile they rotate the top card exactly like the hover
 arrows.
@@ -202,8 +204,8 @@ and ends editing but leaves the viewed card
 open, so the Deck can still be browsed behind it. Drag the viewed card by its
 header and press `v` anywhere in the active Slipbox view—or choose `Return to
 Deck` or `Return to Desk`—when finished. Only one card can be viewed per Slipbox
-view. Filing an unfiled viewed card returns it to the Desk before opening its
-existing inline filing control.
+view. An unfiled viewed card can be filed directly in the viewed card without
+returning to its Desk placeholder first.
 
 Edits replace only the note body. Frontmatter is neither parsed nor rewritten,
 so comments, key order, spacing, and line endings remain byte-for-byte intact,
@@ -389,7 +391,7 @@ newly created card.
 | `o` | Open the focused card in Markdown |
 | `p` | Put the focused filed card on the Desk, or return it from the Desk |
 | `{` / `}` | Cycle card focus backward/forward through the Deck and Desk piles |
-| `%` | Swap focus between the Deck and the last focused pile or viewed Desk card |
+| `%` | Swap focus between the Deck side—including a Deck-origin viewed card—and the last focused pile |
 | `Space` | Expand or collapse the focused Desk card's pile |
 | `h` / `l` | Focus the previous/next card in a pile, wrapping at both ends |
 | `Alt+←` / `Alt+→` | Move the focused Desk card within its pile |
@@ -417,13 +419,13 @@ Legacy Desk shortcut is removed rather than repurposed.
 
 ## Manual filing and address domain
 
-`File active unfiled Markdown note`, the Desk-card File action, or a double-click
-on an unfiled address starts inline filing. The existing Desk card stays at its
-ordinary size and position, gains a light accent treatment, and replaces its
-empty address slot with an address field. The active filed card's address is
-prefilled when one is available. Validation and an expandable duplicate-path
-summary appear compactly on the same card; there is no separate card-in-hand,
-bottom bar, or Deck ghost.
+`File active unfiled Markdown note`, the File action, or a double-click on an
+unfiled address starts inline filing. A Desk card stays at its ordinary size and
+position; a viewed card stays open above the workspace. In either case the
+source gains a light accent treatment and replaces its empty address slot with
+the same address field. The active filed card's address is prefilled when one is
+available. Validation and an expandable duplicate-path summary appear compactly
+on the source card; there is no separate card-in-hand, bottom bar, or Deck ghost.
 
 While the address field owns native focus, `Enter` confirms the current valid
 address and `Escape` cancels without changing Markdown or working-pile
@@ -432,7 +434,10 @@ before the prospective insertion point. At the beginning it selects the first
 filed card for context. The ordinary Deck shortcuts and horizontal scrolling
 then work normally. The previewed Deck card receives focus, while `Shift+Tab`
 returns directly to the inline address field. Editing an address alone never
-moves the Deck.
+moves the Deck. Hovering the empty slot explains the double-click affordance,
+and the address field's placement-aware tooltip explains `Tab`, `Shift+Tab`, and
+`Enter`. Successful viewed-card filing closes the viewed card and focuses the
+newly filed real card in the Deck.
 
 Before writing, Slipbox refreshes metadata and revalidates the exact source
 file, its unfiled state, the ordering mode, and the complete placement signature.

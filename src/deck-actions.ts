@@ -12,6 +12,7 @@ export interface DeckActionContext {
   readonly focusedCardFiled: boolean;
   readonly focusedCardUnfiled: boolean;
   readonly focusedSurface: "deck" | "desk" | "viewed" | null;
+  readonly viewedReturnSurface: "deck" | "desk" | null;
   readonly focusedCardOnDesk: boolean;
   readonly canMoveDeskCardLeft: boolean;
   readonly canMoveDeskCardRight: boolean;
@@ -80,7 +81,11 @@ export function canRunDeckAction(
     case "swap-deck-pile":
       return context.hasDeskPiles &&
         context.hasActiveCard &&
-        (context.focusedSurface !== "viewed" || context.focusedCardOnDesk);
+        (
+          context.focusedSurface !== "viewed" ||
+          context.focusedCardOnDesk ||
+          context.viewedReturnSurface === "deck"
+        );
     case "toggle-pile":
     case "previous-card-in-pile":
     case "next-card-in-pile":

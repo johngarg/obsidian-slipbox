@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   cyclePileFocusTarget,
+  pileFocusLocationForSwap,
   rememberPileFocus,
   swapPileFocusTarget,
   wrappedPileCardNeighbour,
@@ -59,6 +60,45 @@ describe("pile focus cycling", () => {
 });
 
 describe("Deck and remembered-pile swapping", () => {
+  test("treats a Deck-origin viewed card as the Deck side of a round trip", () => {
+    const viewedOrigin = pileFocusLocationForSwap(
+      { surface: "viewed" },
+      "deck",
+    );
+    assert.deepEqual(viewedOrigin, deck());
+    if (viewedOrigin === null) {
+      assert.fail("expected Deck-origin viewed focus to resolve");
+    }
+    assert.deepEqual(
+      swapPileFocusTarget(["one", "two"], viewedOrigin, null, true),
+      pile("one"),
+    );
+    const deskTarget = swapPileFocusTarget(
+      ["one", "two"],
+      viewedOrigin,
+      "two",
+      true,
+    );
+    assert.deepEqual(deskTarget, pile("two"));
+    if (deskTarget === null) {
+      assert.fail("expected the remembered pile");
+    }
+    assert.deepEqual(
+      swapPileFocusTarget(["one", "two"], deskTarget, "two", true),
+      deck(),
+    );
+  });
+
+  test("keeps Desk-origin viewed focus on its pile", () => {
+    assert.deepEqual(
+      pileFocusLocationForSwap(
+        { surface: "viewed", pileId: "two" },
+        "desk",
+      ),
+      pile("two"),
+    );
+  });
+
   test("uses the sole pile without focus history", () => {
     assert.deepEqual(swapPileFocusTarget(["one"], deck(), null, true), pile("one"));
   });

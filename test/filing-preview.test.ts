@@ -13,9 +13,11 @@ import {
   updateInlineFilingEditor,
 } from "../src/index.js";
 import {
+  filingEditorMatchesSource,
   handleFilingEscape,
   shouldSuspendDeckShortcut,
 } from "../src/filing-editor.js";
+import { filingPreviewGuidance } from "../src/filing-preview.js";
 
 const filed = [
   { address: "A/2", path: "one.md" },
@@ -119,6 +121,37 @@ describe("filing placement preview", () => {
     assert.equal(filingPreviewFocusPath(empty), null);
   });
 
+  test("describes invalid, before-first, after-card, and empty-Deck previews", () => {
+    assert.match(filingPreviewGuidance(null), /Enter a valid address/);
+    assert.match(
+      filingPreviewGuidance(createFilingPreview(
+        filed,
+        { address: "A/1", path: "source.md" },
+        "Source",
+        "natural",
+      )),
+      /filed before it/,
+    );
+    assert.match(
+      filingPreviewGuidance(createFilingPreview(
+        filed,
+        { address: "A/12", path: "source.md" },
+        "Source",
+        "natural",
+      )),
+      /filed after/,
+    );
+    assert.match(
+      filingPreviewGuidance(createFilingPreview(
+        [],
+        { address: "A/1", path: "source.md" },
+        "Source",
+        "natural",
+      )),
+      /Deck is empty/,
+    );
+  });
+
   test("the eventual card sort index equals the preview index", () => {
     const candidate = { address: "A/10", path: "m.md" };
     const preview = createFilingPreview(
@@ -187,7 +220,22 @@ describe("filing placement preview", () => {
   });
 });
 
-describe("inline tray filing editor DOM", () => {
+describe("inline filing editor DOM", () => {
+  test("mounts the editor only on its remembered source surface", () => {
+    assert.equal(
+      filingEditorMatchesSource("source.md", "viewed", "source.md", "viewed"),
+      true,
+    );
+    assert.equal(
+      filingEditorMatchesSource("source.md", "viewed", "source.md", "desk"),
+      false,
+    );
+    assert.equal(
+      filingEditorMatchesSource("source.md", "desk", "other.md", "desk"),
+      false,
+    );
+  });
+
   test("suspends Deck letter shortcuts while the filing input has focus", () => {
     const window = new Window();
     const input = window.document.createElementNS(

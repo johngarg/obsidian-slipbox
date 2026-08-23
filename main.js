@@ -409,7 +409,7 @@ function canRunDeckAction(action, context) {
     case "previous-pile":
       return context.hasDeskPiles && (context.focusedSurface !== "viewed" || context.focusedCardOnDesk);
     case "swap-deck-pile":
-      return context.hasDeskPiles && context.hasActiveCard && (context.focusedSurface !== "viewed" || context.focusedCardOnDesk);
+      return context.hasDeskPiles && context.hasActiveCard && (context.focusedSurface !== "viewed" || context.focusedCardOnDesk || context.viewedReturnSurface === "deck");
     case "toggle-pile":
     case "previous-card-in-pile":
     case "next-card-in-pile":
@@ -1732,6 +1732,9 @@ function isDeskCardFocusTarget(target) {
 }
 
 // src/filing-editor.ts
+function filingEditorMatchesSource(sourcePath, sourceSurface, cardPath, cardSurface) {
+  return sourcePath === cardPath && sourceSurface === cardSurface;
+}
 var HTML_NAMESPACE2 = "http://www.w3.org/1999/xhtml";
 function createHtmlElement(document2, tag) {
   return document2.createElementNS(HTML_NAMESPACE2, tag);
@@ -2387,7 +2390,12 @@ var TrayRenderer = class {
   updateFilingState(state) {
     if (this.filingEditor !== null) {
       updateInlineFilingEditor(this.filingEditor, state);
+      this.applyFilingGuidance(this.filingEditor.input, state.guidance);
     }
+  }
+  applyFilingGuidance(input, guidance) {
+    input.setAttribute("aria-description", guidance);
+    (0, import_obsidian3.setTooltip)(input, guidance, { placement: "bottom", delay: 350 });
   }
   async rerenderPath(file) {
     const preview = this.previews.get(file.path);
@@ -2681,7 +2689,12 @@ var TrayRenderer = class {
         this.actions.focusDeskCard(card.cardRef, pile.id);
       }
     });
-    const isFilingSource = filing?.sourcePath === card.cardRef;
+    const isFilingSource = filing !== null && filingEditorMatchesSource(
+      filing.sourcePath,
+      filing.sourceSurface,
+      card.cardRef,
+      "desk"
+    );
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
       "is-bookmarked",
@@ -2705,9 +2718,13 @@ var TrayRenderer = class {
           onFocusChange: (focused) => this.actions.filingInputFocusChanged(focused)
         }
       );
-    } else if (filed === void 0) {
-      addressEl.setAttr("aria-label", "Unfiled card address; double-click to file");
-      (0, import_obsidian3.setTooltip)(addressEl, "Double-click to file", {
+      this.applyFilingGuidance(this.filingEditor.input, filing.guidance);
+    } else if (filed === void 0 && !isViewed) {
+      addressEl.setAttr(
+        "aria-label",
+        "Unfiled card address; double-click to enter an address"
+      );
+      (0, import_obsidian3.setTooltip)(addressEl, "Double-click to enter an address.", {
         placement: "bottom",
         delay: 350
       });
@@ -3294,6 +3311,18 @@ function initialFilingAddress(focusedCard) {
 function filingPreviewFocusPath(preview) {
   return preview.previousPath ?? preview.nextPath;
 }
+function filingPreviewGuidance(preview) {
+  if (preview === null) {
+    return "Enter a valid address. Tab previews its Deck position; Enter files.";
+  }
+  if (preview.previousPath !== null) {
+    return "Tab focuses the Deck card this card will be filed after. Shift+Tab returns here; Enter files.";
+  }
+  if (preview.nextPath !== null) {
+    return "Tab focuses the first Deck card; this card will be filed before it. Shift+Tab returns here; Enter files.";
+  }
+  return "The Deck is empty. Enter files this card as its first card.";
+}
 function createFilingPreview(filed, candidate, title, ordering) {
   const insertionIndex = candidateInsertionIndex(filed, candidate, ordering);
   const previousPath = filed[insertionIndex - 1]?.path ?? null;
@@ -3866,6 +3895,18 @@ function cardFocusDeleted(focus, deletedPath) {
 function pileTarget(pileId) {
   return { surface: "desk", pileId };
 }
+function pileFocusLocationForSwap(focus, viewedReturnSurface) {
+  if (focus?.surface === "deck") {
+    return { surface: "deck" };
+  }
+  if ((focus?.surface === "desk" || focus?.surface === "viewed") && focus.pileId !== void 0) {
+    return { surface: "desk", pileId: focus.pileId };
+  }
+  if (focus?.surface === "viewed" && viewedReturnSurface === "deck") {
+    return { surface: "deck" };
+  }
+  return null;
+}
 function cyclePileFocusTarget(pileIds, current, deckAvailable, direction) {
   if (pileIds.length === 0) {
     return null;
@@ -3982,6 +4023,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   lastPileFocusWasViewed = false;
   filingFile = null;
   filingSourcePath = null;
+  filingSourceSurface = null;
   filingInputValue = "";
   filingPreview = null;
   filingMessage = "Enter an address.";
@@ -4038,6 +4080,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   viewedCardEl = null;
   viewedCardBodyEl = null;
   viewedCardComponent = null;
+  viewedFilingEditor = null;
   viewedFocusFromDeckNavigation = false;
   getViewType() {
     return DECK_VIEW_TYPE;
@@ -4072,10 +4115,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       if (this.handleDeckEscape(event)) {
         return;
       }
-      if (this.filingFile !== null && event.key === "Tab" && event.shiftKey && event.target !== this.trayRenderer.filingInput) {
+      if (this.filingFile !== null && event.key === "Tab" && event.shiftKey && event.target !== this.filingInput) {
         event.preventDefault();
         this.restoreFilingSourceFocus();
-        this.trayRenderer.focusFilingInputNow();
+        this.focusFilingInputNow();
       }
     }, { capture: true });
     this.registerDomEvent(
@@ -4169,6 +4212,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
+    this.filingSourceSurface = null;
     this.filingPreview = null;
     this.filingConfirmationInProgress = false;
     this.stageEl = null;
@@ -4177,6 +4221,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.viewedCard = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
+    this.viewedFilingEditor = null;
     this.cardFocus = null;
     this.viewedFocusFromDeckNavigation = false;
     this.lastFocusedPileId = null;
@@ -4330,7 +4375,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
   }
   swapDeckPileFocus() {
-    const current = this.pileFocusLocation();
+    const current = pileFocusLocationForSwap(
+      this.cardFocus,
+      this.cardFocus?.surface === "viewed" ? this.viewedCard?.returnTarget.surface ?? null : null
+    );
     if (current === null) {
       return;
     }
@@ -4447,6 +4495,35 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   }
   get isFiling() {
     return this.filingFile !== null;
+  }
+  get filingInput() {
+    return this.filingSourceSurface === "viewed" ? this.viewedFilingEditor?.input ?? null : this.trayRenderer.filingInput;
+  }
+  get isFilingInputFocused() {
+    const input = this.filingInput;
+    return input !== null && input.ownerDocument.activeElement === input;
+  }
+  focusFilingInput() {
+    window.requestAnimationFrame(() => this.focusFilingInputNow());
+  }
+  focusFilingInputNow() {
+    const input = this.filingInput;
+    if (input === null) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+  updateRenderedFilingState(state) {
+    this.trayRenderer.updateFilingState(state);
+    if (this.viewedFilingEditor !== null) {
+      updateInlineFilingEditor(this.viewedFilingEditor, state);
+      this.applyFilingGuidance(this.viewedFilingEditor.input, state.guidance);
+    }
+  }
+  applyFilingGuidance(input, guidance) {
+    input.setAttribute("aria-description", guidance);
+    (0, import_obsidian4.setTooltip)(input, guidance, { placement: "bottom", delay: 350 });
   }
   handlePathRename(oldPath, newPath) {
     const editing = this.inlineEdit;
@@ -4622,6 +4699,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       focusedCardFiled: focusedFiled !== null,
       focusedCardUnfiled: focusedFile !== null && focusedFiled === null && this.cardFocus?.surface !== "deck",
       focusedSurface,
+      viewedReturnSurface: focusedSurface === "viewed" ? this.viewedCard?.returnTarget.surface ?? null : null,
       focusedCardOnDesk: focusedPosition !== null,
       canMoveDeskCardLeft: focusedDeskPosition !== null && focusedDeskPosition.cardIndex > 0,
       canMoveDeskCardRight: focusedDeskPosition !== null && focusedDeskPosition.cardIndex < focusedDeskPosition.pileSize - 1,
@@ -4810,7 +4888,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.renderRefreshDeferred = true;
       return;
     }
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
     this.cancelViewportCentering();
     this.recalculateFilingPreview();
     const previousActivePath = this.activePath;
@@ -4823,39 +4901,48 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.clampViewportOffset();
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
   }
-  async startFiling(file) {
+  async startFiling(file, sourceSurface = "desk") {
     const trayPosition = cardPosition(this.plugin.tray, file.path);
-    if (trayPosition !== null) {
+    if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
+      this.assignCardFocus(viewedCardFocus(file.path, trayPosition?.pileId));
+    } else if (trayPosition !== null) {
       this.assignCardFocus(deskCardFocus(file.path, trayPosition.pileId));
     }
-    if (trayPosition !== null && trayPosition.cardIndex > 0 && !this.plugin.tray.expandedPileIds.includes(trayPosition.pileId)) {
+    if (sourceSurface === "desk" && trayPosition !== null && trayPosition.cardIndex > 0 && !this.plugin.tray.expandedPileIds.includes(trayPosition.pileId)) {
       await this.plugin.setTrayPileExpanded(trayPosition.pileId, true);
     }
     const initialAddress = initialFilingAddress(this.activeCard);
     this.filingFile = file;
     this.filingSourcePath = file.path;
+    this.filingSourceSurface = sourceSurface;
     this.filingInputValue = initialAddress;
     this.filingPreview = null;
     this.filingMessage = "Enter an address.";
     this.filingConfirmationInProgress = false;
     this.recalculateFilingPreview();
     await this.renderDeck();
-    this.trayRenderer.focusFilingInput();
+    this.focusFilingInput();
   }
   async cancelFiling() {
     if (this.filingConfirmationInProgress) {
       return;
     }
+    const sourcePath = this.filingSourcePath;
+    const sourceSurface = this.filingSourceSurface;
     this.filingFile = null;
     this.filingSourcePath = null;
+    this.filingSourceSurface = null;
     this.filingPreview = null;
     this.filingInputValue = "";
     this.filingConfirmationInProgress = false;
     await this.renderDeck(false);
+    if (sourceSurface === "viewed" && sourcePath !== null && this.viewedCard?.path === sourcePath) {
+      this.focusViewedCard();
+    }
     new import_obsidian4.Notice("Filing cancelled. The card remains in its pile.");
   }
   async handleDeckOrderingChanged() {
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
     this.recalculateFilingPreview();
     this.viewportOffset = 0;
     await this.renderDeck(restoreFilingInputFocus);
@@ -5028,6 +5115,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   async closeViewedCard() {
     const viewed = this.viewedCard;
     if (viewed === null) {
+      return;
+    }
+    if (this.filingSourceSurface === "viewed" && this.filingSourcePath === viewed.path) {
+      new import_obsidian4.Notice("Finish or cancel filing before closing the viewed card.");
       return;
     }
     await this.runAfterInlineEditing("close-viewed-card", async () => {
@@ -5275,7 +5366,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.cancelViewportCentering();
     this.setDeckAnchor(path);
     this.viewportOffset = 0;
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
     await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
     if (this.filingFile !== null && !restoreFilingInputFocus) {
       this.contentEl.focus({ preventScroll: true });
@@ -5358,6 +5449,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.pendingCommandEl = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
+    this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
@@ -5375,7 +5467,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const trayJob = this.trayRenderer.render(
       stage,
       space,
-      this.currentTrayFilingState(),
+      this.currentFilingState(),
       this.viewedCard?.path ?? null,
       () => version === this.renderVersion
     );
@@ -5403,7 +5495,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.cardFooters.scheduleLayout();
     this.viewedCardFooter.scheduleLayout();
     if (focusFilingInput) {
-      this.trayRenderer.focusFilingInput();
+      this.focusFilingInput();
     }
   }
   async refreshDeckCardWindow() {
@@ -5899,6 +5991,13 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? null;
+    const filing = this.currentFilingState();
+    const isFilingSource = filed === void 0 && filing !== null && filingEditorMatchesSource(
+      filing.sourcePath,
+      filing.sourceSurface,
+      file.path,
+      "viewed"
+    );
     const title = this.plugin.cardTitle(file);
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
@@ -5913,6 +6012,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       "is-card-focused",
       this.cardFocus?.surface === "viewed" && this.cardFocus.path === file.path
     );
+    card.toggleClass("is-filing-source", isFilingSource);
     card.addEventListener("focusin", () => {
       const position = cardPosition(this.plugin.tray, file.path);
       this.setCardFocus(viewedCardFocus(file.path, position?.pileId));
@@ -5930,7 +6030,46 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       delay: 500
     });
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-    renderCardAddress(identity, { cls: "slipbox-card-address", address });
+    const addressEl = renderCardAddress(identity, {
+      cls: "slipbox-card-address",
+      address
+    });
+    if (isFilingSource && filing !== null) {
+      this.viewedFilingEditor = renderInlineFilingEditor(
+        addressEl,
+        card,
+        filing,
+        {
+          onInput: (value) => this.updateFilingInput(value),
+          onConfirm: () => void this.confirmFiling(),
+          onCancel: () => void this.cancelFiling(),
+          onPreview: () => void this.previewFilingPlacement(),
+          onFocusChange: (focused) => {
+            this.setDeckKeybindingsSuspended(focused);
+            if (focused) {
+              this.restoreFilingSourceFocus();
+            }
+          }
+        }
+      );
+      this.applyFilingGuidance(
+        this.viewedFilingEditor.input,
+        filing.guidance
+      );
+    } else if (filed === void 0) {
+      addressEl.setAttr(
+        "aria-label",
+        "Unfiled card address; double-click to enter an address"
+      );
+      (0, import_obsidian4.setTooltip)(addressEl, "Double-click to enter an address.", {
+        placement: "bottom",
+        delay: 350
+      });
+      attachUnfiledAddressFiling(addressEl, () => {
+        this.focusViewedCard();
+        this.runAction("file-card");
+      });
+    }
     const headerTitle = cardHeaderTitle(
       title,
       this.plugin.settings.showTitleInDeck
@@ -5938,27 +6077,29 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (headerTitle !== null) {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
-    const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
     const viewedPosition = cardPosition(this.plugin.tray, file.path);
-    this.viewedCardHeaderButtonController = renderCardHeaderButtons({
-      container: actions,
-      context: {
-        surface: "viewed",
-        viewedReturnSurface: state.returnTarget.surface,
-        filed: filed !== void 0,
-        onDesk: viewedPosition !== null,
-        bookmarked: filed !== void 0 && this.plugin.bookmarkAtPath(filed.path) !== void 0,
-        canMoveLeft: false,
-        canMoveRight: false
-      },
-      settings: this.plugin.settings.cardHeaderButtons,
-      buttonClass: "slipbox-card-toggle",
-      tooltipPlacement: "bottom",
-      run: (action) => {
-        this.focusViewedCard();
-        this.runAction(action);
-      }
-    });
+    if (!isFilingSource) {
+      const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
+      this.viewedCardHeaderButtonController = renderCardHeaderButtons({
+        container: actions,
+        context: {
+          surface: "viewed",
+          viewedReturnSurface: state.returnTarget.surface,
+          filed: filed !== void 0,
+          onDesk: viewedPosition !== null,
+          bookmarked: filed !== void 0 && this.plugin.bookmarkAtPath(filed.path) !== void 0,
+          canMoveLeft: false,
+          canMoveRight: false
+        },
+        settings: this.plugin.settings.cardHeaderButtons,
+        buttonClass: "slipbox-card-toggle",
+        tooltipPlacement: "bottom",
+        run: (action) => {
+          this.focusViewedCard();
+          this.runAction(action);
+        }
+      });
+    }
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
     body.scrollTop = state.scrollTop;
     body.addEventListener("scroll", () => {
@@ -6120,14 +6261,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   }
   async beginFilingViewedCard(file) {
     await this.runAfterInlineEditing("viewed-file-card", async () => {
-      const position = cardPosition(this.plugin.tray, file.path);
-      this.viewedCard = null;
-      this.viewedCardEl = null;
-      this.viewedCardBodyEl = null;
-      if (position !== null) {
-        this.assignCardFocus(deskCardFocus(file.path, position.pileId));
-      }
-      await this.startFiling(file);
+      await this.startFiling(file, "viewed");
     });
   }
   clearCardHeaderButtonControllers() {
@@ -6268,14 +6402,15 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     this.filingInputValue = value;
     this.recalculateFilingPreview();
-    const filing = this.currentTrayFilingState();
+    const filing = this.currentFilingState();
     if (filing !== null) {
-      this.trayRenderer.updateFilingState(filing);
+      this.updateRenderedFilingState(filing);
     }
   }
-  currentTrayFilingState() {
+  currentFilingState() {
     const sourcePath = this.filingSourcePath;
-    if (sourcePath === null) {
+    const sourceSurface = this.filingSourceSurface;
+    if (sourcePath === null || sourceSurface === null) {
       return null;
     }
     const preview = this.filingPreview;
@@ -6283,12 +6418,14 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const blockedByDuplicate = preview !== null && this.plugin.duplicateOccupants(preview.address).length > 0;
     return {
       sourcePath,
+      sourceSurface,
       value: this.filingInputValue,
       address: preview?.address ?? null,
       message: blockedByDuplicate && preview !== null ? duplicateFilingMessage(preview.address, duplicatePaths.length) : this.filingMessage,
       invalid: blockedByDuplicate || preview === null && this.filingMessage !== "Enter an address.",
       confirmationInProgress: this.filingConfirmationInProgress,
-      duplicatePaths
+      duplicatePaths,
+      guidance: filingPreviewGuidance(preview)
     };
   }
   async previewFilingPlacement() {
@@ -6311,7 +6448,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       return;
     }
     const position = cardPosition(this.plugin.tray, path);
-    if (position !== null) {
+    if (this.filingSourceSurface === "viewed" && this.viewedCard?.path === path) {
+      this.setCardFocus(viewedCardFocus(path, position?.pileId));
+    } else if (position !== null) {
       this.setCardFocus(deskCardFocus(path, position.pileId));
     }
   }
@@ -6320,24 +6459,25 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const preview = this.filingPreview;
     if (file === null || preview === null || this.filingConfirmationInProgress) {
       this.recalculateFilingPreview();
-      const filing = this.currentTrayFilingState();
+      const filing = this.currentFilingState();
       if (filing !== null) {
-        this.trayRenderer.updateFilingState(filing);
+        this.updateRenderedFilingState(filing);
       }
       return;
     }
     if (this.plugin.duplicateOccupants(preview.address).length > 0) {
-      const filing = this.currentTrayFilingState();
+      const filing = this.currentFilingState();
       if (filing !== null) {
-        this.trayRenderer.updateFilingState(filing);
+        this.updateRenderedFilingState(filing);
       }
       return;
     }
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    const restoreFilingInputFocus = this.isFilingInputFocused;
+    const sourceSurface = this.filingSourceSurface;
     this.filingConfirmationInProgress = true;
-    const pending = this.currentTrayFilingState();
+    const pending = this.currentFilingState();
     if (pending !== null) {
-      this.trayRenderer.updateFilingState(pending);
+      this.updateRenderedFilingState(pending);
     }
     try {
       const result = await this.plugin.fileCard(file, preview);
@@ -6354,17 +6494,25 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       }
       this.filingFile = null;
       this.filingSourcePath = null;
+      this.filingSourceSurface = null;
       this.filingPreview = null;
       this.filingInputValue = "";
+      if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
+        this.viewedCard = null;
+        this.viewedCardEl = null;
+        this.viewedCardBodyEl = null;
+        this.viewedFilingEditor = null;
+        this.unloadViewedCardComponent();
+      }
       this.setDeckAnchor(file.path);
       this.assignCardFocus(deckCardFocus(file.path));
       this.viewportOffset = 0;
       await this.plugin.refreshDeckViews();
     } finally {
       this.filingConfirmationInProgress = false;
-      const filing = this.currentTrayFilingState();
+      const filing = this.currentFilingState();
       if (filing !== null) {
-        this.trayRenderer.updateFilingState(filing);
+        this.updateRenderedFilingState(filing);
       }
     }
   }
@@ -6639,7 +6787,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     if (shouldSuspendDeckShortcut(
       event.target,
-      this.trayRenderer.isFilingInputFocused
+      this.isFilingInputFocused
     )) {
       return false;
     }
@@ -6664,7 +6812,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (this.pendingCommand.kind !== "idle") {
       if (shouldSuspendDeckShortcut(
         event.target,
-        this.trayRenderer.isFilingInputFocused
+        this.isFilingInputFocused
       )) {
         this.clearPendingCommand();
         return false;

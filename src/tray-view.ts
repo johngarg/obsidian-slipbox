@@ -27,10 +27,12 @@ import { cardHeaderTitle } from "./card-title.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
 import {
   attachUnfiledAddressFiling,
+  filingEditorMatchesSource,
   renderInlineFilingEditor,
   updateInlineFilingEditor,
   type InlineFilingEditorElements,
   type InlineFilingEditorState,
+  type FilingSourceSurface,
 } from "./filing-editor.js";
 import {
   cardPosition,
@@ -82,6 +84,8 @@ export interface TrayViewActions {
 
 export interface TrayFilingState extends InlineFilingEditorState {
   readonly sourcePath: string;
+  readonly sourceSurface: FilingSourceSurface;
+  readonly guidance: string;
 }
 
 export class TrayRenderer {
@@ -147,7 +151,13 @@ export class TrayRenderer {
   updateFilingState(state: TrayFilingState): void {
     if (this.filingEditor !== null) {
       updateInlineFilingEditor(this.filingEditor, state);
+      this.applyFilingGuidance(this.filingEditor.input, state.guidance);
     }
+  }
+
+  private applyFilingGuidance(input: HTMLInputElement, guidance: string): void {
+    input.setAttribute("aria-description", guidance);
+    setTooltip(input, guidance, { placement: "bottom", delay: 350 });
   }
 
   async rerenderPath(file: TFile): Promise<void> {
@@ -519,7 +529,12 @@ export class TrayRenderer {
         this.actions.focusDeskCard(card.cardRef, pile.id);
       }
     });
-    const isFilingSource = filing?.sourcePath === card.cardRef;
+    const isFilingSource = filing !== null && filingEditorMatchesSource(
+      filing.sourcePath,
+      filing.sourceSurface,
+      card.cardRef,
+      "desk",
+    );
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
       "is-bookmarked",
@@ -545,9 +560,13 @@ export class TrayRenderer {
             this.actions.filingInputFocusChanged(focused),
         },
       );
-    } else if (filed === undefined) {
-      addressEl.setAttr("aria-label", "Unfiled card address; double-click to file");
-      setTooltip(addressEl, "Double-click to file", {
+      this.applyFilingGuidance(this.filingEditor.input, filing.guidance);
+    } else if (filed === undefined && !isViewed) {
+      addressEl.setAttr(
+        "aria-label",
+        "Unfiled card address; double-click to enter an address",
+      );
+      setTooltip(addressEl, "Double-click to enter an address.", {
         placement: "bottom",
         delay: 350,
       });

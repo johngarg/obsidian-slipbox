@@ -809,13 +809,61 @@ button.slipbox-tray-pile-cycle svg {
   font-variant-numeric: tabular-nums;
 }
 
-/* The viewed card shows the same empty slot, without the Desk card's
-   double-click-to-file affordance. */
+/* Viewed and Desk cards share the same empty-slot filing affordance. */
 .slipbox-card-address.is-unfiled-slot {
   width: 3.2ch;
   height: 1.3em;
   border: 1px dashed var(--background-modifier-border);
   border-radius: 3px;
+  transition:
+    border-color 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.slipbox-viewed-card .slipbox-card-address.is-unfiled-slot:not(.is-editing) {
+  cursor: text;
+}
+
+.slipbox-viewed-card
+  .slipbox-card-address.is-unfiled-slot:not(.is-editing):hover {
+  border-color: var(--interactive-accent);
+  background-color: color-mix(
+    in srgb,
+    var(--interactive-accent) 12%,
+    transparent
+  );
+}
+
+.slipbox-viewed-card.is-filing-source {
+  border-color: color-mix(
+    in srgb,
+    var(--interactive-accent) 72%,
+    var(--background-modifier-border)
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--interactive-accent) 22%, transparent),
+    0 14px 42px rgb(0 0 0 / 0.28);
+}
+
+.slipbox-viewed-card.is-filing-source .slipbox-card-address-row {
+  background: color-mix(
+    in srgb,
+    var(--interactive-accent) 12%,
+    var(--background-primary-alt)
+  );
+}
+
+.slipbox-viewed-card .slipbox-card-address.is-editing {
+  width: 100%;
+  min-width: 8rem;
+}
+
+.slipbox-viewed-card .slipbox-tray-filing-feedback {
+  top: 46px;
+  right: 15px;
+  left: 15px;
+  max-height: calc(100% - 61px);
+  font-size: var(--font-ui-smaller);
 }
 
 .slipbox-card-header-title {

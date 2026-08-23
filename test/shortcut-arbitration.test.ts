@@ -21,6 +21,16 @@ describe("Slipbox shortcut arbitration", () => {
     assert.equal(tracker.take(staleLastEvent), undefined);
   });
 
+  test("associates a command dispatched before the key event is observed", () => {
+    const tracker = new ShortcutCommandTracker<object, string>();
+    const observedEvent = {};
+    const staleLastEvent = {};
+    tracker.record("centre-card", staleLastEvent);
+    tracker.observe(observedEvent);
+    assert.equal(tracker.take(observedEvent), "centre-card");
+    assert.equal(tracker.take(staleLastEvent), undefined);
+  });
+
   test("falls back to Obsidian's last event outside an observed shortcut", () => {
     const tracker = new ShortcutCommandTracker<object, string>();
     const lastEvent = {};

@@ -1742,16 +1742,36 @@ function keyBindingConflict(keybindings, action, bindingValue) {
 // src/shortcut-arbitration.ts
 var ShortcutCommandTracker = class {
   observedEvent;
+  pendingDispatch;
   handledActions = /* @__PURE__ */ new WeakMap();
   observe(event) {
     this.observedEvent = event;
+    const pending = this.pendingDispatch;
+    if (pending === void 0) {
+      return;
+    }
+    this.pendingDispatch = void 0;
+    if (pending.fallbackEvent !== void 0) {
+      this.handledActions.delete(pending.fallbackEvent);
+    }
+    this.handledActions.set(event, pending.action);
   }
   record(action, fallbackEvent) {
-    const event = this.observedEvent ?? fallbackEvent;
-    if (event !== void 0) {
-      this.handledActions.set(event, action);
+    if (this.observedEvent !== void 0) {
+      this.handledActions.set(this.observedEvent, action);
+      return this.observedEvent;
     }
-    return event;
+    const pending = { action, fallbackEvent };
+    this.pendingDispatch = pending;
+    if (fallbackEvent !== void 0) {
+      this.handledActions.set(fallbackEvent, action);
+    }
+    queueMicrotask(() => {
+      if (this.pendingDispatch === pending) {
+        this.pendingDispatch = void 0;
+      }
+    });
+    return fallbackEvent;
   }
   take(event) {
     const action = this.handledActions.get(event);

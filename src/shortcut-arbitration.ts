@@ -10,18 +10,41 @@ export type ShortcutClaim =
 
 export class ShortcutCommandTracker<TEvent extends object, TAction> {
   private observedEvent: TEvent | undefined;
+  private pendingDispatch: {
+    readonly action: TAction;
+    readonly fallbackEvent: TEvent | undefined;
+  } | undefined;
   private readonly handledActions = new WeakMap<TEvent, TAction>();
 
   observe(event: TEvent): void {
     this.observedEvent = event;
+    const pending = this.pendingDispatch;
+    if (pending === undefined) {
+      return;
+    }
+    this.pendingDispatch = undefined;
+    if (pending.fallbackEvent !== undefined) {
+      this.handledActions.delete(pending.fallbackEvent);
+    }
+    this.handledActions.set(event, pending.action);
   }
 
   record(action: TAction, fallbackEvent?: TEvent): TEvent | undefined {
-    const event = this.observedEvent ?? fallbackEvent;
-    if (event !== undefined) {
-      this.handledActions.set(event, action);
+    if (this.observedEvent !== undefined) {
+      this.handledActions.set(this.observedEvent, action);
+      return this.observedEvent;
     }
-    return event;
+    const pending = { action, fallbackEvent };
+    this.pendingDispatch = pending;
+    if (fallbackEvent !== undefined) {
+      this.handledActions.set(fallbackEvent, action);
+    }
+    queueMicrotask(() => {
+      if (this.pendingDispatch === pending) {
+        this.pendingDispatch = undefined;
+      }
+    });
+    return fallbackEvent;
   }
 
   take(event: TEvent): TAction | undefined {

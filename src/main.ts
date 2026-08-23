@@ -10,6 +10,8 @@ import {
   getFrontMatterInfo,
   moment,
   normalizePath,
+  setIcon,
+  setTooltip,
   stringifyYaml,
   type Editor,
   type EventRef,
@@ -36,6 +38,7 @@ import {
   renameDeskCard,
 } from "./desk-state.js";
 import { validateAddress } from "./address-order.js";
+import { issueStatusSummary } from "./card-metadata.js";
 import {
   BookmarksModal,
   confirmAction,
@@ -99,6 +102,7 @@ import { generateFiledCardLink } from "./card-links.js";
 import { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 import {
   createFilingPreview,
+  duplicateFilingMessage,
   filingPlacementMatches,
   type FilingPreview,
 } from "./filing-preview.js";
@@ -161,6 +165,7 @@ export default class SlipboxPlugin extends Plugin {
   index!: CardIndex;
   canvas!: CanvasBridge;
 
+  private problemStatusBarItem: HTMLElement | null = null;
   private indexRefreshTimer: number | null = null;
   private cardSpreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
@@ -186,6 +191,7 @@ export default class SlipboxPlugin extends Plugin {
       this.app,
       this.settings.addressProperty,
       this.settings.deckOrdering,
+      this.settings.duplicateAddresses,
     );
     this.canvas = new CanvasBridge(this.app);
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
@@ -207,6 +213,13 @@ export default class SlipboxPlugin extends Plugin {
     this.addRibbonIcon("archive", "Open Slipbox", () => {
       void this.openDeck();
     });
+
+    this.problemStatusBarItem = this.addStatusBarItem();
+    this.problemStatusBarItem.addClass("mod-clickable");
+    this.problemStatusBarItem.addEventListener("click", () => {
+      this.showIssues();
+    });
+    this.updateProblemStatusBarItem();
 
     this.registerCommands();
     if (migrateTitleCollision) {
@@ -435,9 +448,11 @@ export default class SlipboxPlugin extends Plugin {
   async updateSettings(value: SlipboxSettings): Promise<void> {
     const previousAddressProperty = this.settings.addressProperty;
     const previousOrdering = this.settings.deckOrdering;
+    const previousDuplicatePolicy = this.settings.duplicateAddresses;
     this.settings = normalizeSettings(value);
     this.index.setAddressProperty(this.settings.addressProperty);
     this.index.setDeckOrdering(this.settings.deckOrdering);
+    this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
@@ -446,7 +461,8 @@ export default class SlipboxPlugin extends Plugin {
     }
     if (
       this.settings.addressProperty !== previousAddressProperty ||
-      this.settings.deckOrdering !== previousOrdering
+      this.settings.deckOrdering !== previousOrdering ||
+      this.settings.duplicateAddresses !== previousDuplicatePolicy
     ) {
       await this.refreshIndex();
       if (this.settings.deckOrdering !== previousOrdering) {
@@ -526,18 +542,66 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
+  /**
+   * Cards already filed at `address` when duplicates are not allowed. Always
+   * empty under the permissive policy, so callers need no policy branch.
+   */
+  duplicateOccupants(address: string): readonly string[] {
+    if (this.settings.duplicateAddresses !== "problem") {
+      return [];
+    }
+    return this.index.filedAtAddress(address).map((card) => card.path);
+  }
+
   showIssues(): void {
     this.index.refresh();
-    new IssuesModal(this.app, this.index.snapshot, {
-      open: (path) => {
-        const file = this.index.fileAtPath(path);
-        if (file === undefined) {
-          new Notice(`Could not find ${path}.`);
-        } else {
-          void this.openMarkdownFile(file);
-        }
+    this.updateProblemStatusBarItem();
+    new IssuesModal(
+      this.app,
+      this.index.snapshot,
+      this.settings.duplicateAddresses,
+      {
+        open: (path) => {
+          const file = this.index.fileAtPath(path);
+          if (file === undefined) {
+            new Notice(`Could not find ${path}.`);
+          } else {
+            void this.openMarkdownFile(file);
+          }
+        },
       },
-    }).open();
+    ).open();
+  }
+
+  /**
+   * Reflect the current issue count in the status bar. The item is hidden
+   * entirely when the vault is clean, so a healthy vault shows no chrome.
+   */
+  private updateProblemStatusBarItem(): void {
+    const item = this.problemStatusBarItem;
+    if (item === null) {
+      return;
+    }
+    const summary = issueStatusSummary(this.index.snapshot.issues);
+    item.replaceChildren();
+    if (summary === null) {
+      item.hide();
+      return;
+    }
+    item.show();
+    item.toggleClass("is-error", summary.severity === "error");
+    item.toggleClass("is-warning", summary.severity === "warning");
+    const icon = item.createSpan({ cls: "slipbox-status-bar-icon" });
+    setIcon(
+      icon,
+      summary.severity === "error" ? "alert-triangle" : "alert-circle",
+    );
+    item.createSpan({
+      cls: "slipbox-status-bar-count",
+      text: String(summary.count),
+    });
+    item.setAttr("aria-label", summary.description);
+    setTooltip(item, summary.description, { placement: "top" });
   }
 
   showBookmarks(view: DeckView): void {
@@ -811,6 +875,13 @@ export default class SlipboxPlugin extends Plugin {
       }
       if (!this.filingPreviewMatches(file, preview)) {
         return { status: "preview-changed" };
+      }
+      // Duplicates can also appear between preview and write, so the policy is
+      // enforced here rather than only in the inline editor.
+      const occupants = this.duplicateOccupants(preview.address);
+      if (occupants.length > 0) {
+        new Notice(duplicateFilingMessage(preview.address, occupants.length));
+        return { status: "failed" };
       }
 
       await this.app.fileManager.processFrontMatter(
@@ -1363,6 +1434,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async refreshDeckViews(): Promise<void> {
+    this.updateProblemStatusBarItem();
     await Promise.all(
       this.app.workspace
         .getLeavesOfType(DECK_VIEW_TYPE)

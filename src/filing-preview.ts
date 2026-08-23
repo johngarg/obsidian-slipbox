@@ -15,6 +15,16 @@ export interface FilingPreview {
   readonly placementSignature: string;
 }
 
+/** Message shown when the duplicate policy refuses an occupied address. */
+export function duplicateFilingMessage(
+  address: string,
+  occupants: number,
+): string {
+  return `${address} is already used by ${occupants} card${
+    occupants === 1 ? "" : "s"
+  }. Duplicate addresses are not allowed.`;
+}
+
 /** Seed manual filing from the currently focused filed card, when available. */
 export function initialFilingAddress(
   focusedCard: Pick<AddressedPath, "address"> | null | undefined,

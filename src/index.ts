@@ -22,9 +22,16 @@ export {
   buildFiledCardLookups,
   cardMetadataRecord,
   indexCardMetadata,
+  issueListDescription,
+  issueStatusSummary,
+} from "./card-metadata.js";
+export type {
+  DuplicateAddressPolicy,
+  IssueStatusSummary,
 } from "./card-metadata.js";
 export {
   createFilingPreview,
+  duplicateFilingMessage,
   filingPlacementMatches,
   filingPreviewFocusPath,
   initialFilingAddress,

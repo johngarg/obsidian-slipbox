@@ -1,4 +1,5 @@
 import type { DeckOrdering } from "./address-order.js";
+import type { DuplicateAddressPolicy } from "./card-metadata.js";
 
 export const SLIPBOX_DATA_SCHEMA_VERSION = 9;
 
@@ -416,6 +417,7 @@ export const DECK_ACTION_DEFINITIONS = SLIPBOX_ACTION_DEFINITIONS;
 export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly deckOrdering: DeckOrdering;
+  readonly duplicateAddresses: DuplicateAddressPolicy;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
   readonly mainCardSize: CardSize;
@@ -495,6 +497,7 @@ const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKe
 export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "zettel-id",
   deckOrdering: "natural",
+  duplicateAddresses: "allowed",
   titleSource: "filename",
   titleProperty: "title",
   mainCardSize: "medium",
@@ -762,6 +765,8 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
     addressProperty,
     deckOrdering:
       source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
+    duplicateAddresses:
+      source.duplicateAddresses === "problem" ? "problem" : "allowed",
     titleSource:
       requestedTitleSource === "frontmatter" && titleProperty === addressProperty
         ? "filename"

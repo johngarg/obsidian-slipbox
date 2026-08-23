@@ -54,6 +54,11 @@ export class SlipboxSettingTab extends PluginSettingTab {
             (setting) => this.renderDeckOrdering(setting),
           ),
           this.definition(
+            "Duplicate addresses",
+            "Two cards may share an address. Allowed keeps them silent; Report as a problem lists them as warnings, counts them in the status bar, and refuses to file onto an occupied address. Neither setting rewrites existing notes.",
+            (setting) => this.renderDuplicateAddresses(setting),
+          ),
+          this.definition(
             "Title source",
             "Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.",
             (setting) => this.renderTitleSource(setting),
@@ -210,6 +215,19 @@ export class SlipboxSettingTab extends PluginSettingTab {
           );
           queueCommit();
         });
+    });
+  }
+
+  private renderDuplicateAddresses(setting: Setting): void {
+    setting.addDropdown((dropdown) => {
+      dropdown
+        .addOption("allowed", "Allowed")
+        .addOption("problem", "Report as a problem")
+        .setValue(this.slipbox.settings.duplicateAddresses)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          duplicateAddresses: value === "problem" ? "problem" : "allowed",
+        }));
     });
   }
 

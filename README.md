@@ -20,12 +20,26 @@ path as a deterministic tie-breaker when several files share one address.
 Addresses are case-sensitive, need not be unique, and have no other grammar.
 Slipbox stores no hidden sequence and imposes no folder.
 
-Duplicate addresses are allowed. Every valid duplicate remains independently
+Two cards may share an address. Every valid duplicate remains independently
 selectable and actionable, and duplicate groups appear together in deterministic
-code-unit path order. Slipbox reports one non-blocking warning per duplicate
-address and lists all affected paths. Invalid stored values—including non-text
-values and text with outer whitespace—are diagnosed and excluded, but never
+code-unit path order, whichever policy is set. The **Duplicate addresses**
+setting decides only how they are treated: `Allowed`, the default, reports
+nothing, while `Report as a problem` emits one non-blocking warning per
+duplicate address listing all affected paths, counts them in the status bar, and
+refuses to file onto an address a card already occupies. Neither policy rewrites
+existing notes, and the vault can acquire duplicates from outside Slipbox under
+either. Invalid stored values—including non-text values and text with outer
+whitespace—are diagnosed and excluded regardless of the policy, but never
 rewritten automatically.
+
+## Card problems
+
+Slipbox keeps a status bar item showing the number of outstanding card problems.
+It is hidden entirely when there are none, takes an error tone when any card is
+excluded and a warning tone otherwise, and opens the problem list when clicked.
+The `Show card problems` command opens the same list and is unavailable while
+the vault is clean. Invalid addresses are always counted; duplicates are counted
+only under the `Report as a problem` policy.
 
 ## Slipbox workspace, Desk, and Canvas
 

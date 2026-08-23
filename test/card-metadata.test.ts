@@ -55,19 +55,28 @@ describe("indexCardMetadata", () => {
     );
   });
 
+  const duplicateRecords = [
+    { path: "z.md", hasAddress: true, address: "A/12" },
+    { path: "a.md", hasAddress: true, address: "A/12" },
+    { path: "m.md", hasAddress: true, address: "A/12" },
+    { path: "other.md", hasAddress: true, address: "A/2" },
+  ];
+
+  const duplicateFiled = [
+    { path: "other.md", address: "A/2" },
+    { path: "a.md", address: "A/12" },
+    { path: "m.md", address: "A/12" },
+    { path: "z.md", address: "A/12" },
+  ];
+
   test("retains every duplicate and emits one path-complete warning", () => {
-    const result = indexCardMetadata([
-      { path: "z.md", hasAddress: true, address: "A/12" },
-      { path: "a.md", hasAddress: true, address: "A/12" },
-      { path: "m.md", hasAddress: true, address: "A/12" },
-      { path: "other.md", hasAddress: true, address: "A/2" },
-    ]);
-    assert.deepEqual(result.filed, [
-      { path: "other.md", address: "A/2" },
-      { path: "a.md", address: "A/12" },
-      { path: "m.md", address: "A/12" },
-      { path: "z.md", address: "A/12" },
-    ]);
+    const result = indexCardMetadata(
+      duplicateRecords,
+      "zettel-id",
+      "natural",
+      "problem",
+    );
+    assert.deepEqual(result.filed, duplicateFiled);
     assert.deepEqual(result.issues, [{
       kind: "duplicate",
       severity: "warning",
@@ -75,6 +84,27 @@ describe("indexCardMetadata", () => {
       paths: ["a.md", "m.md", "z.md"],
       message: "Duplicate zettel-id A/12",
     }]);
+  });
+
+  test("keeps duplicates out of the issue list when they are allowed", () => {
+    const result = indexCardMetadata(duplicateRecords);
+    assert.deepEqual(result.filed, duplicateFiled);
+    assert.deepEqual(result.issues, []);
+  });
+
+  test("reports invalid addresses under either duplicate policy", () => {
+    const records = [
+      { path: "bad.md", hasAddress: true, address: 42 },
+      { path: "a.md", hasAddress: true, address: "A/1" },
+      { path: "b.md", hasAddress: true, address: "A/1" },
+    ];
+    for (const policy of ["allowed", "problem"] as const) {
+      const result = indexCardMetadata(records, "zettel-id", "natural", policy);
+      const invalid = result.issues.filter((issue) => issue.kind === "invalid");
+      assert.equal(invalid.length, 1);
+      assert.deepEqual(invalid[0]?.paths, ["bad.md"]);
+      assert.equal(result.filed.length, 2);
+    }
   });
 
   test("switches ordering without changing membership or duplicate path order", () => {

@@ -7237,9 +7237,9 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
     });
   }
   renderNewCardSettings(container) {
-    const folderSetting = new import_obsidian6.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note\u2019s folder, or the vault root when no source note is active.");
+    const folderSetting = new import_obsidian6.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to follow Obsidian\u2019s own default location for new notes.");
     folderSetting.addDropdown((dropdown) => {
-      dropdown.addOption("", "Source note\u2019s folder");
+      dropdown.addOption("", "Obsidian\u2019s default location");
       const folders = this.app.vault.getAllLoadedFiles().filter(
         (file) => file instanceof import_obsidian6.TFolder && !file.isRoot()
       ).sort((left, right) => left.path.localeCompare(right.path));
@@ -8841,16 +8841,22 @@ ${frontmatter}---
   activeCreationSourcePath() {
     return this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.file.path ?? this.app.workspace.getActiveFile()?.path;
   }
+  /**
+   * Resolve the folder a new card belongs in.
+   *
+   * An empty setting defers to Obsidian's own Default location for new notes.
+   * Slipbox supplies the source path so that the Same folder as current file
+   * option resolves against the Deck's active card, not only the active note.
+   */
   newCardParent(sourcePath) {
     const path = this.settings.newCardFolder;
     if (path === "") {
-      const source = sourcePath === void 0 ? null : this.app.vault.getAbstractFileByPath(sourcePath);
-      return source instanceof import_obsidian9.TFile && source.parent !== null ? source.parent : this.app.vault.getRoot();
+      return this.app.fileManager.getNewFileParent(sourcePath ?? "");
     }
-    const folder = this.app.vault.getAbstractFileByPath(path);
-    if (!(folder instanceof import_obsidian9.TFolder)) {
+    const folder = this.app.vault.getFolderByPath(path);
+    if (folder === null) {
       throw new Error(
-        `The configured new-card folder \u201C${path}\u201D does not exist`
+        `The configured new-card folder \u201C${path}\u201D is not a folder in this vault`
       );
     }
     return folder;

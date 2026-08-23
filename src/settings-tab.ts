@@ -207,9 +207,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
   private renderNewCardSettings(container: HTMLElement): void {
     const folderSetting = new Setting(container)
       .setName("New card folder")
-      .setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to inherit the source note’s folder, or the vault root when no source note is active.");
+      .setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to follow Obsidian’s own default location for new notes.");
     folderSetting.addDropdown((dropdown) => {
-      dropdown.addOption("", "Source note’s folder");
+      dropdown.addOption("", "Obsidian’s default location");
       const folders = this.app.vault
         .getAllLoadedFiles()
         .filter(

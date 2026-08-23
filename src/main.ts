@@ -1141,20 +1141,22 @@ export default class SlipboxPlugin extends Plugin {
       this.app.workspace.getActiveFile()?.path;
   }
 
+  /**
+   * Resolve the folder a new card belongs in.
+   *
+   * An empty setting defers to Obsidian's own Default location for new notes.
+   * Slipbox supplies the source path so that the Same folder as current file
+   * option resolves against the Deck's active card, not only the active note.
+   */
   private newCardParent(sourcePath: string | undefined): TFolder {
     const path = this.settings.newCardFolder;
     if (path === "") {
-      const source = sourcePath === undefined
-        ? null
-        : this.app.vault.getAbstractFileByPath(sourcePath);
-      return source instanceof TFile && source.parent !== null
-        ? source.parent
-        : this.app.vault.getRoot();
+      return this.app.fileManager.getNewFileParent(sourcePath ?? "");
     }
-    const folder = this.app.vault.getAbstractFileByPath(path);
-    if (!(folder instanceof TFolder)) {
+    const folder = this.app.vault.getFolderByPath(path);
+    if (folder === null) {
       throw new Error(
-        `The configured new-card folder “${path}” does not exist`,
+        `The configured new-card folder “${path}” is not a folder in this vault`,
       );
     }
     return folder;

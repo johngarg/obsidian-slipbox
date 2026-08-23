@@ -274,9 +274,13 @@ preserves the default 840 px main-card cap and 360 px Desk-card cap. Desk
 presets remain smaller than main-card presets, including on narrow views.
 
 Every note created through Slipbox is placed in the configured `New card folder`.
-The empty default inherits the source note's folder, or uses the vault root when
-there is no source note. A missing configured folder is reported rather than
-silently recreated elsewhere.
+The empty default follows Obsidian's own **Default location for new notes**
+under Settings → Files and links, rather than reimplementing that preference.
+Slipbox supplies the source path, so Obsidian's **Same folder as current file**
+option resolves against the Deck's active card when a Slipbox view is focused,
+and against the active note otherwise. A configured folder that is missing, or
+that names a note rather than a folder, is reported instead of being silently
+recreated elsewhere.
 
 **New card** creates immediately with the default timestamp-derived title and
 does not open the title prompt. **New card with title** asks for a title;

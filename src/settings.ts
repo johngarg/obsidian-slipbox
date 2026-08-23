@@ -6,6 +6,19 @@ export const DEFAULT_CARD_SPREAD = 0.58;
 export const MIN_CARD_SPREAD = 0.18;
 export const MAX_CARD_SPREAD = 1.12;
 
+export function metadataPropertyError(
+  property: string,
+  disallowedProperty: string | null,
+): string | null {
+  if (property === "") {
+    return "A non-empty top-level property name is required.";
+  }
+  if (disallowedProperty !== null && property === disallowedProperty) {
+    return "The title and address properties must use different keys.";
+  }
+  return null;
+}
+
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
 

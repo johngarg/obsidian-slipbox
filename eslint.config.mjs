@@ -68,13 +68,6 @@ export default defineConfig(
     },
   },
   {
-    files: ["src/settings-tab.ts"],
-    rules: {
-      "@typescript-eslint/no-deprecated": "off",
-      "obsidianmd/settings-tab/prefer-setting-definitions": "off",
-    },
-  },
-  {
     files: ["test/**/*.ts"],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",

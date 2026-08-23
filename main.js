@@ -407,7 +407,7 @@ function canRunDeckAction(action, context) {
       return context.canMoveDeskCardRight;
     case "next-pile":
     case "previous-pile":
-      return context.hasDeskPiles && context.focusedSurface !== "viewed";
+      return context.hasDeskPiles && (context.focusedSurface !== "viewed" || context.focusedCardOnDesk);
     case "swap-deck-pile":
       return context.hasDeskPiles && context.hasActiveCard && (context.focusedSurface !== "viewed" || context.focusedCardOnDesk);
     case "toggle-pile":

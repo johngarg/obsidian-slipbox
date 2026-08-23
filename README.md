@@ -57,12 +57,14 @@ the filed-card controls.
 Card focus can also move between the Deck and Desk piles without changing the
 Deck anchor. `{` and `}` cycle backward and forward through the Deck and every
 visible pile, wrapping at both ends and landing on each pile's top card without
-expanding it. If the Deck has no filed cards, cycling skips it. `%` swaps between
-the Deck and the last pile that received card focus, falling back to the first
-pile when that history is absent or stale; swap is unavailable when the Deck is
-empty. When a viewed card was the last focus in a pile, `%` returns to that
-viewed card rather than its placeholder. `Space` expands or collapses the pile
-containing the focused Desk card.
+expanding it. A viewed card on the Desk participates as its pile, so cycling
+continues normally after a pile's ghost redirects focus to the viewed card. If
+the Deck has no filed cards, cycling skips it. `%` swaps between the Deck and the
+last pile that received card focus, falling back to the first pile when that
+history is absent or stale; swap is unavailable when the Deck is empty. When a
+viewed card was the last focus in a pile, `%` returns to that viewed card rather
+than its placeholder. `Space` expands or collapses the pile containing the
+focused Desk card.
 In an expanded pile, `h` and `l` move card focus through its cards and wrap at
 both ends. In a collapsed pile they rotate the top card exactly like the hover
 arrows.

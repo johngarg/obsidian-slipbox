@@ -95,7 +95,12 @@ describe("Deck action availability", () => {
     for (const action of ["next-pile", "previous-pile"] as const) {
       assert.equal(canRunDeckAction(action, READY), true);
       assert.equal(canRunDeckAction(action, { ...READY, hasDeskPiles: false }), false);
-      assert.equal(canRunDeckAction(action, { ...READY, focusedSurface: "viewed" }), false);
+      assert.equal(canRunDeckAction(action, { ...READY, focusedSurface: "viewed" }), true);
+      assert.equal(canRunDeckAction(action, {
+        ...READY,
+        focusedSurface: "viewed",
+        focusedCardOnDesk: false,
+      }), false);
     }
     assert.equal(canRunDeckAction("swap-deck-pile", READY), true);
     assert.equal(canRunDeckAction("swap-deck-pile", {

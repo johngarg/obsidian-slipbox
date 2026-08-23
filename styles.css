@@ -1,7 +1,7 @@
 .slipbox-deck-view {
   --slipbox-card-footer-height: 36px;
-  --slipbox-deck-center: 56%;
-  --slipbox-deck-top: 28%;
+  --slipbox-deck-center: 67%;
+  --slipbox-deck-top: 40%;
   --slipbox-pile-deck-gap: 24px;
 }
 
@@ -697,7 +697,7 @@ button.slipbox-tray-pile-cycle svg {
   top: var(--slipbox-deck-center);
   left: 50%;
   width: var(--slipbox-main-card-width);
-  max-height: calc(88% - 54px);
+  max-height: calc(66% - 54px);
   aspect-ratio: 3 / 2;
   transform: translate(-50%, -50%);
   transform-origin: center;

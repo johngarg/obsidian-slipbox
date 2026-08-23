@@ -3,13 +3,12 @@ import {
   ItemView,
   MarkdownRenderer,
   Notice,
+  Platform,
   Scope,
   TFile,
   WorkspaceLeaf,
   getLinkpath,
   setTooltip,
-  type KeymapEventHandler,
-  type Modifier,
 } from "obsidian";
 
 import type SlipboxPlugin from "./main.js";
@@ -49,11 +48,16 @@ import {
 import {
   DECK_ACTION_DEFINITIONS,
   formatKeyBinding,
+  keyBindingFromKeyboardEvent,
+  keyBindingSignature,
   type DeckAction,
   type DeckKeyBinding,
   type SlipboxActionDefinition,
 } from "./settings.js";
-import { arbitrateShortcut } from "./shortcut-arbitration.js";
+import {
+  arbitrateShortcut,
+  classifyShortcutClaim,
+} from "./shortcut-arbitration.js";
 import {
   TrayRenderer,
   type TrayFilingState,
@@ -240,8 +244,7 @@ export class DeckView extends ItemView {
   private readonly viewedCardFooter: CardFooterManager;
   private readonly trayRenderer: TrayRenderer;
   private deckKeybindingsSuspended = false;
-  private keymapHandlers: KeymapEventHandler[] = [];
-  private readonly commandHandledEvents = new WeakSet<KeyboardEvent>();
+  private readonly commandHandledActions = new WeakMap<KeyboardEvent, DeckAction>();
   private readonly shortcutConflictNoticeTimes = new Map<string, number>();
   private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
   private pendingCommandStartEvent: KeyboardEvent | null = null;
@@ -307,7 +310,8 @@ export class DeckView extends ItemView {
       }),
     );
     this.scope = new Scope(this.app.scope);
-    this.updateKeybindings();
+    this.scope.register([], "Escape", (event) =>
+      this.handleDeckEscape(event) ? false : undefined);
   }
 
   getViewType(): string {
@@ -342,6 +346,12 @@ export class DeckView extends ItemView {
         },
       },
     ));
+    this.registerDomEvent(
+      this.contentEl.ownerDocument,
+      "keydown",
+      (event) => this.deferConfiguredDeckShortcut(event),
+      { capture: true },
+    );
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (this.handleDeckEscape(event)) {
         return;
@@ -996,37 +1006,6 @@ export class DeckView extends ItemView {
       this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
-    this.updateKeybindings();
-  }
-
-  updateKeybindings(): void {
-    const scope = this.scope;
-    if (scope === null) {
-      return;
-    }
-    for (const handler of this.keymapHandlers) {
-      scope.unregister(handler);
-    }
-    this.keymapHandlers = [];
-    this.keymapHandlers.push(scope.register([], "Escape", (event) =>
-      this.handleDeckEscape(event) ? false : undefined));
-    if (this.deckKeybindingsSuspended) {
-      return;
-    }
-    for (const definition of DECK_ACTION_DEFINITIONS) {
-      for (const binding of this.plugin.settings.deckKeybindings[definition.id]) {
-        this.keymapHandlers.push(scope.register(
-          [...binding.modifiers] as Modifier[],
-          binding.key,
-          (event) => {
-            this.deferDeckActionKey(event, definition, binding);
-            // Yield to Obsidian's parent scope. Slipbox runs in a microtask
-            // only when no Obsidian hotkey has claimed this event.
-            return undefined;
-          },
-        ));
-      }
-    }
   }
 
   canRunCommandAction(action: DeckAction): boolean {
@@ -1047,7 +1026,7 @@ export class DeckView extends ItemView {
   runCommandAction(action: DeckAction): boolean {
     const event = this.app.lastEvent;
     if (event !== null && "key" in event) {
-      this.commandHandledEvents.add(event);
+      this.commandHandledActions.set(event, action);
     }
     const ran = this.runAction(action);
     if (
@@ -1059,6 +1038,28 @@ export class DeckView extends ItemView {
       this.pendingCommandStartEvent = this.app.lastEvent;
     }
     return ran;
+  }
+
+  private deferConfiguredDeckShortcut(event: KeyboardEvent): void {
+    if (
+      this.deckKeybindingsSuspended ||
+      this.pendingCommand.kind !== "idle" ||
+      this.app.workspace.getActiveViewOfType(DeckView) !== this ||
+      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
+    ) {
+      return;
+    }
+    const candidate = keyBindingFromKeyboardEvent(event, Platform.isMacOS);
+    const signature = keyBindingSignature(candidate);
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      const binding = this.plugin.settings.deckKeybindings[definition.id].find(
+        (configured) => keyBindingSignature(configured) === signature,
+      );
+      if (binding !== undefined) {
+        this.deferDeckActionKey(event, definition, binding);
+        return;
+      }
+    }
   }
 
   private deferDeckActionKey(
@@ -1078,9 +1079,14 @@ export class DeckView extends ItemView {
       if (this.app.workspace.getActiveViewOfType(DeckView) !== this) {
         return;
       }
-      arbitrateShortcut(
+      const commandAction = this.commandHandledActions.get(event);
+      const claim = classifyShortcutClaim(
         event.defaultPrevented,
-        this.commandHandledEvents.has(event),
+        definition.id,
+        commandAction,
+      );
+      arbitrateShortcut(
+        claim,
         () => this.handleDeckActionKey(
           event,
           definition.id,

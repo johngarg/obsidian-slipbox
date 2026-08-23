@@ -1740,11 +1740,20 @@ function keyBindingConflict(keybindings, action, bindingValue) {
 }
 
 // src/shortcut-arbitration.ts
-function arbitrateShortcut(defaultPrevented, handledBySlipboxCommand, runSlipboxShortcut, reportConflict) {
-  if (handledBySlipboxCommand) {
+function classifyShortcutClaim(defaultPrevented, configuredAction, handledSlipboxAction) {
+  if (handledSlipboxAction === configuredAction) {
+    return "same-slipbox-command";
+  }
+  if (defaultPrevented || handledSlipboxAction !== void 0) {
+    return "other-command";
+  }
+  return "unclaimed";
+}
+function arbitrateShortcut(claim, runSlipboxShortcut, reportConflict) {
+  if (claim === "same-slipbox-command") {
     return "command";
   }
-  if (defaultPrevented) {
+  if (claim === "other-command") {
     reportConflict();
     return "conflict";
   }
@@ -4033,7 +4042,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       })
     );
     this.scope = new import_obsidian4.Scope(this.app.scope);
-    this.updateKeybindings();
+    this.scope.register([], "Escape", (event) => this.handleDeckEscape(event) ? false : void 0);
   }
   /**
    * Slipbox is a static surface, not a navigable one.
@@ -4094,8 +4103,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   viewedCardFooter;
   trayRenderer;
   deckKeybindingsSuspended = false;
-  keymapHandlers = [];
-  commandHandledEvents = /* @__PURE__ */ new WeakSet();
+  commandHandledActions = /* @__PURE__ */ new WeakMap();
   shortcutConflictNoticeTimes = /* @__PURE__ */ new Map();
   pendingCommand = IDLE_DECK_COMMAND;
   pendingCommandStartEvent = null;
@@ -4142,6 +4150,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         }
       }
     ));
+    this.registerDomEvent(
+      this.contentEl.ownerDocument,
+      "keydown",
+      (event) => this.deferConfiguredDeckShortcut(event),
+      { capture: true }
+    );
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (this.handleDeckEscape(event)) {
         return;
@@ -4679,33 +4693,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
-    this.updateKeybindings();
-  }
-  updateKeybindings() {
-    const scope = this.scope;
-    if (scope === null) {
-      return;
-    }
-    for (const handler of this.keymapHandlers) {
-      scope.unregister(handler);
-    }
-    this.keymapHandlers = [];
-    this.keymapHandlers.push(scope.register([], "Escape", (event) => this.handleDeckEscape(event) ? false : void 0));
-    if (this.deckKeybindingsSuspended) {
-      return;
-    }
-    for (const definition of DECK_ACTION_DEFINITIONS) {
-      for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
-        this.keymapHandlers.push(scope.register(
-          [...binding2.modifiers],
-          binding2.key,
-          (event) => {
-            this.deferDeckActionKey(event, definition, binding2);
-            return void 0;
-          }
-        ));
-      }
-    }
   }
   canRunCommandAction(action) {
     const event = this.app.lastEvent;
@@ -4717,13 +4704,29 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   runCommandAction(action) {
     const event = this.app.lastEvent;
     if (event !== null && "key" in event) {
-      this.commandHandledEvents.add(event);
+      this.commandHandledActions.set(event, action);
     }
     const ran = this.runAction(action);
     if (ran && PENDING_COMMAND_ACTIONS.has(action) && this.app.lastEvent !== null && "key" in this.app.lastEvent) {
       this.pendingCommandStartEvent = this.app.lastEvent;
     }
     return ran;
+  }
+  deferConfiguredDeckShortcut(event) {
+    if (this.deckKeybindingsSuspended || this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)) {
+      return;
+    }
+    const candidate = keyBindingFromKeyboardEvent(event, import_obsidian4.Platform.isMacOS);
+    const signature = keyBindingSignature(candidate);
+    for (const definition of DECK_ACTION_DEFINITIONS) {
+      const binding2 = this.plugin.settings.deckKeybindings[definition.id].find(
+        (configured) => keyBindingSignature(configured) === signature
+      );
+      if (binding2 !== void 0) {
+        this.deferDeckActionKey(event, definition, binding2);
+        return;
+      }
+    }
   }
   deferDeckActionKey(event, definition, binding2) {
     if (this.pendingCommand.kind !== "idle" || this.app.workspace.getActiveViewOfType(_DeckView) !== this || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) || !this.canRunAction(definition.id)) {
@@ -4733,9 +4736,14 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       if (this.app.workspace.getActiveViewOfType(_DeckView) !== this) {
         return;
       }
-      arbitrateShortcut(
+      const commandAction = this.commandHandledActions.get(event);
+      const claim = classifyShortcutClaim(
         event.defaultPrevented,
-        this.commandHandledEvents.has(event),
+        definition.id,
+        commandAction
+      );
+      arbitrateShortcut(
+        claim,
         () => this.handleDeckActionKey(
           event,
           definition.id,
@@ -9080,11 +9088,6 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     this.index.setDeckOrdering(this.settings.deckOrdering);
     this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.updateKeybindings();
-      }
-    }
     if (this.settings.addressProperty !== previousAddressProperty || this.settings.deckOrdering !== previousOrdering || this.settings.duplicateAddresses !== previousDuplicatePolicy) {
       await this.refreshIndex();
       if (this.settings.deckOrdering !== previousOrdering) {

@@ -3,20 +3,38 @@ export type ShortcutArbitrationResult =
   | "conflict"
   | "slipbox";
 
+export type ShortcutClaim =
+  | "same-slipbox-command"
+  | "other-command"
+  | "unclaimed";
+
+export function classifyShortcutClaim(
+  defaultPrevented: boolean,
+  configuredAction: string,
+  handledSlipboxAction?: string,
+): ShortcutClaim {
+  if (handledSlipboxAction === configuredAction) {
+    return "same-slipbox-command";
+  }
+  if (defaultPrevented || handledSlipboxAction !== undefined) {
+    return "other-command";
+  }
+  return "unclaimed";
+}
+
 /**
  * Decide the winner after Obsidian's keymap has had an opportunity to handle
- * a scoped Slipbox shortcut. A customized Obsidian command always wins.
+ * a configured Slipbox shortcut. A customized Obsidian command always wins.
  */
 export function arbitrateShortcut(
-  defaultPrevented: boolean,
-  handledBySlipboxCommand: boolean,
+  claim: ShortcutClaim,
   runSlipboxShortcut: () => void,
   reportConflict: () => void,
 ): ShortcutArbitrationResult {
-  if (handledBySlipboxCommand) {
+  if (claim === "same-slipbox-command") {
     return "command";
   }
-  if (defaultPrevented) {
+  if (claim === "other-command") {
     reportConflict();
     return "conflict";
   }

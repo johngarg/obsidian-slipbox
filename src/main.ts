@@ -454,11 +454,6 @@ export default class SlipboxPlugin extends Plugin {
     this.index.setDeckOrdering(this.settings.deckOrdering);
     this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.updateKeybindings();
-      }
-    }
     if (
       this.settings.addressProperty !== previousAddressProperty ||
       this.settings.deckOrdering !== previousOrdering ||

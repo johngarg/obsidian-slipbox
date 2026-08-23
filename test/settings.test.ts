@@ -11,6 +11,7 @@ import {
   hasTitleAddressPropertyCollision,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
+  metadataPropertyError,
   normalizeDeckKeybindings,
   normalizeKeyBinding,
   normalizeCardSize,
@@ -21,6 +22,18 @@ import {
 } from "../src/settings.js";
 
 describe("Slipbox settings", () => {
+  test("validates metadata property names independently of the settings UI", () => {
+    assert.equal(
+      metadataPropertyError("", null),
+      "A non-empty top-level property name is required.",
+    );
+    assert.equal(
+      metadataPropertyError("title", "title"),
+      "The title and address properties must use different keys.",
+    );
+    assert.equal(metadataPropertyError("signature", "title"), null);
+  });
+
   test("uses the complete default settings for unknown input", () => {
     assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["previous-card"], [

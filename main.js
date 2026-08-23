@@ -1108,6 +1108,15 @@ var SLIPBOX_DATA_SCHEMA_VERSION = 9;
 var DEFAULT_CARD_SPREAD = 0.58;
 var MIN_CARD_SPREAD = 0.18;
 var MAX_CARD_SPREAD = 1.12;
+function metadataPropertyError(property, disallowedProperty) {
+  if (property === "") {
+    return "A non-empty top-level property name is required.";
+  }
+  if (disallowedProperty !== null && property === disallowedProperty) {
+    return "The title and address properties must use different keys.";
+  }
+  return null;
+}
 var CARD_HEADER_BUTTON_ACTIONS = [
   "edit-card",
   "open-note",
@@ -7524,13 +7533,118 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
     super(app, slipbox);
     this.slipbox = slipbox;
   }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    new import_obsidian6.Setting(containerEl).setName("Cards and metadata").setHeading();
-    this.renderAddressProperty(containerEl);
-    this.renderDeckOrdering(containerEl);
-    new import_obsidian6.Setting(containerEl).setName("Title source").setDesc("Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.").addDropdown((dropdown) => {
+  getSettingDefinitions() {
+    return [
+      {
+        type: "group",
+        heading: "Cards and metadata",
+        items: [
+          this.definition(
+            "Address property",
+            "Exact top-level YAML key used to identify and order cards. Changing it re-indexes immediately but does not rewrite existing notes.",
+            (setting) => this.renderAddressProperty(setting)
+          ),
+          this.definition(
+            "Deck ordering",
+            "Controls how manually assigned addresses are arranged in the Deck. Changing this setting reorders cards but does not edit Markdown files.",
+            (setting) => this.renderDeckOrdering(setting)
+          ),
+          this.definition(
+            "Title source",
+            "Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.",
+            (setting) => this.renderTitleSource(setting)
+          ),
+          this.definition(
+            "Title property",
+            "Exact top-level YAML key. It must differ from the address property. Missing, blank, or non-text values fall back to the filename.",
+            (setting) => this.renderTitleProperty(setting)
+          ),
+          this.definition(
+            "Show title in Slipbox card headers",
+            "Show resolved titles beside addresses in Deck and Desk card headers.",
+            (setting) => this.renderShowTitle(setting)
+          ),
+          this.definition(
+            "Show Deck map",
+            "Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.",
+            (setting) => this.renderShowDeckMap(setting)
+          ),
+          this.definition(
+            "Card spread",
+            "Set the separation between neighbouring Deck cards.",
+            (setting) => this.renderCardSpread(setting)
+          )
+        ]
+      },
+      {
+        type: "group",
+        heading: "Card sizes",
+        items: [
+          this.definition(
+            "Main card size",
+            "Maximum Deck-card width: small 720 px, medium 840 px, or large 960 px.",
+            (setting) => this.renderMainCardSize(setting)
+          ),
+          this.definition(
+            "Desk card size",
+            "Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Desk cards remain smaller than main cards.",
+            (setting) => this.renderDeskCardSize(setting)
+          )
+        ]
+      },
+      {
+        type: "group",
+        heading: "New cards",
+        items: [
+          this.definition(
+            "New card folder",
+            "Optional vault-folder override for notes created through Slipbox. Leave empty to follow Obsidian\u2019s own default location for new notes.",
+            (setting) => this.renderNewCardFolder(setting)
+          ),
+          this.definition(
+            "Timestamp filename format",
+            "Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ",
+            (setting) => this.renderTimestampFormat(setting)
+          )
+        ]
+      },
+      {
+        type: "group",
+        heading: "Card header buttons",
+        items: [
+          {
+            name: "Card header button visibility",
+            desc: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox shortcuts, and context menus.",
+            render: (setting) => this.renderCardHeaderIntro(setting)
+          },
+          ...this.cardHeaderButtonDefinitions("deck", "Deck cards"),
+          ...this.cardHeaderButtonDefinitions("desk", "Desk cards"),
+          ...this.cardHeaderButtonDefinitions("viewed", "Viewed cards")
+        ]
+      },
+      {
+        type: "group",
+        heading: "Keyboard shortcuts",
+        items: [
+          {
+            name: "Slipbox shortcut controls",
+            desc: "These shortcuts work only while Slipbox is active and never fire in text or form controls.",
+            render: (setting) => this.renderShortcutIntro(setting)
+          },
+          ...DECK_ACTION_DEFINITIONS.map((definition) => ({
+            name: definition.label,
+            ...definition.description === void 0 ? {} : { desc: definition.description },
+            render: (setting) => this.renderShortcutSetting(setting, definition)
+          }))
+        ]
+      }
+    ];
+  }
+  definition(name, desc, render) {
+    return { name, desc, render };
+  }
+  renderTitleSource(setting) {
+    setting.addDropdown((dropdown) => {
       dropdown.addOption("filename", "Filename").addOption("frontmatter", "Frontmatter property").setValue(this.slipbox.settings.titleSource).onChange((value) => {
         if (value === "frontmatter" && this.slipbox.settings.titleProperty === this.slipbox.settings.addressProperty) {
           dropdown.setValue("filename");
@@ -7542,11 +7656,13 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         void this.save({
           ...this.slipbox.settings,
           titleSource: value === "frontmatter" ? "frontmatter" : "filename"
-        }).then(() => this.redisplayPreservingScroll());
+        }).then(() => this.updatePreservingScroll());
       });
     });
-    const titleProperty = new import_obsidian6.Setting(containerEl).setName("Title property").setDesc("Exact top-level YAML key. It must differ from the address property. Missing, blank, or non-text values fall back to the filename.").setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
-    titleProperty.addText((text) => {
+  }
+  renderTitleProperty(setting) {
+    setting.setDisabled(this.slipbox.settings.titleSource !== "frontmatter");
+    setting.addText((text) => {
       let property = this.slipbox.settings.titleProperty;
       const queueCommit = this.debounceTextCommit(text.inputEl, () => {
         if (property !== "" && property !== this.slipbox.settings.addressProperty && property !== this.slipbox.settings.titleProperty) {
@@ -7559,77 +7675,53 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
       text.setValue(this.slipbox.settings.titleProperty).setDisabled(this.slipbox.settings.titleSource !== "frontmatter").onChange((value) => {
         property = value.trim();
         this.setMetadataPropertyValidity(
-          titleProperty,
+          setting,
           property,
           this.slipbox.settings.addressProperty
         );
         queueCommit();
       });
     });
-    new import_obsidian6.Setting(containerEl).setName("Show title in Slipbox card headers").setDesc("Show resolved titles beside addresses in Deck and Desk card headers.").addToggle((toggle) => {
+  }
+  renderShowTitle(setting) {
+    setting.addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showTitleInDeck).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showTitleInDeck: value
       }));
     });
-    new import_obsidian6.Setting(containerEl).setName("Show Deck map").setDesc("Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.").addToggle((toggle) => {
+  }
+  renderShowDeckMap(setting) {
+    setting.addToggle((toggle) => {
       toggle.setValue(this.slipbox.settings.showDeckMap).onChange((value) => void this.save({
         ...this.slipbox.settings,
         showDeckMap: value
       }));
     });
-    new import_obsidian6.Setting(containerEl).setName("Card spread").setDesc("Set the separation between neighbouring Deck cards.").addSlider((slider) => {
-      slider.setLimits(MIN_CARD_SPREAD, MAX_CARD_SPREAD, 0.01).setValue(this.slipbox.settings.cardSpread).setDynamicTooltip().onChange((value) => this.slipbox.setCardSpread(value));
-    });
-    new import_obsidian6.Setting(containerEl).setName("Card sizes").setHeading();
-    this.renderCardSizeSettings(containerEl);
-    new import_obsidian6.Setting(containerEl).setName("New cards").setHeading();
-    this.renderNewCardSettings(containerEl);
-    new import_obsidian6.Setting(containerEl).setName("Card header buttons").setHeading();
-    containerEl.createEl("p", {
-      cls: "setting-item-description",
-      text: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox shortcuts, and context menus."
-    });
-    this.renderCardHeaderButtons(containerEl, "deck", "Deck cards");
-    this.renderCardHeaderButtons(containerEl, "desk", "Desk cards");
-    this.renderCardHeaderButtons(containerEl, "viewed", "Viewed cards");
-    new import_obsidian6.Setting(containerEl).setName("Keyboard shortcuts").setHeading();
-    const shortcutIntro = containerEl.createDiv({ cls: "slipbox-shortcut-intro" });
-    shortcutIntro.createEl("p", {
-      cls: "setting-item-description",
-      text: "These shortcuts work only while Slipbox is active and never fire in text or form controls."
-    });
-    const resetAll = shortcutIntro.createEl("button", {
-      text: "Reset all shortcuts",
-      attr: { type: "button" }
-    });
-    resetAll.addEventListener("click", () => {
-      void this.save({
-        ...this.slipbox.settings,
-        deckKeybindings: DEFAULT_DECK_KEYBINDINGS
-      }).then(() => this.redisplayPreservingScroll());
-    });
-    for (const definition of DECK_ACTION_DEFINITIONS) {
-      this.renderShortcutSetting(containerEl, definition);
-    }
   }
-  renderCardSizeSettings(container) {
-    new import_obsidian6.Setting(container).setName("Main card size").setDesc("Maximum Deck-card width: small 720 px, medium 840 px, or large 960 px.").addDropdown((dropdown) => {
+  renderCardSpread(setting) {
+    setting.addSlider((slider) => {
+      slider.setLimits(MIN_CARD_SPREAD, MAX_CARD_SPREAD, 0.01).setValue(this.slipbox.settings.cardSpread).onChange((value) => this.slipbox.setCardSpread(value));
+    });
+  }
+  renderMainCardSize(setting) {
+    setting.addDropdown((dropdown) => {
       dropdown.addOption("small", "Small").addOption("medium", "Medium").addOption("large", "Large").setValue(this.slipbox.settings.mainCardSize).onChange((value) => void this.save({
         ...this.slipbox.settings,
         mainCardSize: normalizeCardSize(value)
       }));
     });
-    new import_obsidian6.Setting(container).setName("Desk card size").setDesc("Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Desk cards remain smaller than main cards.").addDropdown((dropdown) => {
+  }
+  renderDeskCardSize(setting) {
+    setting.addDropdown((dropdown) => {
       dropdown.addOption("small", "Small").addOption("medium", "Medium").addOption("large", "Large").setValue(this.slipbox.settings.trayCardSize).onChange((value) => void this.save({
         ...this.slipbox.settings,
         trayCardSize: normalizeCardSize(value)
       }));
     });
   }
-  renderNewCardSettings(container) {
-    const folderSetting = new import_obsidian6.Setting(container).setName("New card folder").setDesc("Optional vault-folder override for notes created through Slipbox. Leave empty to follow Obsidian\u2019s own default location for new notes.");
-    folderSetting.addDropdown((dropdown) => {
+  renderNewCardFolder(setting) {
+    setting.addDropdown((dropdown) => {
       dropdown.addOption("", "Obsidian\u2019s default location");
       const folders = this.app.vault.getAllLoadedFiles().filter(
         (file) => file instanceof import_obsidian6.TFolder && !file.isRoot()
@@ -7646,9 +7738,10 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         newCardFolder: value
       }));
     });
-    const timestamp = new import_obsidian6.Setting(container).setName("Timestamp filename format").setDesc("Moment format used when the title is blank, or whenever titles come from frontmatter. Filename-unsafe characters become hyphens. Example: ");
-    const sample = timestamp.descEl.createEl("code");
-    timestamp.addMomentFormat((component) => {
+  }
+  renderTimestampFormat(setting) {
+    const sample = setting.descEl.createEl("code");
+    setting.addMomentFormat((component) => {
       let format = this.slipbox.settings.newNoteTimestampFormat;
       const queueCommit = this.debounceTextCommit(component.inputEl, () => {
         if (format !== "" && format !== this.slipbox.settings.newNoteTimestampFormat) {
@@ -7661,7 +7754,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
       component.setSampleEl(sample).setDefaultFormat(DEFAULT_SETTINGS.newNoteTimestampFormat).setValue(this.slipbox.settings.newNoteTimestampFormat).onChange((value) => {
         format = value.trim();
         this.setTextValidity(
-          timestamp,
+          setting,
           format !== "",
           "A non-empty timestamp format is required."
         );
@@ -7669,10 +7762,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
       });
     });
   }
-  renderAddressProperty(container) {
-    const setting = new import_obsidian6.Setting(container).setName("Address property").setDesc(
-      "Exact top-level YAML key used to identify and order cards. Changing it re-indexes immediately but does not rewrite existing notes."
-    );
+  renderAddressProperty(setting) {
     setting.addText((text) => {
       let property = this.slipbox.settings.addressProperty;
       const queueCommit = this.debounceTextCommit(text.inputEl, () => {
@@ -7694,39 +7784,70 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
       });
     });
   }
-  renderDeckOrdering(container) {
-    new import_obsidian6.Setting(container).setName("Deck ordering").setDesc("Controls how manually assigned addresses are arranged in the Deck. Changing this setting reorders cards but does not edit Markdown files.").addDropdown((dropdown) => {
+  renderDeckOrdering(setting) {
+    setting.addDropdown((dropdown) => {
       dropdown.addOption("natural", "Natural").addOption("lexicographic", "Lexicographic").setValue(this.slipbox.settings.deckOrdering).onChange((value) => void this.save({
         ...this.slipbox.settings,
         deckOrdering: value === "lexicographic" ? "lexicographic" : "natural"
       }));
     });
   }
-  renderCardHeaderButtons(container, surface, heading) {
-    new import_obsidian6.Setting(container).setName(heading).setHeading();
-    for (const definition of cardHeaderButtonDefinitionsForSurface(surface)) {
-      new import_obsidian6.Setting(container).setName(definition.settingLabel).addToggle((toggle) => {
-        toggle.setValue(
-          this.slipbox.settings.cardHeaderButtons[surface][definition.action]
-        ).onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          cardHeaderButtons: {
-            ...this.slipbox.settings.cardHeaderButtons,
-            [surface]: {
-              ...this.slipbox.settings.cardHeaderButtons[surface],
-              [definition.action]: value
-            }
-          }
-        }));
-      });
-    }
+  renderCardHeaderIntro(setting) {
+    setting.settingEl.empty();
+    setting.settingEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox shortcuts, and context menus."
+    });
   }
-  renderShortcutSetting(container, definition) {
+  cardHeaderButtonDefinitions(surface, heading) {
+    return [
+      {
+        name: heading,
+        render: (setting) => setting.setHeading()
+      },
+      ...cardHeaderButtonDefinitionsForSurface(surface).map((definition) => ({
+        name: definition.settingLabel,
+        render: (setting) => {
+          setting.addToggle((toggle) => {
+            toggle.setValue(
+              this.slipbox.settings.cardHeaderButtons[surface][definition.action]
+            ).onChange((value) => void this.save({
+              ...this.slipbox.settings,
+              cardHeaderButtons: {
+                ...this.slipbox.settings.cardHeaderButtons,
+                [surface]: {
+                  ...this.slipbox.settings.cardHeaderButtons[surface],
+                  [definition.action]: value
+                }
+              }
+            }));
+          });
+        }
+      }))
+    ];
+  }
+  renderShortcutIntro(setting) {
+    setting.settingEl.empty();
+    const shortcutIntro = setting.settingEl.createDiv({
+      cls: "slipbox-shortcut-intro"
+    });
+    shortcutIntro.createEl("p", {
+      cls: "setting-item-description",
+      text: "These shortcuts work only while Slipbox is active and never fire in text or form controls."
+    });
+    const resetAll = shortcutIntro.createEl("button", {
+      text: "Reset all shortcuts",
+      attr: { type: "button" }
+    });
+    resetAll.addEventListener("click", () => {
+      void this.save({
+        ...this.slipbox.settings,
+        deckKeybindings: DEFAULT_DECK_KEYBINDINGS
+      }).then(() => this.updatePreservingScroll());
+    });
+  }
+  renderShortcutSetting(setting, definition) {
     const { id: action, label } = definition;
-    const setting = new import_obsidian6.Setting(container).setName(label);
-    if (definition.description !== void 0) {
-      setting.setDesc(definition.description);
-    }
     setting.settingEl.addClass("slipbox-shortcut-setting");
     const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
     for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
@@ -7749,7 +7870,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
               (candidate) => keyBindingSignature(candidate) !== signature
             )
           }
-        }).then(() => this.redisplayPreservingScroll());
+        }).then(() => this.updatePreservingScroll());
       });
     }
     const add = bindings.createEl("button", {
@@ -7804,7 +7925,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
               candidate
             ]
           }
-        }).then(() => this.redisplayPreservingScroll());
+        }).then(() => this.updatePreservingScroll());
       };
       const finish = () => {
         add.removeEventListener("keydown", capture);
@@ -7843,13 +7964,13 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
           ...this.slipbox.settings.deckKeybindings,
           [action]: defaults
         }
-      }).then(() => this.redisplayPreservingScroll());
+      }).then(() => this.updatePreservingScroll());
     });
   }
   bindingFromEvent(event) {
     return keyBindingFromKeyboardEvent(event, import_obsidian6.Platform.isMacOS);
   }
-  redisplayPreservingScroll() {
+  updatePreservingScroll() {
     const positions = [];
     let element = this.containerEl;
     while (element !== null) {
@@ -7868,7 +7989,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         position.element.scrollLeft = position.left;
       }
     };
-    this.display();
+    this.update();
     restore();
     window.requestAnimationFrame(restore);
   }
@@ -7890,12 +8011,11 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
     };
   }
   setMetadataPropertyValidity(setting, property, disallowedProperty) {
-    const empty = property === "";
-    const collision = disallowedProperty !== null && property === disallowedProperty;
+    const error = metadataPropertyError(property, disallowedProperty);
     this.setTextValidity(
       setting,
-      !empty && !collision,
-      collision ? "The title and address properties must use different keys." : "A non-empty top-level property name is required."
+      error === null,
+      error ?? ""
     );
   }
   setTextValidity(setting, valid, message) {

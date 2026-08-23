@@ -25,7 +25,10 @@ import {
   stationarySelectionOffset,
 } from "./deck-motion.js";
 import type { FiledCard } from "./card-index.js";
-import { CardFooterManager } from "./card-footer.js";
+import {
+  CardFooterManager,
+  type CardFooterEnvironment,
+} from "./card-footer.js";
 import { cardHeaderTitle } from "./card-title.js";
 import {
   renderedLinkAction,
@@ -181,6 +184,7 @@ export class DeckView extends ItemView {
   private filingConfirmationInProgress = false;
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
+  private deckCardsEl: HTMLElement | null = null;
   private renderedCards: HTMLElement[] = [];
   private renderComponents = new Map<string, Component>();
   private cardScrollPositions = new Map<string, number>();
@@ -194,7 +198,10 @@ export class DeckView extends ItemView {
   private renderWindowStart = 0;
   private renderWindowEnd = -1;
   private renderRefreshPending = false;
+  private renderRefreshRunning = false;
+  private renderRefreshQueued = false;
   private renderVersion = 0;
+  private deckRenderVersion = 0;
   private deckMapEl: HTMLElement | null = null;
   private deckMapRailEl: HTMLElement | null = null;
   private deckMapSectionLayerEl: HTMLElement | null = null;
@@ -205,9 +212,11 @@ export class DeckView extends ItemView {
   private deckMapBookmarkCount = 0;
   private resizeObserver: ResizeObserver | null = null;
   private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
+  private viewedCardHeaderButtonController: CardHeaderButtonController | null = null;
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
   private readonly cardFooters: CardFooterManager;
+  private readonly viewedCardFooter: CardFooterManager;
   private readonly trayRenderer: TrayRenderer;
   private keymapHandlers: KeymapEventHandler[] = [];
   private deckKeybindingsSuspended = false;
@@ -224,13 +233,15 @@ export class DeckView extends ItemView {
   private viewedCard: ViewedCardState | null = null;
   private viewedCardEl: HTMLElement | null = null;
   private viewedCardBodyEl: HTMLElement | null = null;
+  private viewedCardComponent: Component | null = null;
+  private viewedFocusFromDeckNavigation = false;
 
   constructor(
     leaf: WorkspaceLeaf,
     private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
-    this.cardFooters = new CardFooterManager({
+    const footerEnvironment: CardFooterEnvironment = {
       app: this.app,
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
@@ -239,7 +250,9 @@ export class DeckView extends ItemView {
       runAfterEditing: (reason, action) => {
         void this.runAfterInlineEditing(reason, action);
       },
-    });
+    };
+    this.cardFooters = new CardFooterManager(footerEnvironment);
+    this.viewedCardFooter = new CardFooterManager(footerEnvironment);
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
       updateFilingInput: (value) => this.updateFilingInput(value),
@@ -264,7 +277,10 @@ export class DeckView extends ItemView {
         this.runAfterInlineEditing(reason, action),
     });
     this.registerEvent(
-      this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout()),
+      this.app.workspace.on("css-change", () => {
+        this.cardFooters.scheduleLayout();
+        this.viewedCardFooter.scheduleLayout();
+      }),
     );
     this.scope = new Scope(this.app.scope);
     this.updateKeybindings();
@@ -395,8 +411,10 @@ export class DeckView extends ItemView {
     this.cancelViewportCentering();
     this.cancelSpaceRecentering();
     this.cardFooters.clear();
+    this.viewedCardFooter.clear();
     this.trayRenderer.clear();
     this.clearCardHeaderButtonControllers();
+    this.clearViewedCardHeaderButtonController();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -406,6 +424,7 @@ export class DeckView extends ItemView {
     this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
+    this.unloadViewedCardComponent();
     this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
@@ -413,10 +432,12 @@ export class DeckView extends ItemView {
     this.filingConfirmationInProgress = false;
     this.stageEl = null;
     this.spaceEl = null;
+    this.deckCardsEl = null;
     this.viewedCard = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.cardFocus = null;
+    this.viewedFocusFromDeckNavigation = false;
     this.lastFocusedPileId = null;
     this.lastPileFocusWasViewed = false;
     this.spaceOffsetX = 0;
@@ -437,6 +458,7 @@ export class DeckView extends ItemView {
   onResize(): void {
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
+    this.viewedCardFooter.scheduleLayout();
     this.updateDeckMapSectionLabels();
     this.constrainViewedCard();
   }
@@ -472,12 +494,16 @@ export class DeckView extends ItemView {
     const viewedPosition = viewedPath === null
       ? null
       : cardPosition(this.plugin.tray, viewedPath);
+    const redirectedFromDeckNavigation =
+      focus?.surface === "deck" && focus.path === viewedPath;
     const resolved = redirectViewedCardGhostFocus(
       focus,
       viewedPath,
       viewedPosition?.pileId,
     );
     this.cardFocus = resolved;
+    this.viewedFocusFromDeckNavigation =
+      redirectedFromDeckNavigation && resolved?.surface === "viewed";
     if (resolved?.surface === "desk" && resolved.pileId !== undefined) {
       this.lastFocusedPileId = resolved.pileId;
       this.lastPileFocusWasViewed = false;
@@ -661,7 +687,11 @@ export class DeckView extends ItemView {
 
   private setDeckAnchor(path: string): void {
     this.activePath = path;
-    this.assignCardFocus(moveDeckFocusWithAnchor(this.cardFocus, path));
+    this.assignCardFocus(moveDeckFocusWithAnchor(
+      this.cardFocus,
+      path,
+      this.viewedFocusFromDeckNavigation,
+    ));
   }
 
   private applyCardFocusClasses(): void {
@@ -801,11 +831,6 @@ export class DeckView extends ItemView {
         this.viewedCard = renameViewedCardState(viewed, renamedPath);
         if (this.viewedCardEl !== null) {
           this.viewedCardEl.dataset.path = renamedPath;
-        }
-        const component = this.renderComponents.get(viewed.path);
-        if (component !== undefined) {
-          this.renderComponents.delete(viewed.path);
-          this.renderComponents.set(renamedPath, component);
         }
       }
     }
@@ -1561,8 +1586,7 @@ export class DeckView extends ItemView {
     }
 
     const renderedScrollTop = restoredRenderedScrollTop ?? bodyEl.scrollTop;
-    this.renderComponents.get(file.path)?.unload();
-    this.renderComponents.delete(file.path);
+    this.unloadViewedCardComponent();
     bodyEl.empty();
     bodyEl.removeClass("markdown-rendered");
     bodyEl.addClass("is-inline-editing");
@@ -1681,7 +1705,7 @@ export class DeckView extends ItemView {
       target.closest(".slipbox-viewed-card") !== null
     ) {
       this.viewedCard = scrollViewedCardState(this.viewedCard, scrollTop);
-      await this.renderViewedMarkdownCard(file, target, this.renderVersion);
+      await this.renderViewedMarkdownCard(file, target);
       target.scrollTop = scrollTop;
       return;
     }
@@ -1690,7 +1714,7 @@ export class DeckView extends ItemView {
       return;
     }
     this.cardScrollPositions.set(file.path, scrollTop);
-    await this.renderMarkdownCard(filed, target, this.renderVersion);
+    await this.renderMarkdownCard(filed, target, this.deckRenderVersion);
     target.scrollTop = scrollTop;
   }
 
@@ -1803,6 +1827,7 @@ export class DeckView extends ItemView {
       return;
     }
     const version = ++this.renderVersion;
+    const deckVersion = ++this.deckRenderVersion;
     this.rememberScrollPositions();
     this.rememberViewedCardScroll();
     if (
@@ -1815,8 +1840,12 @@ export class DeckView extends ItemView {
     this.cardFooters.clear();
     this.trayRenderer.clear();
     this.clearCardHeaderButtonControllers();
+    this.viewedCardFooter.clear();
+    this.clearViewedCardHeaderButtonController();
+    this.unloadViewedCardComponent();
     this.contentEl.empty();
     this.renderedCards = [];
+    this.deckCardsEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -1842,6 +1871,8 @@ export class DeckView extends ItemView {
     const space = stage.createDiv({ cls: "slipbox-space" });
     this.spaceEl = space;
     this.applySpaceOffset();
+    const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
+    this.deckCardsEl = deckCards;
     const trayJob = this.trayRenderer.render(
       stage,
       space,
@@ -1849,13 +1880,12 @@ export class DeckView extends ItemView {
       this.viewedCard?.path ?? null,
       () => version === this.renderVersion,
     );
-
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0) {
-      this.renderEmptyDeck(space);
+      this.renderEmptyDeck(deckCards);
     } else {
       const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-      await this.renderCardWindow(space, filed, activeIndex, version);
+      await this.renderCardWindow(deckCards, filed, activeIndex, deckVersion);
     }
 
     if (version !== this.renderVersion) {
@@ -1876,8 +1906,53 @@ export class DeckView extends ItemView {
     this.positionCards();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
+    this.viewedCardFooter.scheduleLayout();
     if (focusFilingInput) {
       this.trayRenderer.focusFilingInput();
+    }
+  }
+
+  private async refreshDeckCardWindow(): Promise<void> {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
+    const space = this.spaceEl;
+    if (space === null || !space.isConnected) {
+      await this.renderDeck(false);
+      return;
+    }
+
+    const deckVersion = ++this.deckRenderVersion;
+    this.rememberScrollPositions();
+    this.unloadRenderComponents();
+    this.cardFooters.clear();
+    this.clearCardHeaderButtonControllers();
+    this.deckCardsEl?.remove();
+    this.renderedCards = [];
+
+    const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
+    space.prepend(deckCards);
+    this.deckCardsEl = deckCards;
+    const filed = this.plugin.index.snapshot.filed;
+    if (filed.length === 0) {
+      this.renderEmptyDeck(deckCards);
+    } else {
+      const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+      await this.renderCardWindow(deckCards, filed, activeIndex, deckVersion);
+    }
+
+    if (
+      deckVersion !== this.deckRenderVersion ||
+      this.deckCardsEl !== deckCards
+    ) {
+      return;
+    }
+    this.positionCards();
+    this.scheduleCardPositioning();
+    this.cardFooters.scheduleLayout();
+    if (this.stageEl !== null) {
+      this.renderBookmarkEdgeTabs(this.stageEl);
     }
   }
 
@@ -2218,7 +2293,7 @@ export class DeckView extends ItemView {
     stage: HTMLElement,
     filed: readonly FiledCard[],
     activeIndex: number,
-    version: number,
+    deckVersion: number,
   ): Promise<void> {
     const viewportPosition = this.viewportPosition(activeIndex);
     const viewportIndex = Math.round(viewportPosition);
@@ -2346,7 +2421,7 @@ export class DeckView extends ItemView {
         interactive: filedIndex === activeIndex,
         activate: (backlink) => this.jumpToPath(backlink.path),
       });
-      jobs.push(this.renderMarkdownCard(card, scroll, version));
+      jobs.push(this.renderMarkdownCard(card, scroll, deckVersion));
       cardEl.addEventListener("contextmenu", (event) => {
         const target = event.target;
         if (
@@ -2447,7 +2522,7 @@ export class DeckView extends ItemView {
     }
     const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
     const viewedPosition = cardPosition(this.plugin.tray, file.path);
-    this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
+    this.viewedCardHeaderButtonController = renderCardHeaderButtons({
       container: actions,
       context: {
         surface: "viewed",
@@ -2466,7 +2541,7 @@ export class DeckView extends ItemView {
         this.focusViewedCard();
         this.runAction(action);
       },
-    }));
+    });
 
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
     body.scrollTop = state.scrollTop;
@@ -2486,7 +2561,7 @@ export class DeckView extends ItemView {
     });
     this.viewedCardBodyEl = body;
     if (filed !== undefined) {
-      this.cardFooters.render(frame, {
+      this.viewedCardFooter.render(frame, {
         sourcePath: filed.path,
         backlinks: this.plugin.index.backlinksForPath(filed.path),
         interactive: true,
@@ -2513,7 +2588,7 @@ export class DeckView extends ItemView {
       );
     });
     this.attachViewedCardDragging(addressRow, card);
-    await this.renderViewedMarkdownCard(file, body, version);
+    await this.renderViewedMarkdownCard(file, body);
     if (version !== this.renderVersion || this.viewedCardEl !== card) {
       return;
     }
@@ -2527,18 +2602,16 @@ export class DeckView extends ItemView {
   private async renderViewedMarkdownCard(
     file: TFile,
     target: HTMLElement,
-    version: number,
   ): Promise<void> {
-    this.renderComponents.get(file.path)?.unload();
+    this.viewedCardComponent?.unload();
     const component = new Component();
     component.load();
-    this.renderComponents.set(file.path, component);
+    this.viewedCardComponent = component;
     try {
       const body = await this.plugin.index.readBody(file);
       if (
-        version !== this.renderVersion ||
         this.viewedCard?.path !== file.path ||
-        this.renderComponents.get(file.path) !== component
+        this.viewedCardComponent !== component
       ) {
         return;
       }
@@ -2674,10 +2747,15 @@ export class DeckView extends ItemView {
     this.cardHeaderButtonControllers.clear();
   }
 
+  private clearViewedCardHeaderButtonController(): void {
+    this.viewedCardHeaderButtonController?.disconnect();
+    this.viewedCardHeaderButtonController = null;
+  }
+
   private async renderMarkdownCard(
     card: FiledCard,
     target: HTMLElement,
-    version: number,
+    deckVersion: number,
   ): Promise<void> {
     this.renderComponents.get(card.path)?.unload();
     const component = new Component();
@@ -2686,7 +2764,7 @@ export class DeckView extends ItemView {
     try {
       const body = await this.plugin.index.readBody(card.file);
       if (
-        version !== this.renderVersion ||
+        deckVersion !== this.deckRenderVersion ||
         this.renderComponents.get(card.path) !== component
       ) {
         return;
@@ -3554,14 +3632,23 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    if (this.renderRefreshRunning) {
+      this.renderRefreshQueued = true;
+      return;
+    }
+
     this.renderRefreshPending = true;
     window.requestAnimationFrame(() => {
       this.renderRefreshPending = false;
       if (this.stageEl !== null) {
-        void this.renderDeck(
-          this.filingFile === null || restoreFilingInputFocus,
-        );
+        this.renderRefreshRunning = true;
+        void this.refreshDeckCardWindow().finally(() => {
+          this.renderRefreshRunning = false;
+          if (this.renderRefreshQueued) {
+            this.renderRefreshQueued = false;
+            this.queueRenderWindowRefresh();
+          }
+        });
       }
     });
   }
@@ -3598,6 +3685,11 @@ export class DeckView extends ItemView {
       component.unload();
     }
     this.renderComponents.clear();
+  }
+
+  private unloadViewedCardComponent(): void {
+    this.viewedCardComponent?.unload();
+    this.viewedCardComponent = null;
   }
 
   private reconcileScrollPositions(): void {

@@ -34,6 +34,7 @@ export class CardHeaderButtonController {
   private frame: number | null = null;
 
   constructor(private readonly options: CardHeaderButtonRenderOptions) {
+    options.container.addClass("is-awaiting-layout");
     this.rendered = enabledCardHeaderActions(
       options.settings,
       options.context,
@@ -145,6 +146,7 @@ export class CardHeaderButtonController {
     this.moreButton.hidden = true;
     this.overflowed = [];
     if (this.rendered.length === 0) {
+      this.options.container.removeClass("is-awaiting-layout");
       return;
     }
 
@@ -167,6 +169,7 @@ export class CardHeaderButtonController {
     );
     if (visibleCount === this.rendered.length) {
       this.moreButton.hidden = true;
+      container.removeClass("is-awaiting-layout");
       return;
     }
 
@@ -174,6 +177,7 @@ export class CardHeaderButtonController {
       this.rendered[index]?.button.toggleAttribute("hidden", true);
     }
     this.overflowed = this.rendered.slice(visibleCount);
+    container.removeClass("is-awaiting-layout");
   }
 }
 

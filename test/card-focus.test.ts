@@ -22,6 +22,10 @@ describe("single card focus", () => {
     assert.equal(moveDeckFocusWithAnchor(desk, "two.md"), desk);
     assert.equal(moveDeckFocusWithAnchor(viewed, "two.md"), viewed);
     assert.equal(moveDeckFocusWithAnchor(null, "two.md"), null);
+    assert.deepEqual(
+      moveDeckFocusWithAnchor(viewed, "two.md", true),
+      deckCardFocus("two.md"),
+    );
   });
 
   test("redirects Deck and Desk placeholders to the viewed presentation", () => {

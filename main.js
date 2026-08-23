@@ -961,6 +961,7 @@ function releasePointerActivatedButtonFocus(button, activation) {
 var CardHeaderButtonController = class {
   constructor(options) {
     this.options = options;
+    options.container.addClass("is-awaiting-layout");
     this.rendered = enabledCardHeaderActions(
       options.settings,
       options.context
@@ -1066,6 +1067,7 @@ var CardHeaderButtonController = class {
     this.moreButton.hidden = true;
     this.overflowed = [];
     if (this.rendered.length === 0) {
+      this.options.container.removeClass("is-awaiting-layout");
       return;
     }
     const container = this.options.container;
@@ -1087,12 +1089,14 @@ var CardHeaderButtonController = class {
     );
     if (visibleCount === this.rendered.length) {
       this.moreButton.hidden = true;
+      container.removeClass("is-awaiting-layout");
       return;
     }
     for (let index = visibleCount; index < this.rendered.length; index += 1) {
       this.rendered[index]?.button.toggleAttribute("hidden", true);
     }
     this.overflowed = this.rendered.slice(visibleCount);
+    container.removeClass("is-awaiting-layout");
   }
 };
 function renderCardHeaderButtons(options) {
@@ -3809,8 +3813,8 @@ function redirectViewedCardGhostFocus(focus, viewedPath, viewedPileId) {
   }
   return viewedCardFocus(viewedPath, viewedPileId);
 }
-function moveDeckFocusWithAnchor(focus, path) {
-  return focus?.surface === "deck" ? deckCardFocus(path) : focus;
+function moveDeckFocusWithAnchor(focus, path, resumeFromViewedPlaceholder = false) {
+  return focus?.surface === "deck" || resumeFromViewedPlaceholder ? deckCardFocus(path) : focus;
 }
 function renameCardFocus(focus, oldPath, newPath) {
   if (focus === null) {
@@ -3893,7 +3897,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
-    this.cardFooters = new CardFooterManager({
+    const footerEnvironment = {
       app: this.app,
       leaf: this.leaf,
       hoverSource: DECK_VIEW_TYPE,
@@ -3902,7 +3906,9 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       runAfterEditing: (reason, action) => {
         void this.runAfterInlineEditing(reason, action);
       }
-    });
+    };
+    this.cardFooters = new CardFooterManager(footerEnvironment);
+    this.viewedCardFooter = new CardFooterManager(footerEnvironment);
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
       updateFilingInput: (value) => this.updateFilingInput(value),
@@ -3923,7 +3929,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       runAfterEditing: (reason, action) => this.runAfterInlineEditing(reason, action)
     });
     this.registerEvent(
-      this.app.workspace.on("css-change", () => this.cardFooters.scheduleLayout())
+      this.app.workspace.on("css-change", () => {
+        this.cardFooters.scheduleLayout();
+        this.viewedCardFooter.scheduleLayout();
+      })
     );
     this.scope = new import_obsidian4.Scope(this.app.scope);
     this.updateKeybindings();
@@ -3951,6 +3960,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   filingConfirmationInProgress = false;
   stageEl = null;
   spaceEl = null;
+  deckCardsEl = null;
   renderedCards = [];
   renderComponents = /* @__PURE__ */ new Map();
   cardScrollPositions = /* @__PURE__ */ new Map();
@@ -3964,7 +3974,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   renderWindowStart = 0;
   renderWindowEnd = -1;
   renderRefreshPending = false;
+  renderRefreshRunning = false;
+  renderRefreshQueued = false;
   renderVersion = 0;
+  deckRenderVersion = 0;
   deckMapEl = null;
   deckMapRailEl = null;
   deckMapSectionLayerEl = null;
@@ -3975,9 +3988,11 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   deckMapBookmarkCount = 0;
   resizeObserver = null;
   cardHeaderButtonControllers = /* @__PURE__ */ new Set();
+  viewedCardHeaderButtonController = null;
   positioningFrame = null;
   positioningRetriesRemaining = 0;
   cardFooters;
+  viewedCardFooter;
   trayRenderer;
   keymapHandlers = [];
   deckKeybindingsSuspended = false;
@@ -3994,6 +4009,8 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   viewedCard = null;
   viewedCardEl = null;
   viewedCardBodyEl = null;
+  viewedCardComponent = null;
+  viewedFocusFromDeckNavigation = false;
   getViewType() {
     return DECK_VIEW_TYPE;
   }
@@ -4107,8 +4124,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.cancelViewportCentering();
     this.cancelSpaceRecentering();
     this.cardFooters.clear();
+    this.viewedCardFooter.clear();
     this.trayRenderer.clear();
     this.clearCardHeaderButtonControllers();
+    this.clearViewedCardHeaderButtonController();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -4118,6 +4137,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
+    this.unloadViewedCardComponent();
     this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
@@ -4125,10 +4145,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.filingConfirmationInProgress = false;
     this.stageEl = null;
     this.spaceEl = null;
+    this.deckCardsEl = null;
     this.viewedCard = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.cardFocus = null;
+    this.viewedFocusFromDeckNavigation = false;
     this.lastFocusedPileId = null;
     this.lastPileFocusWasViewed = false;
     this.spaceOffsetX = 0;
@@ -4148,6 +4170,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   onResize() {
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
+    this.viewedCardFooter.scheduleLayout();
     this.updateDeckMapSectionLabels();
     this.constrainViewedCard();
   }
@@ -4173,12 +4196,14 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   assignCardFocus(focus) {
     const viewedPath = this.viewedCard?.path ?? null;
     const viewedPosition = viewedPath === null ? null : cardPosition(this.plugin.tray, viewedPath);
+    const redirectedFromDeckNavigation = focus?.surface === "deck" && focus.path === viewedPath;
     const resolved = redirectViewedCardGhostFocus(
       focus,
       viewedPath,
       viewedPosition?.pileId
     );
     this.cardFocus = resolved;
+    this.viewedFocusFromDeckNavigation = redirectedFromDeckNavigation && resolved?.surface === "viewed";
     if (resolved?.surface === "desk" && resolved.pileId !== void 0) {
       this.lastFocusedPileId = resolved.pileId;
       this.lastPileFocusWasViewed = false;
@@ -4327,7 +4352,11 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   }
   setDeckAnchor(path) {
     this.activePath = path;
-    this.assignCardFocus(moveDeckFocusWithAnchor(this.cardFocus, path));
+    this.assignCardFocus(moveDeckFocusWithAnchor(
+      this.cardFocus,
+      path,
+      this.viewedFocusFromDeckNavigation
+    ));
   }
   applyCardFocusClasses() {
     for (const card of this.renderedCards) {
@@ -4440,11 +4469,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         this.viewedCard = renameViewedCardState(viewed, renamedPath);
         if (this.viewedCardEl !== null) {
           this.viewedCardEl.dataset.path = renamedPath;
-        }
-        const component = this.renderComponents.get(viewed.path);
-        if (component !== void 0) {
-          this.renderComponents.delete(viewed.path);
-          this.renderComponents.set(renamedPath, component);
         }
       }
     }
@@ -5077,8 +5101,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       throw new Error("The viewed card surface is unavailable");
     }
     const renderedScrollTop = restoredRenderedScrollTop ?? bodyEl.scrollTop;
-    this.renderComponents.get(file.path)?.unload();
-    this.renderComponents.delete(file.path);
+    this.unloadViewedCardComponent();
     bodyEl.empty();
     bodyEl.removeClass("markdown-rendered");
     bodyEl.addClass("is-inline-editing");
@@ -5179,7 +5202,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     target.addClass("markdown-rendered");
     if (this.viewedCard?.path === file.path && target.closest(".slipbox-viewed-card") !== null) {
       this.viewedCard = scrollViewedCardState(this.viewedCard, scrollTop);
-      await this.renderViewedMarkdownCard(file, target, this.renderVersion);
+      await this.renderViewedMarkdownCard(file, target);
       target.scrollTop = scrollTop;
       return;
     }
@@ -5188,7 +5211,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       return;
     }
     this.cardScrollPositions.set(file.path, scrollTop);
-    await this.renderMarkdownCard(filed, target, this.renderVersion);
+    await this.renderMarkdownCard(filed, target, this.deckRenderVersion);
     target.scrollTop = scrollTop;
   }
   async restoreDetachedInlineEdit() {
@@ -5280,6 +5303,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       return;
     }
     const version = ++this.renderVersion;
+    const deckVersion = ++this.deckRenderVersion;
     this.rememberScrollPositions();
     this.rememberViewedCardScroll();
     if (this.viewedCard !== null && this.plugin.index.fileAtPath(this.viewedCard.path) === void 0) {
@@ -5289,8 +5313,12 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.cardFooters.clear();
     this.trayRenderer.clear();
     this.clearCardHeaderButtonControllers();
+    this.viewedCardFooter.clear();
+    this.clearViewedCardHeaderButtonController();
+    this.unloadViewedCardComponent();
     this.contentEl.empty();
     this.renderedCards = [];
+    this.deckCardsEl = null;
     this.deckMapEl = null;
     this.deckMapRailEl = null;
     this.deckMapSectionLayerEl = null;
@@ -5314,6 +5342,8 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     const space = stage.createDiv({ cls: "slipbox-space" });
     this.spaceEl = space;
     this.applySpaceOffset();
+    const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
+    this.deckCardsEl = deckCards;
     const trayJob = this.trayRenderer.render(
       stage,
       space,
@@ -5323,10 +5353,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     );
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0) {
-      this.renderEmptyDeck(space);
+      this.renderEmptyDeck(deckCards);
     } else {
       const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-      await this.renderCardWindow(space, filed, activeIndex, version);
+      await this.renderCardWindow(deckCards, filed, activeIndex, deckVersion);
     }
     if (version !== this.renderVersion) {
       return;
@@ -5343,8 +5373,46 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     this.positionCards();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
+    this.viewedCardFooter.scheduleLayout();
     if (focusFilingInput) {
       this.trayRenderer.focusFilingInput();
+    }
+  }
+  async refreshDeckCardWindow() {
+    if (this.inlineEdit !== null || this.inlineEditStarting) {
+      this.renderRefreshDeferred = true;
+      return;
+    }
+    const space = this.spaceEl;
+    if (space === null || !space.isConnected) {
+      await this.renderDeck(false);
+      return;
+    }
+    const deckVersion = ++this.deckRenderVersion;
+    this.rememberScrollPositions();
+    this.unloadRenderComponents();
+    this.cardFooters.clear();
+    this.clearCardHeaderButtonControllers();
+    this.deckCardsEl?.remove();
+    this.renderedCards = [];
+    const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
+    space.prepend(deckCards);
+    this.deckCardsEl = deckCards;
+    const filed = this.plugin.index.snapshot.filed;
+    if (filed.length === 0) {
+      this.renderEmptyDeck(deckCards);
+    } else {
+      const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+      await this.renderCardWindow(deckCards, filed, activeIndex, deckVersion);
+    }
+    if (deckVersion !== this.deckRenderVersion || this.deckCardsEl !== deckCards) {
+      return;
+    }
+    this.positionCards();
+    this.scheduleCardPositioning();
+    this.cardFooters.scheduleLayout();
+    if (this.stageEl !== null) {
+      this.renderBookmarkEdgeTabs(this.stageEl);
     }
   }
   renderDeckMap(shell) {
@@ -5636,7 +5704,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       text: "Create a new card, then file it with a manual address."
     });
   }
-  async renderCardWindow(stage, filed, activeIndex, version) {
+  async renderCardWindow(stage, filed, activeIndex, deckVersion) {
     const viewportPosition = this.viewportPosition(activeIndex);
     const viewportIndex = Math.round(viewportPosition);
     const radius = Math.min(
@@ -5755,7 +5823,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         interactive: filedIndex === activeIndex,
         activate: (backlink) => this.jumpToPath(backlink.path)
       });
-      jobs.push(this.renderMarkdownCard(card, scroll, version));
+      jobs.push(this.renderMarkdownCard(card, scroll, deckVersion));
       cardEl.addEventListener("contextmenu", (event) => {
         const target = event.target;
         if (!(target instanceof Element) || target.closest("a, button, input, textarea, select") !== null) {
@@ -5844,7 +5912,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
     const viewedPosition = cardPosition(this.plugin.tray, file.path);
-    this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
+    this.viewedCardHeaderButtonController = renderCardHeaderButtons({
       container: actions,
       context: {
         surface: "viewed",
@@ -5862,7 +5930,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
         this.focusViewedCard();
         this.runAction(action);
       }
-    }));
+    });
     const body = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
     body.scrollTop = state.scrollTop;
     body.addEventListener("scroll", () => {
@@ -5881,7 +5949,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     });
     this.viewedCardBodyEl = body;
     if (filed !== void 0) {
-      this.cardFooters.render(frame, {
+      this.viewedCardFooter.render(frame, {
         sourcePath: filed.path,
         backlinks: this.plugin.index.backlinksForPath(filed.path),
         interactive: true,
@@ -5905,7 +5973,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       );
     });
     this.attachViewedCardDragging(addressRow, card);
-    await this.renderViewedMarkdownCard(file, body, version);
+    await this.renderViewedMarkdownCard(file, body);
     if (version !== this.renderVersion || this.viewedCardEl !== card) {
       return;
     }
@@ -5915,14 +5983,14 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       }
     });
   }
-  async renderViewedMarkdownCard(file, target, version) {
-    this.renderComponents.get(file.path)?.unload();
+  async renderViewedMarkdownCard(file, target) {
+    this.viewedCardComponent?.unload();
     const component = new import_obsidian4.Component();
     component.load();
-    this.renderComponents.set(file.path, component);
+    this.viewedCardComponent = component;
     try {
       const body = await this.plugin.index.readBody(file);
-      if (version !== this.renderVersion || this.viewedCard?.path !== file.path || this.renderComponents.get(file.path) !== component) {
+      if (this.viewedCard?.path !== file.path || this.viewedCardComponent !== component) {
         return;
       }
       await import_obsidian4.MarkdownRenderer.render(
@@ -6040,14 +6108,18 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     this.cardHeaderButtonControllers.clear();
   }
-  async renderMarkdownCard(card, target, version) {
+  clearViewedCardHeaderButtonController() {
+    this.viewedCardHeaderButtonController?.disconnect();
+    this.viewedCardHeaderButtonController = null;
+  }
+  async renderMarkdownCard(card, target, deckVersion) {
     this.renderComponents.get(card.path)?.unload();
     const component = new import_obsidian4.Component();
     component.load();
     this.renderComponents.set(card.path, component);
     try {
       const body = await this.plugin.index.readBody(card.file);
-      if (version !== this.renderVersion || this.renderComponents.get(card.path) !== component) {
+      if (deckVersion !== this.deckRenderVersion || this.renderComponents.get(card.path) !== component) {
         return;
       }
       await import_obsidian4.MarkdownRenderer.render(
@@ -6793,14 +6865,22 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     if (!needsEarlierCards && !needsLaterCards) {
       return;
     }
-    const restoreFilingInputFocus = this.trayRenderer.isFilingInputFocused;
+    if (this.renderRefreshRunning) {
+      this.renderRefreshQueued = true;
+      return;
+    }
     this.renderRefreshPending = true;
     window.requestAnimationFrame(() => {
       this.renderRefreshPending = false;
       if (this.stageEl !== null) {
-        void this.renderDeck(
-          this.filingFile === null || restoreFilingInputFocus
-        );
+        this.renderRefreshRunning = true;
+        void this.refreshDeckCardWindow().finally(() => {
+          this.renderRefreshRunning = false;
+          if (this.renderRefreshQueued) {
+            this.renderRefreshQueued = false;
+            this.queueRenderWindowRefresh();
+          }
+        });
       }
     });
   }
@@ -6833,6 +6913,10 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       component.unload();
     }
     this.renderComponents.clear();
+  }
+  unloadViewedCardComponent() {
+    this.viewedCardComponent?.unload();
+    this.viewedCardComponent = null;
   }
   reconcileScrollPositions() {
     const availablePaths = new Set(

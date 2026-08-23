@@ -42,8 +42,11 @@ export function redirectViewedCardGhostFocus(
 export function moveDeckFocusWithAnchor(
   focus: CardFocus | null,
   path: string,
+  resumeFromViewedPlaceholder = false,
 ): CardFocus | null {
-  return focus?.surface === "deck" ? deckCardFocus(path) : focus;
+  return focus?.surface === "deck" || resumeFromViewedPlaceholder
+    ? deckCardFocus(path)
+    : focus;
 }
 
 export function renameCardFocus(

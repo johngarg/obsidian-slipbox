@@ -601,12 +601,14 @@ unfiled cards, ordinary notes, resolved-link traffic, and a high-backlink hub.
 
 ## Releases
 
-Run `npm version patch`, `npm version minor`, or `npm version major` from a clean
-`main` branch. The version lifecycle runs the complete check, synchronises
-`package.json`, `package-lock.json`, `manifest.json`, and `versions.json`, and
-creates an exact version tag without a leading `v`. Pushing that tag builds and
-refreshes a draft GitHub Release containing `main.js`, `manifest.json`, and
-`styles.css`.
+Prepare a release candidate with `npm version <x.y.z> --no-git-tag-version`.
+The version lifecycle runs the complete check and synchronises `package.json`,
+`package-lock.json`, `manifest.json`, and `versions.json` without committing or
+tagging. Commit and test that candidate before merging it into `main`. Once the
+accepted candidate is on `main`, create an annotated tag whose name exactly
+matches the version without a leading `v`, then push that tag. The tag workflow
+builds and refreshes a draft GitHub Release containing `main.js`,
+`manifest.json`, and `styles.css`.
 
 Draft releases created while the repository is private are not publishable.
 After making the repository public, manually rerun the release workflow for the

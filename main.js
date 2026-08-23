@@ -1126,619 +1126,6 @@ function renderCardHeaderButtons(options) {
   return new CardHeaderButtonController(options);
 }
 
-// src/settings.ts
-var SLIPBOX_DATA_SCHEMA_VERSION = 9;
-var DEFAULT_CARD_SPREAD = 0.58;
-var MIN_CARD_SPREAD = 0.18;
-var MAX_CARD_SPREAD = 1.12;
-function metadataPropertyError(property, disallowedProperty) {
-  if (property === "") {
-    return "A non-empty top-level property name is required.";
-  }
-  if (disallowedProperty !== null && property === disallowedProperty) {
-    return "The title and address properties must use different keys.";
-  }
-  return null;
-}
-var CARD_HEADER_BUTTON_ACTIONS = [
-  "edit-card",
-  "open-note",
-  "toggle-viewed-card",
-  "show-card-in-deck",
-  "toggle-tray",
-  "file-card",
-  "copy-link",
-  "toggle-bookmark",
-  "move-desk-card-left",
-  "move-desk-card-right",
-  "delete-card"
-];
-var binding = (key, modifiers = []) => ({ key, modifiers });
-var BASE_ACTION_DEFINITIONS = [
-  {
-    id: "previous-card",
-    label: "Move Deck anchor to previous card",
-    repeatable: true,
-    defaultBindings: [binding("ArrowLeft"), binding("k")]
-  },
-  {
-    id: "next-card",
-    label: "Move Deck anchor to next card",
-    repeatable: true,
-    defaultBindings: [binding("ArrowRight"), binding("j")]
-  },
-  {
-    id: "previous-bookmark",
-    label: "Move Deck anchor to previous bookmark",
-    repeatable: false,
-    defaultBindings: [binding("[")]
-  },
-  {
-    id: "next-bookmark",
-    label: "Move Deck anchor to next bookmark",
-    repeatable: false,
-    defaultBindings: [binding("]")]
-  },
-  {
-    id: "centre-card",
-    label: "Centre Deck anchor",
-    repeatable: false,
-    defaultBindings: [binding("c")]
-  },
-  {
-    id: "first-card",
-    label: "Move Deck anchor to first card",
-    repeatable: false,
-    defaultBindings: [binding("0")]
-  },
-  {
-    id: "last-card",
-    label: "Move Deck anchor to last card",
-    repeatable: false,
-    defaultBindings: [binding("$", ["Shift"])]
-  },
-  {
-    id: "forward-ten-cards",
-    label: "Move Deck anchor forward ten cards",
-    repeatable: true,
-    defaultBindings: [binding("d", ["Ctrl"])]
-  },
-  {
-    id: "backward-ten-cards",
-    label: "Move Deck anchor backward ten cards",
-    repeatable: true,
-    defaultBindings: [binding("u", ["Ctrl"])]
-  },
-  {
-    id: "open-note",
-    label: "Open focused card in Markdown",
-    repeatable: false,
-    defaultBindings: [binding("o")]
-  },
-  {
-    id: "toggle-tray",
-    label: "Put focused card on or return it from Desk",
-    repeatable: false,
-    defaultBindings: [binding("p")]
-  },
-  {
-    id: "toggle-tray-without-focus",
-    label: "Put focused Deck card on or return it from Desk without moving focus",
-    repeatable: false,
-    defaultBindings: [binding("p", ["Alt"])]
-  },
-  {
-    id: "toggle-bookmark",
-    label: "Toggle bookmark on focused Deck card",
-    repeatable: false,
-    defaultBindings: [binding("b")]
-  },
-  {
-    id: "find-address-first",
-    label: "Move Deck anchor to first address initial",
-    description: "Type the address's first character after this prefix.",
-    repeatable: false,
-    defaultBindings: [binding("g")]
-  },
-  {
-    id: "pull-into-pile",
-    label: "Put focused card into numbered pile",
-    description: "Type a one-based pile number, then press Enter.",
-    repeatable: false,
-    defaultBindings: [binding("p", ["Shift"])]
-  },
-  {
-    id: "next-pile",
-    label: "Focus the next Desk pile",
-    repeatable: true,
-    defaultBindings: [binding("}", ["Shift"])]
-  },
-  {
-    id: "previous-pile",
-    label: "Focus the previous Desk pile",
-    repeatable: true,
-    defaultBindings: [binding("{", ["Shift"])]
-  },
-  {
-    id: "swap-deck-pile",
-    label: "Swap focus between the Deck and the last pile",
-    repeatable: false,
-    defaultBindings: [binding("%", ["Shift"])]
-  },
-  {
-    id: "toggle-pile",
-    label: "Expand or collapse the focused card's pile",
-    repeatable: false,
-    defaultBindings: [binding(" ")]
-  },
-  {
-    id: "previous-card-in-pile",
-    label: "Focus the previous card in the pile",
-    repeatable: true,
-    defaultBindings: [binding("h")]
-  },
-  {
-    id: "next-card-in-pile",
-    label: "Focus the next card in the pile",
-    repeatable: true,
-    defaultBindings: [binding("l")]
-  },
-  {
-    id: "toggle-deck-map",
-    label: "Toggle Deck-map visibility",
-    repeatable: false,
-    defaultBindings: [binding("m")]
-  },
-  {
-    id: "bookmarks",
-    label: "Manage bookmarks",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "problems",
-    label: "Show card problems",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "confirm-filing",
-    label: "File card",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "cancel-filing",
-    label: "Cancel filing",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "copy-link",
-    label: "Copy link to focused card",
-    repeatable: false,
-    defaultBindings: [binding("y")]
-  },
-  {
-    id: "edit-card",
-    label: "Edit focused card on Desk",
-    repeatable: false,
-    defaultBindings: [binding("e")]
-  },
-  {
-    id: "show-card-in-deck",
-    label: "Show focused card in Deck",
-    repeatable: false,
-    defaultBindings: [binding("Enter")]
-  },
-  {
-    id: "toggle-viewed-card",
-    label: "View focused card or return it to its source",
-    repeatable: false,
-    defaultBindings: [binding("v")]
-  },
-  {
-    id: "file-card",
-    label: "File focused card",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "move-desk-card-left",
-    label: "Move focused Desk card left",
-    repeatable: true,
-    defaultBindings: [binding("ArrowLeft", ["Alt"])]
-  },
-  {
-    id: "move-desk-card-right",
-    label: "Move focused Desk card right",
-    repeatable: true,
-    defaultBindings: [binding("ArrowRight", ["Alt"])]
-  },
-  {
-    id: "delete-card",
-    label: "Delete focused card",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "collapse-all-piles",
-    label: "Collapse all Desk piles",
-    repeatable: false,
-    defaultBindings: []
-  },
-  {
-    id: "return-all-filed-cards",
-    label: "Return all filed Desk cards",
-    repeatable: false,
-    defaultBindings: []
-  }
-];
-var ACTION_COMMAND_IDS = {
-  "centre-card": "centre-active-card",
-  "open-note": "open-current-card-markdown",
-  "copy-link": "copy-current-card-link",
-  "toggle-tray": "toggle-tray",
-  "toggle-bookmark": "add-bookmark-current-card",
-  "find-address-first": "find-first-address-initial",
-  "pull-into-pile": "pull-into-numbered-pile",
-  "toggle-deck-map": "toggle-deck-map-visibility",
-  bookmarks: "manage-bookmarks",
-  problems: "show-card-problems",
-  "return-all-filed-cards": "clear-tray"
-};
-var FOCUSED_CARD_ACTIONS = /* @__PURE__ */ new Set([
-  "open-note",
-  "copy-link",
-  "toggle-tray",
-  "toggle-tray-without-focus",
-  "toggle-bookmark",
-  "pull-into-pile",
-  "toggle-pile",
-  "previous-card-in-pile",
-  "next-card-in-pile",
-  "edit-card",
-  "show-card-in-deck",
-  "toggle-viewed-card",
-  "file-card",
-  "move-desk-card-left",
-  "move-desk-card-right",
-  "delete-card"
-]);
-var GLOBAL_ACTIONS = /* @__PURE__ */ new Set(["bookmarks", "problems"]);
-var VIEW_ACTIONS = /* @__PURE__ */ new Set([
-  "toggle-deck-map",
-  "confirm-filing",
-  "cancel-filing",
-  "collapse-all-piles",
-  "return-all-filed-cards",
-  "next-pile",
-  "previous-pile",
-  "swap-deck-pile"
-]);
-var SLIPBOX_ACTION_DEFINITIONS = BASE_ACTION_DEFINITIONS.map((definition) => ({
-  ...definition,
-  commandId: ACTION_COMMAND_IDS[definition.id] ?? definition.id,
-  commandName: definition.label,
-  scope: GLOBAL_ACTIONS.has(definition.id) ? "global" : "active-view",
-  target: GLOBAL_ACTIONS.has(definition.id) ? "global" : FOCUSED_CARD_ACTIONS.has(definition.id) ? "focused-card" : VIEW_ACTIONS.has(definition.id) ? "view" : "deck-anchor"
-}));
-var DECK_ACTION_DEFINITIONS = SLIPBOX_ACTION_DEFINITIONS;
-var allCardHeaderButtons = (enabled) => Object.fromEntries(
-  CARD_HEADER_BUTTON_ACTIONS.map((action) => [action, enabled.includes(action)])
-);
-var DEFAULT_CARD_HEADER_BUTTONS = {
-  deck: allCardHeaderButtons([
-    "open-note",
-    "toggle-tray",
-    "copy-link",
-    "toggle-bookmark"
-  ]),
-  desk: allCardHeaderButtons([
-    "toggle-viewed-card",
-    "edit-card",
-    "open-note",
-    "show-card-in-deck",
-    "file-card",
-    "toggle-tray"
-  ]),
-  viewed: allCardHeaderButtons([
-    "edit-card",
-    "open-note",
-    "show-card-in-deck",
-    "file-card",
-    "toggle-viewed-card"
-  ])
-};
-var DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
-  DECK_ACTION_DEFINITIONS.map((definition) => [
-    definition.id,
-    definition.defaultBindings
-  ])
-);
-var PREVIOUS_DEFAULT_DECK_KEYBINDINGS = {
-  "previous-card": [binding("ArrowLeft"), binding("k")],
-  "next-card": [binding("ArrowRight"), binding("j")],
-  "centre-card": [binding("c")],
-  "first-card": [binding("g")],
-  "last-card": [binding("g", ["Shift"])],
-  "open-note": [binding("o")],
-  "toggle-tray": [binding("p")],
-  "toggle-bookmark": [binding("b")],
-  back: [],
-  forward: [],
-  bookmarks: [],
-  problems: [],
-  "confirm-filing": [],
-  "cancel-filing": [],
-  "copy-link": [binding("y")]
-};
-var DEFAULT_SETTINGS = {
-  addressProperty: "zettel-id",
-  deckOrdering: "natural",
-  duplicateAddresses: "allowed",
-  titleSource: "filename",
-  titleProperty: "title",
-  mainCardSize: "medium",
-  trayCardSize: "medium",
-  newCardFolder: "",
-  newNoteTimestampFormat: "YYYYMMDDTHHmmss",
-  showTitleInDeck: false,
-  showDeckMap: true,
-  cardSpread: DEFAULT_CARD_SPREAD,
-  cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
-  deckKeybindings: DEFAULT_DECK_KEYBINDINGS
-};
-var MODIFIER_ORDER = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
-function isRecord2(value) {
-  return typeof value === "object" && value !== null;
-}
-function normalizePropertyName(value, fallback) {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : fallback;
-}
-function normalizeFolderPath(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const segments = value.trim().replace(/\\/g, "/").split("/").filter((segment) => segment !== "");
-  if (segments.some((segment) => segment === "." || segment === "..")) {
-    return "";
-  }
-  return segments.join("/");
-}
-function normalizeCardSize(value) {
-  return value === "small" || value === "large" ? value : "medium";
-}
-function normalizeCardSpread(value) {
-  const spread = typeof value === "number" && Number.isFinite(value) ? value : DEFAULT_CARD_SPREAD;
-  return Math.min(MAX_CARD_SPREAD, Math.max(MIN_CARD_SPREAD, spread));
-}
-function hasTitleAddressPropertyCollision(value) {
-  if (!isRecord2(value) || value.titleSource !== "frontmatter") {
-    return false;
-  }
-  const addressProperty = normalizePropertyName(
-    value.addressProperty,
-    DEFAULT_SETTINGS.addressProperty
-  );
-  const titleProperty = normalizePropertyName(
-    value.titleProperty,
-    DEFAULT_SETTINGS.titleProperty
-  );
-  return addressProperty === titleProperty;
-}
-function normalizeKeyBinding(value) {
-  if (!isRecord2(value) || typeof value.key !== "string" || value.key === "") {
-    return null;
-  }
-  const key = value.key.length === 1 ? value.key.toLowerCase() : value.key;
-  const supplied = Array.isArray(value.modifiers) ? value.modifiers : [];
-  const modifiers = MODIFIER_ORDER.filter((modifier) => supplied.includes(modifier));
-  return { key, modifiers };
-}
-function keyBindingSignature(bindingValue) {
-  return `${bindingValue.modifiers.join("+")}::${bindingValue.key}`;
-}
-function formatKeyBinding(bindingValue) {
-  const key = bindingValue.key === " " ? "Space" : bindingValue.key;
-  if (bindingValue.modifiers.length === 1 && bindingValue.modifiers[0] === "Shift" && (key === "$" || key === "%" || key === "{" || key === "}")) {
-    return key;
-  }
-  return [...bindingValue.modifiers, key].join("+");
-}
-function keyBindingFromKeyboardEvent(event, isMacOS) {
-  const modifiers = [];
-  const primary = isMacOS ? event.metaKey : event.ctrlKey;
-  if (primary) {
-    modifiers.push("Mod");
-  }
-  if (event.ctrlKey && isMacOS) {
-    modifiers.push("Ctrl");
-  }
-  if (event.metaKey && !isMacOS) {
-    modifiers.push("Meta");
-  }
-  if (event.altKey) {
-    modifiers.push("Alt");
-  }
-  if (event.shiftKey) {
-    modifiers.push("Shift");
-  }
-  return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
-    modifiers,
-    key: event.key
-  };
-}
-function bindingsEqual(left, right) {
-  return left.length === right.length && left.every((candidate, index) => {
-    const expected = right[index];
-    return expected !== void 0 && keyBindingSignature(candidate) === keyBindingSignature(expected);
-  });
-}
-function isCompletePreviousDefaultMap(source) {
-  const previousActions = new Set(Object.keys(PREVIOUS_DEFAULT_DECK_KEYBINDINGS));
-  if (DECK_ACTION_DEFINITIONS.some((definition) => !previousActions.has(definition.id) && Object.prototype.hasOwnProperty.call(source, definition.id))) {
-    return false;
-  }
-  return Object.entries(PREVIOUS_DEFAULT_DECK_KEYBINDINGS).every(([action, expected]) => {
-    const candidate = source[action];
-    if (!Array.isArray(candidate)) {
-      return false;
-    }
-    const normalized = candidate.flatMap((value) => {
-      const result = normalizeKeyBinding(value);
-      return result === null ? [] : [result];
-    });
-    return bindingsEqual(normalized, expected);
-  });
-}
-function normalizeDeckKeybindings(value) {
-  const source = isRecord2(value) ? value : {};
-  if (isCompletePreviousDefaultMap(source)) {
-    return DEFAULT_DECK_KEYBINDINGS;
-  }
-  const claimed = /* @__PURE__ */ new Set();
-  const result = {};
-  for (const definition of DECK_ACTION_DEFINITIONS) {
-    const candidate = source[definition.id];
-    if (!Array.isArray(candidate)) {
-      continue;
-    }
-    const normalized = [];
-    for (const rawBinding of candidate) {
-      const normalizedBinding = normalizeKeyBinding(rawBinding);
-      if (normalizedBinding === null) {
-        continue;
-      }
-      const signature = keyBindingSignature(normalizedBinding);
-      if (claimed.has(signature)) {
-        continue;
-      }
-      claimed.add(signature);
-      normalized.push(normalizedBinding);
-    }
-    result[definition.id] = normalized;
-  }
-  for (const definition of DECK_ACTION_DEFINITIONS) {
-    if (result[definition.id] !== void 0) {
-      continue;
-    }
-    const normalized = [];
-    for (const defaultBinding of definition.defaultBindings) {
-      const signature = keyBindingSignature(defaultBinding);
-      if (!claimed.has(signature)) {
-        claimed.add(signature);
-        normalized.push(defaultBinding);
-      }
-    }
-    result[definition.id] = normalized;
-  }
-  return result;
-}
-function normalizeBooleanRecord(value, defaults) {
-  const source = isRecord2(value) ? value : {};
-  return Object.fromEntries(
-    Object.entries(defaults).map(([key, fallback]) => [
-      key,
-      typeof source[key] === "boolean" ? source[key] : fallback
-    ])
-  );
-}
-function normalizeCardHeaderButtons(value, legacyDeckButtons = void 0) {
-  const source = isRecord2(value) ? value : {};
-  const legacy = isRecord2(legacyDeckButtons) ? legacyDeckButtons : {};
-  const deckSource = isRecord2(source.deck) ? source.deck : {};
-  const migratedDeck = {
-    ...deckSource
-  };
-  const legacyMappings = {
-    "open-note": "open-note",
-    "copy-link": "copy-link",
-    tray: "toggle-tray",
-    bookmark: "toggle-bookmark"
-  };
-  for (const [legacyKey, action] of Object.entries(legacyMappings)) {
-    if (typeof migratedDeck[action] !== "boolean" && typeof legacy[legacyKey] === "boolean") {
-      migratedDeck[action] = legacy[legacyKey];
-    }
-  }
-  return {
-    deck: normalizeBooleanRecord(migratedDeck, DEFAULT_CARD_HEADER_BUTTONS.deck),
-    desk: normalizeBooleanRecord(source.desk, DEFAULT_CARD_HEADER_BUTTONS.desk),
-    viewed: normalizeBooleanRecord(source.viewed, DEFAULT_CARD_HEADER_BUTTONS.viewed)
-  };
-}
-function normalizeSettings(value) {
-  const source = isRecord2(value) ? value : {};
-  const addressProperty = normalizePropertyName(
-    source.addressProperty,
-    DEFAULT_SETTINGS.addressProperty
-  );
-  const titleProperty = normalizePropertyName(
-    source.titleProperty,
-    DEFAULT_SETTINGS.titleProperty
-  );
-  const requestedTitleSource = source.titleSource === "frontmatter" ? "frontmatter" : "filename";
-  return {
-    addressProperty,
-    deckOrdering: source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
-    duplicateAddresses: source.duplicateAddresses === "problem" ? "problem" : "allowed",
-    titleSource: requestedTitleSource === "frontmatter" && titleProperty === addressProperty ? "filename" : requestedTitleSource,
-    titleProperty,
-    mainCardSize: normalizeCardSize(source.mainCardSize),
-    trayCardSize: normalizeCardSize(source.trayCardSize),
-    newCardFolder: normalizeFolderPath(source.newCardFolder),
-    newNoteTimestampFormat: normalizePropertyName(
-      source.newNoteTimestampFormat,
-      DEFAULT_SETTINGS.newNoteTimestampFormat
-    ),
-    showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
-    showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
-    cardSpread: normalizeCardSpread(source.cardSpread),
-    cardHeaderButtons: normalizeCardHeaderButtons(
-      source.cardHeaderButtons,
-      source.deckHeaderButtons
-    ),
-    deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings)
-  };
-}
-function settingsForPersistence(rawValue, settings) {
-  const raw = isRecord2(rawValue) ? rawValue : {};
-  const {
-    deckHeaderButtons: _legacyDeckHeaderButtons,
-    showDeckToolbar: _showDeckToolbar,
-    useTemplatesForNewNotes: _useTemplatesForNewNotes,
-    newNoteTemplatePath: _newNoteTemplatePath,
-    ...retainedRaw
-  } = raw;
-  const rawKeybindingsSource = isRecord2(raw.deckKeybindings) ? raw.deckKeybindings : {};
-  const rawKeybindings = Object.fromEntries(
-    Object.entries(rawKeybindingsSource).filter(
-      ([key]) => key !== "entry-points" && key !== "back" && key !== "forward" && key !== "toggle-toolbar" && key !== "find-address-forward" && key !== "find-address-backward"
-    )
-  );
-  return {
-    ...retainedRaw,
-    ...settings,
-    cardHeaderButtons: settings.cardHeaderButtons,
-    deckKeybindings: {
-      ...rawKeybindings,
-      ...settings.deckKeybindings
-    }
-  };
-}
-function keyBindingConflict(keybindings, action, bindingValue) {
-  const signature = keyBindingSignature(bindingValue);
-  for (const definition of DECK_ACTION_DEFINITIONS) {
-    if (definition.id !== action && keybindings[definition.id].some(
-      (candidate) => keyBindingSignature(candidate) === signature
-    )) {
-      return definition.id;
-    }
-  }
-  return null;
-}
-
 // src/tray-view.ts
 var import_obsidian3 = require("obsidian");
 
@@ -3973,6 +3360,7 @@ var DECK_MAP_SECTION_LABEL_SPACING = 14;
 var DECK_MAP_MARKER_BUDGET = 512;
 var COMMAND_FEEDBACK_DURATION_MS = 1800;
 var VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
+var isDomNode = (value) => value !== null && "nodeType" in value;
 var PENDING_COMMAND_ACTIONS = /* @__PURE__ */ new Set([
   "find-address-first",
   "pull-into-pile"
@@ -4020,7 +3408,7 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       })
     );
     this.scope = new import_obsidian4.Scope(this.app.scope);
-    this.updateKeybindings();
+    this.scope.register([], "Escape", (event) => this.handleDeckEscape(event) ? false : void 0);
   }
   /**
    * Slipbox is a static surface, not a navigable one.
@@ -4080,7 +3468,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
   cardFooters;
   viewedCardFooter;
   trayRenderer;
-  keymapHandlers = [];
   deckKeybindingsSuspended = false;
   pendingCommand = IDLE_DECK_COMMAND;
   pendingCommandStartEvent = null;
@@ -4656,36 +4043,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.viewedCardBodyEl = null;
     }
   }
-  updateKeybindings() {
-    const scope = this.scope;
-    if (scope === null) {
-      return;
-    }
-    for (const handler of this.keymapHandlers) {
-      scope.unregister(handler);
-    }
-    this.keymapHandlers = [];
-    const escapeHandler = scope.register([], "Escape", (event) => {
-      return this.handleDeckEscape(event) ? false : void 0;
-    });
-    this.keymapHandlers.push(escapeHandler);
-    if (!this.deckKeybindingsSuspended) {
-      for (const definition of DECK_ACTION_DEFINITIONS) {
-        for (const binding2 of this.plugin.settings.deckKeybindings[definition.id]) {
-          const handler = scope.register(
-            [...binding2.modifiers],
-            binding2.key,
-            (event) => this.handleDeckActionKey(
-              event,
-              definition.id,
-              definition.repeatable
-            )
-          );
-          this.keymapHandlers.push(handler);
-        }
-      }
-    }
-  }
   setDeckKeybindingsSuspended(suspended) {
     if (this.deckKeybindingsSuspended === suspended) {
       return;
@@ -4694,7 +4051,20 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
       this.clearPendingCommand();
     }
     this.deckKeybindingsSuspended = suspended;
-    this.updateKeybindings();
+  }
+  canRunCommandAction(action) {
+    const event = this.app.lastEvent;
+    if (event !== null && "key" in event && isDomNode(event.target) && this.contentEl.contains(event.target) && (this.deckKeybindingsSuspended || shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused))) {
+      return false;
+    }
+    return this.canRunAction(action);
+  }
+  runCommandAction(action) {
+    const ran = this.runAction(action);
+    if (ran && PENDING_COMMAND_ACTIONS.has(action) && this.app.lastEvent !== null && "key" in this.app.lastEvent) {
+      this.pendingCommandStartEvent = this.app.lastEvent;
+    }
+    return ran;
   }
   handleDeckEscape(event) {
     if (this.app.workspace.getActiveViewOfType(_DeckView) !== this) {
@@ -6822,28 +6192,6 @@ var DeckView = class _DeckView extends import_obsidian4.ItemView {
     }
     void this.goToPath(target.path);
   }
-  handleDeckActionKey(event, action, repeatable = false) {
-    if (this.pendingCommand.kind !== "idle") {
-      return this.handleDeckCommandContinuation(event);
-    }
-    if (shouldSuspendDeckShortcut(
-      event.target,
-      this.isFilingInputFocused
-    )) {
-      return false;
-    }
-    if (!this.canRunAction(action)) {
-      return false;
-    }
-    event.preventDefault();
-    if (!event.repeat || repeatable) {
-      this.runAction(action);
-      if (!event.repeat && PENDING_COMMAND_ACTIONS.has(action)) {
-        this.pendingCommandStartEvent = event;
-      }
-    }
-    return true;
-  }
   handleDeckCommandContinuation(event) {
     if (event === this.pendingCommandStartEvent) {
       this.pendingCommandStartEvent = null;
@@ -7164,7 +6512,7 @@ var DESK_WIDTH = 2400;
 var DESK_HEIGHT = 1600;
 var DESK_CARD_WIDTH = 520;
 var DESK_CARD_HEIGHT = 346;
-function isRecord3(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null;
 }
 function finiteNumber(value) {
@@ -7183,7 +6531,7 @@ function normalizeDeskCards(value) {
   const seen = /* @__PURE__ */ new Set();
   const cards = [];
   for (const candidate of value) {
-    if (!isRecord3(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
+    if (!isRecord2(candidate) || typeof candidate.cardRef !== "string" || candidate.cardRef.trim() === "" || !finiteNumber(candidate.x) || !finiteNumber(candidate.y) || !finiteNumber(candidate.z)) {
       continue;
     }
     const cardRef = candidate.cardRef.trim();
@@ -7802,6 +7150,625 @@ function newCardTitlePlaceholder(timestamp, titleSource) {
   return titleSource === "frontmatter" ? "Leave blank for an empty title" : `Leave blank to use ${timestamp} as the filename`;
 }
 
+// src/settings.ts
+var SLIPBOX_DATA_SCHEMA_VERSION = 9;
+var DEFAULT_CARD_SPREAD = 0.58;
+var MIN_CARD_SPREAD = 0.18;
+var MAX_CARD_SPREAD = 1.12;
+function metadataPropertyError(property, disallowedProperty) {
+  if (property === "") {
+    return "A non-empty top-level property name is required.";
+  }
+  if (disallowedProperty !== null && property === disallowedProperty) {
+    return "The title and address properties must use different keys.";
+  }
+  return null;
+}
+var CARD_HEADER_BUTTON_ACTIONS = [
+  "edit-card",
+  "open-note",
+  "toggle-viewed-card",
+  "show-card-in-deck",
+  "toggle-tray",
+  "file-card",
+  "copy-link",
+  "toggle-bookmark",
+  "move-desk-card-left",
+  "move-desk-card-right",
+  "delete-card"
+];
+var binding = (key, modifiers = []) => ({ key, modifiers });
+var BASE_ACTION_DEFINITIONS = [
+  {
+    id: "previous-card",
+    label: "Move Deck anchor to previous card",
+    repeatable: true,
+    defaultBindings: [binding("ArrowLeft"), binding("k")]
+  },
+  {
+    id: "next-card",
+    label: "Move Deck anchor to next card",
+    repeatable: true,
+    defaultBindings: [binding("ArrowRight"), binding("j")]
+  },
+  {
+    id: "previous-bookmark",
+    label: "Move Deck anchor to previous bookmark",
+    repeatable: false,
+    defaultBindings: [binding("[")]
+  },
+  {
+    id: "next-bookmark",
+    label: "Move Deck anchor to next bookmark",
+    repeatable: false,
+    defaultBindings: [binding("]")]
+  },
+  {
+    id: "centre-card",
+    label: "Centre Deck anchor",
+    repeatable: false,
+    defaultBindings: [binding("c")]
+  },
+  {
+    id: "first-card",
+    label: "Move Deck anchor to first card",
+    repeatable: false,
+    defaultBindings: [binding("0")]
+  },
+  {
+    id: "last-card",
+    label: "Move Deck anchor to last card",
+    repeatable: false,
+    defaultBindings: [binding("$", ["Shift"])]
+  },
+  {
+    id: "forward-ten-cards",
+    label: "Move Deck anchor forward ten cards",
+    repeatable: true,
+    defaultBindings: [binding("d", ["Ctrl"])]
+  },
+  {
+    id: "backward-ten-cards",
+    label: "Move Deck anchor backward ten cards",
+    repeatable: true,
+    defaultBindings: [binding("u", ["Ctrl"])]
+  },
+  {
+    id: "open-note",
+    label: "Open focused card in Markdown",
+    repeatable: false,
+    defaultBindings: [binding("o")]
+  },
+  {
+    id: "toggle-tray",
+    label: "Put focused card on or return it from Desk",
+    repeatable: false,
+    defaultBindings: [binding("p")]
+  },
+  {
+    id: "toggle-tray-without-focus",
+    label: "Put focused Deck card on or return it from Desk without moving focus",
+    repeatable: false,
+    defaultBindings: [binding("p", ["Alt"])]
+  },
+  {
+    id: "toggle-bookmark",
+    label: "Toggle bookmark on focused Deck card",
+    repeatable: false,
+    defaultBindings: [binding("b")]
+  },
+  {
+    id: "find-address-first",
+    label: "Move Deck anchor to first address initial",
+    description: "Type the address's first character after this prefix.",
+    repeatable: false,
+    defaultBindings: [binding("g")]
+  },
+  {
+    id: "pull-into-pile",
+    label: "Put focused card into numbered pile",
+    description: "Type a one-based pile number, then press Enter.",
+    repeatable: false,
+    defaultBindings: [binding("p", ["Shift"])]
+  },
+  {
+    id: "next-pile",
+    label: "Focus the next Desk pile",
+    repeatable: true,
+    defaultBindings: [binding("}", ["Shift"])]
+  },
+  {
+    id: "previous-pile",
+    label: "Focus the previous Desk pile",
+    repeatable: true,
+    defaultBindings: [binding("{", ["Shift"])]
+  },
+  {
+    id: "swap-deck-pile",
+    label: "Swap focus between the Deck and the last pile",
+    repeatable: false,
+    defaultBindings: [binding("%", ["Shift"])]
+  },
+  {
+    id: "toggle-pile",
+    label: "Expand or collapse the focused card's pile",
+    repeatable: false,
+    defaultBindings: [binding(" ")]
+  },
+  {
+    id: "previous-card-in-pile",
+    label: "Focus the previous card in the pile",
+    repeatable: true,
+    defaultBindings: [binding("h")]
+  },
+  {
+    id: "next-card-in-pile",
+    label: "Focus the next card in the pile",
+    repeatable: true,
+    defaultBindings: [binding("l")]
+  },
+  {
+    id: "toggle-deck-map",
+    label: "Toggle Deck-map visibility",
+    repeatable: false,
+    defaultBindings: [binding("m")]
+  },
+  {
+    id: "bookmarks",
+    label: "Manage bookmarks",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "problems",
+    label: "Show card problems",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "confirm-filing",
+    label: "File card",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "cancel-filing",
+    label: "Cancel filing",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "copy-link",
+    label: "Copy link to focused card",
+    repeatable: false,
+    defaultBindings: [binding("y")]
+  },
+  {
+    id: "edit-card",
+    label: "Edit focused card on Desk",
+    repeatable: false,
+    defaultBindings: [binding("e")]
+  },
+  {
+    id: "show-card-in-deck",
+    label: "Show focused card in Deck",
+    repeatable: false,
+    defaultBindings: [binding("Enter")]
+  },
+  {
+    id: "toggle-viewed-card",
+    label: "View focused card or return it to its source",
+    repeatable: false,
+    defaultBindings: [binding("v")]
+  },
+  {
+    id: "file-card",
+    label: "File focused card",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "move-desk-card-left",
+    label: "Move focused Desk card left",
+    repeatable: true,
+    defaultBindings: [binding("ArrowLeft", ["Alt"])]
+  },
+  {
+    id: "move-desk-card-right",
+    label: "Move focused Desk card right",
+    repeatable: true,
+    defaultBindings: [binding("ArrowRight", ["Alt"])]
+  },
+  {
+    id: "delete-card",
+    label: "Delete focused card",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "collapse-all-piles",
+    label: "Collapse all Desk piles",
+    repeatable: false,
+    defaultBindings: []
+  },
+  {
+    id: "return-all-filed-cards",
+    label: "Return all filed Desk cards",
+    repeatable: false,
+    defaultBindings: []
+  }
+];
+var ACTION_COMMAND_IDS = {
+  "centre-card": "centre-active-card",
+  "open-note": "open-current-card-markdown",
+  "copy-link": "copy-current-card-link",
+  "toggle-tray": "toggle-tray",
+  "toggle-bookmark": "add-bookmark-current-card",
+  "find-address-first": "find-first-address-initial",
+  "pull-into-pile": "pull-into-numbered-pile",
+  "toggle-deck-map": "toggle-deck-map-visibility",
+  bookmarks: "manage-bookmarks",
+  problems: "show-card-problems",
+  "return-all-filed-cards": "clear-tray"
+};
+var FOCUSED_CARD_ACTIONS = /* @__PURE__ */ new Set([
+  "open-note",
+  "copy-link",
+  "toggle-tray",
+  "toggle-tray-without-focus",
+  "toggle-bookmark",
+  "pull-into-pile",
+  "toggle-pile",
+  "previous-card-in-pile",
+  "next-card-in-pile",
+  "edit-card",
+  "show-card-in-deck",
+  "toggle-viewed-card",
+  "file-card",
+  "move-desk-card-left",
+  "move-desk-card-right",
+  "delete-card"
+]);
+var GLOBAL_ACTIONS = /* @__PURE__ */ new Set(["bookmarks", "problems"]);
+var VIEW_ACTIONS = /* @__PURE__ */ new Set([
+  "toggle-deck-map",
+  "confirm-filing",
+  "cancel-filing",
+  "collapse-all-piles",
+  "return-all-filed-cards",
+  "next-pile",
+  "previous-pile",
+  "swap-deck-pile"
+]);
+var SLIPBOX_ACTION_DEFINITIONS = BASE_ACTION_DEFINITIONS.map((definition) => ({
+  ...definition,
+  commandId: ACTION_COMMAND_IDS[definition.id] ?? definition.id,
+  commandName: definition.label,
+  scope: GLOBAL_ACTIONS.has(definition.id) ? "global" : "active-view",
+  target: GLOBAL_ACTIONS.has(definition.id) ? "global" : FOCUSED_CARD_ACTIONS.has(definition.id) ? "focused-card" : VIEW_ACTIONS.has(definition.id) ? "view" : "deck-anchor"
+}));
+var DECK_ACTION_DEFINITIONS = SLIPBOX_ACTION_DEFINITIONS;
+var allCardHeaderButtons = (enabled) => Object.fromEntries(
+  CARD_HEADER_BUTTON_ACTIONS.map((action) => [action, enabled.includes(action)])
+);
+var DEFAULT_CARD_HEADER_BUTTONS = {
+  deck: allCardHeaderButtons([
+    "open-note",
+    "toggle-tray",
+    "copy-link",
+    "toggle-bookmark"
+  ]),
+  desk: allCardHeaderButtons([
+    "toggle-viewed-card",
+    "edit-card",
+    "open-note",
+    "show-card-in-deck",
+    "file-card",
+    "toggle-tray"
+  ]),
+  viewed: allCardHeaderButtons([
+    "edit-card",
+    "open-note",
+    "show-card-in-deck",
+    "file-card",
+    "toggle-viewed-card"
+  ])
+};
+var DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
+  DECK_ACTION_DEFINITIONS.map((definition) => [
+    definition.id,
+    definition.defaultBindings
+  ])
+);
+var PREVIOUS_DEFAULT_DECK_KEYBINDINGS = {
+  "previous-card": [binding("ArrowLeft"), binding("k")],
+  "next-card": [binding("ArrowRight"), binding("j")],
+  "centre-card": [binding("c")],
+  "first-card": [binding("g")],
+  "last-card": [binding("g", ["Shift"])],
+  "open-note": [binding("o")],
+  "toggle-tray": [binding("p")],
+  "toggle-bookmark": [binding("b")],
+  back: [],
+  forward: [],
+  bookmarks: [],
+  problems: [],
+  "confirm-filing": [],
+  "cancel-filing": [],
+  "copy-link": [binding("y")]
+};
+var DEFAULT_SETTINGS = {
+  addressProperty: "zettel-id",
+  deckOrdering: "natural",
+  duplicateAddresses: "allowed",
+  titleSource: "filename",
+  titleProperty: "title",
+  mainCardSize: "medium",
+  trayCardSize: "medium",
+  newCardFolder: "",
+  newNoteTimestampFormat: "YYYYMMDDTHHmmss",
+  showTitleInDeck: false,
+  showDeckMap: true,
+  cardSpread: DEFAULT_CARD_SPREAD,
+  cardHeaderButtons: DEFAULT_CARD_HEADER_BUTTONS,
+  deckKeybindings: DEFAULT_DECK_KEYBINDINGS
+};
+var MODIFIER_ORDER = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
+function isRecord3(value) {
+  return typeof value === "object" && value !== null;
+}
+function normalizePropertyName(value, fallback) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : fallback;
+}
+function normalizeFolderPath(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const segments = value.trim().replace(/\\/g, "/").split("/").filter((segment) => segment !== "");
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return "";
+  }
+  return segments.join("/");
+}
+function normalizeCardSize(value) {
+  return value === "small" || value === "large" ? value : "medium";
+}
+function normalizeCardSpread(value) {
+  const spread = typeof value === "number" && Number.isFinite(value) ? value : DEFAULT_CARD_SPREAD;
+  return Math.min(MAX_CARD_SPREAD, Math.max(MIN_CARD_SPREAD, spread));
+}
+function hasTitleAddressPropertyCollision(value) {
+  if (!isRecord3(value) || value.titleSource !== "frontmatter") {
+    return false;
+  }
+  const addressProperty = normalizePropertyName(
+    value.addressProperty,
+    DEFAULT_SETTINGS.addressProperty
+  );
+  const titleProperty = normalizePropertyName(
+    value.titleProperty,
+    DEFAULT_SETTINGS.titleProperty
+  );
+  return addressProperty === titleProperty;
+}
+function normalizeKeyBinding(value) {
+  if (!isRecord3(value) || typeof value.key !== "string" || value.key === "") {
+    return null;
+  }
+  const key = value.key.length === 1 ? value.key.toLowerCase() : value.key;
+  const supplied = Array.isArray(value.modifiers) ? value.modifiers : [];
+  const modifiers = MODIFIER_ORDER.filter((modifier) => supplied.includes(modifier));
+  return { key, modifiers };
+}
+function keyBindingSignature(bindingValue) {
+  return `${bindingValue.modifiers.join("+")}::${bindingValue.key}`;
+}
+function commandHotkeysForAction(settings, action) {
+  return settings.deckKeybindings[action].map((bindingValue) => ({
+    key: bindingValue.key,
+    modifiers: [...bindingValue.modifiers]
+  }));
+}
+function formatKeyBinding(bindingValue) {
+  const key = bindingValue.key === " " ? "Space" : bindingValue.key;
+  if (bindingValue.modifiers.length === 1 && bindingValue.modifiers[0] === "Shift" && (key === "$" || key === "%" || key === "{" || key === "}")) {
+    return key;
+  }
+  return [...bindingValue.modifiers, key].join("+");
+}
+function keyBindingFromKeyboardEvent(event, isMacOS) {
+  const modifiers = [];
+  const primary = isMacOS ? event.metaKey : event.ctrlKey;
+  if (primary) {
+    modifiers.push("Mod");
+  }
+  if (event.ctrlKey && isMacOS) {
+    modifiers.push("Ctrl");
+  }
+  if (event.metaKey && !isMacOS) {
+    modifiers.push("Meta");
+  }
+  if (event.altKey) {
+    modifiers.push("Alt");
+  }
+  if (event.shiftKey) {
+    modifiers.push("Shift");
+  }
+  return normalizeKeyBinding({ modifiers, key: event.key }) ?? {
+    modifiers,
+    key: event.key
+  };
+}
+function bindingsEqual(left, right) {
+  return left.length === right.length && left.every((candidate, index) => {
+    const expected = right[index];
+    return expected !== void 0 && keyBindingSignature(candidate) === keyBindingSignature(expected);
+  });
+}
+function isCompletePreviousDefaultMap(source) {
+  const previousActions = new Set(Object.keys(PREVIOUS_DEFAULT_DECK_KEYBINDINGS));
+  if (DECK_ACTION_DEFINITIONS.some((definition) => !previousActions.has(definition.id) && Object.prototype.hasOwnProperty.call(source, definition.id))) {
+    return false;
+  }
+  return Object.entries(PREVIOUS_DEFAULT_DECK_KEYBINDINGS).every(([action, expected]) => {
+    const candidate = source[action];
+    if (!Array.isArray(candidate)) {
+      return false;
+    }
+    const normalized = candidate.flatMap((value) => {
+      const result = normalizeKeyBinding(value);
+      return result === null ? [] : [result];
+    });
+    return bindingsEqual(normalized, expected);
+  });
+}
+function normalizeDeckKeybindings(value) {
+  const source = isRecord3(value) ? value : {};
+  if (isCompletePreviousDefaultMap(source)) {
+    return DEFAULT_DECK_KEYBINDINGS;
+  }
+  const claimed = /* @__PURE__ */ new Set();
+  const result = {};
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    const candidate = source[definition.id];
+    if (!Array.isArray(candidate)) {
+      continue;
+    }
+    const normalized = [];
+    for (const rawBinding of candidate) {
+      const normalizedBinding = normalizeKeyBinding(rawBinding);
+      if (normalizedBinding === null) {
+        continue;
+      }
+      const signature = keyBindingSignature(normalizedBinding);
+      if (claimed.has(signature)) {
+        continue;
+      }
+      claimed.add(signature);
+      normalized.push(normalizedBinding);
+    }
+    result[definition.id] = normalized;
+  }
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    if (result[definition.id] !== void 0) {
+      continue;
+    }
+    const normalized = [];
+    for (const defaultBinding of definition.defaultBindings) {
+      const signature = keyBindingSignature(defaultBinding);
+      if (!claimed.has(signature)) {
+        claimed.add(signature);
+        normalized.push(defaultBinding);
+      }
+    }
+    result[definition.id] = normalized;
+  }
+  return result;
+}
+function normalizeBooleanRecord(value, defaults) {
+  const source = isRecord3(value) ? value : {};
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, fallback]) => [
+      key,
+      typeof source[key] === "boolean" ? source[key] : fallback
+    ])
+  );
+}
+function normalizeCardHeaderButtons(value, legacyDeckButtons = void 0) {
+  const source = isRecord3(value) ? value : {};
+  const legacy = isRecord3(legacyDeckButtons) ? legacyDeckButtons : {};
+  const deckSource = isRecord3(source.deck) ? source.deck : {};
+  const migratedDeck = {
+    ...deckSource
+  };
+  const legacyMappings = {
+    "open-note": "open-note",
+    "copy-link": "copy-link",
+    tray: "toggle-tray",
+    bookmark: "toggle-bookmark"
+  };
+  for (const [legacyKey, action] of Object.entries(legacyMappings)) {
+    if (typeof migratedDeck[action] !== "boolean" && typeof legacy[legacyKey] === "boolean") {
+      migratedDeck[action] = legacy[legacyKey];
+    }
+  }
+  return {
+    deck: normalizeBooleanRecord(migratedDeck, DEFAULT_CARD_HEADER_BUTTONS.deck),
+    desk: normalizeBooleanRecord(source.desk, DEFAULT_CARD_HEADER_BUTTONS.desk),
+    viewed: normalizeBooleanRecord(source.viewed, DEFAULT_CARD_HEADER_BUTTONS.viewed)
+  };
+}
+function normalizeSettings(value) {
+  const source = isRecord3(value) ? value : {};
+  const addressProperty = normalizePropertyName(
+    source.addressProperty,
+    DEFAULT_SETTINGS.addressProperty
+  );
+  const titleProperty = normalizePropertyName(
+    source.titleProperty,
+    DEFAULT_SETTINGS.titleProperty
+  );
+  const requestedTitleSource = source.titleSource === "frontmatter" ? "frontmatter" : "filename";
+  return {
+    addressProperty,
+    deckOrdering: source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
+    duplicateAddresses: source.duplicateAddresses === "problem" ? "problem" : "allowed",
+    titleSource: requestedTitleSource === "frontmatter" && titleProperty === addressProperty ? "filename" : requestedTitleSource,
+    titleProperty,
+    mainCardSize: normalizeCardSize(source.mainCardSize),
+    trayCardSize: normalizeCardSize(source.trayCardSize),
+    newCardFolder: normalizeFolderPath(source.newCardFolder),
+    newNoteTimestampFormat: normalizePropertyName(
+      source.newNoteTimestampFormat,
+      DEFAULT_SETTINGS.newNoteTimestampFormat
+    ),
+    showTitleInDeck: typeof source.showTitleInDeck === "boolean" ? source.showTitleInDeck : DEFAULT_SETTINGS.showTitleInDeck,
+    showDeckMap: typeof source.showDeckMap === "boolean" ? source.showDeckMap : DEFAULT_SETTINGS.showDeckMap,
+    cardSpread: normalizeCardSpread(source.cardSpread),
+    cardHeaderButtons: normalizeCardHeaderButtons(
+      source.cardHeaderButtons,
+      source.deckHeaderButtons
+    ),
+    deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings)
+  };
+}
+function settingsForPersistence(rawValue, settings) {
+  const raw = isRecord3(rawValue) ? rawValue : {};
+  const {
+    deckHeaderButtons: _legacyDeckHeaderButtons,
+    showDeckToolbar: _showDeckToolbar,
+    useTemplatesForNewNotes: _useTemplatesForNewNotes,
+    newNoteTemplatePath: _newNoteTemplatePath,
+    ...retainedRaw
+  } = raw;
+  const rawKeybindingsSource = isRecord3(raw.deckKeybindings) ? raw.deckKeybindings : {};
+  const rawKeybindings = Object.fromEntries(
+    Object.entries(rawKeybindingsSource).filter(
+      ([key]) => key !== "entry-points" && key !== "back" && key !== "forward" && key !== "toggle-toolbar" && key !== "find-address-forward" && key !== "find-address-backward"
+    )
+  );
+  return {
+    ...retainedRaw,
+    ...settings,
+    cardHeaderButtons: settings.cardHeaderButtons,
+    deckKeybindings: {
+      ...rawKeybindings,
+      ...settings.deckKeybindings
+    }
+  };
+}
+function keyBindingConflict(keybindings, action, bindingValue) {
+  const signature = keyBindingSignature(bindingValue);
+  for (const definition of DECK_ACTION_DEFINITIONS) {
+    if (definition.id !== action && keybindings[definition.id].some(
+      (candidate) => keyBindingSignature(candidate) === signature
+    )) {
+      return definition.id;
+    }
+  }
+  return null;
+}
+
 // src/plugin-state.ts
 var DEFAULT_STATE = {
   bookmarks: []
@@ -7970,7 +7937,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
         items: [
           {
             name: "Slipbox shortcut controls",
-            desc: "These shortcuts work only while Slipbox is active and never fire in text or form controls.",
+            desc: "Configure default hotkeys for Slipbox commands. Obsidian user assignments take priority and conflicts appear in Obsidian\u2019s hotkeys settings.",
             render: (setting) => this.renderShortcutIntro(setting)
           },
           ...DECK_ACTION_DEFINITIONS.map((definition) => ({
@@ -8183,7 +8150,7 @@ var SlipboxSettingTab = class extends import_obsidian6.PluginSettingTab {
     });
     shortcutIntro.createEl("p", {
       cls: "setting-item-description",
-      text: "These shortcuts work only while Slipbox is active and never fire in text or form controls."
+      text: "These are default hotkeys for Slipbox commands. Obsidian\u2019s hotkeys settings has final authority: user-assigned hotkeys take priority, conflicts are reported there, and Slipbox never overrides them. Slipbox actions remain available only while Slipbox is active and never fire in its text or form controls."
     });
     const resetAll = shortcutIntro.createEl("button", {
       text: "Reset all shortcuts",
@@ -8788,6 +8755,7 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
   persistQueue = Promise.resolve();
   trayPileSequence = 0;
   rawSettings = {};
+  slipboxActionCommands = /* @__PURE__ */ new Map();
   inlineEditOwners = new InlineEditPathLock();
   detachedInlineEditDrafts = /* @__PURE__ */ new Map();
   async onload() {
@@ -9026,15 +8994,11 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     const previousOrdering = this.settings.deckOrdering;
     const previousDuplicatePolicy = this.settings.duplicateAddresses;
     this.settings = normalizeSettings(value);
+    this.syncSlipboxActionCommandHotkeys();
     this.index.setAddressProperty(this.settings.addressProperty);
     this.index.setDeckOrdering(this.settings.deckOrdering);
     this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
     await this.persistState();
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.updateKeybindings();
-      }
-    }
     if (this.settings.addressProperty !== previousAddressProperty || this.settings.deckOrdering !== previousOrdering || this.settings.duplicateAddresses !== previousDuplicatePolicy) {
       await this.refreshIndex();
       if (this.settings.deckOrdering !== previousOrdering) {
@@ -9549,20 +9513,24 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
     }
   }
   registerSlipboxActionCommand(definition) {
+    const command = {
+      id: definition.commandId,
+      name: definition.commandName,
+      repeatable: definition.repeatable,
+      hotkeys: commandHotkeysForAction(this.settings, definition.id)
+    };
     if (definition.id === "bookmarks") {
-      this.addCommand({
-        id: definition.commandId,
-        name: definition.commandName,
+      this.slipboxActionCommands.set(definition.id, this.addCommand({
+        ...command,
         callback: () => void this.openDeck().then((view) => {
           view.runAction(definition.id);
         })
-      });
+      }));
       return;
     }
     if (definition.id === "problems") {
-      this.addCommand({
-        id: definition.commandId,
-        name: definition.commandName,
+      this.slipboxActionCommands.set(definition.id, this.addCommand({
+        ...command,
         checkCallback: (checking) => {
           const available = this.index.snapshot.issues.length > 0;
           if (!checking && available) {
@@ -9570,24 +9538,31 @@ var SlipboxPlugin = class extends import_obsidian9.Plugin {
           }
           return available;
         }
-      });
+      }));
       return;
     }
-    this.addCommand({
-      id: definition.commandId,
-      name: definition.commandName,
+    this.slipboxActionCommands.set(definition.id, this.addCommand({
+      ...command,
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType(DeckView);
-        const available = view?.canRunAction(definition.id) ?? false;
+        const available = view?.canRunCommandAction(definition.id) ?? false;
         if (checking) {
           return available;
         }
         if (available && view !== null) {
-          view.runAction(definition.id);
+          view.runCommandAction(definition.id);
         }
         return available;
       }
-    });
+    }));
+  }
+  syncSlipboxActionCommandHotkeys() {
+    for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
+      const command = this.slipboxActionCommands.get(definition.id);
+      if (command !== void 0) {
+        command.hotkeys = commandHotkeysForAction(this.settings, definition.id);
+      }
+    }
   }
   async createNewCardAtTrayPosition(position, titleMode = "default") {
     await this.createNewCard(titleMode, { kind: "desk", position });

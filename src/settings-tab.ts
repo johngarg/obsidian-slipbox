@@ -137,7 +137,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           {
             name: "Slipbox shortcut controls",
-            desc: "These shortcuts work only while Slipbox is active and never fire in text or form controls.",
+            desc: "Configure default hotkeys for Slipbox commands. Obsidian user assignments take priority and conflicts appear in Obsidian’s hotkeys settings.",
             render: (setting) => this.renderShortcutIntro(setting),
           },
           ...DECK_ACTION_DEFINITIONS.map((definition) => ({
@@ -448,7 +448,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
     shortcutIntro.createEl("p", {
       cls: "setting-item-description",
-      text: "These shortcuts work only while Slipbox is active and never fire in text or form controls.",
+      text: "These are default hotkeys for Slipbox commands. Obsidian’s hotkeys settings has final authority: user-assigned hotkeys take priority, conflicts are reported there, and Slipbox never overrides them. Slipbox actions remain available only while Slipbox is active and never fire in its text or form controls.",
     });
     const resetAll = shortcutIntro.createEl("button", {
       text: "Reset all shortcuts",

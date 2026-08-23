@@ -7,6 +7,7 @@ import {
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
+  commandHotkeysForAction,
   formatKeyBinding,
   hasTitleAddressPropertyCollision,
   keyBindingFromKeyboardEvent,
@@ -121,6 +122,22 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
     assert.equal(DEFAULT_SETTINGS.cardSpread, DEFAULT_CARD_SPREAD);
+  });
+
+  test("publishes configured shortcuts as independent Obsidian command hotkeys", () => {
+    const hotkeys = commandHotkeysForAction(DEFAULT_SETTINGS, "previous-card");
+    const first = hotkeys[0];
+    if (first === undefined) {
+      assert.fail("expected the first command hotkey");
+    }
+    assert.equal(first.key, "ArrowLeft");
+    assert.equal(first.modifiers.length, 0);
+    assert.equal(hotkeys[1]?.key, "k");
+    first.modifiers.push("Shift");
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["previous-card"], [
+      { key: "ArrowLeft", modifiers: [] },
+      { key: "k", modifiers: [] },
+    ]);
   });
 
   test("normalizes property names, buttons, and configured shortcuts", () => {

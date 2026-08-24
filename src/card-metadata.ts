@@ -156,7 +156,7 @@ export function buildFiledCardLookups<T extends FiledCardRecord>(
  */
 export function indexCardMetadata(
   records: Iterable<CardMetadataRecord>,
-  addressProperty = "zettel-id",
+  addressProperty = "slipbox-id",
   ordering: DeckOrdering = "natural",
   duplicatePolicy: DuplicateAddressPolicy = "allowed",
 ): CardMetadataIndex {

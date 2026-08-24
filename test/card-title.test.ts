@@ -11,9 +11,9 @@ describe("resolveCardTitle", () => {
 
   test("uses the filename by default", () => {
     assert.equal(
-      resolveCardTitle("20260820T010101", { title: "Systems" }, {
+      resolveCardTitle("20260820T010101", { "slipbox-title": "Systems" }, {
         titleSource: "filename",
-        titleProperty: "title",
+        titleProperty: "slipbox-title",
       }),
       "20260820T010101",
     );
@@ -30,9 +30,18 @@ describe("resolveCardTitle", () => {
   });
 
   test("falls back for missing, empty, and non-string values", () => {
-    const settings = { titleSource: "frontmatter" as const, titleProperty: "title" };
+    const settings = {
+      titleSource: "frontmatter" as const,
+      titleProperty: "slipbox-title",
+    };
     assert.equal(resolveCardTitle("fallback", {}, settings), "fallback");
-    assert.equal(resolveCardTitle("fallback", { title: "  " }, settings), "fallback");
-    assert.equal(resolveCardTitle("fallback", { title: ["Systems"] }, settings), "fallback");
+    assert.equal(
+      resolveCardTitle("fallback", { "slipbox-title": "  " }, settings),
+      "fallback",
+    );
+    assert.equal(
+      resolveCardTitle("fallback", { "slipbox-title": ["Systems"] }, settings),
+      "fallback",
+    );
   });
 });

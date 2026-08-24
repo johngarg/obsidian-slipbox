@@ -36,6 +36,8 @@ describe("Slipbox settings", () => {
 
   test("uses the complete default settings for unknown input", () => {
     assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
+    assert.equal(DEFAULT_SETTINGS.addressProperty, "slipbox-id");
+    assert.equal(DEFAULT_SETTINGS.titleProperty, "slipbox-title");
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["previous-card"], [
       { key: "ArrowLeft", modifiers: [] },
       { key: "k", modifiers: [] },
@@ -511,7 +513,7 @@ describe("Slipbox settings", () => {
 
   test("purges entry-point shortcuts while preserving other removed settings", () => {
     const raw = {
-      addressProperty: "zettel-id",
+      addressProperty: "slipbox-id",
       unknownFutureKey: { retained: true },
       deckHeaderButtons: { "add-card": false, bookmark: false },
       deckKeybindings: {
@@ -590,9 +592,9 @@ describe("Slipbox settings", () => {
       showDeckMap: "yes",
       cardSpread: "wide",
     });
-    assert.equal(settings.addressProperty, "zettel-id");
+    assert.equal(settings.addressProperty, "slipbox-id");
     assert.equal(settings.titleSource, "filename");
-    assert.equal(settings.titleProperty, "title");
+    assert.equal(settings.titleProperty, "slipbox-title");
     assert.equal(settings.mainCardSize, "medium");
     assert.equal(settings.trayCardSize, "medium");
     assert.equal(settings.newCardFolder, "");

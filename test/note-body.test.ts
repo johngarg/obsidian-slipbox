@@ -22,7 +22,7 @@ const fixtures: readonly Fixture[] = [
   },
   {
     name: "CRLF source",
-    prefix: "---\r\nzettel-id: A/2\r\n# comment\r\n---\r\n",
+    prefix: "---\r\nslipbox-id: A/2\r\n# comment\r\n---\r\n",
     body: "Line one\r\nLine two\r\n",
   },
   {
@@ -32,7 +32,7 @@ const fixtures: readonly Fixture[] = [
   },
   {
     name: "frontmatter without a final body newline",
-    prefix: "---\nzettel-id: Z\n---\n",
+    prefix: "---\nslipbox-id: Z\n---\n",
     body: "body",
   },
   {
@@ -69,7 +69,7 @@ describe("exact note-body replacement", () => {
 
   test("preserves a concurrent frontmatter-only change", () => {
     const originalBody = "Original body\n";
-    const latestPrefix = "---\n# added elsewhere\nzettel-id: A/1\n---\n";
+    const latestPrefix = "---\n# added elsewhere\nslipbox-id: A/1\n---\n";
     const latest = latestPrefix + originalBody;
 
     assert.equal(
@@ -84,7 +84,7 @@ describe("exact note-body replacement", () => {
   });
 
   test("rejects a concurrent body change", () => {
-    const prefix = "---\nzettel-id: A/1\n---\n";
+    const prefix = "---\nslipbox-id: A/1\n---\n";
     assert.throws(
       () => replaceNoteBodyIfUnchanged(
         prefix + "Changed elsewhere\n",

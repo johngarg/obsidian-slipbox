@@ -1,7 +1,7 @@
 {
   "id": "slipbox",
   "name": "Slipbox Desk",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "minAppVersion": "1.13.0",
   "description": "A paper-like Zettelkasten for Obsidian: addressed cards, a browsable sequence, and a Desk to lay them out on.",
   "author": "John Gargalionis",

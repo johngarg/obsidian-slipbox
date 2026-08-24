@@ -3,7 +3,8 @@
   "name": "Slipbox Desk",
   "version": "0.11.1",
   "minAppVersion": "1.13.0",
-  "description": "Browse, arrange, and file ordinary Markdown notes as a tactile Luhmann-style card index.",
+  "description": "A paper-like Zettelkasten for Obsidian: addressed cards, a browsable sequence, and a Desk to lay them out on.",
   "author": "John Gargalionis",
+  "fundingUrl": "https://buymeacoffee.com/johngarg",
   "isDesktopOnly": true
 }

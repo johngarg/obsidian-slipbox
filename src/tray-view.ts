@@ -24,6 +24,7 @@ import {
   UNFILED_ADDRESS_LABEL,
 } from "./card-address.js";
 import { cardHeaderTitle } from "./card-title.js";
+import { setCardTooltip } from "./card-tooltip.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
 import {
   attachUnfiledAddressFiling,
@@ -214,12 +215,13 @@ export class TrayRenderer {
     );
     this.attachBackgroundMenu(stage);
     this.workspaceEl = stage;
-    const tray = space.createDiv({
-      cls: "slipbox-tray",
-      attr: {
-        "aria-label": `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
-      },
-    });
+    const tray = space.createDiv({ cls: "slipbox-tray" });
+    setCardTooltip(
+      tray,
+      `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
+      this.plugin.settings.showCardTooltips,
+      { placement: "bottom", delay: 350 },
+    );
     this.rootEl = tray;
 
     const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
@@ -321,11 +323,16 @@ export class TrayRenderer {
       cls: `slipbox-tray-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
       attr: {
         "data-pile-id": pile.id,
-        "aria-label": `Pile ${pileIndex + 1}, ${pile.cards.length} card${
-          pile.cards.length === 1 ? "" : "s"
-        }`,
       },
     });
+    setCardTooltip(
+      pileEl,
+      `Pile ${pileIndex + 1}, ${pile.cards.length} card${
+        pile.cards.length === 1 ? "" : "s"
+      }`,
+      this.plugin.settings.showCardTooltips,
+      { placement: "bottom", delay: 350 },
+    );
     pileEl.tabIndex = expanded ? -1 : 0;
     const renderedPosition = position ?? defaultPilePosition(pileIndex);
     pileEl.style.setProperty(
@@ -357,27 +364,31 @@ export class TrayRenderer {
         this.renderPileCycleButton(pileEl, pile, pileIndex, 1);
       }
     }
-    pileEl.createSpan({
+    const count = pileEl.createSpan({
       cls: "slipbox-tray-pile-count",
       text: String(pile.cards.length),
-      attr: {
-        "aria-label": `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`,
-      },
     });
+    setCardTooltip(
+      count,
+      `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`,
+      this.plugin.settings.showCardTooltips,
+      { placement: "top", delay: 250 },
+    );
     let dragSurface: HTMLElement = pileEl;
     if (expanded) {
       const handle = pileEl.createEl("button", {
         cls: "slipbox-tray-pile-handle",
         attr: {
           type: "button",
-          "aria-label": `Move or collapse pile ${pileIndex + 1}`,
         },
       });
       setIcon(handle, "grip-vertical");
-      setTooltip(handle, "Drag to move · Click to collapse", {
-        placement: "left",
-        delay: 250,
-      });
+      setCardTooltip(
+        handle,
+        `Move or collapse pile ${pileIndex + 1}. Drag to move; click to collapse.`,
+        this.plugin.settings.showCardTooltips,
+        { placement: "left", delay: 250 },
+      );
       handle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -462,10 +473,10 @@ export class TrayRenderer {
       cls: `clickable-icon slipbox-tray-pile-cycle ${
         previous ? "is-previous" : "is-next"
       }`,
-      attr: { type: "button", "aria-label": label },
+      attr: { type: "button" },
     });
     setIcon(button, previous ? "chevron-left" : "chevron-right");
-    setTooltip(button, label, {
+    setCardTooltip(button, label, this.plugin.settings.showCardTooltips, {
       placement: previous ? "left" : "right",
       delay: 250,
     });
@@ -523,13 +534,18 @@ export class TrayRenderer {
       attr: {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== undefined ? "button" : "group",
-        "aria-label": isViewed
-          ? `${addressLabel}, ${title}; viewed card placeholder. Activate to focus the viewed card.`
-          : `${addressLabel}, ${title}; card ${cardIndex + 1} of ${
-              pile.cards.length
-            } in pile ${pileIndex + 1}`,
       },
     });
+    setCardTooltip(
+      miniature,
+      isViewed
+        ? `${addressLabel}, ${title}; viewed card placeholder. Activate to focus the viewed card.`
+        : `${addressLabel}, ${title}; card ${cardIndex + 1} of ${
+            pile.cards.length
+          } in pile ${pileIndex + 1}`,
+      this.plugin.settings.showCardTooltips,
+      { placement: "bottom", delay: 350 },
+    );
     miniature.dataset.pileId = pile.id;
     const jitter = trayStackJitter(card.cardRef, cardIndex);
     miniature.style.setProperty(
@@ -584,14 +600,12 @@ export class TrayRenderer {
       );
       this.applyFilingGuidance(this.filingEditor.input, filing.guidance);
     } else if (filed === undefined && !isViewed) {
-      addressEl.setAttr(
-        "aria-label",
+      setCardTooltip(
+        addressEl,
         "Unfiled card address; double-click to enter an address",
+        this.plugin.settings.showCardTooltips,
+        { placement: "bottom", delay: 350 },
       );
-      setTooltip(addressEl, "Double-click to enter an address.", {
-        placement: "bottom",
-        delay: 350,
-      });
       attachUnfiledAddressFiling(addressEl, () => {
         this.actions.focusDeskCard(card.cardRef, pile.id);
         this.actions.runAction("file-card");
@@ -623,6 +637,7 @@ export class TrayRenderer {
         },
         settings: this.plugin.settings.cardHeaderButtons,
         buttonClass: "slipbox-tray-card-action",
+        showTooltips: this.plugin.settings.showCardTooltips,
         tooltipPlacement: "bottom",
         run: (action) => {
           this.actions.focusDeskCard(card.cardRef, pile.id);

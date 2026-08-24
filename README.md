@@ -1,12 +1,12 @@
 # Slipbox Desk
 
-Slipbox Desk is an experiment in bringing a paper-based _Zettelkasten_ experience to Obsidian.
+Slipbox Desk is a paper-like _Zettelkasten_ for Obsidian: addressed cards, a browsable sequence, and a Desk to lay them out on.
 
 ![Slipbox Desk showing filed cards, Desk piles, and a viewed card](docs/assets/slipbox-hero.png)
 
 > Warning! Slipbox Desk is under active development. If you find a bug, please [open a GitHub issue](https://github.com/johngarg/obsidian-slipbox/issues) and include the steps to reproduce it, your Obsidian version, and your operating system.
 
-The Slipbox Desk plugin provides a unified _Deck_ and _Desk_ view, where the main _Zettelkasten_ sequence of notes can be browsed, and cards can be taken out and placed in piles on the Desk. Card placement on the Desk and a map of the whole _Zettelkasten_ provide spatial cues for finding things again.
+Notes become cards, organised into a single sequence by addresses that mark out lines of thought. Browse with a mouse, trackpad, or vim-like keys. Pull cards out of the Deck and stack them in piles on the Desk, where you can work out how notes connect and begin structuring your writing. The Deck map helps you find your way around and remember where ideas live.
 
 A note becomes a card when it has the configured address property. The default is `slipbox-id`:
 
@@ -44,6 +44,8 @@ The Deck is the canonical sequence, while the Desk is a temporary working area b
 - Configure card sizes, titles, header actions, ordering, shortcuts, and the paper workflow.
 
 ## Installation
+
+Slipbox Desk requires Obsidian 1.13.0 or later and is available on desktop only.
 
 The preferred installation method is **Settings → Community plugins → Browse**. If Slipbox Desk is not yet available there, install it manually from a GitHub Release:
 
@@ -95,7 +97,7 @@ These shortcuts apply only while a Slipbox Desk view is active. You can change t
 
 Slipbox Desk works locally and offline. It makes no network requests, collects no telemetry, and does not load remote code.
 
-Cards remain ordinary Markdown files. Slipbox Desk reads and writes vault files only for actions you start, such as editing, filing, linking, and Canvas layout. The Desk is session-only and is not written to Markdown or plugin data.
+To build the Deck, Slipbox Desk checks the frontmatter of Markdown files through Obsidian's metadata cache. It reads note bodies when displaying or editing cards, and writes vault files only when you create, edit, file, link, delete, or move piles to Canvas. The Desk is session-only; settings and bookmarks are stored as plugin data.
 
 ## Development
 
@@ -110,10 +112,14 @@ npm run check
 
 See the [release candidate smoke test](docs/release-candidate-smoke-test.md) for the manual verification checklist.
 
-This is my first Obsidian plugin; feedback and contributions are welcome.
+Feedback and contributions are welcome.
 
-## Support and license
+## Feedback and license
 
 Report bugs and request features through [GitHub Issues](https://github.com/johngarg/obsidian-slipbox/issues).
 
 Slipbox Desk is available under the [0BSD license](LICENSE).
+
+## Support
+
+If you find Slipbox Desk useful, you can support its development by [buying me a coffee](https://buymeacoffee.com/johngarg).

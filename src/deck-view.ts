@@ -37,6 +37,7 @@ import {
   UNFILED_ADDRESS_LABEL,
 } from "./card-address.js";
 import { cardHeaderTitle } from "./card-title.js";
+import { setCardTooltip } from "./card-tooltip.js";
 import {
   renderedLinkAction,
   resolveFiledCardLink,
@@ -1922,10 +1923,15 @@ export class DeckView extends ItemView {
     const textarea = bodyEl.createEl("textarea", {
       cls: "slipbox-inline-editor",
       attr: {
-        "aria-label": `Edit raw Markdown for ${this.plugin.cardTitle(file)}`,
         spellcheck: "true",
       },
     });
+    setCardTooltip(
+      textarea,
+      `Edit raw Markdown for ${this.plugin.cardTitle(file)}`,
+      this.plugin.settings.showCardTooltips,
+      { placement: "bottom", delay: 250 },
+    );
     textarea.value = baseBody;
     const statusId = `slipbox-inline-edit-status-${++inlineEditStatusSequence}`;
     textarea.setAttr("aria-errormessage", statusId);
@@ -2743,20 +2749,23 @@ export class DeckView extends ItemView {
       const cardLabel = `${card.address} · ${title}${
         isInTray ? "; pulled out into a working pile" : ""
       }`;
-      cardEl.setAttr("aria-label", cardLabel);
-      setTooltip(cardEl, cardLabel, {
-        placement: "bottom",
-        delay: 350,
-      });
+      setCardTooltip(
+        cardEl,
+        cardLabel,
+        this.plugin.settings.showCardTooltips,
+        { placement: "bottom", delay: 350 },
+      );
       cardEl.style.zIndex = String(
         cardStackOrder(filedIndex, focusDisplayIndex),
       );
       this.renderedCards.push(cardEl);
 
       if (isViewed) {
-        cardEl.setAttr(
-          "aria-label",
+        setCardTooltip(
+          cardEl,
           `${card.address} · ${title}; viewed card placeholder. Activate to focus the viewed card.`,
+          this.plugin.settings.showCardTooltips,
+          { placement: "bottom", delay: 350 },
         );
         cardEl.addEventListener("click", (event) => {
           event.preventDefault();
@@ -2809,6 +2818,7 @@ export class DeckView extends ItemView {
         },
         settings: this.plugin.settings.cardHeaderButtons,
         buttonClass: "slipbox-card-toggle",
+        showTooltips: this.plugin.settings.showCardTooltips,
         tooltipPlacement: "bottom",
         run: (action) => {
           this.runAction(action, card);
@@ -3087,11 +3097,14 @@ export class DeckView extends ItemView {
       attr: {
         role: "group",
         tabindex: "0",
-        "aria-label": `Viewed card ${
-          address ?? UNFILED_ADDRESS_LABEL
-        } · ${title}`,
       },
     });
+    setCardTooltip(
+      card,
+      `Viewed card ${address ?? UNFILED_ADDRESS_LABEL} · ${title}`,
+      this.plugin.settings.showCardTooltips,
+      { placement: "bottom", delay: 350 },
+    );
     card.toggleClass(
       "is-card-focused",
       this.cardFocus?.surface === "viewed" && this.cardFocus.path === file.path,
@@ -3111,10 +3124,12 @@ export class DeckView extends ItemView {
     const addressRow = frame.createDiv({
       cls: "slipbox-card-address-row slipbox-viewed-card-drag-handle",
     });
-    setTooltip(addressRow, "Drag to move viewed card", {
-      placement: "top",
-      delay: 500,
-    });
+    setCardTooltip(
+      addressRow,
+      "Drag to move viewed card",
+      this.plugin.settings.showCardTooltips,
+      { placement: "top", delay: 500 },
+    );
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
     const addressEl = renderCardAddress(identity, {
       cls: "slipbox-card-address",
@@ -3143,14 +3158,12 @@ export class DeckView extends ItemView {
         filing.guidance,
       );
     } else if (filed === undefined) {
-      addressEl.setAttr(
-        "aria-label",
+      setCardTooltip(
+        addressEl,
         "Unfiled card address; double-click to enter an address",
+        this.plugin.settings.showCardTooltips,
+        { placement: "bottom", delay: 350 },
       );
-      setTooltip(addressEl, "Double-click to enter an address.", {
-        placement: "bottom",
-        delay: 350,
-      });
       attachUnfiledAddressFiling(addressEl, () => {
         this.focusViewedCard();
         this.runAction("file-card");
@@ -3180,6 +3193,7 @@ export class DeckView extends ItemView {
         },
         settings: this.plugin.settings.cardHeaderButtons,
         buttonClass: "slipbox-card-toggle",
+        showTooltips: this.plugin.settings.showCardTooltips,
         tooltipPlacement: "bottom",
         run: (action) => {
           this.focusViewedCard();
@@ -3708,9 +3722,14 @@ export class DeckView extends ItemView {
         text: `${direction === "left" ? "◀" : "▶"} ${card.address}`,
         attr: {
           type: "button",
-          "aria-label": `Jump to bookmark ${card.address}`,
         },
       });
+      setCardTooltip(
+        tab,
+        `Jump to bookmark ${card.address}`,
+        this.plugin.settings.showCardTooltips,
+        { placement: "top", delay: 250 },
+      );
       tab.addEventListener("click", () => {
         void this.runAfterInlineEditing(
           "bookmark-edge-jump",
@@ -4260,12 +4279,13 @@ export class DeckView extends ItemView {
       }
       const action = isBookmarked ? "Remove bookmark" : "Add bookmark";
       toggle.toggleClass("is-pressed", isBookmarked);
-      toggle.setAttr("aria-label", action);
       toggle.setAttr("aria-pressed", String(isBookmarked));
-      setTooltip(toggle, action, {
-        placement: "bottom",
-        delay: 250,
-      });
+      setCardTooltip(
+        toggle,
+        action,
+        this.plugin.settings.showCardTooltips,
+        { placement: "bottom", delay: 250 },
+      );
     }
 
     if (this.stageEl !== null) {

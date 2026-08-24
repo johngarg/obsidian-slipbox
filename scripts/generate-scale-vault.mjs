@@ -102,8 +102,8 @@ function noteSource(index) {
     const links = filedLinks(index);
     return [
       "---",
-      `zettel-id: ${JSON.stringify(address)}`,
-      `title: ${JSON.stringify(title)}`,
+      `slipbox-id: ${JSON.stringify(address)}`,
+      `slipbox-title: ${JSON.stringify(title)}`,
       "---",
       "",
       `# ${title}`,
@@ -116,8 +116,8 @@ function noteSource(index) {
   if (index < filedCount + unfiledCount) {
     return [
       "---",
-      "zettel-id: \"\"",
-      `title: ${JSON.stringify(title)}`,
+      "slipbox-id: \"\"",
+      `slipbox-title: ${JSON.stringify(title)}`,
       "---",
       "",
       `# ${title}`,
@@ -128,7 +128,7 @@ function noteSource(index) {
   }
   return [
     "---",
-    `title: ${JSON.stringify(title)}`,
+    `slipbox-title: ${JSON.stringify(title)}`,
     "tags: [scale-fixture]",
     "---",
     "",

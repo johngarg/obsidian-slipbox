@@ -14,7 +14,7 @@ const invalidIssue: CardIssue = {
   kind: "invalid",
   severity: "error",
   paths: ["bad.md"],
-  message: "Unsupported zettel-id 42: address must be text",
+  message: "Unsupported slipbox-id 42: address must be text",
 };
 
 const duplicateIssue: CardIssue = {
@@ -22,7 +22,7 @@ const duplicateIssue: CardIssue = {
   severity: "warning",
   address: "A/1",
   paths: ["a.md", "b.md"],
-  message: "Duplicate zettel-id A/1",
+  message: "Duplicate slipbox-id A/1",
 };
 
 describe("duplicate address policy", () => {

@@ -1,32 +1,37 @@
 # Slipbox
 
-A tactile, keyboard-driven card index for Obsidian.
+The Slipbox is an experiment in bringing a paper-based _Zettelkasten_ experience to Obsidian.
 
 ![Slipbox showing filed cards, Desk piles, and a viewed card](docs/assets/slipbox-hero.png)
 
 > Slipbox is under active development. It requires Obsidian 1.13.0 or newer on desktop and is not yet available through Community plugins.
 
-Slipbox treats ordinary Markdown notes as cards. Filed cards sit in a sequential Deck. Pull a card onto the Desk when you want it nearby, then use Obsidian Canvas when an arrangement should persist.
+The Slipbox plugin provides a unified _Deck_ and _Desk_ view, where the main _Zettelkasten_ sequence of notes can be browsed, and cards can be taken out and placed in piles on the Desk. The placement of cards on the Desk and a map of the whole _Zettelkasten_ hope to provide spatial intuition for where to find things.
 
-A note becomes a card when it has the configured address property. The default is `zettel-id`:
+A note becomes a card when it has the configured address property. The default is `slipbox-id`:
 
 ```yaml
 ---
-zettel-id: "68/1a"
+slipbox-id: "68/1a"
 ---
 ```
 
-Slipbox does not impose a folder structure or store a hidden filing sequence. The address in each note determines its place in the Deck.
+The address on each note determines its place in the linear sequence of cards that constitute the Deck.
 
-## Deck, Desk, and Canvas
+## Philosophy
+
+My proposal is that the customary niceties of digital note-taking like search, folders, tags, following links, infinite scroll, etc. can ultimately detract from the serendipitous resurfacing of old, forgotten ideas, which is the whole point of _Zettelkasten_.
+
+The most strict paper-like experience might be too extreme for some users. For this reason, some of the more shocking modifications can be toggled in the settings: disabling the deleting of text, augmenting the ability to paste text, follow links, etc. Of course, these modifications only alter editing in the Slipbox view, and regular markdown editing elsewhere in Obsidian is never restricted.
+
+## Deck and Desk
 
 | Surface | Purpose | Persistence |
 | --- | --- | --- |
 | **Deck** | Browse filed cards in address order | Derived from Markdown frontmatter |
 | **Desk** | Work with unfiled cards and temporary piles | Current Obsidian session |
-| **Canvas** | Keep a spatial arrangement of cards | Saved in the vault |
 
-The Deck is the canonical sequence. The Desk is a temporary working area beside it. Cards on the Desk keep their filed address and remain in the Deck. Slipbox can lay out any working pile on an existing or new Canvas.
+The Deck is the canonical sequence, while the Desk is a temporary working area beside it. Cards on the Desk keep their filed address and remain in the Deck. Slipbox interfaces with Obsidian's Canvas, and piles can be moved to an existing or new Canvas easily.
 
 ## Features
 
@@ -53,17 +58,22 @@ A source checkout does not include the generated `main.js`. Run `npm run build` 
 
 ## Quick start
 
-1. Add `zettel-id` to a Markdown note, or use **Slipbox: Make active Markdown note a card**.
-2. Leave the value empty to put the unfiled card on the Desk.
-3. Enter an address to file it in the Deck.
-4. Open Slipbox and use `j` and `k` to browse.
-5. Press `p` to pull the focused Deck card onto the Desk.
+1. Enter the Slipbox with **Slipbox: Open**
+2. Right click anywhere to create a new note.
+3. Double click the note body to write your note.
+4. Double click the empty address field to file the card.
+5. Navigate the Slipbox Deck by scrolling.
+6. Drag Deck cards onto the Desk to make new piles.
+
+Cards can also be added to the Deck by adding a `slipbox-id` property to the Markdown note. This can also be done using **Slipbox: Make active Markdown note a card**.
 
 Any trimmed, nonempty, single-line string without control characters is a valid address. Slipbox accepts addresses such as `1/2b1`, `A/1`, `Project-17`, and `α/12`.
 
-Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, or they can be reported as card problems. Slipbox never rewrites an existing address automatically.
+Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox never rewrites an existing address automatically.
 
 ## Essential keys
+
+There are some actions that are very quick to do in the real world, but take time in the digital world. For this reason, a default set of vim-inspired keybindings tries to streamline the process of all such card actions.
 
 | Key | Action |
 | --- | --- |
@@ -99,6 +109,8 @@ npm run check
 `npm run check` runs TypeScript checking, tests, ESLint, a production build, and release validation. `npm run build` produces the ignored `main.js` used by Obsidian.
 
 See the [release candidate smoke test](docs/release-candidate-smoke-test.md) for the manual verification checklist.
+
+This is my first Obsidian plugin. Please help me.
 
 ## Support and license
 

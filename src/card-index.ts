@@ -42,7 +42,7 @@ export class CardIndex {
 
   constructor(
     private readonly app: App,
-    private addressProperty = "zettel-id",
+    private addressProperty = "slipbox-id",
     private ordering: DeckOrdering = "natural",
     private duplicatePolicy: DuplicateAddressPolicy = "allowed",
   ) {}

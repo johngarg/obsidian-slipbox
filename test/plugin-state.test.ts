@@ -78,7 +78,8 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.protectFiledCardText, false);
     assert.equal(data.settings.showAutomaticBacklinks, true);
     assert.equal(data.settings.allowCardScrolling, true);
-    assert.equal(data.settings.addressProperty, "zettel-id");
+    assert.equal(data.settings.addressProperty, "slipbox-id");
+    assert.equal(data.settings.titleProperty, "slipbox-title");
     assert.equal(data.settings.deckOrdering, "natural");
     assert.equal(data.settings.showDeckMap, true);
     assert.equal(data.settings.cardSpread, 0.7);
@@ -274,9 +275,9 @@ describe("normalizePluginData", () => {
     const collision = {
       schemaVersion: 5,
       settings: {
-        addressProperty: "zettel-id",
+        addressProperty: "legacy-key",
         titleSource: "frontmatter",
-        titleProperty: "zettel-id",
+        titleProperty: "legacy-key",
       },
       state: {},
     };

@@ -9,8 +9,8 @@ import {
 
 describe("indexCardMetadata", () => {
   test("switches participation with the configured address property", () => {
-    const frontmatter = { "zettel-id": "A/1", signature: "Project-17" };
-    assert.deepEqual(cardMetadataRecord("card.md", frontmatter, "zettel-id"), {
+    const frontmatter = { "slipbox-id": "A/1", signature: "Project-17" };
+    assert.deepEqual(cardMetadataRecord("card.md", frontmatter, "slipbox-id"), {
       path: "card.md",
       hasAddress: true,
       address: "A/1",
@@ -72,7 +72,7 @@ describe("indexCardMetadata", () => {
   test("retains every duplicate and emits one path-complete warning", () => {
     const result = indexCardMetadata(
       duplicateRecords,
-      "zettel-id",
+      "slipbox-id",
       "natural",
       "problem",
     );
@@ -82,7 +82,7 @@ describe("indexCardMetadata", () => {
       severity: "warning",
       address: "A/12",
       paths: ["a.md", "m.md", "z.md"],
-      message: "Duplicate zettel-id A/12",
+      message: "Duplicate slipbox-id A/12",
     }]);
   });
 
@@ -99,7 +99,7 @@ describe("indexCardMetadata", () => {
       { path: "b.md", hasAddress: true, address: "A/1" },
     ];
     for (const policy of ["allowed", "problem"] as const) {
-      const result = indexCardMetadata(records, "zettel-id", "natural", policy);
+      const result = indexCardMetadata(records, "slipbox-id", "natural", policy);
       const invalid = result.issues.filter((issue) => issue.kind === "invalid");
       assert.equal(invalid.length, 1);
       assert.deepEqual(invalid[0]?.paths, ["bad.md"]);
@@ -114,10 +114,10 @@ describe("indexCardMetadata", () => {
       { path: "ten.md", hasAddress: true, address: "A/10" },
       { path: "one.md", hasAddress: true, address: "A/1" },
     ];
-    const natural = indexCardMetadata(records, "zettel-id", "natural");
+    const natural = indexCardMetadata(records, "slipbox-id", "natural");
     const lexicographic = indexCardMetadata(
       [...records].reverse(),
-      "zettel-id",
+      "slipbox-id",
       "lexicographic",
     );
     assert.deepEqual(natural.filed.map((card) => card.path), [

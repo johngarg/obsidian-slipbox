@@ -508,11 +508,11 @@ const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKe
 };
 
 export const DEFAULT_SETTINGS: SlipboxSettings = {
-  addressProperty: "zettel-id",
+  addressProperty: "slipbox-id",
   deckOrdering: "natural",
   duplicateAddresses: "allowed",
   titleSource: "filename",
-  titleProperty: "title",
+  titleProperty: "slipbox-title",
   mainCardSize: "medium",
   trayCardSize: "medium",
   newCardFolder: "",

@@ -74,6 +74,11 @@ export class SlipboxSettingTab extends PluginSettingTab {
             (setting) => this.renderShowTitle(setting),
           ),
           this.definition(
+            "Show card tooltips",
+            "Show descriptive tooltips when cards and card controls are hovered or receive keyboard focus. Accessible labels remain available.",
+            (setting) => this.renderShowCardTooltips(setting),
+          ),
+          this.definition(
             "Show Deck map",
             "Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.",
             (setting) => this.renderShowDeckMap(setting),
@@ -274,6 +279,17 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .onChange((value) => void this.save({
           ...this.slipbox.settings,
           showTitleInDeck: value,
+        }));
+    });
+  }
+
+  private renderShowCardTooltips(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.showCardTooltips)
+        .onChange((value) => void this.save({
+          ...this.slipbox.settings,
+          showCardTooltips: value,
         }));
     });
   }

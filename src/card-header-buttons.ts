@@ -1,4 +1,4 @@
-import { Menu, setIcon, setTooltip } from "obsidian";
+import { Menu, setIcon } from "obsidian";
 
 import {
   cardHeaderVisibleActionCount,
@@ -11,12 +11,14 @@ import type {
   SlipboxAction,
 } from "./settings.js";
 import { releasePointerActivatedButtonFocus } from "./pointer-button-focus.js";
+import { setCardTooltip } from "./card-tooltip.js";
 
 export interface CardHeaderButtonRenderOptions {
   readonly container: HTMLElement;
   readonly context: CardHeaderActionContext;
   readonly settings: CardHeaderButtonSettings;
   readonly buttonClass: string;
+  readonly showTooltips: boolean;
   readonly tooltipPlacement: "bottom" | "top";
   readonly run: (action: SlipboxAction) => void;
 }
@@ -68,12 +70,11 @@ export class CardHeaderButtonController {
       cls: `clickable-icon slipbox-card-header-action ${this.options.buttonClass}`,
       attr: {
         type: "button",
-        "aria-label": presentation.label,
         "data-slipbox-action": presentation.action,
       },
     });
     setIcon(button, presentation.icon);
-    setTooltip(button, presentation.label, {
+    setCardTooltip(button, presentation.label, this.options.showTooltips, {
       placement: this.options.tooltipPlacement,
       delay: 250,
     });
@@ -97,11 +98,10 @@ export class CardHeaderButtonController {
       cls: `clickable-icon slipbox-card-header-action slipbox-card-actions-more ${this.options.buttonClass}`,
       attr: {
         type: "button",
-        "aria-label": "More card actions",
       },
     });
     setIcon(button, "ellipsis");
-    setTooltip(button, "More card actions", {
+    setCardTooltip(button, "More card actions", this.options.showTooltips, {
       placement: this.options.tooltipPlacement,
       delay: 250,
     });

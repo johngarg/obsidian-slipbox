@@ -119,6 +119,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
+    assert.equal(DEFAULT_SETTINGS.showCardTooltips, false);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
     assert.equal(DEFAULT_SETTINGS.restrictViewedCardPaste, true);
     assert.equal(DEFAULT_SETTINGS.previewLinksOnHover, false);
@@ -140,6 +141,7 @@ describe("Slipbox settings", () => {
       newCardFolder: " /Cards\\Slipbox/ ",
       newNoteTimestampFormat: " YYYYMMDD-HHmmss ",
       showTitleInDeck: true,
+      showCardTooltips: true,
       showDeckMap: false,
       cardSpread: 0.73,
       deckHeaderButtons: { bookmark: false, tray: false },
@@ -162,6 +164,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.newCardFolder, "Cards/Slipbox");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDD-HHmmss");
     assert.equal(settings.showTitleInDeck, true);
+    assert.equal(settings.showCardTooltips, true);
     assert.equal(settings.showDeckMap, false);
     assert.equal(settings.cardSpread, 0.73);
     assert.equal(settings.cardHeaderButtons.deck["toggle-bookmark"], false);

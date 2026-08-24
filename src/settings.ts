@@ -433,6 +433,7 @@ export interface SlipboxSettings {
   readonly newCardFolder: string;
   readonly newNoteTimestampFormat: string;
   readonly showTitleInDeck: boolean;
+  readonly showCardTooltips: boolean;
   readonly showDeckMap: boolean;
   readonly restrictViewedCardPaste: boolean;
   readonly previewLinksOnHover: boolean;
@@ -518,6 +519,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   showTitleInDeck: false,
+  showCardTooltips: false,
   showDeckMap: true,
   restrictViewedCardPaste: true,
   previewLinksOnHover: false,
@@ -802,6 +804,10 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
         : DEFAULT_SETTINGS.showTitleInDeck,
+    showCardTooltips:
+      typeof source.showCardTooltips === "boolean"
+        ? source.showCardTooltips
+        : DEFAULT_SETTINGS.showCardTooltips,
     showDeckMap:
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap

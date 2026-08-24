@@ -6,7 +6,7 @@
   --slipbox-pile-deck-gap: 24px;
 }
 
-.slipbox-deck-view.is-empty-startup-position {
+.slipbox-deck-view.is-deck-centered-position {
   --slipbox-deck-center: 50%;
   --slipbox-deck-max-height: calc(100% - 54px);
   --slipbox-deck-top: 31%;

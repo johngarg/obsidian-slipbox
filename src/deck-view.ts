@@ -164,7 +164,11 @@ import {
   type PileFocusLocation,
   type PileNavigationDirection,
 } from "./pile-navigation.js";
-import { deckTopForPileAnchor } from "./workspace-layout.js";
+import {
+  deckPositionModeForPileCount,
+  deckTopForPileAnchor,
+  type DeckPositionMode,
+} from "./workspace-layout.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
@@ -224,6 +228,7 @@ export class DeckView extends ItemView {
   private renderComponents = new Map<string, Component>();
   private cardScrollPositions = new Map<string, number>();
   private viewportOffset = 0;
+  private deckPositionMode: DeckPositionMode | null = null;
   private pointerLastX: number | null = null;
   private pointerLastY: number | null = null;
   private spaceOffsetX = 0;
@@ -2248,10 +2253,7 @@ export class DeckView extends ItemView {
     this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
-    this.contentEl.toggleClass(
-      "is-empty-startup-position",
-      this.plugin.deckIsCenteredAtEmptyStartup,
-    );
+    this.applyDeckPositionMode();
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     this.renderDeckMap(shell);
@@ -3661,6 +3663,11 @@ export class DeckView extends ItemView {
   }
 
   private centerActiveCard(): void {
+    this.deckPositionMode = deckPositionModeForPileCount(
+      this.plugin.tray.piles.length,
+    );
+    this.applyDeckPositionMode();
+    this.recenterSpace();
     if (this.activePath === null) {
       new Notice("There is no Deck anchor to centre.");
       return;
@@ -3669,8 +3676,12 @@ export class DeckView extends ItemView {
     if (activeIndex < 0) {
       return;
     }
-    this.recenterSpace();
     this.centerViewportOnActive(activeIndex, false);
+  }
+
+  private applyDeckPositionMode(): void {
+    const mode = this.deckPositionMode ?? this.plugin.startupDeckPositionMode;
+    this.contentEl.toggleClass("is-deck-centered-position", mode === "centered");
   }
 
   private centerViewportOnActive(

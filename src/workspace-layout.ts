@@ -1,16 +1,13 @@
 const DEFAULT_PILE_HORIZONTAL_STEP_PERCENT = 6;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 36;
 
-export type DeckPositionMode = "startup-centered" | "lowered";
+export type DeckPositionMode = "centered" | "lowered";
 
-/** Lower the Deck after the first pile appears and keep it there for the session. */
-export function deckPositionModeAfterPileCount(
-  current: DeckPositionMode,
+/** Resolve the explicit startup or recenter target from the current piles. */
+export function deckPositionModeForPileCount(
   pileCount: number,
 ): DeckPositionMode {
-  return current === "lowered" || pileCount > 0
-    ? "lowered"
-    : "startup-centered";
+  return pileCount > 0 ? "lowered" : "centered";
 }
 
 export interface AutomaticPilePosition {

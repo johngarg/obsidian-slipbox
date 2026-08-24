@@ -133,7 +133,18 @@ import {
   resolveDeckEscapeAction,
   shouldNavigateDeckFromWheel,
 } from "./inline-edit-interactions.js";
-import { beginThresholdPointerDrag } from "./pointer-drag.js";
+import {
+  beginPointerActionAfterGate,
+  beginThresholdPointerDrag,
+} from "./pointer-drag.js";
+import {
+  deckCardDropTarget,
+  DESK_PILE_PLACEMENT_GEOMETRY,
+  pilePositionAtWorkspacePoint,
+  resolveDeckCardDrop,
+  type DeckCardDropTarget,
+  type ResolvedDeckCardDrop,
+} from "./tray-drop.js";
 import { attachPaperWorkflowTextarea } from "./paper-workflow-dom.js";
 import { attachRenderedLinkInteractions } from "./rendered-link-interactions.js";
 import {
@@ -174,6 +185,8 @@ const VIEWPORT_CENTER_DURATION_MS = 180;
 const DECK_MAP_SECTION_LABEL_SPACING = 14;
 const DECK_MAP_MARKER_BUDGET = 512;
 const COMMAND_FEEDBACK_DURATION_MS = 1_800;
+const DECK_CARD_DRAG_THRESHOLD_PX = 5;
+const DECK_CARD_CLICK_SUPPRESSION_MS = 400;
 const VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
 const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
   "find-address-first",
@@ -225,6 +238,7 @@ export class DeckView extends ItemView {
   private viewportOffset = 0;
   private pointerLastX: number | null = null;
   private pointerLastY: number | null = null;
+  private suppressDeckCardClickUntil = 0;
   private spaceOffsetX = 0;
   private spaceOffsetY = 0;
   private spaceRecenteringTimer: number | null = null;
@@ -2719,6 +2733,7 @@ export class DeckView extends ItemView {
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isInTray = this.plugin.isFileInTray(card.file);
       cardEl.toggleClass("is-in-tray", isInTray);
+      cardEl.toggleClass("can-drag-to-desk", !isInTray);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.address} · ${title}${
         isInTray ? "; pulled out into a working pile" : ""
@@ -2760,6 +2775,9 @@ export class DeckView extends ItemView {
 
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
+      if (!isInTray) {
+        this.attachDeckCardDragging(addressRow, cardEl, card);
+      }
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
       identity.createSpan({ cls: "slipbox-card-address", text: card.address });
       const headerTitle = cardHeaderTitle(
@@ -2830,6 +2848,11 @@ export class DeckView extends ItemView {
       });
 
       cardEl.addEventListener("click", (event) => {
+        if (performance.now() < this.suppressDeckCardClickUntil) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
           return;
@@ -2850,6 +2873,193 @@ export class DeckView extends ItemView {
     this.positionCards();
 
     await Promise.all(jobs);
+  }
+
+  private attachDeckCardDragging(
+    header: HTMLElement,
+    cardEl: HTMLElement,
+    card: FiledCard,
+  ): void {
+    header.addEventListener("pointerdown", (event) => {
+      if (
+        event.button !== 0 ||
+        (
+          event.target instanceof Element &&
+          event.target.closest(
+            ".slipbox-card-actions, button, a, input, textarea, select, " +
+            "[contenteditable='true']",
+          ) !== null
+        )
+      ) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const pointerId = event.pointerId;
+      beginPointerActionAfterGate(
+        event,
+        (action) => this.runAfterInlineEditing("deck-card-drag", action),
+        () => {
+          if (!header.isConnected || !cardEl.isConnected) {
+            return;
+          }
+          beginThresholdPointerDrag({
+            captureTarget: header,
+            pointerId,
+            startX,
+            startY,
+            threshold: DECK_CARD_DRAG_THRESHOLD_PX,
+            onDragStart: () => {
+              this.cancelViewportCentering();
+              this.cancelSpaceRecentering();
+              cardEl.addClass("is-dragging-to-desk");
+            },
+            onDragMove: (moveEvent, dx, dy) => {
+              cardEl.style.translate = `${dx}px ${dy}px`;
+              this.updateDeckCardDropCue(moveEvent, cardEl);
+            },
+            onDrop: (upEvent) => {
+              this.suppressDeckCardClickUntil = performance.now() +
+                DECK_CARD_CLICK_SUPPRESSION_MS;
+              const result = this.deckCardDropResult(
+                card,
+                upEvent.clientX,
+                upEvent.clientY,
+                cardEl,
+              );
+              this.clearDeckCardDrag(cardEl);
+              if (result === null) {
+                return;
+              }
+              this.assignCardFocus(deskCardFocus(
+                result.focusPath,
+                result.pileId,
+              ));
+              void this.applyDeckCardDrop(result);
+            },
+            onCancel: () => {
+              this.suppressDeckCardClickUntil = performance.now() +
+                DECK_CARD_CLICK_SUPPRESSION_MS;
+              this.clearDeckCardDrag(cardEl);
+            },
+          });
+        },
+      );
+    });
+  }
+
+  private deckCardDropResult(
+    card: FiledCard,
+    x: number,
+    y: number,
+    dragged: HTMLElement,
+  ): ResolvedDeckCardDrop | null {
+    const state = this.plugin.tray;
+    if (
+      this.plugin.index.filedByPath(card.path) === undefined ||
+      cardPosition(state, card.path) !== null
+    ) {
+      return null;
+    }
+    const target = this.deckCardDropTargetAtPoint(x, y, dragged);
+    if (target?.kind === "pile") {
+      const pileId = target.pile.dataset.pileId;
+      if (pileId === undefined) {
+        return null;
+      }
+      return resolveDeckCardDrop(state, card.path, {
+        kind: "pile",
+        pileId,
+      });
+    }
+    if (target?.kind !== "workspace") {
+      return null;
+    }
+    const position = this.deckPilePositionAtPoint(x, y);
+    if (position === null) {
+      return null;
+    }
+    const pileId = this.plugin.createTrayPileId();
+    return resolveDeckCardDrop(state, card.path, {
+      kind: "workspace",
+      pileId,
+      position,
+    });
+  }
+
+  private deckCardDropTargetAtPoint(
+    x: number,
+    y: number,
+    dragged: HTMLElement,
+  ): DeckCardDropTarget | null {
+    return deckCardDropTarget(this.elementsBelowDeckCard(x, y, dragged));
+  }
+
+  private elementsBelowDeckCard(
+    x: number,
+    y: number,
+    dragged: HTMLElement,
+  ): Element[] {
+    dragged.addClass("slipbox-ignore-pointer-events");
+    try {
+      return dragged.ownerDocument.elementsFromPoint(x, y);
+    } finally {
+      dragged.removeClass("slipbox-ignore-pointer-events");
+    }
+  }
+
+  private deckPilePositionAtPoint(
+    x: number,
+    y: number,
+  ) {
+    const coordinateBounds = this.spaceEl?.getBoundingClientRect();
+    const workspaceBounds = this.stageEl?.getBoundingClientRect();
+    if (coordinateBounds === undefined || workspaceBounds === undefined) {
+      return null;
+    }
+    return pilePositionAtWorkspacePoint(
+      x,
+      y,
+      coordinateBounds,
+      workspaceBounds,
+      DESK_PILE_PLACEMENT_GEOMETRY,
+    );
+  }
+
+  private updateDeckCardDropCue(
+    event: PointerEvent,
+    dragged: HTMLElement,
+  ): void {
+    this.clearDeckCardDropCues();
+    const target = this.deckCardDropTargetAtPoint(
+      event.clientX,
+      event.clientY,
+      dragged,
+    );
+    if (target?.kind === "pile") {
+      target.pile.addClass("is-card-drop-target");
+    }
+  }
+
+  private clearDeckCardDropCues(): void {
+    this.stageEl?.querySelectorAll<HTMLElement>(
+      ".slipbox-tray-pile.is-card-drop-target",
+    ).forEach((pile) => pile.removeClass("is-card-drop-target"));
+  }
+
+  private clearDeckCardDrag(card: HTMLElement): void {
+    card.removeClass("is-dragging-to-desk");
+    card.setCssProps({ translate: "" });
+    this.clearDeckCardDropCues();
+  }
+
+  private async applyDeckCardDrop(result: ResolvedDeckCardDrop): Promise<void> {
+    await this.plugin.updateTray(result.state);
+    window.requestAnimationFrame(() => {
+      this.stageEl?.querySelector<HTMLElement>(
+        `.slipbox-tray-card[data-card-ref="${CSS.escape(result.focusPath)}"]`,
+      )?.focus({ preventScroll: true });
+    });
   }
 
   private async renderViewedCard(

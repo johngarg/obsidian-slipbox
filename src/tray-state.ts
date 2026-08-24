@@ -347,6 +347,29 @@ export function setPilePosition(
   return { ...state, piles };
 }
 
+export function placeFiledCardAtPosition(
+  state: TrayState,
+  cardRef: string,
+  newPileId: string,
+  position: TrayPilePosition,
+): TrayState {
+  if (
+    cardRef === "" ||
+    trayContains(state, cardRef) ||
+    !Number.isFinite(position.x) ||
+    !Number.isFinite(position.y)
+  ) {
+    return state;
+  }
+  const withPile = createPile(state, newPileId, [{
+    cardRef,
+    kind: "filed",
+  }]);
+  return withPile === state
+    ? state
+    : setPilePosition(withPile, newPileId, position);
+}
+
 export function placeUnfiledCardAtPosition(
   state: TrayState,
   cardRef: string,

@@ -103,6 +103,8 @@ browse the canonical filed sequence.
 
 Use drag and drop to:
 
+- pull a filed Deck card from its header into a new pile in empty workspace;
+- append a filed Deck card to an existing pile without expanding it;
 - reorder cards within an expanded pile;
 - move cards between expanded piles;
 - drop a card in empty workspace to create a new pile at that point;

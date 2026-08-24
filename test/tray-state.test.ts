@@ -16,6 +16,7 @@ import {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
+  placeFiledCardAtPosition,
   placeUnfiledCardAtPosition,
   placeFiledCardInPileOrdinal,
   pruneTrayCards,
@@ -108,6 +109,66 @@ describe("working piles", () => {
       },
     ]);
     assert.equal(next.unfiledPileId, "home");
+  });
+
+  test("places a filed Deck card in its own positioned pile", () => {
+    const state = tray([unfiled("Existing.md")]);
+    const next = placeFiledCardAtPosition(
+      state,
+      "Filed.md",
+      "placed",
+      { x: -75, y: 140 },
+    );
+
+    assert.deepEqual(next.piles, [
+      state.piles[0],
+      {
+        id: "placed",
+        cards: [filed("Filed.md")],
+        position: { x: -75, y: 140 },
+      },
+    ]);
+    assert.deepEqual(next.expandedPileIds, []);
+  });
+
+  test("does not reposition an existing card or accept invalid placement", () => {
+    const state = tray([filed("Filed.md")]);
+    assert.equal(
+      placeFiledCardAtPosition(
+        state,
+        "Filed.md",
+        "duplicate",
+        { x: 10, y: 20 },
+      ),
+      state,
+    );
+    assert.equal(
+      placeFiledCardAtPosition(
+        state,
+        "Other.md",
+        "invalid",
+        { x: Number.NaN, y: 20 },
+      ),
+      state,
+    );
+    assert.equal(
+      placeFiledCardAtPosition(
+        state,
+        "Other.md",
+        "invalid",
+        { x: 10, y: Number.POSITIVE_INFINITY },
+      ),
+      state,
+    );
+    assert.equal(
+      placeFiledCardAtPosition(
+        state,
+        "Other.md",
+        "pile-1",
+        { x: 10, y: 20 },
+      ),
+      state,
+    );
   });
 
   test("pulls into a singleton or the expanded pile and toggles back to Deck", () => {

@@ -208,7 +208,7 @@ export default class SlipboxPlugin extends Plugin {
       (leaf) => new DeckView(leaf, this),
     );
     this.registerHoverLinkSource(DECK_VIEW_TYPE, {
-      display: "Slipbox",
+      display: "Slipbox Desk",
       defaultMod: false,
     });
     this.registerEvent(
@@ -217,7 +217,7 @@ export default class SlipboxPlugin extends Plugin {
       }),
     );
 
-    this.addRibbonIcon("archive", "Open Slipbox", () => {
+    this.addRibbonIcon("archive", "Open Slipbox Desk", () => {
       void this.openDeck();
     });
 
@@ -231,7 +231,7 @@ export default class SlipboxPlugin extends Plugin {
     this.registerCommands();
     if (migrateTitleCollision) {
       new Notice(
-        "Slipbox changed title source to filename because the title and address properties used the same key.",
+        "Slipbox Desk changed title source to filename because the title and address properties used the same key.",
       );
     }
     if (purgeRemovedEntryPoints || migrateTitleCollision || migratePluginData) {
@@ -268,7 +268,7 @@ export default class SlipboxPlugin extends Plugin {
 
     await this.app.workspace.revealLeaf(leaf);
     if (!(leaf.view instanceof DeckView)) {
-      throw new Error("Obsidian did not create the Slipbox view");
+      throw new Error("Obsidian did not create the Slipbox Desk view");
     }
     if (filingFile !== undefined) {
       await leaf.view.startFiling(filingFile);
@@ -313,13 +313,13 @@ export default class SlipboxPlugin extends Plugin {
       return true;
     }
     if (existing !== undefined) {
-      new Notice("This card is already being edited in another Slipbox view.");
+      new Notice("This card is already being edited in another Slipbox Desk view.");
       void this.app.workspace.revealLeaf(existing.leaf);
       return false;
     }
     if (this.detachedInlineEditDrafts.has(path)) {
       new Notice(
-        "This card has an inline draft waiting to be restored in Slipbox.",
+        "This card has an inline draft waiting to be restored in Slipbox Desk.",
       );
       return false;
     }
@@ -835,7 +835,7 @@ export default class SlipboxPlugin extends Plugin {
     const clear = await confirmAction(
       this.app,
       "Clear legacy Desk state?",
-      "The Canvas was created successfully. Clear the old Desk layout from Slipbox’s saved state?",
+      "The Canvas was created successfully. Clear the old Desk layout from Slipbox Desk’s saved state?",
       "Clear legacy state",
     );
     if (!clear) {
@@ -928,7 +928,7 @@ export default class SlipboxPlugin extends Plugin {
       new Notice(
         cacheReady
           ? `Filed ${this.cardTitle(file)} as ${preview.address}.`
-          : `Filed ${this.cardTitle(file)} as ${preview.address}. Slipbox will refresh when Obsidian finishes indexing it.`,
+          : `Filed ${this.cardTitle(file)} as ${preview.address}. Slipbox Desk will refresh when Obsidian finishes indexing it.`,
       );
       return {
         status: "filed",
@@ -1485,7 +1485,7 @@ export default class SlipboxPlugin extends Plugin {
       await write;
       this.rawSettings = persistedSettings;
     } catch (error) {
-      new Notice(`Could not save Slipbox state: ${errorMessage(error)}`);
+      new Notice(`Could not save Slipbox Desk state: ${errorMessage(error)}`);
     }
   }
 

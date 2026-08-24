@@ -363,7 +363,7 @@ export class DeckView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Slipbox";
+    return "Slipbox Desk";
   }
 
   getIcon(): string {
@@ -957,7 +957,7 @@ export class DeckView extends ItemView {
     ) {
       if (!this.plugin.renameInlineEdit(editingPath, renamedEditingPath, this)) {
         editing.controller.markConflict(
-          "The renamed path is already being edited in another Slipbox view.",
+          "The renamed path is already being edited in another Slipbox Desk view.",
         );
         this.applyInlineEditFailure(editing.controller.snapshot.failure);
       } else {
@@ -1204,7 +1204,7 @@ export class DeckView extends ItemView {
   }
 
   private reportShortcutConflict(shortcut: string): void {
-    const message = `${shortcut} is already handled by an Obsidian hotkey; Slipbox left it unchanged.`;
+    const message = `${shortcut} is already handled by an Obsidian hotkey; Slipbox Desk left it unchanged.`;
     this.showCommandFeedback(message);
     const now = Date.now();
     const lastNotice = this.shortcutConflictNoticeTimes.get(shortcut) ?? 0;
@@ -1212,7 +1212,7 @@ export class DeckView extends ItemView {
       return;
     }
     this.shortcutConflictNoticeTimes.set(shortcut, now);
-    new Notice(`Slipbox shortcut conflict: ${message}`, 6_000);
+    new Notice(`Slipbox Desk shortcut conflict: ${message}`, 6_000);
   }
 
   private handleDeckEscape(event: KeyboardEvent): boolean {

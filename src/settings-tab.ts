@@ -69,7 +69,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
             (setting) => this.renderTitleProperty(setting),
           ),
           this.definition(
-            "Show title in Slipbox card headers",
+            "Show title in Slipbox Desk card headers",
             "Show resolved titles beside addresses in Deck and Desk card headers.",
             (setting) => this.renderShowTitle(setting),
           ),
@@ -107,17 +107,17 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "Restrict pasting in viewed cards",
-            "In the Slipbox viewed-card editor, paste one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
+            "In the Slipbox Desk viewed-card editor, paste one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
             (setting) => this.renderRestrictViewedCardPaste(setting),
           ),
           this.definition(
             "Preview links on hover",
-            "Show Obsidian Page Preview popovers for links and backlinks inside Slipbox cards.",
+            "Show Obsidian Page Preview popovers for links and backlinks inside Slipbox Desk cards.",
             (setting) => this.renderPreviewLinksOnHover(setting),
           ),
           this.definition(
             "Follow links from cards",
-            "Allow links and backlinks inside Slipbox cards to navigate. Explicit Slipbox Open note actions remain available.",
+            "Allow links and backlinks inside Slipbox Desk cards to navigate. Explicit Open note actions remain available.",
             (setting) => this.renderFollowLinksFromCards(setting),
           ),
           this.definition(
@@ -143,7 +143,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "New card folder",
-            "Optional vault-folder override for notes created through Slipbox. Leave empty to follow Obsidian’s own default location for new notes.",
+            "Optional vault-folder override for notes created through Slipbox Desk. Leave empty to follow Obsidian’s own default location for new notes.",
             (setting) => this.renderNewCardFolder(setting),
           ),
           this.definition(
@@ -159,7 +159,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           {
             name: "Card header button visibility",
-            desc: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox shortcuts, and context menus.",
+            desc: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox Desk shortcuts, and context menus.",
             render: (setting) => this.renderCardHeaderIntro(setting),
           },
           ...this.cardHeaderButtonDefinitions("deck", "Deck cards"),
@@ -172,8 +172,8 @@ export class SlipboxSettingTab extends PluginSettingTab {
         heading: "Keyboard shortcuts",
         items: [
           {
-            name: "Slipbox shortcut controls",
-            desc: "Configure shortcuts scoped to Slipbox. Obsidian hotkeys take priority; Slipbox warns and yields when a key is already handled there.",
+            name: "Slipbox Desk shortcut controls",
+            desc: "Configure shortcuts scoped to Slipbox Desk. Obsidian hotkeys take priority; Slipbox Desk warns and yields when a key is already handled there.",
             render: (setting) => this.renderShortcutIntro(setting),
           },
           ...DECK_ACTION_DEFINITIONS.map((definition) => ({
@@ -506,7 +506,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     setting.settingEl.empty();
     setting.settingEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox shortcuts, and context menus.",
+      text: "Choose which actions appear in Deck, Desk, and viewed-card headers. Buttons that do not fit move into more card actions. Hidden actions remain available through commands, Slipbox Desk shortcuts, and context menus.",
     });
   }
 
@@ -550,7 +550,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
     shortcutIntro.createEl("p", {
       cls: "setting-item-description",
-      text: "These shortcuts apply only while Slipbox is active and never fire in text or form controls. Obsidian hotkeys have priority: when one handles the same key, Slipbox leaves it alone and shows a conflict warning. Slipbox actions are also available as unassigned commands in Obsidian’s hotkeys settings.",
+      text: "These shortcuts apply only while Slipbox Desk is active and never fire in text or form controls. Obsidian hotkeys have priority: when one handles the same key, Slipbox Desk leaves it alone and shows a conflict warning. Slipbox Desk actions are also available as unassigned commands in Obsidian’s hotkeys settings.",
     });
     const resetAll = shortcutIntro.createEl("button", {
       text: "Reset all shortcuts",
@@ -783,7 +783,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     try {
       await this.slipbox.updateSettings(settings);
     } catch (error) {
-      new Notice(`Could not save Slipbox settings: ${errorMessage(error)}`);
+      new Notice(`Could not save Slipbox Desk settings: ${errorMessage(error)}`);
     }
   }
 }

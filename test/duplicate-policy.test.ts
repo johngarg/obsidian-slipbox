@@ -71,14 +71,14 @@ describe("issue status summary", () => {
     assert.equal(errorsAndWarnings?.severity, "error");
     assert.equal(
       errorsAndWarnings?.description,
-      "Slipbox: 1 unfilable card, 1 duplicate address. Click to review.",
+      "Slipbox Desk: 1 unfilable card, 1 duplicate address. Click to review.",
     );
 
     const warningsOnly = issueStatusSummary([duplicateIssue, duplicateIssue]);
     assert.equal(warningsOnly?.severity, "warning");
     assert.equal(
       warningsOnly?.description,
-      "Slipbox: 2 duplicate addresses. Click to review.",
+      "Slipbox Desk: 2 duplicate addresses. Click to review.",
     );
   });
 
@@ -86,7 +86,7 @@ describe("issue status summary", () => {
     const summary = issueStatusSummary([invalidIssue, invalidIssue]);
     assert.equal(
       summary?.description,
-      "Slipbox: 2 unfilable cards. Click to review.",
+      "Slipbox Desk: 2 unfilable cards. Click to review.",
     );
   });
 });

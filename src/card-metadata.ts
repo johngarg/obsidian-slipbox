@@ -68,7 +68,7 @@ export function issueListDescription(
   const duplicates = duplicatePolicy === "problem"
     ? " Duplicate-address cards remain in the Deck beside one another, ordered by file path, and filing onto an occupied address is refused."
     : "";
-  return `Invalid addresses are excluded until corrected.${duplicates} Slipbox never repairs addresses automatically.`;
+  return `Invalid addresses are excluded until corrected.${duplicates} Slipbox Desk never repairs addresses automatically.`;
 }
 
 export interface IssueStatusSummary {
@@ -107,7 +107,7 @@ export function issueStatusSummary(
   return {
     count: issues.length,
     severity: invalid > 0 ? "error" : "warning",
-    description: `Slipbox: ${parts.join(", ")}. Click to review.`,
+    description: `Slipbox Desk: ${parts.join(", ")}. Click to review.`,
   };
 }
 

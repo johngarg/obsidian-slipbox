@@ -49,7 +49,7 @@ function releaseFixture(options: ReleaseFixtureOptions = {}): string {
   });
   writeJson(root, "manifest.json", {
     id: "slipbox",
-    name: "Slipbox",
+    name: "Slipbox Desk",
     version: manifestVersion,
     minAppVersion,
     description: "Browse ordinary Markdown notes as a card index.",

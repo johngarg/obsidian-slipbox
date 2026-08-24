@@ -1,4 +1,4 @@
-# Slipbox release-candidate smoke test
+# Slipbox Desk release-candidate smoke test
 
 Test only in the supplied disposable vault. Do not use a personal vault.
 
@@ -21,10 +21,10 @@ test. Record unexpected warnings or errors under Findings.
 ## Installation and lifecycle
 
 - [ ] Open the supplied folder as an Obsidian vault and approve its use.
-- [ ] Confirm Slipbox is enabled under **Settings → Community plugins**.
-- [ ] Open Slipbox from its ribbon icon without a console error.
-- [ ] Disable and re-enable Slipbox without an error or stale UI.
-- [ ] Quit and restart Obsidian; reopen Slipbox successfully.
+- [ ] Confirm Slipbox Desk is enabled under **Settings → Community plugins**.
+- [ ] Open Slipbox Desk from its ribbon icon without a console error.
+- [ ] Disable and re-enable Slipbox Desk without an error or stale UI.
+- [ ] Quit and restart Obsidian; reopen Slipbox Desk successfully.
 
 ## Core card workflow
 
@@ -50,11 +50,11 @@ test. Record unexpected warnings or errors under Findings.
 
 Complete this section on Obsidian 1.13.0 on at least one tested platform.
 
-- [ ] Enable and open Slipbox.
+- [ ] Enable and open Slipbox Desk.
 - [ ] Confirm filed and unfiled cards are indexed correctly.
 - [ ] Create, file, view, and edit a disposable card.
 - [ ] Create a Canvas from a pile.
-- [ ] Restart Obsidian and reopen Slipbox without a console error.
+- [ ] Restart Obsidian and reopen Slipbox Desk without a console error.
 
 ## Findings
 
@@ -67,4 +67,3 @@ console output, and a screenshot when useful.
 - [ ] Fail: one or more blocking findings remain.
 
 Tester notes:
-

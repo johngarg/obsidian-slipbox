@@ -14,6 +14,48 @@ export interface ThresholdPointerDragOptions {
   readonly onCancel: () => void;
 }
 
+export type PointerActionGate = (
+  action: () => void,
+) => Promise<unknown>;
+
+/**
+ * Wait for an asynchronous interaction gate without starting a stale pointer
+ * action after the user has already released or cancelled that pointer.
+ */
+export function beginPointerActionAfterGate(
+  event: PointerEvent,
+  gate: PointerActionGate,
+  action: () => void,
+): void {
+  const currentTarget = event.currentTarget;
+  const document = currentTarget !== null && "ownerDocument" in currentTarget
+    ? currentTarget.ownerDocument as Document
+    : null;
+  if (document === null) {
+    return;
+  }
+  const pointerId = event.pointerId;
+  let pointerActive = true;
+  const cleanup = (): void => {
+    document.removeEventListener("pointerup", released, true);
+    document.removeEventListener("pointercancel", released, true);
+  };
+  const released = (releasedEvent: PointerEvent): void => {
+    if (releasedEvent.pointerId === pointerId) {
+      pointerActive = false;
+      cleanup();
+    }
+  };
+  document.addEventListener("pointerup", released, true);
+  document.addEventListener("pointercancel", released, true);
+  void gate(() => {
+    cleanup();
+    if (pointerActive) {
+      action();
+    }
+  }).finally(cleanup);
+}
+
 /**
  * Preserve native click and double-click targeting until pointer movement
  * demonstrates drag intent, then capture the active pointer for a reliable

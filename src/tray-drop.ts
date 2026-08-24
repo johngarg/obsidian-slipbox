@@ -1,4 +1,10 @@
-import type { TrayPilePosition } from "./tray-state.js";
+import {
+  addUniqueCardToPile,
+  placeFiledCardAtPosition,
+  type TrayPile,
+  type TrayPilePosition,
+  type TrayState,
+} from "./tray-state.js";
 
 export interface DeskDropBounds {
   readonly left: number;
@@ -7,6 +13,107 @@ export interface DeskDropBounds {
   readonly bottom: number;
   readonly width: number;
   readonly height: number;
+}
+
+export const DECK_CARD_HEADER_ANCHOR_OFFSET_PX = 16;
+
+export type DeckCardDropTarget =
+  | { readonly kind: "pile"; readonly pile: HTMLElement }
+  | { readonly kind: "workspace" };
+
+export type DeckCardPlacementTarget =
+  | { readonly kind: "pile"; readonly pileId: string }
+  | {
+    readonly kind: "workspace";
+    readonly pileId: string;
+    readonly position: TrayPilePosition;
+  };
+
+export interface ResolvedDeckCardDrop {
+  readonly state: TrayState;
+  readonly focusPath: string;
+  readonly pileId: string;
+}
+
+const INTERACTIVE_DROP_BLOCKER =
+  ".slipbox-card-actions, .slipbox-tray-card-actions, " +
+  "button, a, input, textarea, select, [contenteditable='true']";
+
+/** Resolve a Deck-card drop without treating covered cards or controls as free space. */
+export function deckCardDropTarget(
+  elements: readonly Element[],
+): DeckCardDropTarget | null {
+  for (const element of elements) {
+    if (element.closest(INTERACTIVE_DROP_BLOCKER) !== null) {
+      return null;
+    }
+    const pile = element.closest<HTMLElement>(".slipbox-tray-pile");
+    if (pile?.dataset.pileId !== undefined) {
+      return { kind: "pile", pile };
+    }
+    if (
+      element.closest(".slipbox-deck-map") !== null ||
+      element.closest(".slipbox-card") !== null
+    ) {
+      return null;
+    }
+    if (element.matches(".slipbox-deck-stage")) {
+      return { kind: "workspace" };
+    }
+  }
+  return null;
+}
+
+/** Match Shift+P focus: hidden appended cards resolve to the visible pile top. */
+export function deckCardPileDropFocusPath(
+  pile: Pick<TrayPile, "cards">,
+  cardRef: string,
+  expanded: boolean,
+): string {
+  return expanded ? cardRef : pile.cards[0]?.cardRef ?? cardRef;
+}
+
+/** Place one filed Deck card and resolve the visible post-drop focus target. */
+export function resolveDeckCardDrop(
+  state: TrayState,
+  cardRef: string,
+  target: DeckCardPlacementTarget,
+): ResolvedDeckCardDrop | null {
+  if (target.kind === "workspace") {
+    const next = placeFiledCardAtPosition(
+      state,
+      cardRef,
+      target.pileId,
+      target.position,
+    );
+    return next === state
+      ? null
+      : {
+        state: next,
+        focusPath: cardRef,
+        pileId: target.pileId,
+      };
+  }
+
+  const pile = state.piles.find((candidate) => candidate.id === target.pileId);
+  if (pile === undefined) {
+    return null;
+  }
+  const next = addUniqueCardToPile(state, target.pileId, {
+    cardRef,
+    kind: "filed",
+  });
+  return next === state
+    ? null
+    : {
+      state: next,
+      focusPath: deckCardPileDropFocusPath(
+        pile,
+        cardRef,
+        state.expandedPileIds.includes(target.pileId),
+      ),
+      pileId: target.pileId,
+    };
 }
 
 /**
@@ -51,5 +158,33 @@ export function pilePositionAtWorkspacePoint(
   return {
     x: x - (anchorBounds.left + anchorBounds.width / 2),
     y: y - (anchorBounds.top + anchorBounds.height / 2),
+  };
+}
+
+/** Position a pile so the release point lands within its card header. */
+export function pileHeaderPositionAtWorkspacePoint(
+  x: number,
+  y: number,
+  anchorBounds: DeskDropBounds,
+  workspaceBounds: DeskDropBounds,
+  headerAnchorOffsetPx = DECK_CARD_HEADER_ANCHOR_OFFSET_PX,
+): TrayPilePosition | null {
+  const position = pilePositionAtWorkspacePoint(
+    x,
+    y,
+    anchorBounds,
+    workspaceBounds,
+  );
+  if (
+    position === null ||
+    !Number.isFinite(anchorBounds.height) ||
+    anchorBounds.height <= 0 ||
+    !Number.isFinite(headerAnchorOffsetPx)
+  ) {
+    return null;
+  }
+  return {
+    x: position.x,
+    y: position.y + anchorBounds.height / 2 - headerAnchorOffsetPx,
   };
 }

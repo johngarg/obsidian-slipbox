@@ -722,6 +722,22 @@ button.slipbox-tray-pile-cycle svg {
   pointer-events: auto;
 }
 
+.slipbox-card.can-drag-to-desk .slipbox-card-address-row {
+  cursor: grab;
+}
+
+.slipbox-card.is-dragging-to-desk {
+  z-index: 300 !important;
+  opacity: 0.82 !important;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.28);
+  cursor: grabbing;
+  transition: none;
+}
+
+.slipbox-card.is-dragging-to-desk .slipbox-card-address-row {
+  cursor: grabbing;
+}
+
 .slipbox-card-frame {
   display: flex;
   flex: 1;

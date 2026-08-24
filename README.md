@@ -112,8 +112,12 @@ See the [release candidate smoke test](docs/release-candidate-smoke-test.md) for
 
 This is my first Obsidian plugin; feedback and contributions are welcome.
 
-## Support and license
+## Feedback and license
 
 Report bugs and request features through [GitHub Issues](https://github.com/johngarg/obsidian-slipbox/issues).
 
 Slipbox Desk is available under the [0BSD license](LICENSE).
+
+## Support
+
+If you find Slipbox useful, you can support its development by [buying me a coffee](https://buymeacoffee.com/johngarg).

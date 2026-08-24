@@ -139,7 +139,7 @@ import {
 } from "./pointer-drag.js";
 import {
   deckCardDropTarget,
-  DESK_PILE_PLACEMENT_GEOMETRY,
+  DECK_CARD_DROP_PLACEMENT_GEOMETRY,
   pilePositionAtWorkspacePoint,
   resolveDeckCardDrop,
   type DeckCardDropTarget,
@@ -3022,7 +3022,7 @@ export class DeckView extends ItemView {
       y,
       coordinateBounds,
       workspaceBounds,
-      DESK_PILE_PLACEMENT_GEOMETRY,
+      DECK_CARD_DROP_PLACEMENT_GEOMETRY,
     );
   }
 

@@ -4,6 +4,7 @@ import { Window } from "happy-dom";
 
 import {
   cardDropTargetPile,
+  DECK_CARD_DROP_PLACEMENT_GEOMETRY,
   deckCardPileDropFocusPath,
   deckCardDropTarget,
   pilePositionAtWorkspacePoint,
@@ -78,7 +79,7 @@ describe("Desk card drops", () => {
     const geometry = {
       baseYRatio: 0.31,
       baseYOffsetPx: 126,
-      cardHalfHeightPx: 58,
+      pointerAnchorOffsetPx: 58,
     };
 
     assert.deepEqual(
@@ -100,6 +101,36 @@ describe("Desk card drops", () => {
         geometry,
       ),
       null,
+    );
+  });
+
+  test("can anchor the same workspace point to a Desk-card header", () => {
+    const coordinateBounds = {
+      left: 100,
+      right: 1100,
+      top: 50,
+      bottom: 850,
+      width: 1000,
+      height: 800,
+    };
+    const workspaceBounds = {
+      left: 0,
+      right: 1000,
+      top: 0,
+      bottom: 800,
+      width: 1000,
+      height: 800,
+    };
+
+    assert.deepEqual(
+      pilePositionAtWorkspacePoint(
+        50,
+        400,
+        coordinateBounds,
+        workspaceBounds,
+        DECK_CARD_DROP_PLACEMENT_GEOMETRY,
+      ),
+      { x: -550, y: 212 },
     );
   });
 });

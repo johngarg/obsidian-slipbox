@@ -18,13 +18,20 @@ export interface DeskDropBounds {
 export interface DeskPilePlacementGeometry {
   readonly baseYRatio: number;
   readonly baseYOffsetPx: number;
-  readonly cardHalfHeightPx: number;
+  readonly pointerAnchorOffsetPx: number;
 }
 
 export const DESK_PILE_PLACEMENT_GEOMETRY: DeskPilePlacementGeometry = {
   baseYRatio: 0.31,
   baseYOffsetPx: 126,
-  cardHalfHeightPx: 58,
+  pointerAnchorOffsetPx: 58,
+};
+
+export const DECK_CARD_DROP_PLACEMENT_GEOMETRY: DeskPilePlacementGeometry = {
+  ...DESK_PILE_PLACEMENT_GEOMETRY,
+  // Centre the release point within the 27px Desk-card identity row, including
+  // the collapsed pile's small top inset.
+  pointerAnchorOffsetPx: 16,
 };
 
 export type DeckCardDropTarget =
@@ -172,6 +179,6 @@ export function pilePositionAtWorkspacePoint(
       coordinateBounds.top +
       coordinateBounds.height * geometry.baseYRatio -
       geometry.baseYOffsetPx
-    ) - geometry.cardHalfHeightPx,
+    ) - geometry.pointerAnchorOffsetPx,
   };
 }

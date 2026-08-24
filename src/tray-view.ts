@@ -216,7 +216,6 @@ export class TrayRenderer {
       return;
     }
 
-    stage.addClass("has-tray");
     this.workspaceEl = stage;
     const tray = space.createDiv({
       cls: "slipbox-tray",

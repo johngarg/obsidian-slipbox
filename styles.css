@@ -720,15 +720,6 @@ button.slipbox-tray-pile-cycle svg {
   cursor: grabbing;
 }
 
-.slipbox-deck-stage.has-tray .slipbox-card {
-  top: 62%;
-  max-height: 62%;
-}
-
-.slipbox-deck-stage.has-tray .slipbox-deck-empty {
-  top: 62%;
-}
-
 .slipbox-card-frame {
   display: flex;
   flex: 1;
@@ -1112,11 +1103,6 @@ button.slipbox-tray-pile-cycle svg {
       var(--slipbox-viewed-card-y, 0px)
     );
   transition: box-shadow 120ms ease, border-color 120ms ease;
-}
-
-.slipbox-deck-stage.has-tray .slipbox-card.slipbox-viewed-card {
-  top: 50%;
-  max-height: calc(100% - 54px);
 }
 
 .slipbox-card.slipbox-viewed-card:focus {

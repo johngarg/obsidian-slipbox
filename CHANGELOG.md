@@ -6,6 +6,8 @@ initial public beta.
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-08-26
+
 ### Fixed
 
 - Saving a changed card with `Escape` no longer flashes or remounts the card.
@@ -48,7 +50,8 @@ Initial public beta.
 - Improved default pile placement and kept the Deck stable as cards and piles
   are added or moved.
 
-[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.1...HEAD
+[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...HEAD
+[0.12.2]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.1...0.12.2
 [0.12.1]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.0...0.12.1
 [0.12.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.11.1...0.12.0
 [0.11.1]: https://github.com/johngarg/obsidian-slipbox/compare/0.11.0...0.11.1

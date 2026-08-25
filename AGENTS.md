@@ -99,6 +99,18 @@ npm run build
 - Attach `manifest.json`, `main.js`, and `styles.css` (if present) to the release as individual assets.
 - After the initial release, follow the process to add/update your plugin in the community catalog as required.
 
+### Changelog workflow
+
+- `CHANGELOG.md` is the canonical user-facing release history. Add notable
+  features, behavior changes, fixes, removals, migrations, and security changes
+  to **Unreleased** as part of the change that introduces them; omit internal
+  refactors, tests, and routine documentation work.
+- When cutting a release, move the **Unreleased** entries into a section named
+  for the exact version and release date, recreate an empty **Unreleased**
+  section, and update the comparison links at the bottom of the file.
+- Use the completed version section to review and edit the draft GitHub release
+  notes before publication.
+
 ## Security, privacy, and compliance
 
 Follow Obsidian's **Developer Policies** and **Plugin Guidelines**. In particular:

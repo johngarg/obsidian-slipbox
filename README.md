@@ -43,6 +43,8 @@ The Deck is the canonical sequence, while the Desk is a temporary working area b
 - Follow card links, copy links, insert links from an Obsidian editor, and show automatic backlinks.
 - Configure card sizes, titles, header actions, ordering, shortcuts, and the paper workflow.
 
+See the [changelog](CHANGELOG.md) for user-facing release history.
+
 ## Installation
 
 Slipbox Desk requires Obsidian 1.13.0 or later and is available on desktop only.

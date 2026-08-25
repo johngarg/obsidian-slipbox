@@ -18,6 +18,8 @@ import {
   bookmarkEdgeTargets,
   cardMotionStyle,
   cardStackOrder,
+  setCardMotionOpacity,
+  setCardStackOrder,
   centredViewportPosition,
   clampViewportPosition,
   deckIndexByDelta,
@@ -2846,7 +2848,8 @@ export class DeckView extends ItemView {
         this.plugin.settings.showCardTooltips,
         { placement: "bottom", delay: 350 },
       );
-      cardEl.style.zIndex = String(
+      setCardStackOrder(
+        cardEl,
         cardStackOrder(filedIndex, focusDisplayIndex),
       );
       this.renderedCards.push(cardEl);
@@ -4227,7 +4230,7 @@ export class DeckView extends ItemView {
         this.cardFocus?.surface === "deck" &&
         card.dataset.path === this.cardFocus.path,
       );
-      card.style.zIndex = String(cardStackOrder(index, focusDisplayIndex));
+      setCardStackOrder(card, cardStackOrder(index, focusDisplayIndex));
       const motion = cardMotionStyle(
         index,
         viewportPosition,
@@ -4237,7 +4240,7 @@ export class DeckView extends ItemView {
       );
       card.style.transform =
         `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
-      card.style.opacity = String(motion.opacity);
+      setCardMotionOpacity(card, motion.opacity);
     }
     return this.updatePileAnchorFromDeck();
   }
@@ -4329,7 +4332,7 @@ export class DeckView extends ItemView {
         this.cardFocus?.surface === "deck" &&
         card.dataset.path === this.cardFocus.path,
       );
-      card.style.zIndex = String(cardStackOrder(filedIndex, activeIndex));
+      setCardStackOrder(card, cardStackOrder(filedIndex, activeIndex));
       this.cardFooters.setInteractive(card, filedIndex === activeIndex);
     }
     if (this.stageEl !== null) {

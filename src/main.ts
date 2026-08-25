@@ -96,6 +96,7 @@ import {
   type TrayPilePosition,
   type TrayState,
 } from "./tray-state.js";
+import { formatCurrentTimestamp } from "./timestamp.js";
 import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
 import { normalizeCanvasPath } from "./canvas-layout.js";
 import { generateFiledCardLink } from "./card-links.js";
@@ -1212,7 +1213,7 @@ export default class SlipboxPlugin extends Plugin {
   ): Promise<TFile | null> {
     const timestamp = newNoteBasename(
       "",
-      moment().format(this.settings.newNoteTimestampFormat),
+      formatCurrentTimestamp(moment, this.settings.newNoteTimestampFormat),
     );
     const title = await resolveNewCardTitle(
       titleMode,

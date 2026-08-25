@@ -4,6 +4,18 @@ export interface CardMotionStyle {
   readonly opacity: number;
 }
 
+export const CARD_STACK_ORDER_PROPERTY = "--slipbox-card-z-index";
+export const CARD_OPACITY_PROPERTY = "--slipbox-card-opacity";
+
+/** Keep computed Deck motion overridable by temporary CSS interaction states. */
+export function setCardStackOrder(card: HTMLElement, order: number): void {
+  card.style.setProperty(CARD_STACK_ORDER_PROPERTY, String(order));
+}
+
+export function setCardMotionOpacity(card: HTMLElement, opacity: number): void {
+  card.style.setProperty(CARD_OPACITY_PROPERTY, String(opacity));
+}
+
 export const DEFAULT_ACTIVE_HYSTERESIS = 0.06;
 /** Keep card surfaces in one physical stack ordered around the Deck anchor. */
 export function cardStackOrder(

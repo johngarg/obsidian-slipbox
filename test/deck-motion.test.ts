@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { Window } from "happy-dom";
 
 import {
   activeIndexForViewport,
@@ -11,6 +12,8 @@ import {
   clampViewportPosition,
   deckIndexByDelta,
   stationarySelectionOffset,
+  setCardMotionOpacity,
+  setCardStackOrder,
 } from "../src/deck-motion.js";
 
 describe("free Deck motion", () => {
@@ -28,6 +31,22 @@ describe("free Deck motion", () => {
     assert.equal(cardStackOrder(4, 4), 220);
     assert.equal(cardStackOrder(3, 4), 99);
     assert.equal(cardStackOrder(0, 4), 96);
+  });
+
+  test("stores computed motion in overridable CSS properties", () => {
+    const window = new Window();
+    const card = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    ) as unknown as HTMLElement;
+
+    setCardStackOrder(card, 220);
+    setCardMotionOpacity(card, 0.82);
+
+    assert.equal(card.style.getPropertyValue("--slipbox-card-z-index"), "220");
+    assert.equal(card.style.getPropertyValue("--slipbox-card-opacity"), "0.82");
+    assert.equal(card.style.zIndex, "");
+    assert.equal(card.style.opacity, "");
   });
 
   test("keeps intervening cards visible when selection does not move the viewport", () => {

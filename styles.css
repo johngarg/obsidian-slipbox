@@ -12,15 +12,15 @@
   --slipbox-deck-top: 31%;
 }
 
-.slipbox-deck-view {
+.view-content.slipbox-deck-view {
   --slipbox-card-radius: 10px;
   --slipbox-main-card-width: min(58%, 840px);
   --slipbox-tray-card-width: min(360px, 36cqw);
   --slipbox-tray-pile-height: min(258px, calc(24cqw + 18px));
   container-type: inline-size;
   height: 100%;
-  padding: 0 !important;
-  overflow: hidden !important;
+  padding: 0;
+  overflow: hidden;
 }
 
 .slipbox-deck-view[data-main-card-size="small"] {
@@ -720,6 +720,8 @@ button.slipbox-tray-pile-cycle svg {
   background: var(--background-primary);
   cursor: pointer;
   pointer-events: auto;
+  z-index: var(--slipbox-card-z-index, auto);
+  opacity: var(--slipbox-card-opacity, 1);
 }
 
 .slipbox-card.can-drag-to-desk .slipbox-card-address-row {
@@ -727,8 +729,8 @@ button.slipbox-tray-pile-cycle svg {
 }
 
 .slipbox-card.is-dragging-to-desk {
-  z-index: 300 !important;
-  opacity: 0.82 !important;
+  z-index: 300;
+  opacity: 0.82;
   box-shadow: 0 18px 48px rgb(0 0 0 / 0.28);
   cursor: grabbing;
   transition: none;
@@ -819,7 +821,11 @@ button.slipbox-tray-pile-cycle svg {
 }
 
 .slipbox-card-header-identity {
-  display: contents;
+  display: grid;
+  grid-column: 1 / span 2;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: center;
+  min-width: 0;
 }
 
 .slipbox-card-address {
@@ -973,7 +979,7 @@ button.slipbox-tray-pile-cycle svg {
 }
 
 .slipbox-card-header-action[hidden] {
-  display: none !important;
+  display: none;
 }
 
 .slipbox-card-toggle:hover,
@@ -1382,7 +1388,7 @@ button.slipbox-card-backlink-overflow:disabled {
   background: transparent;
 }
 
-.slipbox-file-visit {
+.slipbox-modal-list .slipbox-file-visit {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -1393,14 +1399,14 @@ button.slipbox-card-backlink-overflow:disabled {
   border: 0;
   box-shadow: none;
   color: var(--text-normal);
-  background: transparent !important;
+  background: transparent;
   text-align: left;
 }
 
-.slipbox-file-visit:hover,
-.slipbox-file-visit:focus-visible {
+.slipbox-modal-list .slipbox-file-visit:hover,
+.slipbox-modal-list .slipbox-file-visit:focus-visible {
   color: var(--text-normal);
-  background: transparent !important;
+  background: transparent;
 }
 
 .slipbox-list-label {
@@ -1606,8 +1612,8 @@ button.slipbox-card-backlink-overflow:disabled {
   }
 }
 
-.slipbox-ignore-pointer-events {
-  pointer-events: none !important;
+.slipbox-deck-view .slipbox-ignore-pointer-events {
+  pointer-events: none;
 }
 .slipbox-visually-hidden {
   position: absolute;

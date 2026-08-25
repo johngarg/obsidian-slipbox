@@ -9,6 +9,18 @@ export interface DeckEscapeState {
   readonly filing: boolean;
 }
 
+export interface InlineEditPresentationCard {
+  readonly path: string;
+  readonly modified: number;
+  readonly presentation: unknown;
+}
+
+export interface InlineEditPresentationState {
+  readonly editingPath: string;
+  readonly cards: readonly InlineEditPresentationCard[];
+  readonly context: unknown;
+}
+
 export type DeckEscapeAction =
   | "finish-editing"
   | "cancel-pending-command"
@@ -57,6 +69,54 @@ export function consumeDeckEscape(event: KeyboardEvent): void {
   event.preventDefault();
   event.stopPropagation();
   event.stopImmediatePropagation();
+}
+
+/**
+ * Compare everything that can require remounting the Slipbox surface while
+ * deliberately ignoring body-only writes to the card being edited.
+ */
+export function inlineEditPresentationFingerprint(
+  state: InlineEditPresentationState,
+): string {
+  return JSON.stringify({
+    cards: state.cards.map((card) => ({
+      path: card.path,
+      modified: card.path === state.editingPath ? null : card.modified,
+      presentation: card.presentation,
+    })),
+    context: state.context,
+  });
+}
+
+/** Let card-header controls dispatch their own save-before-action sequence. */
+export function shouldFinishInlineEditFromPointerDown(
+  target: EventTarget | null,
+  textarea: HTMLTextAreaElement,
+  card: HTMLElement,
+): boolean {
+  const ElementConstructor = card.ownerDocument.defaultView?.Element;
+  if (
+    ElementConstructor === undefined ||
+    !(target instanceof ElementConstructor)
+  ) {
+    return true;
+  }
+  if (textarea.contains(target)) {
+    return false;
+  }
+  if (card.contains(target)) {
+    if (target.closest(".slipbox-card-header-action") !== null) {
+      return false;
+    }
+    if (
+      target.closest(
+        "a, button, input, select, [contenteditable='true']",
+      ) === null
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function isInlineEditBodyTarget(

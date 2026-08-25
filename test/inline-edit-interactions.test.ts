@@ -5,8 +5,10 @@ import { Window } from "happy-dom";
 import {
   consumeDeckEscape,
   dispatchInlineAwareDeckAction,
+  inlineEditPresentationFingerprint,
   isInlineEditBodyTarget,
   resolveDeckEscapeAction,
+  shouldFinishInlineEditFromPointerDown,
   shouldNavigateDeckFromWheel,
 } from "../src/inline-edit-interactions.js";
 import {
@@ -237,5 +239,88 @@ describe("inline-aware Deck action dispatch", () => {
       () => events.push("starting-action"),
     ), false);
     assert.deepEqual(events, ["save", "action"]);
+  });
+});
+
+describe("inline edit exit arbitration", () => {
+  test("leaves card-header actions mounted until their click dispatches", () => {
+    const window = new Window();
+    const create = (tag: string) => window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      tag,
+    );
+    const card = create("div");
+    const textarea = create("textarea");
+    const action = create("button");
+    const otherButton = create("button");
+    const surface = create("div");
+    const outside = create("div");
+    action.className = "slipbox-card-header-action";
+    card.append(textarea, action, otherButton, surface);
+    window.document.body.append(card, outside);
+
+    assert.equal(shouldFinishInlineEditFromPointerDown(
+      textarea as unknown as EventTarget,
+      textarea as unknown as HTMLTextAreaElement,
+      card as unknown as HTMLElement,
+    ), false);
+    assert.equal(shouldFinishInlineEditFromPointerDown(
+      action as unknown as EventTarget,
+      textarea as unknown as HTMLTextAreaElement,
+      card as unknown as HTMLElement,
+    ), false);
+    assert.equal(shouldFinishInlineEditFromPointerDown(
+      surface as unknown as EventTarget,
+      textarea as unknown as HTMLTextAreaElement,
+      card as unknown as HTMLElement,
+    ), false);
+    assert.equal(shouldFinishInlineEditFromPointerDown(
+      otherButton as unknown as EventTarget,
+      textarea as unknown as HTMLTextAreaElement,
+      card as unknown as HTMLElement,
+    ), true);
+    assert.equal(shouldFinishInlineEditFromPointerDown(
+      outside as unknown as EventTarget,
+      textarea as unknown as HTMLTextAreaElement,
+      card as unknown as HTMLElement,
+    ), true);
+  });
+
+  test("ignores only the edited card body timestamp in refresh fingerprints", () => {
+    const editedCard = {
+      path: "edited.md",
+      modified: 10,
+      presentation: ["filed", "1"],
+    };
+    const otherCard = {
+      path: "other.md",
+      modified: 20,
+      presentation: ["filed", "2"],
+    };
+    const state = {
+      editingPath: "edited.md",
+      cards: [editedCard, otherCard],
+      context: { settings: "same" },
+    };
+    const baseline = inlineEditPresentationFingerprint(state);
+
+    assert.equal(inlineEditPresentationFingerprint({
+      ...state,
+      cards: [
+        { path: "edited.md", modified: 11, presentation: ["filed", "1"] },
+        otherCard,
+      ],
+    }), baseline);
+    assert.notEqual(inlineEditPresentationFingerprint({
+      ...state,
+      cards: [
+        editedCard,
+        { path: "other.md", modified: 21, presentation: ["filed", "2"] },
+      ],
+    }), baseline);
+    assert.notEqual(inlineEditPresentationFingerprint({
+      ...state,
+      context: { settings: "changed" },
+    }), baseline);
   });
 });

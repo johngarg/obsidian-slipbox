@@ -130,8 +130,10 @@ import {
 import {
   consumeDeckEscape,
   dispatchInlineAwareDeckAction,
+  inlineEditPresentationFingerprint,
   isInlineEditBodyTarget,
   resolveDeckEscapeAction,
+  shouldFinishInlineEditFromPointerDown,
   shouldNavigateDeckFromWheel,
 } from "./inline-edit-interactions.js";
 import {
@@ -208,7 +210,10 @@ interface MountedInlineEdit {
   readonly bodyEl: HTMLElement;
   readonly cardEl: HTMLElement;
   readonly renderedScrollTop: number;
+  readonly presentationFingerprint: string;
 }
+
+type DeckRefreshReason = "full" | "index";
 
 export class DeckView extends ItemView {
   /**
@@ -289,6 +294,12 @@ export class DeckView extends ItemView {
   private readonly inlineEditFinalization = new InlineEditFinalizationCoordinator();
   private inlineEditStarting = false;
   private renderRefreshDeferred = false;
+  private inlineIndexRefreshDeferred = false;
+  private recentInlineEditRefresh: {
+    readonly path: string;
+    readonly presentationFingerprint: string;
+    readonly expiresAt: number;
+  } | null = null;
   private viewedCard: ViewedCardState | null = null;
   private viewedCardEl: HTMLElement | null = null;
   private viewedCardBodyEl: HTMLElement | null = null;
@@ -1489,9 +1500,33 @@ export class DeckView extends ItemView {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(reason: DeckRefreshReason = "full"): Promise<void> {
     if (this.inlineEdit !== null || this.inlineEditStarting) {
-      this.renderRefreshDeferred = true;
+      const editing = this.inlineEdit;
+      if (
+        reason === "index" &&
+        editing !== null &&
+        editing.presentationFingerprint ===
+          this.currentInlineEditPresentationFingerprint(
+            editing.controller.snapshot.path,
+          )
+      ) {
+        this.inlineIndexRefreshDeferred = true;
+      } else {
+        this.renderRefreshDeferred = true;
+      }
+      return;
+    }
+    const recent = this.recentInlineEditRefresh;
+    this.recentInlineEditRefresh = null;
+    if (
+      reason === "index" &&
+      recent !== null &&
+      Date.now() <= recent.expiresAt &&
+      recent.presentationFingerprint ===
+        this.currentInlineEditPresentationFingerprint(recent.path)
+    ) {
+      this.refreshInlineEditBacklinks();
       return;
     }
     const restoreFilingInputFocus = this.isFilingInputFocused;
@@ -1641,6 +1676,7 @@ export class DeckView extends ItemView {
     if (editing === null) {
       return true;
     }
+    const edited = editing.controller.snapshot.version > 0;
     const saved = await editing.controller.finish();
     if (!saved) {
       this.applyInlineEditFailure(editing.controller.snapshot.failure);
@@ -1653,6 +1689,14 @@ export class DeckView extends ItemView {
     const path = editing.controller.snapshot.path;
     const shouldSkipRender = ["view-close", "plugin-unload", "quit"]
       .some((reason) => reasons.has(reason));
+    const presentationUnchanged = editing.presentationFingerprint ===
+      this.currentInlineEditPresentationFingerprint(path);
+    const requiresFullRefresh = this.renderRefreshDeferred ||
+      (this.inlineIndexRefreshDeferred && !presentationUnchanged);
+    const refreshBacklinks = this.inlineIndexRefreshDeferred &&
+      presentationUnchanged;
+    this.renderRefreshDeferred = false;
+    this.inlineIndexRefreshDeferred = false;
     this.clearInlineEditPolicyMessage();
     this.inlineEdit = null;
     this.plugin.releaseInlineEdit(path, this);
@@ -1664,12 +1708,23 @@ export class DeckView extends ItemView {
     ]);
 
     if (!shouldSkipRender) {
-      if (this.renderRefreshDeferred) {
-        this.renderRefreshDeferred = false;
+      if (requiresFullRefresh) {
+        this.recentInlineEditRefresh = null;
         await this.refresh();
       } else {
         await this.rerenderEditedPath(editing.file, editing.bodyEl, editing.renderedScrollTop);
         await this.trayRenderer.rerenderPath(editing.file);
+        if (refreshBacklinks) {
+          this.refreshInlineEditBacklinks();
+        }
+        if (edited) {
+          this.recentInlineEditRefresh = {
+            path,
+            presentationFingerprint:
+              this.currentInlineEditPresentationFingerprint(path),
+            expiresAt: Date.now() + 2_000,
+          };
+        }
       }
     }
     if (reasons.has("escape")) {
@@ -1993,24 +2048,60 @@ export class DeckView extends ItemView {
       bodyEl,
       cardEl,
       renderedScrollTop,
+      presentationFingerprint:
+        this.currentInlineEditPresentationFingerprint(file.path),
     };
   }
 
   private handleInlineEditPointerDown(event: PointerEvent): void {
     const editing = this.inlineEdit;
-    if (editing === null || !(event.target instanceof Element)) {
+    if (editing === null) {
       return;
     }
-    if (editing.textarea.contains(event.target)) {
-      return;
-    }
-    if (
-      editing.cardEl.contains(event.target) &&
-      event.target.closest("a, button, input, select, [contenteditable='true']") === null
-    ) {
+    if (!shouldFinishInlineEditFromPointerDown(
+      event.target,
+      editing.textarea,
+      editing.cardEl,
+    )) {
       return;
     }
     void this.finishInlineEditing("outside-pointer");
+  }
+
+  private currentInlineEditPresentationFingerprint(path: string): string {
+    const snapshot = this.plugin.index.snapshot;
+    return inlineEditPresentationFingerprint({
+      editingPath: path,
+      cards: [
+        ...snapshot.filed.map((card) => ({
+          path: card.path,
+          modified: card.file.stat.mtime,
+          presentation: [
+            "filed",
+            card.address,
+            this.plugin.cardTitle(card.file),
+          ],
+        })),
+        ...snapshot.unfiled.map((file) => ({
+          path: file.path,
+          modified: file.stat.mtime,
+          presentation: ["unfiled", this.plugin.cardTitle(file)],
+        })),
+      ],
+      context: {
+        issues: snapshot.issues,
+        tray: this.plugin.tray,
+        settings: this.plugin.settings,
+        bookmarks: this.plugin.state.bookmarks,
+      },
+    });
+  }
+
+  private refreshInlineEditBacklinks(): void {
+    const backlinksForPath = (path: string) =>
+      this.plugin.index.backlinksForPath(path);
+    this.cardFooters.refreshBacklinks(backlinksForPath);
+    this.viewedCardFooter.refreshBacklinks(backlinksForPath);
   }
 
   private reportInlineEditFailure(failure: InlineEditFailure): void {

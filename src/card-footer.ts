@@ -36,12 +36,15 @@ export interface CardFooterRenderOptions {
   readonly activate: (backlink: FiledCard) => void | Promise<void>;
 }
 
-interface RenderedFooter extends CardFooterRenderOptions {
+interface RenderedFooter {
+  readonly sourcePath: string;
+  backlinks: readonly FiledCard[];
+  readonly activate: (backlink: FiledCard) => void | Promise<void>;
   readonly footer: HTMLElement;
-  readonly content: HTMLElement | null;
-  readonly measureItems: readonly HTMLElement[];
-  readonly measureSeparator: HTMLElement | null;
-  readonly measureOverflow: HTMLElement | null;
+  content: HTMLElement | null;
+  measureItems: readonly HTMLElement[];
+  measureSeparator: HTMLElement | null;
+  measureOverflow: HTMLElement | null;
   interactive: boolean;
   fitKey: string | null;
 }
@@ -65,7 +68,9 @@ export class CardFooterManager {
   render(parent: HTMLElement, options: CardFooterRenderOptions): HTMLElement {
     const footer = parent.createDiv({ cls: "slipbox-card-footer" });
     const entry: RenderedFooter = {
-      ...options,
+      sourcePath: options.sourcePath,
+      backlinks: options.backlinks,
+      activate: options.activate,
       footer,
       content: null,
       measureItems: [],
@@ -75,41 +80,7 @@ export class CardFooterManager {
       fitKey: null,
     };
 
-    if (options.backlinks.length > 0) {
-      footer.createSpan({
-        cls: "slipbox-card-footer-icon",
-        text: "↩",
-        attr: { "aria-hidden": "true" },
-      });
-      const content = footer.createDiv({ cls: "slipbox-card-footer-content" });
-      const measure = footer.createDiv({
-        cls: "slipbox-card-footer-measure",
-        attr: { "aria-hidden": "true" },
-      });
-      const measureItems = options.backlinks
-        .slice(0, BACKLINK_MEASUREMENT_LIMIT)
-        .map((backlink) =>
-        measure.createSpan({
-          cls: "slipbox-card-backlink",
-          text: backlink.address,
-        }),
-        );
-      const measureSeparator = measure.createSpan({
-        cls: "slipbox-card-backlink-separator",
-        text: "·",
-      });
-      const measureOverflow = measure.createEl("button", {
-        cls: "slipbox-card-backlink-overflow",
-        text: "+1",
-        attr: { type: "button", tabindex: "-1" },
-      });
-      Object.assign(entry, {
-        content,
-        measureItems,
-        measureSeparator,
-        measureOverflow,
-      });
-    }
+    this.populate(entry, options.backlinks);
 
     this.entries.add(entry);
     this.entriesByFooter.set(footer, entry);
@@ -117,6 +88,31 @@ export class CardFooterManager {
     this.resizeObserver.observe(footer);
     this.scheduleLayout();
     return footer;
+  }
+
+  /** Refresh link-derived footer data without replacing any mounted card. */
+  refreshBacklinks(
+    backlinksForPath: (sourcePath: string) => readonly FiledCard[],
+  ): void {
+    for (const entry of this.entries) {
+      const backlinks = backlinksForPath(entry.sourcePath);
+      if (
+        entry.backlinks.length === backlinks.length &&
+        entry.backlinks.every((backlink, index) => {
+          const next = backlinks[index];
+          return next !== undefined &&
+            backlink.path === next.path &&
+            backlink.address === next.address;
+        })
+      ) {
+        continue;
+      }
+      if (this.overflowEntry === entry) {
+        this.closeOverflowMenu();
+      }
+      this.populate(entry, backlinks);
+    }
+    this.scheduleLayout();
   }
 
   setInteractive(card: HTMLElement, interactive: boolean): void {
@@ -158,6 +154,54 @@ export class CardFooterManager {
       window.clearTimeout(this.layoutTimer);
       this.layoutTimer = null;
     }
+  }
+
+  private populate(
+    entry: RenderedFooter,
+    backlinks: readonly FiledCard[],
+  ): void {
+    entry.footer.empty();
+    entry.backlinks = backlinks;
+    entry.content = null;
+    entry.measureItems = [];
+    entry.measureSeparator = null;
+    entry.measureOverflow = null;
+    entry.fitKey = null;
+    if (backlinks.length === 0) {
+      this.applyInteractiveState(entry);
+      return;
+    }
+
+    entry.footer.createSpan({
+      cls: "slipbox-card-footer-icon",
+      text: "↩",
+      attr: { "aria-hidden": "true" },
+    });
+    entry.content = entry.footer.createDiv({
+      cls: "slipbox-card-footer-content",
+    });
+    const measure = entry.footer.createDiv({
+      cls: "slipbox-card-footer-measure",
+      attr: { "aria-hidden": "true" },
+    });
+    entry.measureItems = backlinks
+      .slice(0, BACKLINK_MEASUREMENT_LIMIT)
+      .map((backlink) =>
+        measure.createSpan({
+          cls: "slipbox-card-backlink",
+          text: backlink.address,
+        })
+      );
+    entry.measureSeparator = measure.createSpan({
+      cls: "slipbox-card-backlink-separator",
+      text: "·",
+    });
+    entry.measureOverflow = measure.createEl("button", {
+      cls: "slipbox-card-backlink-overflow",
+      text: "+1",
+      attr: { type: "button", tabindex: "-1" },
+    });
+    this.applyInteractiveState(entry);
   }
 
   private flushLayout(): void {

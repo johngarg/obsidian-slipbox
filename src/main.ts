@@ -1441,10 +1441,10 @@ export default class SlipboxPlugin extends Plugin {
       await this.persistState();
     }
     this.reconcileSessionTray();
-    await this.refreshDeckViews();
+    await this.refreshDeckViews("index");
   }
 
-  async refreshDeckViews(): Promise<void> {
+  async refreshDeckViews(reason: "full" | "index" = "full"): Promise<void> {
     this.startupDeckMode ??= deckPositionModeForPileCount(
       this.tray.piles.length,
     );
@@ -1453,7 +1453,7 @@ export default class SlipboxPlugin extends Plugin {
       this.app.workspace
         .getLeavesOfType(DECK_VIEW_TYPE)
         .flatMap((leaf) =>
-          leaf.view instanceof DeckView ? [leaf.view.refresh()] : [],
+          leaf.view instanceof DeckView ? [leaf.view.refresh(reason)] : [],
         ),
     );
   }

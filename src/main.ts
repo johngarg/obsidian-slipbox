@@ -28,7 +28,11 @@ import {
   renameBookmarkPaths,
   type DeckBookmark,
 } from "./bookmarks.js";
-import { DECK_VIEW_TYPE, DeckView } from "./deck-view.js";
+import {
+  DECK_VIEW_TYPE,
+  DeckView,
+  type DeckRefreshReason,
+} from "./deck-view.js";
 import {
   applicableCardHeaderActions,
   type CardHeaderActionContext,
@@ -125,6 +129,12 @@ import {
   splitNoteBody,
 } from "./note-body.js";
 import { preservesProtectedText } from "./paper-workflow.js";
+import {
+  IndexRefreshCoordinator,
+  type AfterIndexReconcile,
+  type IndexRefreshBatch,
+  type IndexRefreshReason,
+} from "./index-refresh-coordinator.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -174,13 +184,21 @@ export default class SlipboxPlugin extends Plugin {
   canvas!: CanvasBridge;
 
   private problemStatusBarItem: HTMLElement | null = null;
-  private indexRefreshTimer: number | null = null;
   private cardSpreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
   private persistQueue: Promise<void> = Promise.resolve();
   private trayPileSequence = 0;
   private startupDeckMode: DeckPositionMode | null = null;
   private rawSettings: unknown = {};
+  private readonly indexRefreshCoordinator = new IndexRefreshCoordinator({
+    delayMs: 80,
+    schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    cancelScheduled: (handle) => window.clearTimeout(handle as number),
+    run: (batch) => this.performIndexRefresh(batch),
+    reportBackgroundError: (error) => {
+      new Notice(`Could not refresh the card index: ${errorMessage(error)}`);
+    },
+  });
   private readonly inlineEditOwners = new InlineEditPathLock<DeckView>();
   private readonly detachedInlineEditDrafts = new Map<
     string,
@@ -250,9 +268,7 @@ export default class SlipboxPlugin extends Plugin {
 
   onunload(): void {
     void this.finishInlineEdits("plugin-unload");
-    if (this.indexRefreshTimer !== null) {
-      window.clearTimeout(this.indexRefreshTimer);
-    }
+    this.indexRefreshCoordinator.dispose();
     if (this.cardSpreadSaveTimer !== null) {
       window.clearTimeout(this.cardSpreadSaveTimer);
       this.cardSpreadSaveTimer = null;
@@ -262,6 +278,10 @@ export default class SlipboxPlugin extends Plugin {
 
   async openDeck(filingFile?: TFile): Promise<DeckView> {
     await this.refreshIndex();
+    return this.revealDeck(filingFile);
+  }
+
+  private async revealDeck(filingFile?: TFile): Promise<DeckView> {
     let leaf: WorkspaceLeaf;
     const existing = this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)[0];
     if (existing === undefined) {
@@ -297,7 +317,7 @@ export default class SlipboxPlugin extends Plugin {
     }
     this.cardSpreadSaveTimer = window.setTimeout(() => {
       this.cardSpreadSaveTimer = null;
-      void this.persistState().then(() => this.refreshDeckViews());
+      void this.persistState();
     }, 160);
   }
 
@@ -488,14 +508,9 @@ export default class SlipboxPlugin extends Plugin {
       this.settings.branchLinkMarker !== previousBranchLinkMarker ||
       this.settings.inferAddressBranches !== previousInferAddressBranches
     ) {
-      await this.refreshIndex();
-      if (this.settings.deckOrdering !== previousOrdering) {
-        for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-          if (leaf.view instanceof DeckView) {
-            await leaf.view.handleDeckOrderingChanged();
-          }
-        }
-      }
+      await this.refreshIndex(
+        this.settings.deckOrdering !== previousOrdering ? "ordering" : "index",
+      );
     } else if (settingsEqualExceptBranchingPresentation(
       previousSettings,
       this.settings,
@@ -868,12 +883,12 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async beginFiling(file: TFile): Promise<void> {
-    this.index.refresh();
+    await this.refreshIndex();
     if (this.cardMetadataState(file) !== "unfiled") {
       new Notice("Only an unfiled card can enter filing mode.");
       return;
     }
-    await this.openDeck(file);
+    await this.revealDeck(file);
   }
 
   isUnfiledCard(file: TFile): boolean {
@@ -1185,22 +1200,21 @@ export default class SlipboxPlugin extends Plugin {
       }
       if (placement.kind === "desk") {
         await this.waitForCachedAddress(file, "");
-        this.index.refresh();
-        // Reconciliation alone places the card in the Desk's home pile, which
-        // is where every other newly discovered unfiled card lands.
-        this.reconcileSessionTray();
-        if (placement.position !== undefined) {
-          this.tray = placeUnfiledCardAtPosition(
-            this.tray,
-            file.path,
-            this.createTrayPileId(),
-            placement.position,
-          );
-        }
-        await this.refreshDeckViews();
+        const position = placement.position;
+        await this.refreshIndex("index", position === undefined
+          ? undefined
+          : () => {
+            this.tray = placeUnfiledCardAtPosition(
+              this.tray,
+              file.path,
+              this.createTrayPileId(),
+              position,
+            );
+          });
         this.focusDeskCardInViews(file.path);
+      } else {
+        this.queueIndexRefresh();
       }
-      this.queueIndexRefresh();
     } catch (error) {
       new Notice(`Could not create a card: ${errorMessage(error)}`);
     }
@@ -1413,13 +1427,7 @@ export default class SlipboxPlugin extends Plugin {
     if (this.filingWriteInProgress) {
       return;
     }
-    if (this.indexRefreshTimer !== null) {
-      window.clearTimeout(this.indexRefreshTimer);
-    }
-    this.indexRefreshTimer = window.setTimeout(() => {
-      this.indexRefreshTimer = null;
-      void this.refreshIndex();
-    }, 80);
+    this.indexRefreshCoordinator.queue();
   }
 
   private registerIndexEvents(): void {
@@ -1448,7 +1456,17 @@ export default class SlipboxPlugin extends Plugin {
     await this.refreshIndex();
   }
 
-  private async refreshIndex(): Promise<void> {
+  private refreshIndex(
+    reason: IndexRefreshReason = "index",
+    afterReconcile?: AfterIndexReconcile,
+  ): Promise<void> {
+    return this.indexRefreshCoordinator.refresh({
+      reason,
+      ...(afterReconcile === undefined ? {} : { afterReconcile }),
+    });
+  }
+
+  private async performIndexRefresh(batch: IndexRefreshBatch): Promise<void> {
     this.index.refresh();
     if (this.state.bookmarks.some((bookmark) => !isPathBookmark(bookmark))) {
       this.state = {
@@ -1461,10 +1479,13 @@ export default class SlipboxPlugin extends Plugin {
       await this.persistState();
     }
     this.reconcileSessionTray();
-    await this.refreshDeckViews("index");
+    for (const afterReconcile of batch.afterReconcile) {
+      afterReconcile();
+    }
+    await this.refreshDeckViews(batch.reason);
   }
 
-  async refreshDeckViews(reason: "full" | "index" = "full"): Promise<void> {
+  async refreshDeckViews(reason: DeckRefreshReason = "full"): Promise<void> {
     this.startupDeckMode ??= deckPositionModeForPileCount(
       this.tray.piles.length,
     );

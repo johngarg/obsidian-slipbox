@@ -230,7 +230,7 @@ interface CardActionTarget {
   readonly pileId?: string;
 }
 
-type DeckRefreshReason = "full" | "index";
+export type DeckRefreshReason = "full" | "index" | "ordering";
 
 export class DeckView extends ItemView {
   /**
@@ -1756,7 +1756,7 @@ export class DeckView extends ItemView {
     this.reconcileScrollPositions();
     this.chooseAvailableActiveCard();
     this.reconcileCardFocus();
-    if (this.activePath !== previousActivePath) {
+    if (reason === "ordering" || this.activePath !== previousActivePath) {
       this.viewportOffset = 0;
     }
     this.clampViewportOffset();
@@ -1815,13 +1815,6 @@ export class DeckView extends ItemView {
       this.focusViewedCard();
     }
     new Notice("Filing cancelled. The card remains in its pile.");
-  }
-
-  async handleDeckOrderingChanged(): Promise<void> {
-    const restoreFilingInputFocus = this.isFilingInputFocused;
-    this.recalculateFilingPreview();
-    this.viewportOffset = 0;
-    await this.renderDeck(restoreFilingInputFocus);
   }
 
   handleCardSpreadChanged(): void {

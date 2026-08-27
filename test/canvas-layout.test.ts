@@ -114,8 +114,19 @@ describe("Canvas file-node layout", () => {
     const parsed = parseCanvasDocument('{"nodes":[],"edges":[],"future":1}');
     assert.equal(parsed.future, 1);
     assert.equal(parseCanvasDocument(serializeCanvasDocument(parsed)).future, 1);
+    assert.deepEqual(parseCanvasDocument("{}"), { nodes: [], edges: [] });
+    assert.deepEqual(parseCanvasDocument('{"nodes":[]}'), {
+      nodes: [],
+      edges: [],
+    });
+    assert.deepEqual(parseCanvasDocument('{"edges":[]}'), {
+      edges: [],
+      nodes: [],
+    });
     assert.throws(() => parseCanvasDocument("not json"), /valid JSON/);
-    assert.throws(() => parseCanvasDocument('{"nodes":[]}'), /nodes or edges/);
+    assert.throws(() => parseCanvasDocument("[]"), /JSON object/);
+    assert.throws(() => parseCanvasDocument('{"nodes":null}'), /nodes field/);
+    assert.throws(() => parseCanvasDocument('{"edges":{}}'), /edges field/);
   });
 
   test("normalizes safe Canvas filenames and paths", () => {

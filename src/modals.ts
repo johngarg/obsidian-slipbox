@@ -113,14 +113,17 @@ export function promptForNewCardTitle(
 }
 
 class CanvasPromptModal extends FuzzySuggestModal<TFile> {
-  private settled = false;
+  private readonly choice: ModalChoice<TFile>;
 
   constructor(
     app: App,
     private readonly files: readonly TFile[],
-    private readonly resolveFile: (file: TFile | null) => void,
+    resolveFile: (file: TFile | null) => void,
   ) {
     super(app);
+    this.choice = modalChoice(resolveFile, (task) => {
+      window.setTimeout(task);
+    });
     this.setPlaceholder("Choose a Canvas (Esc to cancel)");
   }
 
@@ -133,16 +136,12 @@ class CanvasPromptModal extends FuzzySuggestModal<TFile> {
   }
 
   onChooseItem(file: TFile): void {
-    this.settled = true;
-    this.resolveFile(file);
+    this.choice.choose(file);
   }
 
   onClose(): void {
     super.onClose();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveFile(null);
-    }
+    this.choice.cancel();
   }
 }
 

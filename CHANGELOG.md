@@ -40,6 +40,8 @@ initial public beta.
 - Promoted explicit and inferred branching to separate top-level settings groups.
 - Removed CSS constructs flagged by Obsidian's community-plugin scanner while
   preserving signature focus and drag-time navigation behavior.
+- Desk piles can now be laid out on existing Canvases, including newly created
+  empty Canvases.
 
 ## [0.13.0] - 2026-08-27
 

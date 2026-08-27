@@ -119,7 +119,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
-    assert.equal(DEFAULT_SETTINGS.showCardTooltips, false);
+    assert.equal(DEFAULT_SETTINGS.showTooltips, false);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
     assert.equal(DEFAULT_SETTINGS.restrictViewedCardPaste, true);
     assert.equal(DEFAULT_SETTINGS.previewLinksOnHover, false);
@@ -141,7 +141,7 @@ describe("Slipbox settings", () => {
       newCardFolder: " /Cards\\Slipbox/ ",
       newNoteTimestampFormat: " YYYYMMDD-HHmmss ",
       showTitleInDeck: true,
-      showCardTooltips: true,
+      showTooltips: true,
       showDeckMap: false,
       cardSpread: 0.73,
       deckHeaderButtons: { bookmark: false, tray: false },
@@ -164,7 +164,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.newCardFolder, "Cards/Slipbox");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDD-HHmmss");
     assert.equal(settings.showTitleInDeck, true);
-    assert.equal(settings.showCardTooltips, true);
+    assert.equal(settings.showTooltips, true);
     assert.equal(settings.showDeckMap, false);
     assert.equal(settings.cardSpread, 0.73);
     assert.equal(settings.cardHeaderButtons.deck["toggle-bookmark"], false);
@@ -487,6 +487,22 @@ describe("Slipbox settings", () => {
     assert.equal(normalizeSettings({ cardSpread: 0.42 }).cardSpread, 0.42);
     assert.equal(normalizeSettings({ cardSpread: 0 }).cardSpread, MIN_CARD_SPREAD);
     assert.equal(normalizeSettings({ cardSpread: 99 }).cardSpread, MAX_CARD_SPREAD);
+  });
+
+  test("migrates the card-tooltip preference to the view-wide setting", () => {
+    assert.equal(normalizeSettings({ showCardTooltips: true }).showTooltips, true);
+    assert.equal(normalizeSettings({
+      showCardTooltips: true,
+      showTooltips: false,
+    }).showTooltips, false);
+
+    const persisted = settingsForPersistence(
+      { showCardTooltips: true, unknownFutureKey: "kept" },
+      normalizeSettings({ showCardTooltips: true }),
+    );
+    assert.equal(persisted.showTooltips, true);
+    assert.equal("showCardTooltips" in persisted, false);
+    assert.equal(persisted.unknownFutureKey, "kept");
   });
 
   test("normalizes and persists paper-workflow settings", () => {

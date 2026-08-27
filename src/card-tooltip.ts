@@ -1,6 +1,11 @@
 import type { TooltipOptions } from "obsidian";
 
 let accessibleLabelSequence = 0;
+const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+
+export interface SlipboxTooltipOptions extends TooltipOptions {
+  readonly accessibleLabel?: string;
+}
 
 const labelIdFor = (element: HTMLElement): string => {
   const existing = element.dataset.slipboxAccessibleLabelId;
@@ -21,15 +26,36 @@ const removeHiddenLabel = (element: HTMLElement): void => {
   element.removeAttribute("aria-labelledby");
 };
 
-/** Keep a card control accessible without invoking Obsidian's aria-label tooltip. */
+const setHiddenLabel = (element: HTMLElement, label: string): void => {
+  const id = labelIdFor(element);
+  let hidden = element.ownerDocument.getElementById(id);
+  if (hidden === null) {
+    hidden = element.ownerDocument.createElementNS(
+      HTML_NAMESPACE,
+      "span",
+    );
+    (element.parentElement ?? element).append(hidden);
+    hidden.id = id;
+    hidden.className = "slipbox-visually-hidden";
+  }
+  hidden.textContent = label;
+  element.setAttribute("aria-labelledby", id);
+};
+
+/** Keep a Slipbox control accessible without invoking an unwanted tooltip. */
 export function setCardTooltip(
   element: HTMLElement,
   label: string,
   showTooltip: boolean,
-  options?: TooltipOptions,
+  options?: SlipboxTooltipOptions,
 ): void {
+  const accessibleLabel = options?.accessibleLabel ?? label;
   if (showTooltip) {
-    removeHiddenLabel(element);
+    if (accessibleLabel === label) {
+      removeHiddenLabel(element);
+    } else {
+      setHiddenLabel(element, accessibleLabel);
+    }
     element.setAttribute("aria-label", label);
     element.setAttribute(
       "data-tooltip-position",
@@ -48,13 +74,5 @@ export function setCardTooltip(
     }
   }
 
-  const id = labelIdFor(element);
-  let hidden = element.ownerDocument.getElementById(id);
-  if (hidden === null) {
-    hidden = (element.parentElement ?? element).createSpan();
-    hidden.id = id;
-    hidden.className = "slipbox-visually-hidden";
-  }
-  hidden.textContent = label;
-  element.setAttribute("aria-labelledby", id);
+  setHiddenLabel(element, accessibleLabel);
 }

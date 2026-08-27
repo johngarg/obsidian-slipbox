@@ -85,6 +85,7 @@ describe("card address rendering", () => {
         duplicatePaths: [],
       },
       {
+        showTooltips: false,
         onInput: () => undefined,
         onConfirm: () => undefined,
         onCancel: () => undefined,

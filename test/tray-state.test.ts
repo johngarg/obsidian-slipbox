@@ -16,6 +16,7 @@ import {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
+  movePileToOrdinalBoundary,
   placeFiledCardAtPosition,
   placeUnfiledCardAtPosition,
   placeFiledCardInPileOrdinal,
@@ -317,6 +318,35 @@ describe("working piles", () => {
     assert.deepEqual(merged.expandedPileIds, ["pile-1", "pile-3"]);
     const reordered = reorderPiles(merged, 1, 0);
     assert.deepEqual(reordered.piles.map((pile) => pile.id), ["pile-3", "pile-1"]);
+  });
+
+  test("moves piles to ordinal and same-state stacking boundaries", () => {
+    let state = tray(
+      [filed("A.md")],
+      [filed("B.md")],
+      [filed("C.md")],
+      [filed("D.md")],
+    );
+    state = setPileExpanded(state, "pile-2", true);
+    state = setPileExpanded(state, "pile-4", true);
+
+    const front = movePileToOrdinalBoundary(state, "pile-2", "front");
+    assert.deepEqual(front.piles.map((pile) => pile.id), [
+      "pile-1", "pile-3", "pile-4", "pile-2",
+    ]);
+    assert.deepEqual(front.expandedPileIds, ["pile-2", "pile-4"]);
+    assert.equal(cardPosition(front, "B.md")?.pileIndex, 3);
+
+    const back = movePileToOrdinalBoundary(front, "pile-4", "back");
+    assert.deepEqual(back.piles.map((pile) => pile.id), [
+      "pile-4", "pile-1", "pile-3", "pile-2",
+    ]);
+    assert.deepEqual(back.expandedPileIds, ["pile-2", "pile-4"]);
+    assert.equal(cardPosition(back, "D.md")?.pileIndex, 0);
+
+    assert.equal(movePileToOrdinalBoundary(back, "pile-4", "back"), back);
+    assert.equal(movePileToOrdinalBoundary(back, "pile-2", "front"), back);
+    assert.equal(movePileToOrdinalBoundary(back, "missing", "front"), back);
   });
 
   test("moves a pile within the session workspace without disturbing its cards", () => {

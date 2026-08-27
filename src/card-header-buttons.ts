@@ -10,7 +10,10 @@ import type {
   CardHeaderButtonSettings,
   SlipboxAction,
 } from "./settings.js";
-import { releasePointerActivatedButtonFocus } from "./pointer-button-focus.js";
+import {
+  preventPointerActivatedButtonFocus,
+  releasePointerActivatedButtonFocus,
+} from "./pointer-button-focus.js";
 import { setCardTooltip } from "./card-tooltip.js";
 
 export interface CardHeaderButtonRenderOptions {
@@ -83,7 +86,8 @@ export class CardHeaderButtonController {
       button.toggleClass("is-pressed", presentation.pressed);
     }
     button.toggleClass("is-warning", presentation.warning === true);
-    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("pointerdown", (event) =>
+      preventPointerActivatedButtonFocus(event));
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -106,7 +110,8 @@ export class CardHeaderButtonController {
       delay: 250,
     });
     button.hidden = true;
-    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("pointerdown", (event) =>
+      preventPointerActivatedButtonFocus(event));
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();

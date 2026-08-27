@@ -18,6 +18,8 @@ export {
   UNFILED_ADDRESS_LABEL,
 } from "./card-address.js";
 export type { CardAddressOptions } from "./card-address.js";
+export { deleteCardWithConfirmation } from "./card-deletion.js";
+export type { CardDeletionFileManager } from "./card-deletion.js";
 export {
   buildFiledCardLookups,
   cardMetadataRecord,
@@ -179,6 +181,7 @@ export {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
+  movePileToOrdinalBoundary,
   placeFiledCardInPileOrdinal,
   pruneTrayCards,
   reconcileTray,

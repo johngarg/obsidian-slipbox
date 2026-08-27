@@ -6,10 +6,25 @@ initial public beta.
 
 ## [Unreleased]
 
+### Added
+
+- Added pile context-menu actions for bringing a pile to the highest ordinal
+  or sending it to the lowest, while expanded piles remain above collapsed
+  piles.
+
+### Changed
+
+- Replaced **Show card tooltips** with **Show tooltips**, which controls all
+  Slipbox-view tooltips while retaining accessible labels when disabled.
+
 ### Fixed
 
 - Kept late metadata updates from remounting a card as inline editing closes.
 - Kept a viewed card mounted when one of its links moves the Deck anchor.
+- Deleted cards now follow Obsidian's confirmation and trash workflow once,
+  without a second trash attempt or an erroneous missing-file notice.
+- Card-header buttons now act on their own card without first moving card
+  focus or the Deck anchor.
 
 ## [0.12.2] - 2026-08-26
 

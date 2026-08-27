@@ -1,3 +1,5 @@
+import { setCardTooltip } from "./card-tooltip.js";
+
 export interface InlineFilingEditorState {
   readonly value: string;
   readonly address: string | null;
@@ -19,6 +21,7 @@ export function filingEditorMatchesSource(
 }
 
 export interface InlineFilingEditorActions {
+  readonly showTooltips: boolean;
   readonly onInput: (value: string) => void;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
@@ -103,7 +106,10 @@ export function renderInlineFilingEditor(
   input.autocomplete = "off";
   input.spellcheck = false;
   input.placeholder = "Enter an address";
-  input.setAttribute("aria-label", "Card address");
+  setCardTooltip(input, "Card address", actions.showTooltips, {
+    placement: "bottom",
+    delay: 350,
+  });
   addressSlot.append(input);
 
   const feedback = createHtmlElement(card.ownerDocument, "div");

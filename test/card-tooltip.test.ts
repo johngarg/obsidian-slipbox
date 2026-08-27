@@ -21,7 +21,7 @@ function addObsidianCreateSpan(element: HTMLElement): void {
   });
 }
 
-describe("card tooltip accessibility", () => {
+describe("Slipbox tooltip accessibility", () => {
   test("uses a hidden accessible label when visual tooltips are disabled", () => {
     const document = documentWithObsidianDom();
     const parent = document.createElementNS(HTML_NAMESPACE, "div");
@@ -56,5 +56,31 @@ describe("card tooltip accessibility", () => {
     assert.equal(textarea.getAttribute("aria-labelledby"), labelId);
     assert.equal(document.querySelectorAll(".slipbox-visually-hidden").length, 1);
     assert.equal(document.getElementById(labelId ?? "")?.textContent, "Second label");
+  });
+
+  test("keeps a stable accessible name when dynamic tooltip text is toggled", () => {
+    const document = documentWithObsidianDom();
+    const parent = document.createElementNS(HTML_NAMESPACE, "div");
+    const input = document.createElementNS(HTML_NAMESPACE, "input");
+    addObsidianCreateSpan(parent);
+    parent.append(input);
+    document.body.append(parent);
+
+    setCardTooltip(input, "Address will be filed after 12", true, {
+      placement: "bottom",
+      accessibleLabel: "Card address",
+    });
+    const labelId = input.getAttribute("aria-labelledby");
+    assert.equal(input.getAttribute("aria-label"), "Address will be filed after 12");
+    assert.equal(input.getAttribute("data-tooltip-position"), "bottom");
+    assert.equal(document.getElementById(labelId ?? "")?.textContent, "Card address");
+
+    setCardTooltip(input, "Address will be filed after 13", false, {
+      accessibleLabel: "Card address",
+    });
+    assert.equal(input.getAttribute("aria-label"), null);
+    assert.equal(input.getAttribute("data-tooltip-position"), null);
+    assert.equal(input.getAttribute("aria-labelledby"), labelId);
+    assert.equal(document.getElementById(labelId ?? "")?.textContent, "Card address");
   });
 });

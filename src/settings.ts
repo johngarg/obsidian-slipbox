@@ -157,19 +157,19 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     id: "jump-inferred-parent",
     label: "Move Deck anchor to inferred parent",
     repeatable: false,
-    defaultBindings: [],
+    defaultBindings: [binding("-")],
   },
   {
     id: "cycle-forward-inferred-siblings",
     label: "Cycle Deck anchor forward through inferred siblings",
     repeatable: true,
-    defaultBindings: [],
+    defaultBindings: [binding("n")],
   },
   {
     id: "cycle-backward-inferred-siblings",
     label: "Cycle Deck anchor backward through inferred siblings",
     repeatable: true,
-    defaultBindings: [],
+    defaultBindings: [binding("n", ["Shift"])],
   },
   {
     id: "previous-bookmark",
@@ -534,6 +534,20 @@ const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKe
   "copy-link": [binding("y")],
 };
 
+const PREVIOUS_UNBOUND_INFERRED_DEFAULT_DECK_KEYBINDINGS: Readonly<
+  Record<DeckAction, readonly DeckKeyBinding[]>
+> = {
+  ...DEFAULT_DECK_KEYBINDINGS,
+  "jump-inferred-parent": [],
+  "cycle-forward-inferred-siblings": [],
+  "cycle-backward-inferred-siblings": [],
+};
+
+const PREVIOUS_DEFAULT_DECK_KEYBINDING_MAPS = [
+  PREVIOUS_DEFAULT_DECK_KEYBINDINGS,
+  PREVIOUS_UNBOUND_INFERRED_DEFAULT_DECK_KEYBINDINGS,
+] as const;
+
 export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "slipbox-id",
   deckOrdering: "natural",
@@ -711,22 +725,24 @@ function bindingsEqual(left: readonly DeckKeyBinding[], right: readonly DeckKeyB
 }
 
 function isCompletePreviousDefaultMap(source: Record<string, unknown>): boolean {
-  const previousActions = new Set(Object.keys(PREVIOUS_DEFAULT_DECK_KEYBINDINGS));
-  if (DECK_ACTION_DEFINITIONS.some((definition) =>
-    !previousActions.has(definition.id) &&
-    Object.prototype.hasOwnProperty.call(source, definition.id))) {
-    return false;
-  }
-  return Object.entries(PREVIOUS_DEFAULT_DECK_KEYBINDINGS).every(([action, expected]) => {
-    const candidate = source[action];
-    if (!Array.isArray(candidate)) {
+  return PREVIOUS_DEFAULT_DECK_KEYBINDING_MAPS.some((previousDefaults) => {
+    const previousActions = new Set(Object.keys(previousDefaults));
+    if (DECK_ACTION_DEFINITIONS.some((definition) =>
+      !previousActions.has(definition.id) &&
+      Object.prototype.hasOwnProperty.call(source, definition.id))) {
       return false;
     }
-    const normalized = candidate.flatMap((value): DeckKeyBinding[] => {
-      const result = normalizeKeyBinding(value);
-      return result === null ? [] : [result];
+    return Object.entries(previousDefaults).every(([action, expected]) => {
+      const candidate = source[action];
+      if (!Array.isArray(candidate)) {
+        return false;
+      }
+      const normalized = candidate.flatMap((value): DeckKeyBinding[] => {
+        const result = normalizeKeyBinding(value);
+        return result === null ? [] : [result];
+      });
+      return bindingsEqual(normalized, expected);
     });
-    return bindingsEqual(normalized, expected);
   });
 }
 

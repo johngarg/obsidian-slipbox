@@ -14,6 +14,18 @@ describe("community scanner CSS compatibility", () => {
     assert.doesNotMatch(styles, /display\s*:\s*contents\b/);
   });
 
+  test("does not use flagged text-decoration thickness", () => {
+    assert.doesNotMatch(styles, /text-decoration-thickness\s*:/);
+  });
+
+  test("avoids broad relational selectors while hiding dragged-card navigation", () => {
+    assert.doesNotMatch(styles, /:has\(/);
+    assert.match(
+      styles,
+      /\.slipbox-tray-card\.is-dragging\s*\+\s*\.slipbox-inferred-navigation/,
+    );
+  });
+
   test("gives annotated Desk signatures a stable inline allocation", () => {
     assert.match(
       styles,

@@ -80,11 +80,11 @@ Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicogra
 
 The optional **Recognise explicit branch links** setting treats a marked link alias such as `[[Child card|+a]]` as an asserted branch. The complete marker is configurable. Its remaining alias, `a` in this example, appears beside the child card's address and returns the Deck anchor to the source card. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
 
-The separate **Infer branches from addresses** setting derives an ephemeral hierarchy from address extension. With natural ordering, `2a` can be a child of `2`, while `20` is not; lexicographic ordering uses every proper literal prefix. Duplicate-address cards share one structural node. Three unbound commands move to the inferred parent or cycle forward and backward through local siblings, wrapping within the same parent. Roots form their own sibling axis; equal-depth cards under different parents do not.
+The separate **Infer branches from addresses** setting derives an ephemeral hierarchy from address extension. With natural ordering, `2a` can be a child of `2`, while `20` is not; lexicographic ordering uses every proper literal prefix. Duplicate-address cards share one structural node. Three commands move to the inferred parent or cycle forward and backward through local siblings, wrapping within the same parent. Roots form their own sibling axis; equal-depth cards under different parents do not.
 
 When **Show inferred branch navigation** is enabled, the active Deck card, the focused card in an expanded Desk pile, and the viewed card show subtle arrows beneath their lower corners. The left menu lists the inferred parent and nearest preceding sibling; the right menu lists the nearest following sibling and immediate children. Rows show canonical addresses and immediate-child counts, support keyboard operation, and preview targets according to **Preview links on hover**. Selecting one recentres the target structurally even if ordinary card-link following is disabled.
 
-The full sibling axis remains available through **Cycle Deck anchor forward through inferred siblings** and **Cycle Deck anchor backward through inferred siblings**. These commands wrap and have no default shortcuts; assign them under **Settings → Slipbox Desk → Keyboard shortcuts** or Obsidian's hotkey settings.
+The full sibling axis remains available through **Cycle Deck anchor forward through inferred siblings** and **Cycle Deck anchor backward through inferred siblings**. These commands wrap and use `n` and `N` by default; `-` moves to the inferred parent. Change them under **Settings → Slipbox Desk → Keyboard shortcuts** or Obsidian's hotkey settings.
 
 Both forms of branching are derived in memory. Enabling, disabling, or navigating them never writes Markdown, frontmatter, or addresses.
 
@@ -96,6 +96,8 @@ There are some actions that are very quick to do in the real world, but take tim
 | --- | --- |
 | `←` / `k` | Move to the previous Deck card |
 | `→` / `j` | Move to the next Deck card |
+| `-` | Move to the inferred parent |
+| `n` / `N` | Cycle forward/backward through inferred siblings |
 | `p` | Put the focused card on the Desk, or return it |
 | `e` | Edit the focused Desk or viewed card |
 | `v` | View a Desk card, or return a viewed card |

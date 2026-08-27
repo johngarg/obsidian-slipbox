@@ -185,16 +185,19 @@ describe("Deck action availability", () => {
         id: "jump-inferred-parent",
         label: "Move Deck anchor to inferred parent",
         repeatable: false,
+        defaultBindings: [{ key: "-", modifiers: [] }],
       },
       {
         id: "cycle-forward-inferred-siblings",
         label: "Cycle Deck anchor forward through inferred siblings",
         repeatable: true,
+        defaultBindings: [{ key: "n", modifiers: [] }],
       },
       {
         id: "cycle-backward-inferred-siblings",
         label: "Cycle Deck anchor backward through inferred siblings",
         repeatable: true,
+        defaultBindings: [{ key: "n", modifiers: ["Shift"] }],
       },
     ];
     for (const expectedAction of expected) {
@@ -203,7 +206,10 @@ describe("Deck action availability", () => {
       );
       assert.equal(definition?.label, expectedAction.label);
       assert.equal(definition?.repeatable, expectedAction.repeatable);
-      assert.deepEqual(definition?.defaultBindings, []);
+      assert.deepEqual(
+        definition?.defaultBindings,
+        expectedAction.defaultBindings,
+      );
       assert.equal(definition?.target, "deck-anchor");
     }
     for (const removed of [

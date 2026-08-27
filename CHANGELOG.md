@@ -21,6 +21,8 @@ initial public beta.
 
 ### Changed
 
+- Assigned Vim-style defaults for inferred navigation: `-` for the parent and
+  `n`/`N` for forward/backward sibling cycling.
 - Standardised address-derived hierarchy terminology on “inferred” throughout
   the interface, commands, settings, and documentation.
 - Divided the Branching settings into explicit and inferred subsections.
@@ -34,6 +36,8 @@ initial public beta.
   card and transferred them in place when Desk focus changes.
 - Kept available Deck commands runnable from the command palette while its
   search field is focused.
+- Removed CSS constructs flagged by Obsidian's community-plugin scanner while
+  preserving signature focus and drag-time navigation behavior.
 
 ## [0.13.0] - 2026-08-27
 

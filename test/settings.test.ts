@@ -126,13 +126,17 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.showBranchLabels, true);
     assert.equal(DEFAULT_SETTINGS.inferAddressBranches, false);
     assert.equal(DEFAULT_SETTINGS.showInferredBranchNavigation, true);
-    for (const action of [
-      "jump-inferred-parent",
-      "cycle-forward-inferred-siblings",
-      "cycle-backward-inferred-siblings",
-    ] as const) {
-      assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings[action], []);
-    }
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["jump-inferred-parent"], [
+      { key: "-", modifiers: [] },
+    ]);
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["cycle-forward-inferred-siblings"],
+      [{ key: "n", modifiers: [] }],
+    );
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["cycle-backward-inferred-siblings"],
+      [{ key: "n", modifiers: ["Shift"] }],
+    );
     assert.equal(DEFAULT_SETTINGS.showTooltips, false);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
     assert.equal(DEFAULT_SETTINGS.restrictViewedCardPaste, true);
@@ -322,17 +326,23 @@ describe("Slipbox settings", () => {
       assert.equal(definition?.scope, "active-view");
       assert.equal(definition?.target, "focused-card");
     }
-    for (const action of [
-      "jump-inferred-parent",
-      "cycle-forward-inferred-siblings",
-      "cycle-backward-inferred-siblings",
-    ] as const) {
+    const inferredDefaults = {
+      "jump-inferred-parent": [{ key: "-", modifiers: [] }],
+      "cycle-forward-inferred-siblings": [{ key: "n", modifiers: [] }],
+      "cycle-backward-inferred-siblings": [{
+        key: "n",
+        modifiers: ["Shift"],
+      }],
+    } as const;
+    for (const action of Object.keys(inferredDefaults) as Array<
+      keyof typeof inferredDefaults
+    >) {
       const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
         candidate.id === action
       );
       assert.equal(definition?.scope, "active-view");
       assert.equal(definition?.target, "deck-anchor");
-      assert.deepEqual(definition?.defaultBindings, []);
+      assert.deepEqual(definition?.defaultBindings, inferredDefaults[action]);
     }
     assert.equal(
       DECK_ACTION_DEFINITIONS.find((definition) =>
@@ -488,6 +498,17 @@ describe("Slipbox settings", () => {
       { key: "0", modifiers: [] },
     ]);
     assert.equal("toggle-toolbar" in withNewCustomization, false);
+
+    const unboundInferenceDefaults = {
+      ...DEFAULT_SETTINGS.deckKeybindings,
+      "jump-inferred-parent": [],
+      "cycle-forward-inferred-siblings": [],
+      "cycle-backward-inferred-siblings": [],
+    };
+    assert.deepEqual(
+      normalizeDeckKeybindings(unboundInferenceDefaults),
+      DEFAULT_SETTINGS.deckKeybindings,
+    );
   });
 
   test("preserves every non-default legacy array and protects legacy g", () => {
@@ -524,6 +545,19 @@ describe("Slipbox settings", () => {
     assert.deepEqual(normalized["backward-ten-cards"], [{
       key: "u",
       modifiers: ["Ctrl"],
+    }]);
+
+    const siblingConflict = normalizeDeckKeybindings({
+      "open-note": [{ key: "n", modifiers: [] }],
+    });
+    assert.deepEqual(siblingConflict["jump-inferred-parent"], [{
+      key: "-",
+      modifiers: [],
+    }]);
+    assert.deepEqual(siblingConflict["cycle-forward-inferred-siblings"], []);
+    assert.deepEqual(siblingConflict["cycle-backward-inferred-siblings"], [{
+      key: "n",
+      modifiers: ["Shift"],
     }]);
   });
 

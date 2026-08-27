@@ -184,10 +184,10 @@ export {
   renameBookmarkPaths,
 } from "./bookmarks.js";
 export {
-  normalizeDeskCards,
-  removeDeskPath,
-  renameDeskCard,
-} from "./desk-state.js";
+  normalizeLegacyDeskCards,
+  removeLegacyDeskPath,
+  renameLegacyDeskCard,
+} from "./legacy-desk-state.js";
 
 export type {
   CardIssue,
@@ -267,7 +267,7 @@ export type {
   TrayStackJitter,
   TrayState,
 } from "./tray-state.js";
-export type { DeskCardState } from "./desk-state.js";
+export type { LegacyDeskCardState } from "./legacy-desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
 export type {
   NavigablePile,

@@ -39,9 +39,9 @@ import {
 } from "./card-header-actions.js";
 import { deleteCardWithConfirmation } from "./card-deletion.js";
 import {
-  removeDeskPath,
-  renameDeskCard,
-} from "./desk-state.js";
+  removeLegacyDeskPath,
+  renameLegacyDeskCard,
+} from "./legacy-desk-state.js";
 import { validateAddress } from "./address-order.js";
 import { issueStatusSummary } from "./card-metadata.js";
 import {
@@ -1607,7 +1607,7 @@ export default class SlipboxPlugin extends Plugin {
       removesLegacyDeskCard ||
       nextBookmarks.length !== this.state.bookmarks.length
     ) {
-      const next = removeDeskPath(legacyDeskCards, file.path);
+      const next = removeLegacyDeskPath(legacyDeskCards, file.path);
       const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
       this.state = {
         ...state,
@@ -1657,7 +1657,13 @@ export default class SlipboxPlugin extends Plugin {
         ...this.state,
         bookmarks: renameBookmarkPaths(this.state.bookmarks, oldPath, file.path),
         ...(renamesLegacyDeskCard
-          ? { legacyDeskCards: renameDeskCard(legacyDeskCards, oldPath, file.path) }
+          ? {
+              legacyDeskCards: renameLegacyDeskCard(
+                legacyDeskCards,
+                oldPath,
+                file.path,
+              ),
+            }
           : {}),
       };
       void this.persistState();

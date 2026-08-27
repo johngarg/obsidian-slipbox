@@ -1,5 +1,8 @@
 import { normalizeBookmarks, type StoredBookmark } from "./bookmarks.js";
-import { normalizeDeskCards, type DeskCardState } from "./desk-state.js";
+import {
+  normalizeLegacyDeskCards,
+  type LegacyDeskCardState,
+} from "./legacy-desk-state.js";
 import {
   DEFAULT_SETTINGS,
   SLIPBOX_DATA_SCHEMA_VERSION,
@@ -11,7 +14,7 @@ import {
 export interface SlipboxPluginState {
   readonly bookmarks: readonly StoredBookmark[];
   /** Retained only until an old persistent Desk has been exported to Canvas. */
-  readonly legacyDeskCards?: readonly DeskCardState[];
+  readonly legacyDeskCards?: readonly LegacyDeskCardState[];
 }
 
 export interface SlipboxPluginData {
@@ -72,7 +75,7 @@ export function normalizePluginState(value: unknown): SlipboxPluginState {
     return DEFAULT_STATE;
   }
 
-  const legacyDeskCards = normalizeDeskCards(
+  const legacyDeskCards = normalizeLegacyDeskCards(
     Object.prototype.hasOwnProperty.call(value, "legacyDeskCards")
       ? value.legacyDeskCards
       : value.deskCards,

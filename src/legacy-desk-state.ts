@@ -1,9 +1,9 @@
-export const DESK_WIDTH = 2400;
-export const DESK_HEIGHT = 1600;
-export const DESK_CARD_WIDTH = 520;
-export const DESK_CARD_HEIGHT = 346;
+export const LEGACY_DESK_WIDTH = 2400;
+export const LEGACY_DESK_HEIGHT = 1600;
+export const LEGACY_DESK_CARD_WIDTH = 520;
+export const LEGACY_DESK_CARD_HEIGHT = 346;
 
-export interface DeskCardState {
+export interface LegacyDeskCardState {
   readonly cardRef: string;
   readonly x: number;
   readonly y: number;
@@ -18,22 +18,30 @@ function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-export function clampDeskPosition(
+export function clampLegacyDeskPosition(
   x: number,
   y: number,
 ): Readonly<{ x: number; y: number }> {
   return {
-    x: Math.round(Math.max(0, Math.min(DESK_WIDTH - DESK_CARD_WIDTH, x))),
-    y: Math.round(Math.max(0, Math.min(DESK_HEIGHT - DESK_CARD_HEIGHT, y))),
+    x: Math.round(Math.max(
+      0,
+      Math.min(LEGACY_DESK_WIDTH - LEGACY_DESK_CARD_WIDTH, x),
+    )),
+    y: Math.round(Math.max(
+      0,
+      Math.min(LEGACY_DESK_HEIGHT - LEGACY_DESK_CARD_HEIGHT, y),
+    )),
   };
 }
 
-export function normalizeDeskCards(value: unknown): readonly DeskCardState[] {
+export function normalizeLegacyDeskCards(
+  value: unknown,
+): readonly LegacyDeskCardState[] {
   if (!Array.isArray(value)) {
     return [];
   }
   const seen = new Set<string>();
-  const cards: DeskCardState[] = [];
+  const cards: LegacyDeskCardState[] = [];
   for (const candidate of value) {
     if (
       !isRecord(candidate) ||
@@ -50,7 +58,7 @@ export function normalizeDeskCards(value: unknown): readonly DeskCardState[] {
       continue;
     }
     seen.add(cardRef);
-    const position = clampDeskPosition(candidate.x, candidate.y);
+    const position = clampLegacyDeskPosition(candidate.x, candidate.y);
     cards.push({
       cardRef,
       ...position,
@@ -61,21 +69,21 @@ export function normalizeDeskCards(value: unknown): readonly DeskCardState[] {
 }
 
 /** Remove a deleted note or every note beneath a deleted folder path. */
-export function removeDeskPath(
-  cards: readonly DeskCardState[],
+export function removeLegacyDeskPath(
+  cards: readonly LegacyDeskCardState[],
   deletedPath: string,
-): readonly DeskCardState[] {
+): readonly LegacyDeskCardState[] {
   const prefix = `${deletedPath.replace(/\/$/, "")}/`;
   return cards.filter(
     (card) => card.cardRef !== deletedPath && !card.cardRef.startsWith(prefix),
   );
 }
 
-export function renameDeskCard(
-  cards: readonly DeskCardState[],
+export function renameLegacyDeskCard(
+  cards: readonly LegacyDeskCardState[],
   oldRef: string,
   newRef: string,
-): readonly DeskCardState[] {
+): readonly LegacyDeskCardState[] {
   const oldPrefix = `${oldRef.replace(/\/$/, "")}/`;
   const newPrefix = `${newRef.replace(/\/$/, "")}/`;
   const renamed = cards.map((card) => {
@@ -87,5 +95,5 @@ export function renameDeskCard(
     }
     return card;
   });
-  return normalizeDeskCards(renamed);
+  return normalizeLegacyDeskCards(renamed);
 }

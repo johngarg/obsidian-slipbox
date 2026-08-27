@@ -352,6 +352,7 @@ export class DeckView extends ItemView {
     this.viewedCardFooter = new CardFooterManager(footerEnvironment);
     const signatureEnvironment: CardSignatureEnvironment = {
       showBranchLabels: () => this.plugin.settings.showBranchLabels,
+      showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       branchesForPath: (path) => this.cardSignatureBranches(path),
       preview: (event, target, branch, targetPath) => {
@@ -376,6 +377,7 @@ export class DeckView extends ItemView {
       showNavigation: () =>
         this.plugin.settings.inferAddressBranches &&
         this.plugin.settings.showInferredBranchNavigation,
+      showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       relationsForPath: (path: string) =>
         this.plugin.index.inferredNavigationForPath(path),
@@ -3831,6 +3833,7 @@ export class DeckView extends ItemView {
     attachRenderedLinkInteractions(target, {
       previewEnabled: this.plugin.settings.previewLinksOnHover,
       followEnabled: this.plugin.settings.followLinksFromCards,
+      showTooltips: this.plugin.settings.showTooltips,
       preview: (event, link, linktext) => {
         this.app.workspace.trigger("hover-link", {
           event,

@@ -28,6 +28,7 @@ describe("Slipbox tooltip accessibility", () => {
     const button = document.createElementNS(HTML_NAMESPACE, "button");
     addObsidianCreateSpan(parent);
     button.setAttribute("aria-label", "Old");
+    button.setAttribute("title", "Old native tooltip");
     button.setAttribute("data-tooltip-position", "bottom");
     parent.append(button);
     document.body.append(parent);
@@ -35,6 +36,7 @@ describe("Slipbox tooltip accessibility", () => {
     setCardTooltip(button, "Edit card", false);
 
     assert.equal(button.getAttribute("aria-label"), null);
+    assert.equal(button.getAttribute("title"), null);
     assert.equal(button.getAttribute("data-tooltip-position"), null);
     const labelId = button.getAttribute("aria-labelledby");
     assert.notEqual(labelId, null);

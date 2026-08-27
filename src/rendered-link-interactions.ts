@@ -1,6 +1,9 @@
+import { setCardTooltip } from "./card-tooltip.js";
+
 export interface RenderedLinkInteractionOptions {
   readonly previewEnabled: boolean;
   readonly followEnabled: boolean;
+  readonly showTooltips: boolean;
   readonly preview: (
     event: MouseEvent,
     link: HTMLAnchorElement,
@@ -51,9 +54,26 @@ export function applyOwnedLinkAccessibility(
 export function applyRenderedLinkAccessibility(
   target: HTMLElement,
   followEnabled: boolean,
+  showTooltips: boolean,
 ): void {
   target.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
     applyOwnedLinkAccessibility(link, followEnabled);
+    if (showTooltips) {
+      return;
+    }
+    const hasVisualTooltip = link.getAttributeNames().some((attribute) =>
+      attribute === "aria-label" ||
+      attribute === "title" ||
+      attribute.startsWith("data-tooltip")
+    );
+    if (!hasVisualTooltip) {
+      return;
+    }
+    const label = link.getAttribute("aria-label") ??
+      link.getAttribute("title") ??
+      link.textContent?.trim() ??
+      "Link";
+    setCardTooltip(link, label === "" ? "Link" : label, false);
   });
 }
 
@@ -66,7 +86,7 @@ export function attachRenderedLinkInteractions(
     options.previewEnabled,
     options.followEnabled,
   );
-  applyRenderedLinkAccessibility(target, policy.follow);
+  applyRenderedLinkAccessibility(target, policy.follow, options.showTooltips);
   target.addEventListener("mouseover", (event) => {
     const ElementType = target.ownerDocument.defaultView?.Element;
     if (

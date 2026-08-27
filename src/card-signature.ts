@@ -1,5 +1,6 @@
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { renderCardAddress } from "./card-address.js";
+import { setCardTooltip } from "./card-tooltip.js";
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const BRANCH_MEASUREMENT_LIMIT = 64;
@@ -19,6 +20,7 @@ export interface CardSignatureOverflowItem {
 
 export interface CardSignatureEnvironment {
   readonly showBranchLabels: () => boolean;
+  readonly showTooltips: () => boolean;
   readonly previewLinksOnHover: () => boolean;
   readonly branchesForPath: (path: string) => readonly CardSignatureBranch[];
   readonly preview: (
@@ -364,9 +366,11 @@ export class CardSignatureManager {
       this.createSeparator(entry.content);
     }
     const overflow = this.createOverflowButton(entry.content, hiddenCount);
-    overflow.setAttribute(
-      "aria-label",
+    setCardTooltip(
+      overflow,
       `Show ${hiddenCount} more branch annotation${hiddenCount === 1 ? "" : "s"}`,
+      this.environment.showTooltips(),
+      { placement: "bottom" },
     );
     overflow.addEventListener("pointerdown", (event) => event.stopPropagation());
     overflow.addEventListener("click", (event) => {
@@ -399,8 +403,13 @@ export class CardSignatureManager {
     button.className = "slipbox-card-branch-label";
     button.type = "button";
     button.textContent = branch.label;
-    button.setAttribute("aria-label", branchAccessibleLabel(branch));
     if (entry !== undefined) {
+      setCardTooltip(
+        button,
+        branchAccessibleLabel(branch),
+        this.environment.showTooltips(),
+        { placement: "bottom" },
+      );
       button.addEventListener("mouseover", (event) => {
         if (entry.interactive && this.environment.previewLinksOnHover()) {
           this.environment.preview(event, button, branch, entry.path);
@@ -447,7 +456,12 @@ export class CardSignatureManager {
       const label = createHtmlElement(entry.metadata.ownerDocument, "span");
       label.className = "slipbox-card-branch-overflow-item";
       label.textContent = branch.label;
-      label.setAttribute("aria-label", branchAccessibleLabel(branch));
+      setCardTooltip(
+        label,
+        branchAccessibleLabel(branch),
+        this.environment.showTooltips(),
+        { placement: "left" },
+      );
       label.addEventListener("mouseover", (event) => {
         if (entry.interactive && this.environment.previewLinksOnHover()) {
           this.environment.preview(event, label, branch, entry.path);

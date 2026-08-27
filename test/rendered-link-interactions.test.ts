@@ -44,6 +44,7 @@ describe("rendered card-link interaction policy", () => {
     attachRenderedLinkInteractions(body as unknown as HTMLElement, {
       previewEnabled: false,
       followEnabled: false,
+      showTooltips: false,
       preview: () => {
         previews += 1;
       },
@@ -96,6 +97,7 @@ describe("rendered card-link interaction policy", () => {
     attachRenderedLinkInteractions(body as unknown as HTMLElement, {
       previewEnabled: true,
       followEnabled: true,
+      showTooltips: true,
       preview: (_event, _link, linktext) => previews.push(linktext),
       follow: (event, _link, linktext) => {
         follows.push({ linktext, button: event.button });
@@ -124,11 +126,29 @@ describe("rendered card-link interaction policy", () => {
 
   test("can refresh accessibility after a Markdown rerender", () => {
     const { body, internal } = cardBody();
-    applyRenderedLinkAccessibility(body as unknown as HTMLElement, false);
+    applyRenderedLinkAccessibility(body as unknown as HTMLElement, false, true);
     assert.equal(internal.tabIndex, -1);
-    applyRenderedLinkAccessibility(body as unknown as HTMLElement, true);
+    applyRenderedLinkAccessibility(body as unknown as HTMLElement, true, true);
     assert.equal(internal.tabIndex, 0);
     assert.equal(internal.hasAttribute("aria-disabled"), false);
+  });
+
+  test("removes Markdown-rendered visual tooltips without losing link labels", () => {
+    const { body, internal } = cardBody();
+    internal.setAttribute("aria-label", "Resolved card title");
+    internal.setAttribute("title", "Native card title");
+    internal.setAttribute("data-tooltip-position", "top");
+
+    applyRenderedLinkAccessibility(body as unknown as HTMLElement, true, false);
+
+    assert.equal(internal.getAttribute("aria-label"), null);
+    assert.equal(internal.getAttribute("title"), null);
+    assert.equal(internal.getAttribute("data-tooltip-position"), null);
+    const labelId = internal.getAttribute("aria-labelledby") ?? "";
+    assert.equal(
+      internal.ownerDocument.getElementById(labelId)?.textContent,
+      "Resolved card title",
+    );
   });
 
   test("keeps preview and following independent on bodies and backlinks", () => {
@@ -155,6 +175,7 @@ describe("rendered card-link interaction policy", () => {
       attachRenderedLinkInteractions(body as unknown as HTMLElement, {
         previewEnabled,
         followEnabled,
+        showTooltips: false,
         preview: () => {
           previews += 1;
         },

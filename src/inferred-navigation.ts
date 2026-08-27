@@ -2,6 +2,7 @@ import type {
   InferredNavigationRelations,
   InferredNavigationTarget,
 } from "./card-index.js";
+import { clearCardTooltip, setCardTooltip } from "./card-tooltip.js";
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const DEFAULT_OPEN_DELAY_MS = 180;
@@ -23,6 +24,7 @@ interface InferredNavigationRow {
 
 export interface InferredNavigationEnvironment {
   readonly showNavigation: () => boolean;
+  readonly showTooltips: () => boolean;
   readonly previewLinksOnHover: () => boolean;
   readonly relationsForPath: (path: string) => InferredNavigationRelations;
   readonly preview: (
@@ -83,7 +85,6 @@ export class InferredNavigationManager {
   ): HTMLDivElement {
     const root = createHtmlElement(owner.ownerDocument, "div");
     root.className = "slipbox-inferred-navigation";
-    root.setAttribute("aria-label", "Inferred branch navigation");
     (options.mount ?? owner).append(root);
     const entry: RenderedInferredNavigation = {
       owner,
@@ -119,6 +120,7 @@ export class InferredNavigationManager {
     this.clearTimers();
     this.closeMenu();
     for (const entry of this.entries) {
+      clearCardTooltip(entry.root);
       entry.root.remove();
     }
     this.entries.clear();
@@ -131,6 +133,12 @@ export class InferredNavigationManager {
       this.closeMenu();
     }
     entry.root.replaceChildren();
+    setCardTooltip(
+      entry.root,
+      "Inferred branch navigation",
+      this.environment.showTooltips(),
+      { placement: "bottom" },
+    );
     entry.root.hidden = !this.environment.showNavigation() || !entry.interactive;
     if (entry.root.hidden) {
       return;
@@ -154,8 +162,9 @@ export class InferredNavigationManager {
     button.className = `slipbox-inferred-navigation-arrow is-${side}`;
     button.textContent = side === "left" ? "←" : "→";
     button.disabled = !enabled;
-    button.setAttribute("aria-label", label);
-    button.title = label;
+    setCardTooltip(button, label, this.environment.showTooltips(), {
+      placement: "bottom",
+    });
     entry.root.append(button);
 
     button.addEventListener("pointerdown", (event) => event.stopPropagation());
@@ -234,7 +243,9 @@ export class InferredNavigationManager {
     const menu = createHtmlElement(document, "div");
     menu.className = `menu slipbox-inferred-navigation-menu is-${side}`;
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", trigger.getAttribute("aria-label") ?? "");
+    const menuLabel = side === "left"
+      ? "Inferred parent and preceding siblings"
+      : "Following inferred siblings and children";
     const buttons: HTMLButtonElement[] = [];
     const firstGroupLength = side === "left"
       ? (entry.relations.parent === undefined ? 0 : 1)
@@ -254,6 +265,7 @@ export class InferredNavigationManager {
       buttons.push(button);
     });
     document.body.append(menu);
+    setCardTooltip(menu, menuLabel, false);
 
     const handleOutsidePointer = (event: PointerEvent): void => {
       const target = event.target;
@@ -308,7 +320,12 @@ export class InferredNavigationManager {
     button.type = "button";
     button.className = "menu-item slipbox-inferred-navigation-item";
     button.setAttribute("role", "menuitem");
-    button.setAttribute("aria-label", accessibleRowLabel(row));
+    setCardTooltip(
+      button,
+      accessibleRowLabel(row),
+      this.environment.showTooltips(),
+      { placement: "left" },
+    );
     const address = createHtmlElement(button.ownerDocument, "span");
     address.className = "slipbox-inferred-navigation-address";
     address.textContent = row.target.address;
@@ -399,6 +416,7 @@ export class InferredNavigationManager {
     document.removeEventListener("pointerdown", state.handleOutsidePointer, true);
     document.defaultView?.removeEventListener("resize", state.handleViewportChange);
     document.removeEventListener("scroll", state.handleViewportChange, true);
+    clearCardTooltip(state.menu);
     state.menu.remove();
     if (activeManagerByDocument.get(document) === this) {
       activeManagerByDocument.delete(document);

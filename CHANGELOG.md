@@ -34,6 +34,8 @@ initial public beta.
 
 ### Fixed
 
+- Made the tooltip preference apply to inferred navigation, branch annotations,
+  and links rendered inside Deck and Desk cards.
 - Kept annotated Desk-card headers stable while labels, titles, and action
   overflow are fitted, reserved only the signature’s measured content width,
   and omitted the address separator when no annotation is present.

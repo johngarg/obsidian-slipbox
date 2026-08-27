@@ -129,6 +129,7 @@ export class DeskRenderer {
   ) {
     this.cardSignatures = new CardSignatureManager({
       showBranchLabels: () => this.plugin.settings.showBranchLabels,
+      showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       branchesForPath: (path) => this.cardSignatureBranches(path),
       preview: (event, target, branch, targetPath) => {
@@ -144,6 +145,7 @@ export class DeskRenderer {
       showNavigation: () =>
         this.plugin.settings.inferAddressBranches &&
         this.plugin.settings.showInferredBranchNavigation,
+      showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       relationsForPath: (path) => this.plugin.index.inferredNavigationForPath(path),
       preview: (event, target, destination, sourcePath) => {
@@ -247,6 +249,7 @@ export class DeskRenderer {
       applyRenderedLinkAccessibility(
         preview,
         this.plugin.settings.followLinksFromCards,
+        this.plugin.settings.showTooltips,
       );
     } catch {
       preview.setText("Preview unavailable");
@@ -836,6 +839,7 @@ export class DeskRenderer {
         applyRenderedLinkAccessibility(
           preview,
           this.plugin.settings.followLinksFromCards,
+          this.plugin.settings.showTooltips,
         );
       }
     } catch {
@@ -925,6 +929,7 @@ export class DeskRenderer {
     attachRenderedLinkInteractions(preview, {
       previewEnabled: this.plugin.settings.previewLinksOnHover,
       followEnabled: this.plugin.settings.followLinksFromCards,
+      showTooltips: this.plugin.settings.showTooltips,
       preview: (event, link, linktext) => {
         this.actions.previewLink(event, link, linktext, sourcePath);
       },

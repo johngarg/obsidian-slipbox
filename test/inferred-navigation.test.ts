@@ -27,6 +27,7 @@ const RELATIONS: InferredNavigationRelations = {
 function fixture(
   relations: InferredNavigationRelations = RELATIONS,
   interactive = true,
+  showTooltips = true,
 ) {
   const window = new Window();
   const document = window.document as unknown as Document;
@@ -49,6 +50,7 @@ function fixture(
   const activations: string[] = [];
   const manager = new InferredNavigationManager({
     showNavigation: () => show,
+    showTooltips: () => showTooltips,
     previewLinksOnHover: () => previewEnabled,
     relationsForPath: () => currentRelations,
     preview: (_event, _row, destination) => previews.push(destination.path),
@@ -93,6 +95,11 @@ describe("inferred branch navigation", () => {
       arrow(subject, "left")?.getAttribute("aria-label"),
       "Show inferred parent and preceding siblings",
     );
+    assert.equal(arrow(subject, "left")?.getAttribute("title"), null);
+    assert.equal(
+      arrow(subject, "left")?.getAttribute("data-tooltip-position"),
+      "bottom",
+    );
 
     subject.manager.setInteractive(subject.card, false);
     assert.equal(subject.navigation.hidden, true);
@@ -101,6 +108,33 @@ describe("inferred branch navigation", () => {
     subject.manager.setInteractive(subject.card, true);
     assert.equal(subject.navigation.hidden, false);
     assert.equal(subject.address.textContent, "8b");
+  });
+
+  test("hides visual tooltips while retaining accessible navigation labels", () => {
+    const subject = fixture(RELATIONS, true, false);
+    const left = arrow(subject, "left");
+    assert.equal(subject.navigation.getAttribute("aria-label"), null);
+    assert.equal(subject.navigation.getAttribute("data-tooltip-position"), null);
+    assert.equal(left?.getAttribute("aria-label"), null);
+    assert.equal(left?.getAttribute("title"), null);
+    assert.equal(left?.getAttribute("data-tooltip-position"), null);
+    const leftLabel = left?.getAttribute("aria-labelledby") ?? "";
+    assert.equal(
+      subject.document.getElementById(leftLabel)?.textContent,
+      "Show inferred parent and preceding siblings",
+    );
+
+    left?.click();
+    const row = subject.document.querySelector<HTMLButtonElement>(
+      ".slipbox-inferred-navigation-item",
+    );
+    assert.equal(row?.getAttribute("aria-label"), null);
+    assert.equal(row?.getAttribute("data-tooltip-position"), null);
+    const rowLabel = row?.getAttribute("aria-labelledby") ?? "";
+    assert.equal(
+      subject.document.getElementById(rowLabel)?.textContent,
+      "Inferred parent 8, 2 children",
+    );
   });
 
   test("moves controls between interactive Desk card owners", () => {
@@ -242,6 +276,7 @@ describe("inferred branch navigation", () => {
     subject.document.body.append(secondCard);
     const second = new InferredNavigationManager({
       showNavigation: () => true,
+      showTooltips: () => true,
       previewLinksOnHover: () => false,
       relationsForPath: () => RELATIONS,
       preview: () => undefined,

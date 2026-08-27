@@ -26,6 +26,16 @@ const removeHiddenLabel = (element: HTMLElement): void => {
   element.removeAttribute("aria-labelledby");
 };
 
+const removeVisualTooltip = (element: HTMLElement): void => {
+  element.removeAttribute("aria-label");
+  element.removeAttribute("title");
+  for (const attribute of element.getAttributeNames()) {
+    if (attribute.startsWith("data-tooltip")) {
+      element.removeAttribute(attribute);
+    }
+  }
+};
+
 const setHiddenLabel = (element: HTMLElement, label: string): void => {
   const id = labelIdFor(element);
   let hidden = element.ownerDocument.getElementById(id);
@@ -50,6 +60,7 @@ export function setCardTooltip(
   options?: SlipboxTooltipOptions,
 ): void {
   const accessibleLabel = options?.accessibleLabel ?? label;
+  element.removeAttribute("title");
   if (showTooltip) {
     if (accessibleLabel === label) {
       removeHiddenLabel(element);
@@ -67,12 +78,12 @@ export function setCardTooltip(
     return;
   }
 
-  element.removeAttribute("aria-label");
-  for (const attribute of element.getAttributeNames()) {
-    if (attribute.startsWith("data-tooltip")) {
-      element.removeAttribute(attribute);
-    }
-  }
-
+  removeVisualTooltip(element);
   setHiddenLabel(element, accessibleLabel);
+}
+
+/** Remove both visual tooltip and accessibility-label state owned by Slipbox. */
+export function clearCardTooltip(element: HTMLElement): void {
+  removeVisualTooltip(element);
+  removeHiddenLabel(element);
 }

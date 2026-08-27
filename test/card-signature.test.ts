@@ -19,7 +19,11 @@ const branch = (
   linktext: "Parent",
 });
 
-function fixture(initial: readonly CardSignatureBranch[], interactive = true) {
+function fixture(
+  initial: readonly CardSignatureBranch[],
+  interactive = true,
+  showTooltips = true,
+) {
   const window = new Window();
   const parent = window.document.createElementNS(
     "http://www.w3.org/1999/xhtml",
@@ -34,6 +38,7 @@ function fixture(initial: readonly CardSignatureBranch[], interactive = true) {
   let overflowCloseCount = 0;
   const manager = new CardSignatureManager({
     showBranchLabels: () => show,
+    showTooltips: () => showTooltips,
     previewLinksOnHover: () => previewEnabled,
     branchesForPath: () => branches,
     preview: (_event, _target, candidate) => previews.push(candidate.label),
@@ -93,6 +98,8 @@ describe("card branch signatures", () => {
     );
     const button = subject.parent.querySelector<HTMLButtonElement>("button");
     assert.equal(button?.getAttribute("aria-label"), "Branch a from 1 · Parent");
+    assert.equal(button?.getAttribute("title"), null);
+    assert.equal(button?.getAttribute("data-tooltip-position"), "bottom");
     assert.equal(button?.tabIndex, 0);
     assert.equal(signature?.classList.contains("has-branch-annotations"), true);
     assert.equal(
@@ -107,6 +114,19 @@ describe("card branch signatures", () => {
     assert.equal(
       subject.parent.querySelector<HTMLElement>(".slipbox-card-signature-branches")?.hidden,
       true,
+    );
+  });
+
+  test("hides branch tooltips while retaining accessible labels", () => {
+    const subject = fixture([branch("a")], true, false);
+    const button = subject.parent.querySelector<HTMLButtonElement>("button");
+    assert.equal(button?.getAttribute("aria-label"), null);
+    assert.equal(button?.getAttribute("title"), null);
+    assert.equal(button?.getAttribute("data-tooltip-position"), null);
+    const labelId = button?.getAttribute("aria-labelledby") ?? "";
+    assert.equal(
+      button?.querySelector(`#${labelId}`)?.textContent,
+      "Branch a from 1 · Parent",
     );
   });
 
@@ -256,6 +276,7 @@ describe("card branch signatures", () => {
       ".slipbox-card-branch-overflow",
     );
     assert.equal(overflow?.getAttribute("aria-label"), "Show 2 more branch annotations");
+    assert.equal(overflow?.getAttribute("data-tooltip-position"), "bottom");
     overflow?.click();
     assert.deepEqual(
       subject.overflowItems().map((item) => item.title.textContent),

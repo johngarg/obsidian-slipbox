@@ -87,20 +87,20 @@ import {
 import { SlipboxSettingTab } from "./settings-tab.js";
 import { CardIndex, type FiledCard } from "./card-index.js";
 import {
-  EMPTY_TRAY,
+  EMPTY_DESK,
   clearFiledCardsFromPile,
-  clearFiledCardsFromTray,
+  clearFiledCardsFromDesk,
   placeUnfiledCardAtPosition,
-  reconcileTray,
-  removeTrayPath,
-  renameTrayPath,
+  reconcileDesk,
+  removeDeskPath,
+  renameDeskPath,
   setPileExpanded,
   toggleFiledCard,
-  trayContains,
-  type TrayCardCandidate,
-  type TrayPilePosition,
-  type TrayState,
-} from "./tray-state.js";
+  deskContains,
+  type DeskCardCandidate,
+  type DeskPilePosition,
+  type DeskState,
+} from "./desk-state.js";
 import { formatCurrentTimestamp } from "./timestamp.js";
 import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
 import { normalizeCanvasPath } from "./canvas-layout.js";
@@ -146,7 +146,7 @@ export type FileCardResult =
 /** Where a newly created card goes, and whether its note is opened. */
 type NewCardPlacement =
   | { readonly kind: "open" }
-  | { readonly kind: "desk"; readonly position?: TrayPilePosition };
+  | { readonly kind: "desk"; readonly position?: DeskPilePosition };
 
 export interface InlineEditStartData {
   readonly file: TFile;
@@ -179,7 +179,7 @@ interface DetachedInlineEditPresentation {
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
   override settings: SlipboxSettings = DEFAULT_SETTINGS;
-  tray: TrayState = EMPTY_TRAY;
+  desk: DeskState = EMPTY_DESK;
   index!: CardIndex;
   canvas!: CanvasBridge;
 
@@ -187,7 +187,7 @@ export default class SlipboxPlugin extends Plugin {
   private cardSpreadSaveTimer: number | null = null;
   private filingWriteInProgress = false;
   private persistQueue: Promise<void> = Promise.resolve();
-  private trayPileSequence = 0;
+  private deskPileSequence = 0;
   private startupDeckMode: DeckPositionMode | null = null;
   private rawSettings: unknown = {};
   private readonly indexRefreshCoordinator = new IndexRefreshCoordinator({
@@ -539,7 +539,7 @@ export default class SlipboxPlugin extends Plugin {
 
     const isBookmarked =
       address !== null && this.bookmarkAtPath(file.path) !== undefined;
-    const isInTray = trayContains(this.tray, file.path);
+    const isOnDesk = deskContains(this.desk, file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
     const runViewAction = (action: Parameters<DeckView["runAction"]>[0]): void => {
@@ -552,7 +552,7 @@ export default class SlipboxPlugin extends Plugin {
       surface,
       viewedReturnSurface,
       filed: address !== null,
-      onDesk: isInTray,
+      onDesk: isOnDesk,
       bookmarked: isBookmarked,
       canMoveLeft: false,
       canMoveRight: false,
@@ -698,33 +698,33 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  createTrayPileId(): string {
-    this.trayPileSequence += 1;
-    return `tray-pile-${this.trayPileSequence}`;
+  createDeskPileId(): string {
+    this.deskPileSequence += 1;
+    return `desk-pile-${this.deskPileSequence}`;
   }
 
-  async updateTray(next: TrayState): Promise<void> {
-    this.tray = next;
+  async updateDesk(next: DeskState): Promise<void> {
+    this.desk = next;
     await this.refreshDeckViews();
   }
 
-  async toggleFileInTray(file: TFile): Promise<void> {
+  async toggleFileOnDesk(file: TFile): Promise<void> {
     this.index.refresh();
     const filed = this.index.filedByFile(file);
     if (filed === undefined) {
       new Notice("Only an available filed card can be pulled out.");
       return;
     }
-    this.tray = toggleFiledCard(
-      this.tray,
+    this.desk = toggleFiledCard(
+      this.desk,
       { cardRef: file.path, kind: "filed" },
-      this.createTrayPileId(),
+      this.createDeskPileId(),
     );
     await this.refreshDeckViews();
   }
 
   async putFileOnDesk(file: TFile): Promise<boolean> {
-    if (trayContains(this.tray, file.path)) {
+    if (deskContains(this.desk, file.path)) {
       return true;
     }
     this.index.refresh();
@@ -733,31 +733,31 @@ export default class SlipboxPlugin extends Plugin {
       new Notice("Only an available filed card can be put on the Desk.");
       return false;
     }
-    this.tray = toggleFiledCard(
-      this.tray,
+    this.desk = toggleFiledCard(
+      this.desk,
       { cardRef: file.path, kind: "filed" },
-      this.createTrayPileId(),
+      this.createDeskPileId(),
     );
     await this.refreshDeckViews();
-    return trayContains(this.tray, file.path);
+    return deskContains(this.desk, file.path);
   }
 
-  isFileInTray(file: TFile): boolean {
-    return trayContains(this.tray, file.path);
+  isFileOnDesk(file: TFile): boolean {
+    return deskContains(this.desk, file.path);
   }
 
-  async setTrayPileExpanded(pileId: string, expanded: boolean): Promise<void> {
-    this.tray = setPileExpanded(this.tray, pileId, expanded);
+  async setDeskPileExpanded(pileId: string, expanded: boolean): Promise<void> {
+    this.desk = setPileExpanded(this.desk, pileId, expanded);
     await this.refreshDeckViews();
   }
 
-  async clearTrayPile(pileId: string): Promise<void> {
-    this.tray = clearFiledCardsFromPile(this.tray, pileId);
+  async clearDeskPile(pileId: string): Promise<void> {
+    this.desk = clearFiledCardsFromPile(this.desk, pileId);
     await this.refreshDeckViews();
   }
 
-  async clearTray(): Promise<void> {
-    this.tray = clearFiledCardsFromTray(this.tray);
+  async clearDesk(): Promise<void> {
+    this.desk = clearFiledCardsFromDesk(this.desk);
     await this.refreshDeckViews();
   }
 
@@ -765,8 +765,8 @@ export default class SlipboxPlugin extends Plugin {
     return this.canvas.hasActiveCanvas();
   }
 
-  async layOutTrayPileOnActiveCanvas(pileId: string): Promise<void> {
-    const paths = this.trayPilePaths(pileId);
+  async layOutDeskPileOnActiveCanvas(pileId: string): Promise<void> {
+    const paths = this.deskPilePaths(pileId);
     if (paths.length === 0) {
       return;
     }
@@ -777,8 +777,8 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async layOutTrayPileOnCanvas(pileId: string): Promise<void> {
-    const paths = this.trayPilePaths(pileId);
+  async layOutDeskPileOnCanvas(pileId: string): Promise<void> {
+    const paths = this.deskPilePaths(pileId);
     if (paths.length === 0) {
       return;
     }
@@ -798,8 +798,8 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async createCanvasFromTrayPile(pileId: string): Promise<void> {
-    const paths = this.trayPilePaths(pileId);
+  async createCanvasFromDeskPile(pileId: string): Promise<void> {
+    const paths = this.deskPilePaths(pileId);
     if (paths.length === 0) {
       return;
     }
@@ -958,7 +958,7 @@ export default class SlipboxPlugin extends Plugin {
       const cacheReady = await this.waitForCachedAddress(file, preview.address);
       refreshAfterFiling = !cacheReady;
       this.index.refresh();
-      this.tray = removeTrayPath(this.tray, file.path);
+      this.desk = removeDeskPath(this.desk, file.path);
       const filedIndex = this.index.filedIndexForPath(file.path);
       new Notice(
         cacheReady
@@ -1155,8 +1155,8 @@ export default class SlipboxPlugin extends Plugin {
     });
   }
 
-  async createNewCardAtTrayPosition(
-    position: TrayPilePosition,
+  async createNewCardAtDeskPosition(
+    position: DeskPilePosition,
     titleMode: NewCardTitleMode = "default",
   ): Promise<void> {
     await this.createNewCard(titleMode, { kind: "desk", position });
@@ -1204,10 +1204,10 @@ export default class SlipboxPlugin extends Plugin {
         await this.refreshIndex("index", position === undefined
           ? undefined
           : () => {
-            this.tray = placeUnfiledCardAtPosition(
-              this.tray,
+            this.desk = placeUnfiledCardAtPosition(
+              this.desk,
               file.path,
-              this.createTrayPileId(),
+              this.createDeskPileId(),
               position,
             );
           });
@@ -1478,7 +1478,7 @@ export default class SlipboxPlugin extends Plugin {
       };
       await this.persistState();
     }
-    this.reconcileSessionTray();
+    this.reconcileSessionDesk();
     for (const afterReconcile of batch.afterReconcile) {
       afterReconcile();
     }
@@ -1487,7 +1487,7 @@ export default class SlipboxPlugin extends Plugin {
 
   async refreshDeckViews(reason: DeckRefreshReason = "full"): Promise<void> {
     this.startupDeckMode ??= deckPositionModeForPileCount(
-      this.tray.piles.length,
+      this.desk.piles.length,
     );
     this.updateProblemStatusBarItem();
     await Promise.all(
@@ -1591,7 +1591,7 @@ export default class SlipboxPlugin extends Plugin {
         });
       }
     }
-    this.tray = removeTrayPath(this.tray, file.path);
+    this.desk = removeDeskPath(this.desk, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
         leaf.view.handlePathDeletion(file.path);
@@ -1637,7 +1637,7 @@ export default class SlipboxPlugin extends Plugin {
         conflictRetryable: collision ? false : draft.conflictRetryable,
       });
     }
-    this.tray = renameTrayPath(this.tray, oldPath, file.path);
+    this.desk = renameDeskPath(this.desk, oldPath, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
         leaf.view.handlePathRename(oldPath, file.path);
@@ -1671,8 +1671,8 @@ export default class SlipboxPlugin extends Plugin {
     this.queueIndexRefresh();
   }
 
-  private reconcileSessionTray(): void {
-    const candidates: TrayCardCandidate[] = [
+  private reconcileSessionDesk(): void {
+    const candidates: DeskCardCandidate[] = [
       ...this.index.snapshot.unfiled.map((file) => ({
         cardRef: file.path,
         kind: "unfiled" as const,
@@ -1684,11 +1684,11 @@ export default class SlipboxPlugin extends Plugin {
         modifiedTime: card.file.stat.mtime,
       })),
     ];
-    this.tray = reconcileTray(this.tray, candidates, this.createTrayPileId());
+    this.desk = reconcileDesk(this.desk, candidates, this.createDeskPileId());
   }
 
-  private trayPilePaths(pileId: string): string[] {
-    return this.tray.piles
+  private deskPilePaths(pileId: string): string[] {
+    return this.desk.piles
       .find((pile) => pile.id === pileId)
       ?.cards.map((card) => card.cardRef) ?? [];
   }

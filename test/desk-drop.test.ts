@@ -9,8 +9,8 @@ import {
   pileHeaderPositionAtWorkspacePoint,
   pilePositionAtWorkspacePoint,
   resolveDeckCardDrop,
-} from "../src/tray-drop.js";
-import type { TrayState } from "../src/tray-state.js";
+} from "../src/desk-drop.js";
+import type { DeskState } from "../src/desk-state.js";
 
 function pile(
   window: Window,
@@ -127,7 +127,7 @@ describe("Desk card drops", () => {
 });
 
 describe("Deck card drops", () => {
-  const state: TrayState = {
+  const state: DeskState = {
     piles: [{
       id: "target",
       cards: [

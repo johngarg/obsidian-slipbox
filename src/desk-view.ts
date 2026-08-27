@@ -47,12 +47,12 @@ import {
   movePileToOrdinalBoundary,
   setPilePosition,
   splitCardIntoNewPile,
-  trayStackJitter,
-  type TrayCard,
-  type TrayPile,
-  type TrayPilePosition,
-  type TrayState,
-} from "./tray-state.js";
+  deskStackJitter,
+  type DeskCard,
+  type DeskPile,
+  type DeskPilePosition,
+  type DeskState,
+} from "./desk-state.js";
 import {
   beginPointerActionAfterGate,
   beginThresholdPointerDrag,
@@ -61,7 +61,7 @@ import {
   cardDropTargetPile,
   pileHeaderPositionAtWorkspacePoint,
   pilePositionAtWorkspacePoint,
-} from "./tray-drop.js";
+} from "./desk-drop.js";
 import type { SlipboxAction } from "./settings.js";
 import {
   applyRenderedLinkAccessibility,
@@ -70,9 +70,9 @@ import {
 import { defaultPilePosition } from "./workspace-layout.js";
 
 const DRAG_THRESHOLD_PX = 5;
-const TRAY_SINGLE_CLICK_DELAY_MS = 320;
+const DESK_SINGLE_CLICK_DELAY_MS = 320;
 
-export interface TrayViewActions {
+export interface DeskViewActions {
   jumpToFiledCard(path: string): Promise<void>;
   updateFilingInput(value: string): void;
   confirmFiling(): void;
@@ -101,13 +101,13 @@ export interface TrayViewActions {
   ): void;
 }
 
-export interface TrayFilingState extends InlineFilingEditorState {
+export interface DeskFilingState extends InlineFilingEditorState {
   readonly sourcePath: string;
   readonly sourceSurface: FilingSourceSurface;
   readonly guidance: string;
 }
 
-export class TrayRenderer {
+export class DeskRenderer {
   private components = new Map<string, Component>();
   private previews = new Map<string, HTMLElement>();
   private rootEl: HTMLElement | null = null;
@@ -124,7 +124,7 @@ export class TrayRenderer {
   constructor(
     private readonly app: App,
     private readonly plugin: SlipboxPlugin,
-    private readonly actions: TrayViewActions,
+    private readonly actions: DeskViewActions,
   ) {
     this.cardSignatures = new CardSignatureManager({
       showBranchLabels: () => this.plugin.settings.showBranchLabels,
@@ -208,7 +208,7 @@ export class TrayRenderer {
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  updateFilingState(state: TrayFilingState): void {
+  updateFilingState(state: DeskFilingState): void {
     if (this.filingEditor !== null) {
       updateInlineFilingEditor(this.filingEditor, state);
       this.applyFilingGuidance(this.filingEditor.input, state.guidance);
@@ -301,27 +301,27 @@ export class TrayRenderer {
   async render(
     stage: HTMLElement,
     space: HTMLElement,
-    filing: TrayFilingState | null,
+    filing: DeskFilingState | null,
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {
-    const state = this.plugin.tray;
+    const state = this.plugin.desk;
     const cardCount = state.piles.reduce(
       (total, pile) => total + pile.cards.length,
       0,
     );
     this.attachBackgroundMenu(stage);
     this.workspaceEl = stage;
-    const tray = space.createDiv({ cls: "slipbox-tray" });
+    const deskEl = space.createDiv({ cls: "slipbox-tray" });
     setCardTooltip(
-      tray,
+      deskEl,
       `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
       this.plugin.settings.showTooltips,
       { placement: "bottom", delay: 350 },
     );
-    this.rootEl = tray;
+    this.rootEl = deskEl;
 
-    const piles = tray.createDiv({ cls: "slipbox-tray-piles" });
+    const piles = deskEl.createDiv({ cls: "slipbox-tray-piles" });
     this.pilesAnchorEl = piles;
     if (cardCount === 0) {
       return;
@@ -364,8 +364,8 @@ export class TrayRenderer {
           .onClick(() => {
             if (position !== null) {
               void this.actions.runAfterEditing(
-                "tray-new-card",
-                () => this.plugin.createNewCardAtTrayPosition(position),
+                "desk-new-card",
+                () => this.plugin.createNewCardAtDeskPosition(position),
               );
             }
           });
@@ -378,8 +378,8 @@ export class TrayRenderer {
           .onClick(() => {
             if (position !== null) {
               void this.actions.runAfterEditing(
-                "tray-new-card",
-                () => this.plugin.createNewCardAtTrayPosition(
+                "desk-new-card",
+                () => this.plugin.createNewCardAtDeskPosition(
                   position,
                   "prompt",
                 ),
@@ -408,11 +408,11 @@ export class TrayRenderer {
 
   private renderPile(
     parent: HTMLElement,
-    pile: TrayPile,
+    pile: DeskPile,
     pileIndex: number,
-    position: TrayPilePosition | null,
+    position: DeskPilePosition | null,
     expanded: boolean,
-    filing: TrayFilingState | null,
+    filing: DeskFilingState | null,
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void>[] {
@@ -491,8 +491,8 @@ export class TrayRenderer {
           return;
         }
         void this.actions.runAfterEditing(
-          "tray-collapse-pile",
-          () => this.plugin.setTrayPileExpanded(pile.id, false),
+          "desk-collapse-pile",
+          () => this.plugin.setDeskPileExpanded(pile.id, false),
         );
       });
       handle.addEventListener("contextmenu", (event) => {
@@ -538,8 +538,8 @@ export class TrayRenderer {
       event.preventDefault();
       event.stopPropagation();
       void this.actions.runAfterEditing(
-        "tray-toggle-pile",
-        () => this.plugin.setTrayPileExpanded(pile.id, !expanded),
+        "desk-toggle-pile",
+        () => this.plugin.setDeskPileExpanded(pile.id, !expanded),
       );
     });
     pileEl.addEventListener("contextmenu", (event) => {
@@ -563,7 +563,7 @@ export class TrayRenderer {
 
   private renderPileCycleButton(
     parent: HTMLElement,
-    pile: TrayPile,
+    pile: DeskPile,
     pileIndex: number,
     direction: -1 | 1,
   ): void {
@@ -584,10 +584,10 @@ export class TrayRenderer {
       event.preventDefault();
       event.stopPropagation();
       void this.actions.runAfterEditing(
-        `tray-cycle-pile-${previous ? "previous" : "next"}`,
+        `desk-cycle-pile-${previous ? "previous" : "next"}`,
         async () => {
-          await this.plugin.updateTray(cyclePileTopCard(
-            this.plugin.tray,
+          await this.plugin.updateDesk(cyclePileTopCard(
+            this.plugin.desk,
             pile.id,
             direction,
           ));
@@ -611,12 +611,12 @@ export class TrayRenderer {
 
   private async renderCard(
     parent: HTMLElement,
-    pile: TrayPile,
-    card: TrayCard,
+    pile: DeskPile,
+    card: DeskCard,
     cardIndex: number,
     pileIndex: number,
     expanded: boolean,
-    filing: TrayFilingState | null,
+    filing: DeskFilingState | null,
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {
@@ -650,7 +650,7 @@ export class TrayRenderer {
       { placement: "bottom", delay: 350 },
     );
     miniature.dataset.pileId = pile.id;
-    const jitter = trayStackJitter(card.cardRef, cardIndex);
+    const jitter = deskStackJitter(card.cardRef, cardIndex);
     miniature.style.setProperty(
       "--slipbox-tray-card-tilt",
       `${jitter.rotationDegrees}deg`,
@@ -848,8 +848,8 @@ export class TrayRenderer {
         if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
           this.scheduleCardClick(() => {
             void this.actions.runAfterEditing(
-              "tray-expand-pile",
-              () => this.plugin.setTrayPileExpanded(pile.id, true),
+              "desk-expand-pile",
+              () => this.plugin.setDeskPileExpanded(pile.id, true),
             );
           });
         }
@@ -859,8 +859,8 @@ export class TrayRenderer {
         event.preventDefault();
         event.stopPropagation();
         void this.actions.runAfterEditing(
-          "tray-expand-pile",
-          () => this.plugin.setTrayPileExpanded(pile.id, true),
+          "desk-expand-pile",
+          () => this.plugin.setDeskPileExpanded(pile.id, true),
         );
       }
     });
@@ -883,11 +883,11 @@ export class TrayRenderer {
     this.attachCardDragging(miniature, pile, card, expanded);
   }
 
-  private renderStackLayers(parent: HTMLElement, pile: TrayPile): void {
+  private renderStackLayers(parent: HTMLElement, pile: DeskPile): void {
     const hiddenCards = pile.cards.slice(1, 8);
     hiddenCards.forEach((card, index) => {
       const depth = index + 1;
-      const jitter = trayStackJitter(card.cardRef, depth);
+      const jitter = deskStackJitter(card.cardRef, depth);
       const layer = parent.createDiv({
         cls: "slipbox-tray-stack-layer",
         attr: { "aria-hidden": "true" },
@@ -915,7 +915,7 @@ export class TrayRenderer {
       follow: (event, link, linktext) => {
         const internal = link.matches(".internal-link");
         const newLeaf = event.metaKey || event.ctrlKey || event.button === 1;
-        void this.actions.runAfterEditing("tray-rendered-link", async () => {
+        void this.actions.runAfterEditing("desk-rendered-link", async () => {
           const filed = internal
             ? resolveFiledCardLink(getLinkpath(linktext), sourcePath, {
                 resolveFile: (path, source) =>
@@ -945,8 +945,8 @@ export class TrayRenderer {
 
   private showPileMenu(
     event: MouseEvent,
-    pile: TrayPile,
-    visibleCard?: TrayCard,
+    pile: DeskPile,
+    visibleCard?: DeskCard,
   ): void {
     const menu = Menu.forEvent(event);
     if (
@@ -963,8 +963,8 @@ export class TrayRenderer {
         .setIcon("layout-dashboard")
         .setDisabled(!this.plugin.hasActiveCanvas())
         .onClick(() => this.actions.runAfterEditing(
-          "tray-layout-active-canvas",
-          () => this.plugin.layOutTrayPileOnActiveCanvas(pile.id),
+          "desk-layout-active-canvas",
+          () => this.plugin.layOutDeskPileOnActiveCanvas(pile.id),
         ));
     });
     menu.addItem((item) => {
@@ -972,8 +972,8 @@ export class TrayRenderer {
         .setTitle("Lay out pile on Canvas…")
         .setIcon("layout-template")
         .onClick(() => this.actions.runAfterEditing(
-          "tray-layout-canvas",
-          () => this.plugin.layOutTrayPileOnCanvas(pile.id),
+          "desk-layout-canvas",
+          () => this.plugin.layOutDeskPileOnCanvas(pile.id),
         ));
     });
     menu.addItem((item) => {
@@ -981,8 +981,8 @@ export class TrayRenderer {
         .setTitle("Create Canvas from pile…")
         .setIcon("file-plus-2")
         .onClick(() => this.actions.runAfterEditing(
-          "tray-create-canvas",
-          () => this.plugin.createCanvasFromTrayPile(pile.id),
+          "desk-create-canvas",
+          () => this.plugin.createCanvasFromDeskPile(pile.id),
         ));
     });
     menu.addSeparator();
@@ -992,15 +992,15 @@ export class TrayRenderer {
         .setIcon("eraser")
         .setDisabled(!pile.cards.some((card) => card.kind === "filed"))
         .onClick(() => this.actions.runAfterEditing(
-          "tray-return-pile",
-          () => this.plugin.clearTrayPile(pile.id),
+          "desk-return-pile",
+          () => this.plugin.clearDeskPile(pile.id),
         ));
     });
     menu.showAtMouseEvent(event);
   }
 
-  private showCardMenu(event: MouseEvent, pile: TrayPile, card: TrayCard): void {
-    const state = this.plugin.tray;
+  private showCardMenu(event: MouseEvent, pile: DeskPile, card: DeskCard): void {
+    const state = this.plugin.desk;
     const position = cardPosition(state, card.cardRef);
     if (position === null) {
       return;
@@ -1051,7 +1051,7 @@ export class TrayRenderer {
         .setIcon("split")
         .setDisabled(pile.cards.length <= 1)
         .onClick(() => {
-          const newPileId = this.plugin.createTrayPileId();
+          const newPileId = this.plugin.createDeskPileId();
           const split = splitCardIntoNewPile(state, card.cardRef, newPileId);
           this.moveAndFocus(
             setPilePosition(split, newPileId, {
@@ -1067,8 +1067,8 @@ export class TrayRenderer {
     menu.showAtMouseEvent(event);
   }
 
-  private addPileOrderingMenuItems(menu: Menu, pile: TrayPile): void {
-    const state = this.plugin.tray;
+  private addPileOrderingMenuItems(menu: Menu, pile: DeskPile): void {
+    const state = this.plugin.desk;
     const pileIndex = state.piles.findIndex((candidate) =>
       candidate.id === pile.id
     );
@@ -1079,9 +1079,9 @@ export class TrayRenderer {
         .setIcon("bring-to-front")
         .setDisabled(pileIndex < 0 || pileIndex === lastPileIndex)
         .onClick(() => this.actions.runAfterEditing(
-          "tray-bring-pile-to-front",
-          () => this.plugin.updateTray(movePileToOrdinalBoundary(
-            this.plugin.tray,
+          "desk-bring-pile-to-front",
+          () => this.plugin.updateDesk(movePileToOrdinalBoundary(
+            this.plugin.desk,
             pile.id,
             "front",
           )),
@@ -1093,9 +1093,9 @@ export class TrayRenderer {
         .setIcon("send-to-back")
         .setDisabled(pileIndex <= 0)
         .onClick(() => this.actions.runAfterEditing(
-          "tray-send-pile-to-back",
-          () => this.plugin.updateTray(movePileToOrdinalBoundary(
-            this.plugin.tray,
+          "desk-send-pile-to-back",
+          () => this.plugin.updateDesk(movePileToOrdinalBoundary(
+            this.plugin.desk,
             pile.id,
             "back",
           )),
@@ -1105,7 +1105,7 @@ export class TrayRenderer {
 
   private addCardFileMenuItems(
     menu: Menu,
-    card: TrayCard,
+    card: DeskCard,
     pileId: string,
   ): boolean {
     const file = this.plugin.index.fileAtPath(card.cardRef);
@@ -1113,7 +1113,7 @@ export class TrayRenderer {
       return false;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const position = cardPosition(this.plugin.tray, card.cardRef);
+    const position = cardPosition(this.plugin.desk, card.cardRef);
     const run = (action: SlipboxAction): void => {
       this.actions.focusDeskCard(card.cardRef, pileId);
       this.actions.runAction(action);
@@ -1144,8 +1144,8 @@ export class TrayRenderer {
 
   private attachCardDragging(
     element: HTMLElement,
-    pile: TrayPile,
-    card: TrayCard,
+    pile: DeskPile,
+    card: DeskCard,
     expanded: boolean,
   ): void {
     if (!expanded) {
@@ -1166,7 +1166,7 @@ export class TrayRenderer {
       const pointerId = event.pointerId;
       beginPointerActionAfterGate(
         event,
-        (action) => this.actions.runAfterEditing("tray-card-drag", action),
+        (action) => this.actions.runAfterEditing("desk-card-drag", action),
         () => {
           beginThresholdPointerDrag({
             captureTarget: element,
@@ -1196,7 +1196,7 @@ export class TrayRenderer {
                 this.actions.focusDeskCard(card.cardRef, nextPosition.pileId);
               }
               this.clearDropCues();
-              void this.plugin.updateTray(next);
+              void this.plugin.updateDesk(next);
             },
             onCancel: () => this.clearDropCues(),
           });
@@ -1208,7 +1208,7 @@ export class TrayRenderer {
   private attachPileDragging(
     element: HTMLElement,
     dragSurface: HTMLElement,
-    pile: TrayPile,
+    pile: DeskPile,
   ): void {
     dragSurface.addEventListener("pointerdown", (event) => {
       if (
@@ -1226,7 +1226,7 @@ export class TrayRenderer {
       const pointerId = event.pointerId;
       beginPointerActionAfterGate(
         event,
-        (action) => this.actions.runAfterEditing("tray-pile-drag", action),
+        (action) => this.actions.runAfterEditing("desk-pile-drag", action),
         () => {
           const origin = this.renderedPilePosition(element) ?? pile.position ?? {
             x: 0,
@@ -1256,7 +1256,7 @@ export class TrayRenderer {
                 },
               );
               this.clearDropCues();
-              void this.plugin.updateTray(next);
+              void this.plugin.updateDesk(next);
             },
             onCancel: () => {
               element.setCssProps({ translate: "" });
@@ -1275,7 +1275,7 @@ export class TrayRenderer {
     y: number,
     dragged: HTMLElement,
   ) {
-    const state = this.plugin.tray;
+    const state = this.plugin.desk;
     const targetPileEl = cardDropTargetPile(
       this.elementsBelowPoint(x, y, dragged),
       sourcePileId,
@@ -1296,7 +1296,7 @@ export class TrayRenderer {
     }
     const newPosition = this.positionAtPoint(x, y);
     if (newPosition !== null) {
-      const newPileId = this.plugin.createTrayPileId();
+      const newPileId = this.plugin.createDeskPileId();
       const split = splitCardIntoNewPile(state, cardRef, newPileId);
       return setPilePosition(split, newPileId, newPosition);
     }
@@ -1308,9 +1308,9 @@ export class TrayRenderer {
     x: number,
     y: number,
     dragged: HTMLElement,
-    newPosition: TrayPilePosition,
+    newPosition: DeskPilePosition,
   ) {
-    const state = this.plugin.tray;
+    const state = this.plugin.desk;
     const target = this.elementsBelowPoint(x, y, dragged)
       .find((element) =>
         element.matches(".slipbox-tray-pile") &&
@@ -1391,7 +1391,7 @@ export class TrayRenderer {
     y: number,
     coordinateElement: HTMLElement | null = this.pilesAnchorEl,
     hitBoundsElement: HTMLElement | null = null,
-  ): TrayPilePosition | null {
+  ): DeskPilePosition | null {
     const rect = coordinateElement?.getBoundingClientRect();
     const hitBounds = (hitBoundsElement ?? this.workspaceEl)
       ?.getBoundingClientRect();
@@ -1404,7 +1404,7 @@ export class TrayRenderer {
   positionDeckCardAtPoint(
     x: number,
     y: number,
-  ): TrayPilePosition | null {
+  ): DeskPilePosition | null {
     const rect = this.pilesAnchorEl?.getBoundingClientRect();
     const hitBounds = this.workspaceEl?.getBoundingClientRect();
     if (rect === undefined || hitBounds === undefined) {
@@ -1415,7 +1415,7 @@ export class TrayRenderer {
 
   private renderedPilePosition(
     pile: HTMLElement | null,
-  ): TrayPilePosition | null {
+  ): DeskPilePosition | null {
     const anchor = this.pilesAnchorEl;
     if (pile === null || anchor === null) {
       return null;
@@ -1452,9 +1452,9 @@ export class TrayRenderer {
     this.rootEl?.removeClass("is-dragging-card");
   }
 
-  private moveAndFocus(nextState: TrayState, cardRef: string): void {
-    void this.actions.runAfterEditing("tray-menu-move-card", async () => {
-      await this.plugin.updateTray(nextState);
+  private moveAndFocus(nextState: DeskState, cardRef: string): void {
+    void this.actions.runAfterEditing("desk-menu-move-card", async () => {
+      await this.plugin.updateDesk(nextState);
       const ownerWindow = this.rootEl?.win;
       ownerWindow?.requestAnimationFrame(() => {
         const escaped = CSS.escape(cardRef);
@@ -1476,7 +1476,7 @@ export class TrayRenderer {
       this.pendingCardClickTimer = null;
       this.pendingCardClickWindow = null;
       action();
-    }, TRAY_SINGLE_CLICK_DELAY_MS);
+    }, DESK_SINGLE_CLICK_DELAY_MS);
   }
 
   private cancelPendingCardClick(): void {

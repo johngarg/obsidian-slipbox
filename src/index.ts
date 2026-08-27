@@ -100,7 +100,7 @@ export { replaceNoteBody, splitNoteBody } from "./note-body.js";
 export type { NoteBodyParts } from "./note-body.js";
 export { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 export { resolveCardTitle } from "./card-title.js";
-export { canRunDeckAction, trayToggleLabel } from "./deck-actions.js";
+export { canRunDeckAction, deskToggleLabel } from "./deck-actions.js";
 export {
   cyclePileFocusTarget,
   rememberPileFocus,
@@ -212,36 +212,50 @@ export type {
   StoredBookmark,
 } from "./bookmarks.js";
 export {
-  EMPTY_TRAY,
+  EMPTY_DESK,
   addUniqueCardToPile,
   cardPosition,
   collapseAllPiles,
   clearFiledCardsFromPile,
-  clearFiledCardsFromTray,
+  clearFiledCardsFromDesk,
   createPile,
   cyclePileTopCard,
-  initialTrayFromUnfiled,
+  initialDeskFromUnfiled,
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
   movePileToOrdinalBoundary,
   placeFiledCardInPileOrdinal,
-  pruneTrayCards,
-  reconcileTray,
+  pruneDeskCards,
+  reconcileDesk,
   removeCard,
   removeEmptyPiles,
-  removeTrayPath,
-  renameTrayPath,
+  removeDeskPath,
+  renameDeskPath,
   reorderPiles,
   setPilePosition,
   setPileExpanded,
   splitCardIntoNewPile,
   toggleFiledCard,
-  trayContains,
-  trayHasFiledCards,
-  trayStackJitter,
-} from "./tray-state.js";
+  deskContains,
+  deskHasFiledCards,
+  deskStackJitter,
+} from "./desk-state.js";
+
+/** @deprecated Use the Desk-named exports from desk-state instead. */
+export {
+  EMPTY_DESK as EMPTY_TRAY,
+  clearFiledCardsFromDesk as clearFiledCardsFromTray,
+  initialDeskFromUnfiled as initialTrayFromUnfiled,
+  pruneDeskCards as pruneTrayCards,
+  reconcileDesk as reconcileTray,
+  removeDeskPath as removeTrayPath,
+  renameDeskPath as renameTrayPath,
+  deskContains as trayContains,
+  deskHasFiledCards as trayHasFiledCards,
+  deskStackJitter as trayStackJitter,
+} from "./desk-state.js";
 export {
   isFileNode,
   layoutFilesOnCanvas,
@@ -259,14 +273,24 @@ export type {
   LegacyDeskCanvasCard,
 } from "./canvas-layout.js";
 export type {
-  TrayCard,
-  TrayCardCandidate,
-  TrayCardKind,
-  TrayPile,
-  TrayPilePosition,
-  TrayStackJitter,
-  TrayState,
-} from "./tray-state.js";
+  DeskCard,
+  DeskCardCandidate,
+  DeskCardKind,
+  DeskPile,
+  DeskPilePosition,
+  DeskStackJitter,
+  DeskState,
+} from "./desk-state.js";
+/** @deprecated Use the Desk-named types from desk-state instead. */
+export type {
+  DeskCard as TrayCard,
+  DeskCardCandidate as TrayCardCandidate,
+  DeskCardKind as TrayCardKind,
+  DeskPile as TrayPile,
+  DeskPilePosition as TrayPilePosition,
+  DeskStackJitter as TrayStackJitter,
+  DeskState as TrayState,
+} from "./desk-state.js";
 export type { LegacyDeskCardState } from "./legacy-desk-state.js";
 export type { DeckActionContext } from "./deck-actions.js";
 export type {

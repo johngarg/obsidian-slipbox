@@ -1,29 +1,29 @@
 import { fnv1a } from "./hash.js";
 
-export type TrayCardKind = "filed" | "unfiled";
+export type DeskCardKind = "filed" | "unfiled";
 
-export interface TrayCard {
+export interface DeskCard {
   readonly cardRef: string;
-  readonly kind: TrayCardKind;
+  readonly kind: DeskCardKind;
 }
 
-export interface TrayCardCandidate extends TrayCard {
+export interface DeskCardCandidate extends DeskCard {
   readonly modifiedTime: number;
 }
 
-export interface TrayPile {
+export interface DeskPile {
   readonly id: string;
-  readonly cards: readonly TrayCard[];
-  readonly position?: TrayPilePosition;
+  readonly cards: readonly DeskCard[];
+  readonly position?: DeskPilePosition;
 }
 
-export interface TrayPilePosition {
+export interface DeskPilePosition {
   readonly x: number;
   readonly y: number;
 }
 
-export interface TrayState {
-  readonly piles: readonly TrayPile[];
+export interface DeskState {
+  readonly piles: readonly DeskPile[];
   /** Expanded piles in activation order; the last is the active pull-out target. */
   readonly expandedPileIds: readonly string[];
   /** The startup pile that receives newly discovered unfiled cards while it exists. */
@@ -41,36 +41,36 @@ export function deskCardPrimaryClickIntent(
   return expanded ? "focus-only" : "expand-pile";
 }
 
-export interface TrayStackJitter {
+export interface DeskStackJitter {
   readonly rotationDegrees: number;
   readonly offsetX: number;
   readonly offsetY: number;
 }
 
-export const EMPTY_TRAY: TrayState = {
+export const EMPTY_DESK: DeskState = {
   piles: [],
   expandedPileIds: [],
   unfiledPileId: null,
 };
 
-export function initialTrayFromUnfiled(
-  candidates: readonly TrayCardCandidate[],
+export function initialDeskFromUnfiled(
+  candidates: readonly DeskCardCandidate[],
   pileId: string,
-): TrayState {
-  return reconcileTray(EMPTY_TRAY, candidates, pileId);
+): DeskState {
+  return reconcileDesk(EMPTY_DESK, candidates, pileId);
 }
 
 export function createPile(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
-  cards: readonly TrayCard[],
+  cards: readonly DeskCard[],
   pileIndex = state.piles.length,
-): TrayState {
+): DeskState {
   if (pileId === "" || state.piles.some((pile) => pile.id === pileId)) {
     return state;
   }
-  const occupied = new Set(allTrayCardRefs(state));
-  const unique: TrayCard[] = [];
+  const occupied = new Set(allDeskCardRefs(state));
+  const unique: DeskCard[] = [];
   for (const card of cards) {
     if (card.cardRef !== "" && !occupied.has(card.cardRef)) {
       occupied.add(card.cardRef);
@@ -85,20 +85,20 @@ export function createPile(
     id: pileId,
     cards: unique,
   });
-  return cleanTray({ ...state, piles });
+  return cleanDesk({ ...state, piles });
 }
 
-export function removeEmptyPiles(state: TrayState): TrayState {
-  return cleanTray(state);
+export function removeEmptyPiles(state: DeskState): DeskState {
+  return cleanDesk(state);
 }
 
 export function addUniqueCardToPile(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
-  card: TrayCard,
+  card: DeskCard,
   cardIndex = Number.POSITIVE_INFINITY,
-): TrayState {
-  if (card.cardRef === "" || trayContains(state, card.cardRef)) {
+): DeskState {
+  if (card.cardRef === "" || deskContains(state, card.cardRef)) {
     return state;
   }
   const pileIndex = state.piles.findIndex((pile) => pile.id === pileId);
@@ -109,11 +109,11 @@ export function addUniqueCardToPile(
   const cards = [...piles[pileIndex]!.cards];
   cards.splice(clampInsertionIndex(cardIndex, cards.length), 0, card);
   piles[pileIndex] = { ...piles[pileIndex]!, cards };
-  return cleanTray({ ...state, piles });
+  return cleanDesk({ ...state, piles });
 }
 
-export function removeCard(state: TrayState, cardRef: string): TrayState {
-  return cleanTray({
+export function removeCard(state: DeskState, cardRef: string): DeskState {
+  return cleanDesk({
     ...state,
     piles: state.piles.map((pile) => ({
       ...pile,
@@ -123,11 +123,11 @@ export function removeCard(state: TrayState, cardRef: string): TrayState {
 }
 
 export function moveCardWithinPile(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
   fromIndex: number,
   toIndex: number,
-): TrayState {
+): DeskState {
   const pileIndex = state.piles.findIndex((pile) => pile.id === pileId);
   const pile = state.piles[pileIndex];
   if (
@@ -146,15 +146,15 @@ export function moveCardWithinPile(
   cards.splice(clampInsertionIndex(toIndex, cards.length), 0, card);
   const piles = [...state.piles];
   piles[pileIndex] = { ...pile, cards };
-  return cleanTray({ ...state, piles });
+  return cleanDesk({ ...state, piles });
 }
 
 /** Rotate a pile so its previous or next card becomes the visible top card. */
 export function cyclePileTopCard(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
   direction: -1 | 1,
-): TrayState {
+): DeskState {
   const pileIndex = state.piles.findIndex((pile) => pile.id === pileId);
   const pile = state.piles[pileIndex];
   if (pile === undefined || pile.cards.length < 2) {
@@ -178,11 +178,11 @@ export function cyclePileTopCard(
 }
 
 export function moveCardBetweenPiles(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
   targetPileId: string,
   targetIndex = Number.POSITIVE_INFINITY,
-): TrayState {
+): DeskState {
   const source = cardPosition(state, cardRef);
   const targetPile = state.piles.find((pile) => pile.id === targetPileId);
   if (source === null || targetPile === undefined) {
@@ -210,10 +210,10 @@ export function moveCardBetweenPiles(
  * Invalid ordinals and same-pile requests preserve object identity.
  */
 export function placeFiledCardInPileOrdinal(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
   ordinal: number,
-): TrayState {
+): DeskState {
   if (!Number.isInteger(ordinal) || ordinal <= 0 || cardRef === "") {
     return state;
   }
@@ -239,11 +239,11 @@ export function placeFiledCardInPileOrdinal(
 }
 
 export function splitCardIntoNewPile(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
   newPileId: string,
   pileIndex?: number,
-): TrayState {
+): DeskState {
   const source = cardPosition(state, cardRef);
   if (
     source === null ||
@@ -271,10 +271,10 @@ export function splitCardIntoNewPile(
 }
 
 export function mergePiles(
-  state: TrayState,
+  state: DeskState,
   sourcePileId: string,
   targetPileId: string,
-): TrayState {
+): DeskState {
   if (sourcePileId === targetPileId) {
     return state;
   }
@@ -285,7 +285,7 @@ export function mergePiles(
   if (source === undefined || target === undefined) {
     return state;
   }
-  const piles = state.piles.flatMap((pile): TrayPile[] => {
+  const piles = state.piles.flatMap((pile): DeskPile[] => {
     if (pile.id === sourcePileId) {
       return [];
     }
@@ -294,7 +294,7 @@ export function mergePiles(
     }
     return [pile];
   });
-  return cleanTray({
+  return cleanDesk({
     ...state,
     piles,
     expandedPileIds: state.expandedPileIds.map((pileId) =>
@@ -306,10 +306,10 @@ export function mergePiles(
 }
 
 export function reorderPiles(
-  state: TrayState,
+  state: DeskState,
   fromIndex: number,
   toIndex: number,
-): TrayState {
+): DeskState {
   if (
     fromIndex < 0 ||
     fromIndex >= state.piles.length ||
@@ -323,14 +323,14 @@ export function reorderPiles(
     return state;
   }
   piles.splice(clampInsertionIndex(toIndex, piles.length), 0, pile);
-  return cleanTray({ ...state, piles });
+  return cleanDesk({ ...state, piles });
 }
 
 export function movePileToOrdinalBoundary(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
   boundary: "front" | "back",
-): TrayState {
+): DeskState {
   const fromIndex = state.piles.findIndex((pile) => pile.id === pileId);
   if (fromIndex < 0) {
     return state;
@@ -342,10 +342,10 @@ export function movePileToOrdinalBoundary(
 }
 
 export function setPilePosition(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
-  position: TrayPilePosition,
-): TrayState {
+  position: DeskPilePosition,
+): DeskState {
   if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) {
     return state;
   }
@@ -363,14 +363,14 @@ export function setPilePosition(
 }
 
 export function placeFiledCardAtPosition(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
   newPileId: string,
-  position: TrayPilePosition,
-): TrayState {
+  position: DeskPilePosition,
+): DeskState {
   if (
     cardRef === "" ||
-    trayContains(state, cardRef) ||
+    deskContains(state, cardRef) ||
     !Number.isFinite(position.x) ||
     !Number.isFinite(position.y)
   ) {
@@ -386,11 +386,11 @@ export function placeFiledCardAtPosition(
 }
 
 export function placeUnfiledCardAtPosition(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
   newPileId: string,
-  position: TrayPilePosition,
-): TrayState {
+  position: DeskPilePosition,
+): DeskState {
   const withoutCard = removeCard(state, cardRef);
   const withPile = createPile(withoutCard, newPileId, [{
     cardRef,
@@ -400,10 +400,10 @@ export function placeUnfiledCardAtPosition(
 }
 
 export function clearFiledCardsFromPile(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
-): TrayState {
-  return cleanTray({
+): DeskState {
+  return cleanDesk({
     ...state,
     piles: state.piles.map((pile) => pile.id === pileId
       ? { ...pile, cards: pile.cards.filter((card) => card.kind === "unfiled") }
@@ -411,8 +411,8 @@ export function clearFiledCardsFromPile(
   });
 }
 
-export function clearFiledCardsFromTray(state: TrayState): TrayState {
-  return cleanTray({
+export function clearFiledCardsFromDesk(state: DeskState): DeskState {
+  return cleanDesk({
     ...state,
     piles: state.piles.map((pile) => ({
       ...pile,
@@ -421,18 +421,18 @@ export function clearFiledCardsFromTray(state: TrayState): TrayState {
   });
 }
 
-export function renameTrayPath(
-  state: TrayState,
+export function renameDeskPath(
+  state: DeskState,
   oldPath: string,
   newPath: string,
-): TrayState {
+): DeskState {
   const prefix = `${oldPath.replace(/\/$/, "")}/`;
   const seen = new Set<string>();
-  return cleanTray({
+  return cleanDesk({
     ...state,
     piles: state.piles.map((pile) => ({
       ...pile,
-      cards: pile.cards.flatMap((card): TrayCard[] => {
+      cards: pile.cards.flatMap((card): DeskCard[] => {
         const cardRef = card.cardRef === oldPath
           ? newPath
           : card.cardRef.startsWith(prefix)
@@ -448,9 +448,9 @@ export function renameTrayPath(
   });
 }
 
-export function removeTrayPath(state: TrayState, path: string): TrayState {
+export function removeDeskPath(state: DeskState, path: string): DeskState {
   const prefix = `${path.replace(/\/$/, "")}/`;
-  return cleanTray({
+  return cleanDesk({
     ...state,
     piles: state.piles.map((pile) => ({
       ...pile,
@@ -461,21 +461,21 @@ export function removeTrayPath(state: TrayState, path: string): TrayState {
   });
 }
 
-export function pruneTrayCards(
-  state: TrayState,
-  eligibleCards: readonly TrayCard[],
-): TrayState {
+export function pruneDeskCards(
+  state: DeskState,
+  eligibleCards: readonly DeskCard[],
+): DeskState {
   const eligible = new Map(
     eligibleCards
       .filter((card) => card.cardRef !== "")
       .map((card) => [card.cardRef, card.kind] as const),
   );
   const seen = new Set<string>();
-  return cleanTray({
+  return cleanDesk({
     ...state,
     piles: state.piles.map((pile) => ({
       ...pile,
-      cards: pile.cards.flatMap((card): TrayCard[] => {
+      cards: pile.cards.flatMap((card): DeskCard[] => {
         const kind = eligible.get(card.cardRef);
         if (
           kind === undefined ||
@@ -491,14 +491,14 @@ export function pruneTrayCards(
   });
 }
 
-export function reconcileTray(
-  state: TrayState,
-  candidates: readonly TrayCardCandidate[],
+export function reconcileDesk(
+  state: DeskState,
+  candidates: readonly DeskCardCandidate[],
   newUnfiledPileId: string,
-): TrayState {
+): DeskState {
   const eligible = uniqueCandidates(candidates);
-  let next = pruneTrayCards(state, eligible);
-  const present = new Set(allTrayCardRefs(next));
+  let next = pruneDeskCards(state, eligible);
+  const present = new Set(allDeskCardRefs(next));
   const missing = eligible
     .filter((card) => card.kind === "unfiled" && !present.has(card.cardRef))
     .sort(compareInitialCards)
@@ -513,7 +513,7 @@ export function reconcileTray(
     const piles = next.piles.map((pile) => pile.id === home.id
       ? { ...pile, cards: [...missing, ...pile.cards] }
       : pile);
-    return cleanTray({ ...next, piles });
+    return cleanDesk({ ...next, piles });
   }
   next = createPile(next, newUnfiledPileId, missing);
   return next.piles.some((pile) => pile.id === newUnfiledPileId)
@@ -522,14 +522,14 @@ export function reconcileTray(
 }
 
 export function toggleFiledCard(
-  state: TrayState,
-  card: TrayCard,
+  state: DeskState,
+  card: DeskCard,
   newPileId: string,
-): TrayState {
+): DeskState {
   if (card.kind !== "filed") {
     return state;
   }
-  if (trayContains(state, card.cardRef)) {
+  if (deskContains(state, card.cardRef)) {
     return removeCard(state, card.cardRef);
   }
   const activePileId = state.expandedPileIds[state.expandedPileIds.length - 1];
@@ -542,10 +542,10 @@ export function toggleFiledCard(
 }
 
 export function setPileExpanded(
-  state: TrayState,
+  state: DeskState,
   pileId: string,
   expanded: boolean,
-): TrayState {
+): DeskState {
   if (!state.piles.some((pile) => pile.id === pileId)) {
     return state;
   }
@@ -559,24 +559,24 @@ export function setPileExpanded(
   };
 }
 
-export function collapseAllPiles(state: TrayState): TrayState {
+export function collapseAllPiles(state: DeskState): DeskState {
   return state.expandedPileIds.length === 0
     ? state
     : { ...state, expandedPileIds: [] };
 }
 
-export function trayContains(state: TrayState, cardRef: string): boolean {
+export function deskContains(state: DeskState, cardRef: string): boolean {
   return state.piles.some((pile) =>
     pile.cards.some((card) => card.cardRef === cardRef));
 }
 
-export function trayHasFiledCards(state: TrayState): boolean {
+export function deskHasFiledCards(state: DeskState): boolean {
   return state.piles.some((pile) =>
     pile.cards.some((card) => card.kind === "filed"));
 }
 
 /** Stable pseudo-random offsets keep a pile tactile without flickering on rerender. */
-export function trayStackJitter(cardRef: string, depth: number): TrayStackJitter {
+export function deskStackJitter(cardRef: string, depth: number): DeskStackJitter {
   let hash = fnv1a(cardRef);
   hash ^= Math.imul(Math.max(0, Math.trunc(depth)) + 1, -1640531527);
   const unsigned = hash >>> 0;
@@ -588,7 +588,7 @@ export function trayStackJitter(cardRef: string, depth: number): TrayStackJitter
 }
 
 export function cardPosition(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
 ): Readonly<{
   pileId: string;
@@ -617,7 +617,7 @@ export function insertionIndexForPoint(
   return index < 0 ? itemCentres.length : index;
 }
 
-function cleanTray(state: TrayState): TrayState {
+function cleanDesk(state: DeskState): DeskState {
   const piles = state.piles.filter((pile) => pile.cards.length > 0);
   const ids = new Set(piles.map((pile) => pile.id));
   return {
@@ -632,7 +632,7 @@ function cleanTray(state: TrayState): TrayState {
   };
 }
 
-function allTrayCardRefs(state: TrayState): string[] {
+function allDeskCardRefs(state: DeskState): string[] {
   return state.piles.flatMap((pile) => pile.cards.map((card) => card.cardRef));
 }
 
@@ -644,8 +644,8 @@ function clampInsertionIndex(index: number, length: number): number {
 }
 
 function uniqueCandidates(
-  candidates: readonly TrayCardCandidate[],
-): TrayCardCandidate[] {
+  candidates: readonly DeskCardCandidate[],
+): DeskCardCandidate[] {
   const seen = new Set<string>();
   return candidates.filter((card) => {
     if (card.cardRef === "" || seen.has(card.cardRef)) {
@@ -657,8 +657,8 @@ function uniqueCandidates(
 }
 
 function compareInitialCards(
-  left: TrayCardCandidate,
-  right: TrayCardCandidate,
+  left: DeskCardCandidate,
+  right: DeskCardCandidate,
 ): number {
   return right.modifiedTime - left.modifiedTime ||
     left.cardRef.localeCompare(right.cardRef);

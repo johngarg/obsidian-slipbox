@@ -24,10 +24,10 @@ export interface DeckActionContext {
   readonly hasFiledDeskCards: boolean;
 }
 
-export function trayToggleLabel(
-  inTray: boolean,
+export function deskToggleLabel(
+  onDesk: boolean,
 ): "Return from Desk" | "Put on Desk" {
-  return inTray ? "Return from Desk" : "Put on Desk";
+  return onDesk ? "Return from Desk" : "Put on Desk";
 }
 
 export type DeskToggleFocusTarget = "deck" | "desk" | "preserve";

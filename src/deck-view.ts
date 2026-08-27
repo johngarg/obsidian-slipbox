@@ -72,17 +72,17 @@ import {
   ShortcutCommandTracker,
 } from "./shortcut-arbitration.js";
 import {
-  TrayRenderer,
-  type TrayFilingState,
-} from "./tray-view.js";
+  DeskRenderer,
+  type DeskFilingState,
+} from "./desk-view.js";
 import {
   collapseAllPiles,
   cardPosition,
   cyclePileTopCard,
   moveCardWithinPile,
   placeFiledCardInPileOrdinal,
-  trayHasFiledCards,
-} from "./tray-state.js";
+  deskHasFiledCards,
+} from "./desk-state.js";
 import {
   pathIsAtOrBelow,
   renamePathReference,
@@ -155,7 +155,7 @@ import {
   resolveDeckCardDrop,
   type DeckCardDropTarget,
   type ResolvedDeckCardDrop,
-} from "./tray-drop.js";
+} from "./desk-drop.js";
 import { attachPaperWorkflowTextarea } from "./paper-workflow-dom.js";
 import { attachRenderedLinkInteractions } from "./rendered-link-interactions.js";
 import {
@@ -296,7 +296,7 @@ export class DeckView extends ItemView {
   private readonly viewedCardSignature: CardSignatureManager;
   private readonly inferredNavigation: InferredNavigationManager;
   private readonly viewedInferredNavigation: InferredNavigationManager;
-  private readonly trayRenderer: TrayRenderer;
+  private readonly deskRenderer: DeskRenderer;
   private deckKeybindingsSuspended = false;
   private readonly shortcutCommandTracker =
     new ShortcutCommandTracker<KeyboardEvent, DeckAction>();
@@ -338,7 +338,7 @@ export class DeckView extends ItemView {
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       followLinksFromCards: () => this.plugin.settings.followLinksFromCards,
       showTooltips: () => this.plugin.settings.showTooltips,
-      isInTray: (file) => this.plugin.isFileInTray(file),
+      isOnDesk: (file) => this.plugin.isFileOnDesk(file),
       runAction: (action, target) => this.runAction(action, target),
       runAfterEditing: (reason, action) => {
         void this.runAfterInlineEditing(reason, action);
@@ -405,7 +405,7 @@ export class DeckView extends ItemView {
     this.viewedInferredNavigation = new InferredNavigationManager(
       inferredNavigationEnvironment,
     );
-    this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
+    this.deskRenderer = new DeskRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
       updateFilingInput: (value) => this.updateFilingInput(value),
       confirmFiling: () => void this.confirmFiling(),
@@ -446,7 +446,7 @@ export class DeckView extends ItemView {
         this.viewedCardFooter.scheduleLayout();
         this.cardSignatures.scheduleLayout();
         this.viewedCardSignature.scheduleLayout();
-        this.trayRenderer.scheduleBranchLayout();
+        this.deskRenderer.scheduleBranchLayout();
       }),
     );
     this.scope = new Scope(this.app.scope);
@@ -594,7 +594,7 @@ export class DeckView extends ItemView {
     this.inferredNavigation.clear();
     this.viewedCardSignature.clear();
     this.viewedInferredNavigation.clear();
-    this.trayRenderer.clear();
+    this.deskRenderer.clear();
     this.clearCardHeaderButtonControllers();
     this.clearViewedCardHeaderButtonController();
     this.resizeObserver?.disconnect();
@@ -645,7 +645,7 @@ export class DeckView extends ItemView {
     this.viewedCardFooter.scheduleLayout();
     this.cardSignatures.scheduleLayout();
     this.viewedCardSignature.scheduleLayout();
-    this.trayRenderer.scheduleBranchLayout();
+    this.deskRenderer.scheduleBranchLayout();
     this.updateDeckMapSectionLabels();
     this.constrainViewedCard();
   }
@@ -680,7 +680,7 @@ export class DeckView extends ItemView {
     const viewedPath = this.viewedCard?.path ?? null;
     const viewedPosition = viewedPath === null
       ? null
-      : cardPosition(this.plugin.tray, viewedPath);
+      : cardPosition(this.plugin.desk, viewedPath);
     const redirectedFromDeckNavigation =
       focus?.surface === "deck" && focus.path === viewedPath;
     const resolved = redirectViewedCardGhostFocus(
@@ -722,7 +722,7 @@ export class DeckView extends ItemView {
    * land on a mounted card. Returns false when the path is not on the Desk.
    */
   focusDeskCardAtPath(path: string): boolean {
-    const position = cardPosition(this.plugin.tray, path);
+    const position = cardPosition(this.plugin.desk, path);
     if (position === null) {
       return false;
     }
@@ -734,7 +734,7 @@ export class DeckView extends ItemView {
     card: FiledCard,
     focusPulledCard: boolean,
   ): Promise<void> {
-    const wasOnDesk = this.plugin.isFileInTray(card.file);
+    const wasOnDesk = this.plugin.isFileOnDesk(card.file);
     const focusTarget = deskToggleFocusTarget(
       this.cardFocus?.surface ?? null,
       wasOnDesk,
@@ -752,12 +752,12 @@ export class DeckView extends ItemView {
       this.viewportOffset = 0;
     }
 
-    // toggleFileInTray updates the shared tray synchronously before refreshing
+    // toggleFileOnDesk updates the shared Desk synchronously before refreshing
     // views. Assigning logical Desk focus immediately makes a quick p, e chord
     // reliable even while the refreshed card presentation is mounting.
-    const refresh = this.plugin.toggleFileInTray(card.file);
+    const refresh = this.plugin.toggleFileOnDesk(card.file);
     if (focusTarget === "desk") {
-      const position = cardPosition(this.plugin.tray, card.path);
+      const position = cardPosition(this.plugin.desk, card.path);
       if (position !== null) {
         this.assignCardFocus(deskCardFocus(card.path, position.pileId));
       }
@@ -827,7 +827,7 @@ export class DeckView extends ItemView {
       }
       return;
     }
-    const pile = this.plugin.tray.piles.find((candidate) =>
+    const pile = this.plugin.desk.piles.find((candidate) =>
       candidate.id === target.pileId
     );
     const preferred = preferredPath === undefined
@@ -841,7 +841,7 @@ export class DeckView extends ItemView {
 
   private cyclePileFocus(direction: PileNavigationDirection): void {
     const target = cyclePileFocusTarget(
-      this.plugin.tray.piles.map((pile) => pile.id),
+      this.plugin.desk.piles.map((pile) => pile.id),
       this.pileFocusLocation(),
       this.activePath !== null,
       direction,
@@ -862,7 +862,7 @@ export class DeckView extends ItemView {
       return;
     }
     const target = swapPileFocusTarget(
-      this.plugin.tray.piles.map((pile) => pile.id),
+      this.plugin.desk.piles.map((pile) => pile.id),
       current,
       this.lastFocusedPileId,
       this.activePath !== null,
@@ -886,11 +886,11 @@ export class DeckView extends ItemView {
       return;
     }
     const pileId = this.cardFocus.pileId;
-    if (!this.plugin.tray.piles.some((pile) => pile.id === pileId)) {
+    if (!this.plugin.desk.piles.some((pile) => pile.id === pileId)) {
       return;
     }
-    const expanded = this.plugin.tray.expandedPileIds.includes(pileId);
-    void this.plugin.setTrayPileExpanded(pileId, !expanded);
+    const expanded = this.plugin.desk.expandedPileIds.includes(pileId);
+    void this.plugin.setDeskPileExpanded(pileId, !expanded);
   }
 
   private moveFocusWithinPile(direction: PileNavigationDirection): void {
@@ -900,16 +900,16 @@ export class DeckView extends ItemView {
     ) {
       return;
     }
-    const pile = this.plugin.tray.piles.find((candidate) =>
+    const pile = this.plugin.desk.piles.find((candidate) =>
       candidate.id === this.cardFocus?.pileId
     );
     if (pile === undefined) {
       return;
     }
-    if (!this.plugin.tray.expandedPileIds.includes(pile.id)) {
-      const next = cyclePileTopCard(this.plugin.tray, pile.id, direction);
-      if (next !== this.plugin.tray) {
-        void this.plugin.updateTray(next);
+    if (!this.plugin.desk.expandedPileIds.includes(pile.id)) {
+      const next = cyclePileTopCard(this.plugin.desk, pile.id, direction);
+      if (next !== this.plugin.desk) {
+        void this.plugin.updateDesk(next);
       }
       return;
     }
@@ -953,7 +953,7 @@ export class DeckView extends ItemView {
           this.cardFocus.pileId === pileId,
         );
       });
-    this.trayRenderer.refreshFocusedInferredNavigation();
+    this.deskRenderer.refreshFocusedInferredNavigation();
     if (this.viewedCardEl !== null) {
       this.viewedCardEl.toggleClass(
         "is-card-focused",
@@ -975,17 +975,17 @@ export class DeckView extends ItemView {
       this.viewedCard?.path === focus.path &&
       this.plugin.index.fileAtPath(focus.path) !== undefined
     ) {
-      const position = cardPosition(this.plugin.tray, focus.path);
+      const position = cardPosition(this.plugin.desk, focus.path);
       this.assignCardFocus(viewedCardFocus(focus.path, position?.pileId));
       return;
     }
     if (focus?.surface === "desk") {
-      const pile = this.plugin.tray.piles.find((candidate) =>
+      const pile = this.plugin.desk.piles.find((candidate) =>
         candidate.id === focus.pileId
       );
       const index = pile?.cards.findIndex((card) => card.cardRef === focus.path) ?? -1;
       if (pile !== undefined && index >= 0) {
-        if (this.plugin.tray.expandedPileIds.includes(pile.id) || index === 0) {
+        if (this.plugin.desk.expandedPileIds.includes(pile.id) || index === 0) {
           return;
         }
         const top = pile.cards[0];
@@ -999,7 +999,7 @@ export class DeckView extends ItemView {
       this.assignCardFocus(deckCardFocus(this.activePath));
       return;
     }
-    const firstPile = this.plugin.tray.piles[0];
+    const firstPile = this.plugin.desk.piles[0];
     const firstCard = firstPile?.cards[0];
     this.assignCardFocus(firstPile !== undefined && firstCard !== undefined
       ? deskCardFocus(firstCard.cardRef, firstPile.id)
@@ -1013,7 +1013,7 @@ export class DeckView extends ItemView {
   private get filingInput(): HTMLInputElement | null {
     return this.filingSourceSurface === "viewed"
       ? this.viewedFilingEditor?.input ?? null
-      : this.trayRenderer.filingInput;
+      : this.deskRenderer.filingInput;
   }
 
   private get isFilingInputFocused(): boolean {
@@ -1035,8 +1035,8 @@ export class DeckView extends ItemView {
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  private updateRenderedFilingState(state: TrayFilingState): void {
-    this.trayRenderer.updateFilingState(state);
+  private updateRenderedFilingState(state: DeskFilingState): void {
+    this.deskRenderer.updateFilingState(state);
     if (this.viewedFilingEditor !== null) {
       updateInlineFilingEditor(this.viewedFilingEditor, state);
       this.applyFilingGuidance(this.viewedFilingEditor.input, state.guidance);
@@ -1407,7 +1407,7 @@ export class DeckView extends ItemView {
     const focusedSurface = target?.surface ?? this.cardFocus?.surface ?? null;
     const focusedPosition = focusedFile === null
       ? null
-      : cardPosition(this.plugin.tray, focusedFile.path);
+      : cardPosition(this.plugin.desk, focusedFile.path);
     const focusedDeskPosition = focusedSurface === "desk"
       ? focusedPosition
       : null;
@@ -1448,9 +1448,9 @@ export class DeckView extends ItemView {
       canMoveDeskCardRight:
         focusedDeskPosition !== null &&
         focusedDeskPosition.cardIndex < focusedDeskPosition.pileSize - 1,
-      hasDeskPiles: this.plugin.tray.piles.length > 0,
-      hasExpandedPiles: this.plugin.tray.expandedPileIds.length > 0,
-      hasFiledDeskCards: trayHasFiledCards(this.plugin.tray),
+      hasDeskPiles: this.plugin.desk.piles.length > 0,
+      hasExpandedPiles: this.plugin.desk.expandedPileIds.length > 0,
+      hasFiledDeskCards: deskHasFiledCards(this.plugin.desk),
     });
   }
 
@@ -1642,7 +1642,7 @@ export class DeckView extends ItemView {
           let returnTarget: ViewedCardReturnTarget | null;
           if (target?.surface === "desk") {
             const pileId = target.pileId ??
-              cardPosition(this.plugin.tray, file.path)?.pileId;
+              cardPosition(this.plugin.desk, file.path)?.pileId;
             returnTarget = pileId === undefined
               ? null
               : { surface: "desk", pileId };
@@ -1670,16 +1670,16 @@ export class DeckView extends ItemView {
         break;
       case "move-desk-card-left":
         if (target?.surface === "desk") {
-          void this.moveTrayCardBy(target.file.path, -1);
+          void this.moveDeskCardBy(target.file.path, -1);
         } else if (target === null && this.cardFocus?.surface === "desk") {
-          void this.moveTrayCardBy(this.cardFocus.path, -1);
+          void this.moveDeskCardBy(this.cardFocus.path, -1);
         }
         break;
       case "move-desk-card-right":
         if (target?.surface === "desk") {
-          void this.moveTrayCardBy(target.file.path, 1);
+          void this.moveDeskCardBy(target.file.path, 1);
         } else if (target === null && this.cardFocus?.surface === "desk") {
-          void this.moveTrayCardBy(this.cardFocus.path, 1);
+          void this.moveDeskCardBy(this.cardFocus.path, 1);
         }
         break;
       case "delete-card":
@@ -1688,19 +1688,19 @@ export class DeckView extends ItemView {
         }
         break;
       case "collapse-all-piles":
-        void this.plugin.updateTray(collapseAllPiles(this.plugin.tray));
+        void this.plugin.updateDesk(collapseAllPiles(this.plugin.desk));
         break;
       case "return-all-filed-cards":
         if (
           card !== null &&
           this.cardFocus?.surface === "desk" &&
-          this.plugin.isFileInTray(card.file)
+          this.plugin.isFileOnDesk(card.file)
         ) {
           this.setDeckAnchor(card.path);
           this.assignCardFocus(deckCardFocus(card.path));
           this.viewportOffset = 0;
         }
-        void this.plugin.clearTray();
+        void this.plugin.clearDesk();
         break;
     }
   }
@@ -1767,19 +1767,19 @@ export class DeckView extends ItemView {
     file: TFile,
     sourceSurface: FilingSourceSurface = "desk",
   ): Promise<void> {
-    const trayPosition = cardPosition(this.plugin.tray, file.path);
+    const deskPosition = cardPosition(this.plugin.desk, file.path);
     if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
-      this.assignCardFocus(viewedCardFocus(file.path, trayPosition?.pileId));
-    } else if (trayPosition !== null) {
-      this.assignCardFocus(deskCardFocus(file.path, trayPosition.pileId));
+      this.assignCardFocus(viewedCardFocus(file.path, deskPosition?.pileId));
+    } else if (deskPosition !== null) {
+      this.assignCardFocus(deskCardFocus(file.path, deskPosition.pileId));
     }
     if (
       sourceSurface === "desk" &&
-      trayPosition !== null &&
-      trayPosition.cardIndex > 0 &&
-      !this.plugin.tray.expandedPileIds.includes(trayPosition.pileId)
+      deskPosition !== null &&
+      deskPosition.cardIndex > 0 &&
+      !this.plugin.desk.expandedPileIds.includes(deskPosition.pileId)
     ) {
-      await this.plugin.setTrayPileExpanded(trayPosition.pileId, true);
+      await this.plugin.setDeskPileExpanded(deskPosition.pileId, true);
     }
     const initialAddress = initialFilingAddress(this.activeCard);
     this.filingFile = file;
@@ -1934,7 +1934,7 @@ export class DeckView extends ItemView {
           expiresAt: Date.now() + 2_000,
         };
         await this.rerenderEditedPath(editing.file, editing.bodyEl, editing.renderedScrollTop);
-        await this.trayRenderer.rerenderPath(editing.file);
+        await this.deskRenderer.rerenderPath(editing.file);
         if (refreshBacklinks) {
           this.refreshInlineEditLinkMetadata();
         }
@@ -1965,7 +1965,7 @@ export class DeckView extends ItemView {
     returnTarget: ViewedCardReturnTarget,
     editImmediately: boolean,
   ): Promise<void> {
-    if (!this.plugin.isFileInTray(file)) {
+    if (!this.plugin.isFileOnDesk(file)) {
       new Notice("Put the card on the Desk before viewing it.");
       return;
     }
@@ -1993,7 +1993,7 @@ export class DeckView extends ItemView {
   }
 
   private async editCardOnDesk(file: TFile): Promise<void> {
-    if (!this.plugin.isFileInTray(file)) {
+    if (!this.plugin.isFileOnDesk(file)) {
       new Notice("Put the card on the Desk before editing it.");
       return;
     }
@@ -2001,17 +2001,17 @@ export class DeckView extends ItemView {
       new Notice("Finish filing before editing a card body.");
       return;
     }
-    let position = cardPosition(this.plugin.tray, file.path);
+    let position = cardPosition(this.plugin.desk, file.path);
     if (position === null) {
       new Notice("Could not find the card on the Desk.");
       return;
     }
     if (
       position.cardIndex > 0 &&
-      !this.plugin.tray.expandedPileIds.includes(position.pileId)
+      !this.plugin.desk.expandedPileIds.includes(position.pileId)
     ) {
-      await this.plugin.setTrayPileExpanded(position.pileId, true);
-      position = cardPosition(this.plugin.tray, file.path);
+      await this.plugin.setDeskPileExpanded(position.pileId, true);
+      position = cardPosition(this.plugin.desk, file.path);
       if (position === null) {
         new Notice("Could not find the card on the Desk.");
         return;
@@ -2051,7 +2051,7 @@ export class DeckView extends ItemView {
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
-      const position = cardPosition(this.plugin.tray, viewed.path);
+      const position = cardPosition(this.plugin.desk, viewed.path);
       const returnTarget = resolveViewedCardReturnTarget(
         viewed,
         this.plugin.index.filedByPath(viewed.path) !== undefined,
@@ -2221,7 +2221,7 @@ export class DeckView extends ItemView {
           const result = await this.plugin.commitInlineEdit(request);
           if (result.status === "saved" && !request.final) {
             const latestFile = this.plugin.index.fileAtPath(request.path) ?? file;
-            await this.trayRenderer.rerenderPath(latestFile);
+            await this.deskRenderer.rerenderPath(latestFile);
           }
           return result;
         },
@@ -2303,7 +2303,7 @@ export class DeckView extends ItemView {
       ],
       context: {
         issues: snapshot.issues,
-        tray: this.plugin.tray,
+        desk: this.plugin.desk,
         settings: this.plugin.settings,
         bookmarks: this.plugin.state.bookmarks,
       },
@@ -2321,10 +2321,10 @@ export class DeckView extends ItemView {
   refreshBranchPresentation(): void {
     this.cardSignatures.refreshBranches();
     this.viewedCardSignature.refreshBranches();
-    this.trayRenderer.refreshBranchMetadata();
+    this.deskRenderer.refreshBranchMetadata();
     this.inferredNavigation.refresh();
     this.viewedInferredNavigation.refresh();
-    this.trayRenderer.refreshInferredNavigation();
+    this.deskRenderer.refreshInferredNavigation();
   }
 
   private cardSignatureBranches(path: string): readonly CardSignatureBranch[] {
@@ -2458,7 +2458,7 @@ export class DeckView extends ItemView {
     }
     const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
     this.viewedCard = createViewedCardState(draft.path, draft.returnTarget);
-    const position = cardPosition(this.plugin.tray, draft.path);
+    const position = cardPosition(this.plugin.desk, draft.path);
     this.assignCardFocus(viewedCardFocus(draft.path, position?.pileId));
     await this.renderDeck(false);
     await this.beginInlineEditing(file, this.viewedCardBodyEl, {
@@ -2526,10 +2526,10 @@ export class DeckView extends ItemView {
     const nextDeckPath = deckIndex < 0
       ? this.activePath
       : filed[deckIndex + 1]?.path ?? filed[deckIndex - 1]?.path ?? null;
-    const position = cardPosition(this.plugin.tray, file.path);
+    const position = cardPosition(this.plugin.desk, file.path);
     const pile = position === null
       ? undefined
-      : this.plugin.tray.piles[position.pileIndex];
+      : this.plugin.desk.piles[position.pileIndex];
     const nextDeskPath = position === null || pile === undefined
       ? null
       : pile.cards[position.cardIndex + 1]?.cardRef ??
@@ -2584,7 +2584,7 @@ export class DeckView extends ItemView {
     this.cardFooters.clear();
     this.cardSignatures.clear();
     this.inferredNavigation.clear();
-    this.trayRenderer.clear();
+    this.deskRenderer.clear();
     this.clearCardHeaderButtonControllers();
     this.viewedCardFooter.clear();
     this.viewedCardSignature.clear();
@@ -2623,7 +2623,7 @@ export class DeckView extends ItemView {
     this.applySpaceOffset();
     const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
     this.deckCardsEl = deckCards;
-    const trayJob = this.trayRenderer.render(
+    const deskJob = this.deskRenderer.render(
       stage,
       space,
       this.currentFilingState(),
@@ -2642,7 +2642,7 @@ export class DeckView extends ItemView {
       return;
     }
 
-    await trayJob;
+    await deskJob;
     if (version !== this.renderVersion) {
       return;
     }
@@ -2750,7 +2750,7 @@ export class DeckView extends ItemView {
       const card = filed[index];
       marker.toggleClass(
         "is-in-tray",
-        card !== undefined && this.plugin.isFileInTray(card.file),
+        card !== undefined && this.plugin.isFileOnDesk(card.file),
       );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
@@ -2895,7 +2895,7 @@ export class DeckView extends ItemView {
 
   private completePileCommand(digits: string): void {
     const ordinal = Number(digits);
-    const pileCount = this.plugin.tray.piles.length;
+    const pileCount = this.plugin.desk.piles.length;
     if (
       digits === "" ||
       !Number.isSafeInteger(ordinal) ||
@@ -2917,14 +2917,14 @@ export class DeckView extends ItemView {
       this.showCommandFeedback("There is no focused filed card.");
       return;
     }
-    const source = cardPosition(this.plugin.tray, card.path);
+    const source = cardPosition(this.plugin.desk, card.path);
     const next = placeFiledCardInPileOrdinal(
-      this.plugin.tray,
+      this.plugin.desk,
       card.path,
       ordinal,
     );
     this.clearPendingCommand();
-    if (next === this.plugin.tray) {
+    if (next === this.plugin.desk) {
       this.showCommandFeedback(`The focused card is already in pile ${ordinal}.`);
       return;
     }
@@ -2933,11 +2933,11 @@ export class DeckView extends ItemView {
         ? `Put the focused card into pile ${ordinal}.`
         : `Moved the focused card to pile ${ordinal}.`,
     );
-    const targetPile = this.plugin.tray.piles[ordinal - 1];
+    const targetPile = this.plugin.desk.piles[ordinal - 1];
     if (targetPile !== undefined) {
       this.assignCardFocus(deskCardFocus(card.path, targetPile.id));
     }
-    void this.plugin.updateTray(next);
+    void this.plugin.updateDesk(next);
   }
 
   private updateDeckMapBookmarks(bookmarkedPaths: Set<string>): void {
@@ -2963,7 +2963,7 @@ export class DeckView extends ItemView {
       const card = this.plugin.index.filedByPath(path);
       marker.toggleClass(
         "is-in-tray",
-        card !== undefined && this.plugin.isFileInTray(card.file),
+        card !== undefined && this.plugin.isFileOnDesk(card.file),
       );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
@@ -3084,12 +3084,12 @@ export class DeckView extends ItemView {
       cardEl.toggleClass("is-viewed-ghost", isViewed);
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
-      const isInTray = this.plugin.isFileInTray(card.file);
-      cardEl.toggleClass("is-in-tray", isInTray);
-      cardEl.toggleClass("can-drag-to-desk", !isInTray);
+      const isOnDesk = this.plugin.isFileOnDesk(card.file);
+      cardEl.toggleClass("is-in-tray", isOnDesk);
+      cardEl.toggleClass("can-drag-to-desk", !isOnDesk);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.address} · ${title}${
-        isInTray ? "; pulled out into a working pile" : ""
+        isOnDesk ? "; pulled out into a working pile" : ""
       }`;
       setCardTooltip(
         cardEl,
@@ -3132,7 +3132,7 @@ export class DeckView extends ItemView {
 
       const frame = cardEl.createDiv({ cls: "slipbox-card-frame" });
       const addressRow = frame.createDiv({ cls: "slipbox-card-address-row" });
-      if (!isInTray) {
+      if (!isOnDesk) {
         this.attachDeckCardDragging(addressRow, cardEl, card);
       }
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
@@ -3159,7 +3159,7 @@ export class DeckView extends ItemView {
           surface: "deck",
           viewedReturnSurface: null,
           filed: true,
-          onDesk: isInTray,
+          onDesk: isOnDesk,
           bookmarked: isBookmarked,
           canMoveLeft: false,
           canMoveRight: false,
@@ -3319,7 +3319,7 @@ export class DeckView extends ItemView {
     y: number,
     dragged: HTMLElement,
   ): ResolvedDeckCardDrop | null {
-    const state = this.plugin.tray;
+    const state = this.plugin.desk;
     if (
       this.plugin.index.filedByPath(card.path) === undefined ||
       cardPosition(state, card.path) !== null
@@ -3344,7 +3344,7 @@ export class DeckView extends ItemView {
     if (position === null) {
       return null;
     }
-    const pileId = this.plugin.createTrayPileId();
+    const pileId = this.plugin.createDeskPileId();
     return resolveDeckCardDrop(state, card.path, {
       kind: "workspace",
       pileId,
@@ -3377,7 +3377,7 @@ export class DeckView extends ItemView {
     x: number,
     y: number,
   ) {
-    return this.trayRenderer.positionDeckCardAtPoint(x, y);
+    return this.deskRenderer.positionDeckCardAtPoint(x, y);
   }
 
   private updateDeckCardDropCue(
@@ -3408,7 +3408,7 @@ export class DeckView extends ItemView {
   }
 
   private async applyDeckCardDrop(result: ResolvedDeckCardDrop): Promise<void> {
-    await this.plugin.updateTray(result.state);
+    await this.plugin.updateDesk(result.state);
     this.contentEl.win.requestAnimationFrame(() => {
       this.stageEl?.querySelector<HTMLElement>(
         `.slipbox-tray-card[data-card-ref="${CSS.escape(result.focusPath)}"]`,
@@ -3461,7 +3461,7 @@ export class DeckView extends ItemView {
     );
     card.toggleClass("is-filing-source", isFilingSource);
     card.addEventListener("focusin", () => {
-      const position = cardPosition(this.plugin.tray, file.path);
+      const position = cardPosition(this.plugin.desk, file.path);
       this.setCardFocus(viewedCardFocus(file.path, position?.pileId));
     });
     card.dataset.path = file.path;
@@ -3529,7 +3529,7 @@ export class DeckView extends ItemView {
     if (headerTitle !== null) {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
-    const viewedPosition = cardPosition(this.plugin.tray, file.path);
+    const viewedPosition = cardPosition(this.plugin.desk, file.path);
     if (!isFilingSource) {
       const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
       this.viewedCardHeaderButtonController = renderCardHeaderButtons({
@@ -3748,7 +3748,7 @@ export class DeckView extends ItemView {
     if (viewed === null) {
       return;
     }
-    const position = cardPosition(this.plugin.tray, viewed.path);
+    const position = cardPosition(this.plugin.desk, viewed.path);
     this.setCardFocus(viewedCardFocus(viewed.path, position?.pileId));
     this.viewedCardEl?.focus({ preventScroll: true });
   }
@@ -3914,7 +3914,7 @@ export class DeckView extends ItemView {
     }
   }
 
-  private currentFilingState(): TrayFilingState | null {
+  private currentFilingState(): DeskFilingState | null {
     const sourcePath = this.filingSourcePath;
     const sourceSurface = this.filingSourceSurface;
     if (sourcePath === null || sourceSurface === null) {
@@ -3962,7 +3962,7 @@ export class DeckView extends ItemView {
     if (path === null) {
       return;
     }
-    const position = cardPosition(this.plugin.tray, path);
+    const position = cardPosition(this.plugin.desk, path);
     if (
       this.filingSourceSurface === "viewed" &&
       this.viewedCard?.path === path
@@ -4238,7 +4238,7 @@ export class DeckView extends ItemView {
 
   private centerActiveCard(): void {
     this.deckPositionMode = deckPositionModeForPileCount(
-      this.plugin.tray.piles.length,
+      this.plugin.desk.piles.length,
     );
     this.applyDeckPositionMode();
     this.recenterSpace();
@@ -4332,11 +4332,11 @@ export class DeckView extends ItemView {
     }
   }
 
-  private async moveTrayCardBy(
+  private async moveDeskCardBy(
     cardRef: string,
     delta: -1 | 1,
   ): Promise<void> {
-    const position = cardPosition(this.plugin.tray, cardRef);
+    const position = cardPosition(this.plugin.desk, cardRef);
     if (position === null) {
       return;
     }
@@ -4347,8 +4347,8 @@ export class DeckView extends ItemView {
     if (target === position.cardIndex) {
       return;
     }
-    await this.plugin.updateTray(moveCardWithinPile(
-      this.plugin.tray,
+    await this.plugin.updateDesk(moveCardWithinPile(
+      this.plugin.desk,
       position.pileId,
       position.cardIndex,
       target,

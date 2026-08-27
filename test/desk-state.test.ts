@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  EMPTY_TRAY,
+  EMPTY_DESK,
   addUniqueCardToPile,
   cardPosition,
   collapseAllPiles,
   clearFiledCardsFromPile,
-  clearFiledCardsFromTray,
+  clearFiledCardsFromDesk,
   createPile,
   cyclePileTopCard,
   deskCardPrimaryClickIntent,
-  initialTrayFromUnfiled,
+  initialDeskFromUnfiled,
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
@@ -20,31 +20,31 @@ import {
   placeFiledCardAtPosition,
   placeUnfiledCardAtPosition,
   placeFiledCardInPileOrdinal,
-  pruneTrayCards,
-  reconcileTray,
+  pruneDeskCards,
+  reconcileDesk,
   removeCard,
-  removeTrayPath,
-  renameTrayPath,
+  removeDeskPath,
+  renameDeskPath,
   reorderPiles,
   setPilePosition,
   setPileExpanded,
   splitCardIntoNewPile,
   toggleFiledCard,
-  trayHasFiledCards,
-  trayStackJitter,
-  type TrayCard,
-  type TrayCardCandidate,
-  type TrayState,
-} from "../src/tray-state.js";
+  deskHasFiledCards,
+  deskStackJitter,
+  type DeskCard,
+  type DeskCardCandidate,
+  type DeskState,
+} from "../src/desk-state.js";
 
-const unfiled = (cardRef: string, modifiedTime = 0): TrayCardCandidate => ({
+const unfiled = (cardRef: string, modifiedTime = 0): DeskCardCandidate => ({
   cardRef,
   kind: "unfiled",
   modifiedTime,
 });
-const filed = (cardRef: string): TrayCard => ({ cardRef, kind: "filed" });
+const filed = (cardRef: string): DeskCard => ({ cardRef, kind: "filed" });
 
-function tray(...piles: readonly TrayCard[][]): TrayState {
+function desk(...piles: readonly DeskCard[][]): DeskState {
   return {
     piles: piles.map((cards, index) => ({ id: `pile-${index + 1}`, cards })),
     expandedPileIds: [],
@@ -59,7 +59,7 @@ describe("working piles", () => {
   });
 
   test("constructs one deterministic newest-first pile from unfiled cards", () => {
-    const state = initialTrayFromUnfiled([
+    const state = initialDeskFromUnfiled([
       unfiled("B.md", 20),
       unfiled("C.md", 30),
       unfiled("A.md", 20),
@@ -77,7 +77,7 @@ describe("working piles", () => {
   });
 
   test("creates piles and enforces unique card membership", () => {
-    let state = createPile(EMPTY_TRAY, "one", [filed("A.md"), filed("A.md")]);
+    let state = createPile(EMPTY_DESK, "one", [filed("A.md"), filed("A.md")]);
     state = createPile(state, "two", [filed("A.md"), filed("B.md")]);
     state = addUniqueCardToPile(state, "one", filed("B.md"));
     assert.deepEqual(state.piles.map((pile) => pile.cards.map((card) => card.cardRef)), [
@@ -87,7 +87,7 @@ describe("working piles", () => {
   });
 
   test("places a new unfiled card in its own positioned pile", () => {
-    const state = initialTrayFromUnfiled([
+    const state = initialDeskFromUnfiled([
       unfiled("Existing.md", 1),
       unfiled("New.md", 2),
     ], "home");
@@ -113,7 +113,7 @@ describe("working piles", () => {
   });
 
   test("places a filed Deck card in its own positioned pile", () => {
-    const state = tray([unfiled("Existing.md")]);
+    const state = desk([unfiled("Existing.md")]);
     const next = placeFiledCardAtPosition(
       state,
       "Filed.md",
@@ -133,7 +133,7 @@ describe("working piles", () => {
   });
 
   test("does not reposition an existing card or accept invalid placement", () => {
-    const state = tray([filed("Filed.md")]);
+    const state = desk([filed("Filed.md")]);
     assert.equal(
       placeFiledCardAtPosition(
         state,
@@ -173,7 +173,7 @@ describe("working piles", () => {
   });
 
   test("pulls into a singleton or the expanded pile and toggles back to Deck", () => {
-    let state = toggleFiledCard(EMPTY_TRAY, filed("A.md"), "one");
+    let state = toggleFiledCard(EMPTY_DESK, filed("A.md"), "one");
     state = setPileExpanded(state, "one", true);
     state = toggleFiledCard(state, filed("B.md"), "unused");
     assert.deepEqual(state.piles[0]?.cards.map((card) => card.cardRef), ["A.md", "B.md"]);
@@ -182,7 +182,7 @@ describe("working piles", () => {
   });
 
   test("expands piles independently and pulls into the most recently expanded pile", () => {
-    let state = tray([filed("A.md")], [filed("B.md")]);
+    let state = desk([filed("A.md")], [filed("B.md")]);
     state = setPileExpanded(state, "pile-1", true);
     state = setPileExpanded(state, "pile-2", true);
     assert.deepEqual(state.expandedPileIds, ["pile-1", "pile-2"]);
@@ -197,7 +197,7 @@ describe("working piles", () => {
   });
 
   test("collapses every expanded pile at once", () => {
-    let state = tray([filed("A.md")], [filed("B.md")]);
+    let state = desk([filed("A.md")], [filed("B.md")]);
     assert.equal(collapseAllPiles(state), state);
     state = setPileExpanded(state, "pile-1", true);
     state = setPileExpanded(state, "pile-2", true);
@@ -207,7 +207,7 @@ describe("working piles", () => {
   });
 
   test("moves cards in both directions within a pile", () => {
-    const state = tray([filed("A.md"), filed("B.md"), filed("C.md")]);
+    const state = desk([filed("A.md"), filed("B.md"), filed("C.md")]);
     const right = moveCardWithinPile(state, "pile-1", 0, 2);
     assert.deepEqual(right.piles[0]?.cards.map((card) => card.cardRef), ["B.md", "C.md", "A.md"]);
     const left = moveCardWithinPile(right, "pile-1", 2, 0);
@@ -215,7 +215,7 @@ describe("working piles", () => {
   });
 
   test("cycles the visible top card in either direction", () => {
-    const state = tray([filed("A.md"), filed("B.md"), filed("C.md")]);
+    const state = desk([filed("A.md"), filed("B.md"), filed("C.md")]);
     const next = cyclePileTopCard(state, "pile-1", 1);
     assert.deepEqual(next.piles[0]?.cards.map((card) => card.cardRef), [
       "B.md", "C.md", "A.md",
@@ -225,12 +225,12 @@ describe("working piles", () => {
       "A.md", "B.md", "C.md",
     ]);
     assert.equal(cyclePileTopCard(state, "missing", 1), state);
-    const singleton = tray([filed("Only.md")]);
+    const singleton = desk([filed("Only.md")]);
     assert.equal(cyclePileTopCard(singleton, "pile-1", 1), singleton);
   });
 
   test("moves cards between piles and removes an emptied source", () => {
-    const state = tray([filed("A.md")], [filed("B.md")]);
+    const state = desk([filed("A.md")], [filed("B.md")]);
     const next = moveCardBetweenPiles(state, "A.md", "pile-2", 0);
     assert.deepEqual(next.piles, [{
       id: "pile-2",
@@ -240,7 +240,7 @@ describe("working piles", () => {
   });
 
   test("adds a filed card to an existing numbered pile without creating one", () => {
-    const state = tray([filed("A.md")], [filed("B.md")]);
+    const state = desk([filed("A.md")], [filed("B.md")]);
     const next = placeFiledCardInPileOrdinal(state, "C.md", 2);
     assert.deepEqual(next.piles.map((pile) => pile.cards), [
       [filed("A.md")],
@@ -250,7 +250,7 @@ describe("working piles", () => {
   });
 
   test("moves a filed card to another numbered pile", () => {
-    const state = tray([filed("A.md"), filed("B.md")], [filed("C.md")]);
+    const state = desk([filed("A.md"), filed("B.md")], [filed("C.md")]);
     const next = placeFiledCardInPileOrdinal(state, "A.md", 2);
     assert.deepEqual(next.piles.map((pile) => pile.cards), [
       [filed("B.md")],
@@ -259,12 +259,12 @@ describe("working piles", () => {
   });
 
   test("returns the same state when the card is already in the selected pile", () => {
-    const state = tray([filed("A.md")], [filed("B.md")]);
+    const state = desk([filed("A.md")], [filed("B.md")]);
     assert.equal(placeFiledCardInPileOrdinal(state, "B.md", 2), state);
   });
 
   test("rejects empty, zero, fractional, and nonexistent pile ordinals", () => {
-    const state = tray([filed("A.md")], [filed("B.md")]);
+    const state = desk([filed("A.md")], [filed("B.md")]);
     assert.equal(placeFiledCardInPileOrdinal(state, "C.md", 0), state);
     assert.equal(placeFiledCardInPileOrdinal(state, "C.md", -1), state);
     assert.equal(placeFiledCardInPileOrdinal(state, "C.md", 1.5), state);
@@ -274,7 +274,7 @@ describe("working piles", () => {
 
   test("resolves pile ordinals from the current reordered pile sequence", () => {
     const state = reorderPiles(
-      tray([filed("A.md")], [filed("B.md")], [filed("C.md")]),
+      desk([filed("A.md")], [filed("B.md")], [filed("C.md")]),
       2,
       0,
     );
@@ -286,7 +286,7 @@ describe("working piles", () => {
   });
 
   test("splits a card into a new pile and maintains positions", () => {
-    const state = tray([filed("A.md"), filed("B.md")], [filed("C.md")]);
+    const state = desk([filed("A.md"), filed("B.md")], [filed("C.md")]);
     const next = splitCardIntoNewPile(state, "B.md", "split");
     assert.deepEqual(next.piles.map((pile) => [
       pile.id,
@@ -306,7 +306,7 @@ describe("working piles", () => {
 
   test("merges piles by appending the source order and reorders piles", () => {
     let state = setPileExpanded(
-      tray([filed("A.md")], [filed("B.md"), filed("C.md")], [filed("D.md")]),
+      desk([filed("A.md")], [filed("B.md"), filed("C.md")], [filed("D.md")]),
       "pile-2",
       true,
     );
@@ -321,7 +321,7 @@ describe("working piles", () => {
   });
 
   test("moves piles to ordinal and same-state stacking boundaries", () => {
-    let state = tray(
+    let state = desk(
       [filed("A.md")],
       [filed("B.md")],
       [filed("C.md")],
@@ -350,7 +350,7 @@ describe("working piles", () => {
   });
 
   test("moves a pile within the session workspace without disturbing its cards", () => {
-    const state = tray([filed("A.md")], [filed("B.md"), filed("C.md")]);
+    const state = desk([filed("A.md")], [filed("B.md"), filed("C.md")]);
     const next = setPilePosition(state, "pile-2", { x: 42.5, y: -18 });
     assert.deepEqual(next.piles[1], {
       id: "pile-2",
@@ -365,40 +365,40 @@ describe("working piles", () => {
   });
 
   test("returns only filed cards from one pile or all piles", () => {
-    const state = tray(
+    const state = desk(
       [filed("A.md"), unfiled("U.md")],
       [filed("B.md")],
       [unfiled("V.md")],
     );
     const one = clearFiledCardsFromPile(state, "pile-1");
     assert.deepEqual(one.piles[0]?.cards.map((card) => card.cardRef), ["U.md"]);
-    const all = clearFiledCardsFromTray(state);
+    const all = clearFiledCardsFromDesk(state);
     assert.deepEqual(all.piles.map((pile) => pile.cards.map((card) => card.cardRef)), [
       ["U.md"],
       ["V.md"],
     ]);
-    assert.equal(trayHasFiledCards(state), true);
-    assert.equal(trayHasFiledCards(all), false);
+    assert.equal(deskHasFiledCards(state), true);
+    assert.equal(deskHasFiledCards(all), false);
   });
 
   test("follows exact and descendant renames and deletions", () => {
-    const state = tray([
+    const state = desk([
       filed("Folder/A.md"),
       unfiled("Folder/Nested/B.md"),
       filed("Elsewhere.md"),
     ]);
-    const renamed = renameTrayPath(state, "Folder", "Cards");
+    const renamed = renameDeskPath(state, "Folder", "Cards");
     assert.deepEqual(renamed.piles[0]?.cards.map((card) => card.cardRef), [
       "Cards/A.md", "Cards/Nested/B.md", "Elsewhere.md",
     ]);
-    const removed = removeTrayPath(renamed, "Cards/Nested");
+    const removed = removeDeskPath(renamed, "Cards/Nested");
     assert.deepEqual(removed.piles[0]?.cards.map((card) => card.cardRef), [
       "Cards/A.md", "Elsewhere.md",
     ]);
   });
 
   test("prunes ineligible and duplicate cards and removes a newly filed card", () => {
-    const state: TrayState = {
+    const state: DeskState = {
       piles: [
         { id: "one", cards: [unfiled("U.md"), filed("A.md"), filed("Gone.md")] },
         { id: "two", cards: [filed("A.md")] },
@@ -406,14 +406,14 @@ describe("working piles", () => {
       expandedPileIds: ["two"],
       unfiledPileId: "one",
     };
-    const next = pruneTrayCards(state, [filed("U.md"), filed("A.md")]);
+    const next = pruneDeskCards(state, [filed("U.md"), filed("A.md")]);
     assert.deepEqual(next.piles, [{ id: "one", cards: [filed("A.md")] }]);
     assert.deepEqual(next.expandedPileIds, []);
   });
 
   test("adds newly discovered unfiled cards to the home pile without reordering it", () => {
-    const state = initialTrayFromUnfiled([unfiled("Old.md", 1)], "home");
-    const next = reconcileTray(state, [
+    const state = initialDeskFromUnfiled([unfiled("Old.md", 1)], "home");
+    const next = reconcileDesk(state, [
       unfiled("Newest.md", 3),
       unfiled("Middle.md", 2),
       unfiled("Old.md", 1),
@@ -425,10 +425,10 @@ describe("working piles", () => {
 
   test("creates a new unfiled pile after the original has disappeared", () => {
     const withoutHome = removeCard(
-      initialTrayFromUnfiled([unfiled("Old.md", 1)], "home"),
+      initialDeskFromUnfiled([unfiled("Old.md", 1)], "home"),
       "Old.md",
     );
-    const next = reconcileTray(withoutHome, [unfiled("New.md", 2)], "replacement");
+    const next = reconcileDesk(withoutHome, [unfiled("New.md", 2)], "replacement");
     assert.deepEqual(next.piles, [{
       id: "replacement",
       cards: [{ cardRef: "New.md", kind: "unfiled" }],
@@ -443,9 +443,9 @@ describe("working piles", () => {
   });
 
   test("gives stacked cards stable, bounded, varied visual jitter", () => {
-    const first = trayStackJitter("Cards/A.md", 2);
-    assert.deepEqual(trayStackJitter("Cards/A.md", 2), first);
-    assert.notDeepEqual(trayStackJitter("Cards/B.md", 2), first);
+    const first = deskStackJitter("Cards/A.md", 2);
+    assert.deepEqual(deskStackJitter("Cards/A.md", 2), first);
+    assert.notDeepEqual(deskStackJitter("Cards/B.md", 2), first);
     assert.ok(first.rotationDegrees >= -2 && first.rotationDegrees <= 2);
     assert.ok(first.offsetX >= -4 && first.offsetX <= 4);
     assert.ok(first.offsetY >= 3 && first.offsetY <= 5);

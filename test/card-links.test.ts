@@ -94,7 +94,7 @@ describe("rendered card links", () => {
     );
   });
 
-  test("keeps plain filed links in Slipbox across Deck and Tray decisions", () => {
+  test("keeps plain filed links in Slipbox across Deck and Desk decisions", () => {
     assert.deepEqual(
       renderedLinkAction(
         true,

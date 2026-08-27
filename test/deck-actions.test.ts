@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import {
   canRunDeckAction,
   deskToggleFocusTarget,
-  trayToggleLabel,
+  deskToggleLabel,
   type DeckActionContext,
 } from "../src/deck-actions.js";
 import { DECK_ACTION_DEFINITIONS } from "../src/settings.js";
@@ -385,7 +385,7 @@ describe("Deck action availability", () => {
   });
 
   test("uses concise state-dependent wording in shared card actions", () => {
-    assert.equal(trayToggleLabel(false), "Put on Desk");
-    assert.equal(trayToggleLabel(true), "Return from Desk");
+    assert.equal(deskToggleLabel(false), "Put on Desk");
+    assert.equal(deskToggleLabel(true), "Return from Desk");
   });
 });

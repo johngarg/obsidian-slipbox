@@ -1,10 +1,10 @@
 import {
   addUniqueCardToPile,
   placeFiledCardAtPosition,
-  type TrayPile,
-  type TrayPilePosition,
-  type TrayState,
-} from "./tray-state.js";
+  type DeskPile,
+  type DeskPilePosition,
+  type DeskState,
+} from "./desk-state.js";
 
 export interface DeskDropBounds {
   readonly left: number;
@@ -26,11 +26,11 @@ export type DeckCardPlacementTarget =
   | {
     readonly kind: "workspace";
     readonly pileId: string;
-    readonly position: TrayPilePosition;
+    readonly position: DeskPilePosition;
   };
 
 export interface ResolvedDeckCardDrop {
-  readonly state: TrayState;
+  readonly state: DeskState;
   readonly focusPath: string;
   readonly pileId: string;
 }
@@ -66,7 +66,7 @@ export function deckCardDropTarget(
 
 /** Match Shift+P focus: hidden appended cards resolve to the visible pile top. */
 export function deckCardPileDropFocusPath(
-  pile: Pick<TrayPile, "cards">,
+  pile: Pick<DeskPile, "cards">,
   cardRef: string,
   expanded: boolean,
 ): string {
@@ -75,7 +75,7 @@ export function deckCardPileDropFocusPath(
 
 /** Place one filed Deck card and resolve the visible post-drop focus target. */
 export function resolveDeckCardDrop(
-  state: TrayState,
+  state: DeskState,
   cardRef: string,
   target: DeckCardPlacementTarget,
 ): ResolvedDeckCardDrop | null {
@@ -148,7 +148,7 @@ export function pilePositionAtWorkspacePoint(
   y: number,
   anchorBounds: DeskDropBounds,
   workspaceBounds: DeskDropBounds,
-): TrayPilePosition | null {
+): DeskPilePosition | null {
   if (
     x < workspaceBounds.left || x > workspaceBounds.right ||
     y < workspaceBounds.top || y > workspaceBounds.bottom
@@ -168,7 +168,7 @@ export function pileHeaderPositionAtWorkspacePoint(
   anchorBounds: DeskDropBounds,
   workspaceBounds: DeskDropBounds,
   headerAnchorOffsetPx = DECK_CARD_HEADER_ANCHOR_OFFSET_PX,
-): TrayPilePosition | null {
+): DeskPilePosition | null {
   const position = pilePositionAtWorkspacePoint(
     x,
     y,

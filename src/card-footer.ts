@@ -8,7 +8,7 @@ import {
 
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { setCardTooltip } from "./card-tooltip.js";
-import { trayToggleLabel } from "./deck-actions.js";
+import { deskToggleLabel } from "./deck-actions.js";
 import type { FiledCard } from "./card-index.js";
 import {
   applyOwnedLinkAccessibility,
@@ -23,7 +23,7 @@ export interface CardFooterEnvironment {
   readonly previewLinksOnHover: () => boolean;
   readonly followLinksFromCards: () => boolean;
   readonly showTooltips: () => boolean;
-  readonly isInTray: (file: TFile) => boolean;
+  readonly isOnDesk: (file: TFile) => boolean;
   readonly runAction: (action: SlipboxAction, target: FiledCard) => boolean;
   readonly runAfterEditing: (
     reason: string,
@@ -471,12 +471,12 @@ export class CardFooterManager {
     backlink: FiledCard,
   ): void {
     this.closeOverflowMenu();
-    const inTray = this.environment.isInTray(backlink.file);
+    const onDesk = this.environment.isOnDesk(backlink.file);
     const menu = Menu.forEvent(event);
     menu.addItem((item) => {
       item
-        .setTitle(trayToggleLabel(inTray))
-        .setIcon(inTray ? "undo-2" : "bring-to-front")
+        .setTitle(deskToggleLabel(onDesk))
+        .setIcon(onDesk ? "undo-2" : "bring-to-front")
         .onClick(() => this.environment.runAfterEditing(
           "backlink-tray-toggle",
           () => {

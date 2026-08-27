@@ -34,7 +34,7 @@ export const CARD_BUTTON_DEFINITIONS: readonly CardHeaderButtonDefinition[] = [
   { action: "open-note", settingLabel: "Open Markdown note", surfaces: ["deck", "desk", "viewed"] },
   { action: "toggle-viewed-card", settingLabel: "View or return card to its source", surfaces: ["desk", "viewed"] },
   { action: "show-card-in-deck", settingLabel: "Show card in Deck", surfaces: ["desk", "viewed"] },
-  { action: "toggle-tray", settingLabel: "Put on or return from Desk", surfaces: ["deck", "desk", "viewed"] },
+  { action: "toggle-desk", settingLabel: "Put on or return from Desk", surfaces: ["deck", "desk", "viewed"] },
   { action: "file-card", settingLabel: "File card", surfaces: ["desk", "viewed"] },
   { action: "copy-link", settingLabel: "Copy card link", surfaces: ["deck", "desk", "viewed"] },
   { action: "toggle-bookmark", settingLabel: "Toggle bookmark", surfaces: ["deck"] },
@@ -49,7 +49,7 @@ export const CARD_BUTTON_ORDER: Readonly<Record<
 >> = {
   deck: [
     "open-note",
-    "toggle-tray",
+    "toggle-desk",
     "copy-link",
     "toggle-bookmark",
     "delete-card",
@@ -60,7 +60,7 @@ export const CARD_BUTTON_ORDER: Readonly<Record<
     "open-note",
     "show-card-in-deck",
     "file-card",
-    "toggle-tray",
+    "toggle-desk",
     "copy-link",
     "move-desk-card-left",
     "move-desk-card-right",
@@ -72,7 +72,7 @@ export const CARD_BUTTON_ORDER: Readonly<Record<
     "show-card-in-deck",
     "file-card",
     "toggle-viewed-card",
-    "toggle-tray",
+    "toggle-desk",
     "copy-link",
     "delete-card",
   ],
@@ -126,7 +126,7 @@ export function cardHeaderActionPresentation(
       return context.filed && context.surface !== "deck"
         ? { action: definition.action, icon: "locate-fixed", label: "Show in Deck" }
         : null;
-    case "toggle-tray":
+    case "toggle-desk":
       if (!context.filed) {
         return null;
       }

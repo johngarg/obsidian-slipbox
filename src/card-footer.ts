@@ -480,7 +480,7 @@ export class CardFooterManager {
         .onClick(() => this.environment.runAfterEditing(
           "backlink-tray-toggle",
           () => {
-            this.environment.runAction("toggle-tray", backlink);
+            this.environment.runAction("toggle-desk", backlink);
           },
         ));
     });

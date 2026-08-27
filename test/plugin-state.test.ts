@@ -61,6 +61,17 @@ describe("normalizePluginState", () => {
   test("uses defaults for unknown data", () => {
     assert.deepEqual(normalizePluginState(null), { bookmarks: [] });
   });
+
+  test("loads the historical deskCards persistence key", () => {
+    assert.deepEqual(normalizePluginState({
+      deskCards: [{ cardRef: "Archive/one.md", x: 10, y: 20, z: 1 }],
+    }), {
+      bookmarks: [],
+      legacyDeskCards: [
+        { cardRef: "Archive/one.md", x: 10, y: 20, z: 1 },
+      ],
+    });
+  });
 });
 
 describe("normalizePluginData", () => {

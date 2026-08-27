@@ -83,18 +83,18 @@ describe("card header action presentation", () => {
       icon: "maximize-2",
       label: "View",
     });
-    assert.deepEqual(cardHeaderActionPresentation("toggle-tray", FILED_DESK), {
-      action: "toggle-tray",
+    assert.deepEqual(cardHeaderActionPresentation("toggle-desk", FILED_DESK), {
+      action: "toggle-desk",
       icon: "undo-2",
       label: "Return from Desk",
       pressed: true,
     });
-    assert.deepEqual(cardHeaderActionPresentation("toggle-tray", {
+    assert.deepEqual(cardHeaderActionPresentation("toggle-desk", {
       ...FILED_DESK,
       surface: "deck",
       onDesk: false,
     }), {
-      action: "toggle-tray",
+      action: "toggle-desk",
       icon: "bring-to-front",
       label: "Put on Desk",
       pressed: false,
@@ -163,7 +163,7 @@ describe("card header action presentation", () => {
         "edit-card",
         "open-note",
         "show-card-in-deck",
-        "toggle-tray",
+        "toggle-desk",
       ],
     );
     assert.equal(

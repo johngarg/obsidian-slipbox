@@ -53,10 +53,10 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["open-note"], [
       { key: "o", modifiers: [] },
     ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray"], [
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-desk"], [
       { key: "p", modifiers: [] },
     ]);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-tray-without-focus"], []);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-desk-without-focus"], []);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["copy-link"], [
       { key: "y", modifiers: [] },
     ]);
@@ -119,7 +119,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(DEFAULT_SETTINGS.newCardFolder, "");
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
-    assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
+    assert.equal(DEFAULT_SETTINGS.deskCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
     assert.equal(DEFAULT_SETTINGS.explicitBranchLinks, false);
     assert.equal(DEFAULT_SETTINGS.branchLinkMarker, "+");
@@ -155,7 +155,7 @@ describe("Slipbox settings", () => {
       titleSource: "frontmatter",
       titleProperty: " display-name ",
       mainCardSize: "large",
-      trayCardSize: "small",
+      deskCardSize: "small",
       newCardFolder: " /Cards\\Slipbox/ ",
       newNoteTimestampFormat: " YYYYMMDD-HHmmss ",
       showTitleInDeck: true,
@@ -178,7 +178,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.titleSource, "frontmatter");
     assert.equal(settings.titleProperty, "display-name");
     assert.equal(settings.mainCardSize, "large");
-    assert.equal(settings.trayCardSize, "small");
+    assert.equal(settings.deskCardSize, "small");
     assert.equal(settings.newCardFolder, "Cards/Slipbox");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDD-HHmmss");
     assert.equal(settings.showTitleInDeck, true);
@@ -186,7 +186,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.showDeckMap, false);
     assert.equal(settings.cardSpread, 0.73);
     assert.equal(settings.cardHeaderButtons.deck["toggle-bookmark"], false);
-    assert.equal(settings.cardHeaderButtons.deck["toggle-tray"], false);
+    assert.equal(settings.cardHeaderButtons.deck["toggle-desk"], false);
     assert.equal("desk" in settings.cardHeaderButtons, true);
     assert.equal("showTitleInDesk" in settings, false);
     assert.equal("deskHeaderButtons" in settings, false);
@@ -199,6 +199,84 @@ describe("Slipbox settings", () => {
       { key: "y", modifiers: [] },
     ]);
     assert.equal(settings.cardHeaderButtons.deck["copy-link"], true);
+  });
+
+  test("loads Tray settings into canonical Desk fields and persists only legacy keys", () => {
+    const legacy = normalizeSettings({
+      trayCardSize: "small",
+      cardHeaderButtons: {
+        deck: { "toggle-tray": false },
+        desk: { "toggle-tray": true },
+      },
+      deckKeybindings: {
+        "toggle-tray": [{ key: "q", modifiers: ["Alt"] }],
+        "toggle-tray-without-focus": [{ key: "w", modifiers: ["Alt"] }],
+      },
+    });
+    assert.equal(legacy.deskCardSize, "small");
+    assert.equal(legacy.cardHeaderButtons.deck["toggle-desk"], false);
+    assert.equal(legacy.cardHeaderButtons.desk["toggle-desk"], true);
+    assert.deepEqual(legacy.deckKeybindings["toggle-desk"], [{
+      key: "q",
+      modifiers: ["Alt"],
+    }]);
+    assert.deepEqual(legacy.deckKeybindings["toggle-desk-without-focus"], [{
+      key: "w",
+      modifiers: ["Alt"],
+    }]);
+
+    const canonical = normalizeSettings({
+      deskCardSize: "large",
+      trayCardSize: "small",
+      cardHeaderButtons: {
+        deck: { "toggle-desk": true, "toggle-tray": false },
+      },
+      deckKeybindings: {
+        "toggle-desk": [{ key: "d", modifiers: ["Alt"] }],
+        "toggle-tray": [{ key: "t", modifiers: ["Alt"] }],
+      },
+    });
+    assert.equal(canonical.deskCardSize, "large");
+    assert.equal(canonical.cardHeaderButtons.deck["toggle-desk"], true);
+    assert.deepEqual(canonical.deckKeybindings["toggle-desk"], [{
+      key: "d",
+      modifiers: ["Alt"],
+    }]);
+
+    const persisted = settingsForPersistence({
+      deskCardSize: "small",
+      opaqueSetting: "retained",
+      deckKeybindings: {
+        "toggle-desk": [],
+        "opaque-action": [{ key: "z", modifiers: ["Ctrl"] }],
+      },
+    }, canonical);
+    assert.equal("deskCardSize" in persisted, false);
+    assert.equal(persisted.trayCardSize, "large");
+    assert.equal(persisted.opaqueSetting, "retained");
+    const persistedButtons = persisted.cardHeaderButtons as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const persistedDeckButtons = persistedButtons.deck;
+    assert.ok(persistedDeckButtons);
+    assert.equal("toggle-desk" in persistedDeckButtons, false);
+    assert.equal(persistedDeckButtons["toggle-tray"], true);
+    const persistedBindings = persisted.deckKeybindings as Record<string, unknown>;
+    assert.equal("toggle-desk" in persistedBindings, false);
+    assert.equal("toggle-desk-without-focus" in persistedBindings, false);
+    assert.deepEqual(persistedBindings["toggle-tray"], [{
+      key: "d",
+      modifiers: ["Alt"],
+    }]);
+    assert.deepEqual(
+      persistedBindings["toggle-tray-without-focus"],
+      canonical.deckKeybindings["toggle-desk-without-focus"],
+    );
+    assert.deepEqual(persistedBindings["opaque-action"], [{
+      key: "z",
+      modifiers: ["Ctrl"],
+    }]);
   });
 
   test("normalizes branching settings and rejects unsafe markers", () => {
@@ -303,6 +381,24 @@ describe("Slipbox settings", () => {
     );
     assert.equal(new Set(commandIds).size, commandIds.length);
     assert.equal(
+      DECK_ACTION_DEFINITIONS.find((definition) =>
+        definition.id === "toggle-desk"
+      )?.commandId,
+      "toggle-tray",
+    );
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.find((definition) =>
+        definition.id === "toggle-desk-without-focus"
+      )?.commandId,
+      "toggle-tray-without-focus",
+    );
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.find((definition) =>
+        definition.id === "return-all-filed-cards"
+      )?.commandId,
+      "clear-tray",
+    );
+    assert.equal(
       DECK_ACTION_DEFINITIONS.every((definition) =>
         definition.commandName !== "" && definition.target !== undefined
       ),
@@ -385,14 +481,14 @@ describe("Slipbox settings", () => {
     const settings = normalizeSettings({
       deckKeybindings: {
         "open-note": [{ key: "h", modifiers: [] }],
-        "toggle-tray": [{ key: " ", modifiers: [] }],
+        "toggle-desk": [{ key: " ", modifiers: [] }],
       },
     });
     assert.deepEqual(settings.deckKeybindings["open-note"], [{
       key: "h",
       modifiers: [],
     }]);
-    assert.deepEqual(settings.deckKeybindings["toggle-tray"], [{
+    assert.deepEqual(settings.deckKeybindings["toggle-desk"], [{
       key: " ",
       modifiers: [],
     }]);
@@ -408,12 +504,12 @@ describe("Slipbox settings", () => {
       key: "p",
       modifiers: ["Alt"],
     }]);
-    assert.deepEqual(normalized["toggle-tray-without-focus"], []);
+    assert.deepEqual(normalized["toggle-desk-without-focus"], []);
 
     const configured = normalizeDeckKeybindings({
-      "toggle-tray-without-focus": [{ key: "q", modifiers: ["Alt"] }],
+      "toggle-desk-without-focus": [{ key: "q", modifiers: ["Alt"] }],
     });
-    assert.deepEqual(configured["toggle-tray-without-focus"], [{
+    assert.deepEqual(configured["toggle-desk-without-focus"], [{
       key: "q",
       modifiers: ["Alt"],
     }]);
@@ -479,7 +575,7 @@ describe("Slipbox settings", () => {
       "first-card": [{ key: "g", modifiers: [] }],
       "last-card": [{ key: "g", modifiers: ["Shift"] }],
       "open-note": [{ key: "o", modifiers: [] }],
-      "toggle-tray": [{ key: "p", modifiers: [] }],
+      "toggle-desk": [{ key: "p", modifiers: [] }],
       "toggle-bookmark": [{ key: "b", modifiers: [] }],
       back: [],
       forward: [],
@@ -760,7 +856,7 @@ describe("Slipbox settings", () => {
       titleSource: "unknown",
       titleProperty: 42,
       mainCardSize: "huge",
-      trayCardSize: null,
+      deskCardSize: null,
       newCardFolder: 42,
       newNoteTimestampFormat: "   ",
       showDeckMap: "yes",
@@ -770,7 +866,7 @@ describe("Slipbox settings", () => {
     assert.equal(settings.titleSource, "filename");
     assert.equal(settings.titleProperty, "slipbox-title");
     assert.equal(settings.mainCardSize, "medium");
-    assert.equal(settings.trayCardSize, "medium");
+    assert.equal(settings.deskCardSize, "medium");
     assert.equal(settings.newCardFolder, "");
     assert.equal(settings.newNoteTimestampFormat, "YYYYMMDDTHHmmss");
     assert.equal(settings.showDeckMap, true);

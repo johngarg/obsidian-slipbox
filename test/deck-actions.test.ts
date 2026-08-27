@@ -43,8 +43,8 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("cycle-backward-inferred-siblings", READY), true);
     assert.equal(canRunDeckAction("open-note", READY), true);
     assert.equal(canRunDeckAction("copy-link", READY), true);
-    assert.equal(canRunDeckAction("toggle-tray", READY), true);
-    assert.equal(canRunDeckAction("toggle-tray-without-focus", READY), false);
+    assert.equal(canRunDeckAction("toggle-desk", READY), true);
+    assert.equal(canRunDeckAction("toggle-desk-without-focus", READY), false);
     assert.equal(canRunDeckAction("problems", READY), true);
     assert.equal(canRunDeckAction("confirm-filing", READY), true);
     assert.equal(canRunDeckAction("cancel-filing", READY), true);
@@ -83,8 +83,8 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("forward-ten-cards", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);
-    assert.equal(canRunDeckAction("toggle-tray", unavailable), false);
-    assert.equal(canRunDeckAction("toggle-tray-without-focus", unavailable), false);
+    assert.equal(canRunDeckAction("toggle-desk", unavailable), false);
+    assert.equal(canRunDeckAction("toggle-desk-without-focus", unavailable), false);
     assert.equal(canRunDeckAction("problems", unavailable), false);
     assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
@@ -261,21 +261,21 @@ describe("Deck action availability", () => {
 
   test("leaves the Deck-only background toggle unbound by default", () => {
     const backgroundToggle = DECK_ACTION_DEFINITIONS.find(
-      (definition) => definition.id === "toggle-tray-without-focus",
+      (definition) => definition.id === "toggle-desk-without-focus",
     );
     assert.deepEqual(backgroundToggle?.defaultBindings, []);
     assert.equal(backgroundToggle?.target, "focused-card");
-    assert.equal(canRunDeckAction("toggle-tray-without-focus", {
+    assert.equal(canRunDeckAction("toggle-desk-without-focus", {
       ...READY,
       focusedSurface: "deck",
       focusedCardOnDesk: false,
     }), true);
-    assert.equal(canRunDeckAction("toggle-tray-without-focus", {
+    assert.equal(canRunDeckAction("toggle-desk-without-focus", {
       ...READY,
       focusedSurface: "deck",
       focusedCardOnDesk: true,
     }), true);
-    assert.equal(canRunDeckAction("toggle-tray-without-focus", {
+    assert.equal(canRunDeckAction("toggle-desk-without-focus", {
       ...READY,
       focusedSurface: "viewed",
     }), false);

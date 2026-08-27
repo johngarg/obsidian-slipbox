@@ -518,10 +518,10 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .addOption("small", "Small")
         .addOption("medium", "Medium")
         .addOption("large", "Large")
-        .setValue(this.slipbox.settings.trayCardSize)
+        .setValue(this.slipbox.settings.deskCardSize)
         .onChange((value) => void this.save({
           ...this.slipbox.settings,
-          trayCardSize: normalizeCardSize(value),
+          deskCardSize: normalizeCardSize(value),
         }));
     });
   }

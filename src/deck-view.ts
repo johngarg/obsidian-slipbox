@@ -1562,12 +1562,12 @@ export class DeckView extends ItemView {
           void this.plugin.copyCardLink(card);
         }
         break;
-      case "toggle-tray":
+      case "toggle-desk":
         if (card !== null) {
           void this.toggleFocusedCardOnDesk(card, target === null);
         }
         break;
-      case "toggle-tray-without-focus":
+      case "toggle-desk-without-focus":
         if (card !== null) {
           void this.toggleFocusedCardOnDesk(card, false);
         }
@@ -2607,7 +2607,7 @@ export class DeckView extends ItemView {
     this.viewedCardBodyEl = null;
     this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
-    this.contentEl.dataset.trayCardSize = this.plugin.settings.trayCardSize;
+    this.contentEl.dataset.trayCardSize = this.plugin.settings.deskCardSize;
     this.applyDeckPositionMode();
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });

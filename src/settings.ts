@@ -36,7 +36,7 @@ export type CardHeaderButtonAction =
   | "open-note"
   | "toggle-viewed-card"
   | "show-card-in-deck"
-  | "toggle-tray"
+  | "toggle-desk"
   | "file-card"
   | "copy-link"
   | "toggle-bookmark"
@@ -54,7 +54,7 @@ export const CARD_HEADER_BUTTON_ACTIONS: readonly CardHeaderButtonAction[] = [
   "open-note",
   "toggle-viewed-card",
   "show-card-in-deck",
-  "toggle-tray",
+  "toggle-desk",
   "file-card",
   "copy-link",
   "toggle-bookmark",
@@ -78,8 +78,8 @@ export type SlipboxAction =
   | "last-card"
   | "open-note"
   | "copy-link"
-  | "toggle-tray"
-  | "toggle-tray-without-focus"
+  | "toggle-desk"
+  | "toggle-desk-without-focus"
   | "toggle-bookmark"
   | "find-address-first"
   | "pull-into-pile"
@@ -103,6 +103,11 @@ export type SlipboxAction =
   | "delete-card"
   | "collapse-all-piles"
   | "return-all-filed-cards";
+
+const LEGACY_ACTION_IDS = {
+  "toggle-desk": "toggle-tray",
+  "toggle-desk-without-focus": "toggle-tray-without-focus",
+} as const satisfies Partial<Record<SlipboxAction, string>>;
 
 /** Compatibility alias retained for integrations built before schema 6. */
 export type DeckAction = SlipboxAction;
@@ -220,13 +225,13 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     defaultBindings: [binding("o")],
   },
   {
-    id: "toggle-tray",
+    id: "toggle-desk",
     label: "Put focused card on or return it from Desk",
     repeatable: false,
     defaultBindings: [binding("p")],
   },
   {
-    id: "toggle-tray-without-focus",
+    id: "toggle-desk-without-focus",
     label: "Put focused Deck card on or return it from Desk without moving focus",
     repeatable: false,
     defaultBindings: [],
@@ -383,7 +388,8 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   "centre-card": "centre-active-card",
   "open-note": "open-current-card-markdown",
   "copy-link": "copy-current-card-link",
-  "toggle-tray": "toggle-tray",
+  "toggle-desk": "toggle-tray",
+  "toggle-desk-without-focus": "toggle-tray-without-focus",
   "toggle-bookmark": "add-bookmark-current-card",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
@@ -396,8 +402,8 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
 const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
   "open-note",
   "copy-link",
-  "toggle-tray",
-  "toggle-tray-without-focus",
+  "toggle-desk",
+  "toggle-desk-without-focus",
   "toggle-bookmark",
   "pull-into-pile",
   "toggle-pile",
@@ -455,7 +461,7 @@ export interface SlipboxSettings {
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
   readonly mainCardSize: CardSize;
-  readonly trayCardSize: CardSize;
+  readonly deskCardSize: CardSize;
   readonly newCardFolder: string;
   readonly newNoteTimestampFormat: string;
   readonly showTitleInDeck: boolean;
@@ -488,7 +494,7 @@ const allCardHeaderButtons = (
 export const DEFAULT_CARD_HEADER_BUTTONS: CardHeaderButtonSettings = {
   deck: allCardHeaderButtons([
     "open-note",
-    "toggle-tray",
+    "toggle-desk",
     "copy-link",
     "toggle-bookmark",
   ]),
@@ -498,7 +504,7 @@ export const DEFAULT_CARD_HEADER_BUTTONS: CardHeaderButtonSettings = {
     "open-note",
     "show-card-in-deck",
     "file-card",
-    "toggle-tray",
+    "toggle-desk",
   ]),
   viewed: allCardHeaderButtons([
     "edit-card",
@@ -523,7 +529,7 @@ const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKe
   "first-card": [binding("g")],
   "last-card": [binding("g", ["Shift"])],
   "open-note": [binding("o")],
-  "toggle-tray": [binding("p")],
+  "toggle-desk": [binding("p")],
   "toggle-bookmark": [binding("b")],
   back: [],
   forward: [],
@@ -560,7 +566,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   titleSource: "filename",
   titleProperty: "slipbox-title",
   mainCardSize: "medium",
-  trayCardSize: "medium",
+  deskCardSize: "medium",
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   showTitleInDeck: false,
@@ -581,6 +587,36 @@ const MODIFIER_ORDER: readonly KeyModifier[] = ["Mod", "Ctrl", "Meta", "Alt", "S
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function hasOwn(source: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(source, key);
+}
+
+function canonicalActionRecord(value: unknown): Record<string, unknown> {
+  const raw = isRecord(value) ? value : {};
+  const canonical: Record<string, unknown> = { ...raw };
+  for (const [action, legacyAction] of Object.entries(LEGACY_ACTION_IDS)) {
+    if (!hasOwn(canonical, action) && hasOwn(raw, legacyAction)) {
+      canonical[action] = raw[legacyAction];
+    }
+  }
+  return canonical;
+}
+
+function persistedActionId(action: string): string {
+  return LEGACY_ACTION_IDS[action as keyof typeof LEGACY_ACTION_IDS] ?? action;
+}
+
+function actionRecordForPersistence<T>(
+  record: Readonly<Record<string, T>>,
+): Readonly<Record<string, T>> {
+  return Object.fromEntries(
+    Object.entries(record).map(([action, value]) => [
+      persistedActionId(action),
+      value,
+    ]),
+  );
 }
 
 export function normalizePropertyName(value: unknown, fallback: string): string {
@@ -750,7 +786,7 @@ export function normalizeDeckKeybindings(
   value: unknown,
 ): Readonly<Record<DeckAction, readonly DeckKeyBinding[]>> {
   const rawSource = isRecord(value) ? value : {};
-  const source: Record<string, unknown> = { ...rawSource };
+  const source = canonicalActionRecord(rawSource);
   const renamedActions = [
     [
       "jump-inferred-parent",
@@ -842,19 +878,19 @@ export function normalizeCardHeaderButtons(
 ): CardHeaderButtonSettings {
   const source = isRecord(value) ? value : {};
   const legacy = isRecord(legacyDeckButtons) ? legacyDeckButtons : {};
-  const deckSource = isRecord(source.deck) ? source.deck : {};
+  const deckSource = canonicalActionRecord(source.deck);
   const migratedDeck: Record<string, unknown> = {
     ...deckSource,
   };
   const legacyMappings = {
     "open-note": "open-note",
     "copy-link": "copy-link",
-    tray: "toggle-tray",
+    tray: "toggle-desk",
     bookmark: "toggle-bookmark",
   } as const;
   for (const [legacyKey, action] of Object.entries(legacyMappings)) {
     if (
-      typeof migratedDeck[action] !== "boolean" &&
+      !hasOwn(migratedDeck, action) &&
       typeof legacy[legacyKey] === "boolean"
     ) {
       migratedDeck[action] = legacy[legacyKey];
@@ -862,8 +898,14 @@ export function normalizeCardHeaderButtons(
   }
   return {
     deck: normalizeBooleanRecord(migratedDeck, DEFAULT_CARD_HEADER_BUTTONS.deck),
-    desk: normalizeBooleanRecord(source.desk, DEFAULT_CARD_HEADER_BUTTONS.desk),
-    viewed: normalizeBooleanRecord(source.viewed, DEFAULT_CARD_HEADER_BUTTONS.viewed),
+    desk: normalizeBooleanRecord(
+      canonicalActionRecord(source.desk),
+      DEFAULT_CARD_HEADER_BUTTONS.desk,
+    ),
+    viewed: normalizeBooleanRecord(
+      canonicalActionRecord(source.viewed),
+      DEFAULT_CARD_HEADER_BUTTONS.viewed,
+    ),
   };
 }
 
@@ -911,7 +953,11 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
         : requestedTitleSource,
     titleProperty,
     mainCardSize: normalizeCardSize(source.mainCardSize),
-    trayCardSize: normalizeCardSize(source.trayCardSize),
+    deskCardSize: normalizeCardSize(
+      hasOwn(source, "deskCardSize")
+        ? source.deskCardSize
+        : source.trayCardSize,
+    ),
     newCardFolder: normalizeFolderPath(source.newCardFolder),
     newNoteTimestampFormat: normalizePropertyName(
       source.newNoteTimestampFormat,
@@ -972,6 +1018,7 @@ export function settingsForPersistence(
   const raw = isRecord(rawValue) ? rawValue : {};
   const {
     deckHeaderButtons: _legacyDeckHeaderButtons,
+    deskCardSize: _canonicalDeskCardSize,
     showCardTooltips: _legacyShowCardTooltips,
     showDeckToolbar: _showDeckToolbar,
     useTemplatesForNewNotes: _useTemplatesForNewNotes,
@@ -979,12 +1026,20 @@ export function settingsForPersistence(
     inferApparentBranches: _legacyInferApparentBranches,
     ...retainedRaw
   } = raw;
+  const {
+    deskCardSize,
+    cardHeaderButtons,
+    deckKeybindings,
+    ...legacySettings
+  } = settings;
   const rawKeybindingsSource = isRecord(raw.deckKeybindings)
     ? raw.deckKeybindings
     : {};
   const rawKeybindings = Object.fromEntries(
     Object.entries(rawKeybindingsSource).filter(([key]) =>
       key !== "entry-points" &&
+      key !== "toggle-desk" &&
+      key !== "toggle-desk-without-focus" &&
       key !== "back" &&
       key !== "forward" &&
       key !== "toggle-toolbar" &&
@@ -1001,11 +1056,17 @@ export function settingsForPersistence(
   );
   return {
     ...retainedRaw,
-    ...settings,
-    cardHeaderButtons: settings.cardHeaderButtons,
+    ...legacySettings,
+    trayCardSize: deskCardSize,
+    cardHeaderButtons: Object.fromEntries(
+      Object.entries(cardHeaderButtons).map(([surface, actions]) => [
+        surface,
+        actionRecordForPersistence(actions),
+      ]),
+    ),
     deckKeybindings: {
       ...rawKeybindings,
-      ...settings.deckKeybindings,
+      ...actionRecordForPersistence(deckKeybindings),
     },
   };
 }

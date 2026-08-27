@@ -6,11 +6,9 @@ import {
   cardMetadataRecord,
   indexCardMetadata,
   type CardMetadataIndex,
-  type DuplicateAddressPolicy,
   type FiledCardRecord,
 } from "./card-metadata.js";
 import { indexFiledBacklinks } from "./backlinks.js";
-import type { DeckOrdering } from "./address-order.js";
 import {
   EMPTY_EXPLICIT_BRANCH_INDEX,
   indexExplicitBranches,
@@ -29,6 +27,7 @@ import {
   type InferredStructureIndex,
 } from "./inferred-structure.js";
 import { resolveFiledCardLink } from "./card-links.js";
+import type { CardIndexConfig } from "./card-index-config.js";
 
 export interface FiledCard extends FiledCardRecord {
   readonly file: TFile;
@@ -84,59 +83,32 @@ export class CardIndex {
 
   constructor(
     private readonly app: App,
-    private addressProperty = "slipbox-id",
-    private ordering: DeckOrdering = "natural",
-    private duplicatePolicy: DuplicateAddressPolicy = "allowed",
-    private explicitBranchLinks = false,
-    private branchLinkMarker = "+",
-    private inferAddressBranches = false,
+    private config: CardIndexConfig,
   ) {}
 
   get snapshot(): VaultCardIndex {
     return this.current;
   }
 
-  get deckOrdering(): DeckOrdering {
-    return this.ordering;
-  }
-
-  setAddressProperty(addressProperty: string): void {
-    this.addressProperty = addressProperty;
-  }
-
-  setDeckOrdering(ordering: DeckOrdering): void {
-    this.ordering = ordering;
-  }
-
-  setDuplicateAddressPolicy(policy: DuplicateAddressPolicy): void {
-    this.duplicatePolicy = policy;
-  }
-
-  setExplicitBranchLinks(enabled: boolean): void {
-    this.explicitBranchLinks = enabled;
-  }
-
-  setBranchLinkMarker(marker: string): void {
-    this.branchLinkMarker = marker;
-  }
-
-  setInferAddressBranches(enabled: boolean): void {
-    this.inferAddressBranches = enabled;
+  configure(config: CardIndexConfig): void {
+    // Replace every option together so a refresh cannot see a partial update.
+    this.config = config;
   }
 
   refresh(): VaultCardIndex {
+    const config = this.config;
     const markdownFiles = this.app.vault.getMarkdownFiles();
     const records = markdownFiles.map((file) => cardMetadataRecord(
       file.path,
       this.app.metadataCache.getFileCache(file)?.frontmatter,
-      this.addressProperty,
+      config.addressProperty,
     ));
 
     const indexed = indexCardMetadata(
       records,
-      this.addressProperty,
-      this.ordering,
-      this.duplicatePolicy,
+      config.addressProperty,
+      config.ordering,
+      config.duplicatePolicy,
     );
     const filesByPath = new Map(markdownFiles.map((file) => [file.path, file]));
     const filed: FiledCard[] = [];
@@ -160,7 +132,7 @@ export class CardIndex {
     this.filedByPathMap = new Map(lookups.byPath);
     this.filedIndexByPathMap = new Map(lookups.indexByPath);
     this.filedByAddressMap = new Map(lookups.byAddress);
-    const explicitBranches = this.explicitBranchLinks
+    const explicitBranches = config.explicitBranchLinks
       ? indexExplicitBranches(
         filed.map((card, deckIndex) => ({
           path: card.path,
@@ -169,7 +141,7 @@ export class CardIndex {
         })),
         {
           enabled: true,
-          marker: this.branchLinkMarker,
+          marker: config.branchLinkMarker,
           resolveTargetPath: (link, sourcePath) => resolveFiledCardLink(
             getLinkpath(link),
             sourcePath,
@@ -184,8 +156,8 @@ export class CardIndex {
         },
       )
       : EMPTY_EXPLICIT_BRANCH_INDEX;
-    const inferredStructure = this.inferAddressBranches
-      ? buildInferredStructure(filed, this.ordering)
+    const inferredStructure = config.inferAddressBranches
+      ? buildInferredStructure(filed, config.ordering)
       : EMPTY_INFERRED_STRUCTURE;
     this.current = {
       ...indexed,

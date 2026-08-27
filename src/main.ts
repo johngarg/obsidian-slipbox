@@ -87,6 +87,10 @@ import {
 import { SlipboxSettingTab } from "./settings-tab.js";
 import { CardIndex, type FiledCard } from "./card-index.js";
 import {
+  cardIndexConfig,
+  cardIndexConfigChange,
+} from "./card-index-config.js";
+import {
   EMPTY_DESK,
   clearFiledCardsFromPile,
   clearFiledCardsFromDesk,
@@ -214,15 +218,7 @@ export default class SlipboxPlugin extends Plugin {
     this.rawSettings = rawSettingsFromPluginData(loadedData);
     this.settings = data.settings;
     this.state = data.state;
-    this.index = new CardIndex(
-      this.app,
-      this.settings.addressProperty,
-      this.settings.deckOrdering,
-      this.settings.duplicateAddresses,
-      this.settings.explicitBranchLinks,
-      this.settings.branchLinkMarker,
-      this.settings.inferAddressBranches,
-    );
+    this.index = new CardIndex(this.app, cardIndexConfig(this.settings));
     this.canvas = new CanvasBridge(this.app);
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
@@ -486,31 +482,18 @@ export default class SlipboxPlugin extends Plugin {
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
     const previousSettings = this.settings;
-    const previousAddressProperty = this.settings.addressProperty;
-    const previousOrdering = this.settings.deckOrdering;
-    const previousDuplicatePolicy = this.settings.duplicateAddresses;
-    const previousExplicitBranchLinks = this.settings.explicitBranchLinks;
-    const previousBranchLinkMarker = this.settings.branchLinkMarker;
-    const previousInferAddressBranches = this.settings.inferAddressBranches;
+    const previousIndexConfig = cardIndexConfig(previousSettings);
     this.settings = normalizeSettings(value);
-    this.index.setAddressProperty(this.settings.addressProperty);
-    this.index.setDeckOrdering(this.settings.deckOrdering);
-    this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
-    this.index.setExplicitBranchLinks(this.settings.explicitBranchLinks);
-    this.index.setBranchLinkMarker(this.settings.branchLinkMarker);
-    this.index.setInferAddressBranches(this.settings.inferAddressBranches);
+    const nextIndexConfig = cardIndexConfig(this.settings);
+    const indexConfigChange = cardIndexConfigChange(
+      previousIndexConfig,
+      nextIndexConfig,
+    );
+    // Keep settings and index config aligned before persistence yields to events.
+    this.index.configure(nextIndexConfig);
     await this.persistState();
-    if (
-      this.settings.addressProperty !== previousAddressProperty ||
-      this.settings.deckOrdering !== previousOrdering ||
-      this.settings.duplicateAddresses !== previousDuplicatePolicy ||
-      this.settings.explicitBranchLinks !== previousExplicitBranchLinks ||
-      this.settings.branchLinkMarker !== previousBranchLinkMarker ||
-      this.settings.inferAddressBranches !== previousInferAddressBranches
-    ) {
-      await this.refreshIndex(
-        this.settings.deckOrdering !== previousOrdering ? "ordering" : "index",
-      );
+    if (indexConfigChange !== "unchanged") {
+      await this.refreshIndex(indexConfigChange);
     } else if (settingsEqualExceptBranchingPresentation(
       previousSettings,
       this.settings,

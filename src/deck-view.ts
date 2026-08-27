@@ -60,21 +60,13 @@ import {
   type CardHeaderButtonController,
 } from "./card-header-buttons.js";
 import {
-  DECK_ACTION_DEFINITIONS,
-  formatKeyBinding,
-  keyBindingFromKeyboardEvent,
-  keyBindingSignature,
   type DeckAction,
-  type DeckKeyBinding,
   type CardButtonSurface,
-  type SlipboxActionDefinition,
 } from "./settings.js";
 import {
-  arbitrateShortcut,
-  classifyShortcutClaim,
-  installEarlyShortcutObserver,
-  ShortcutCommandTracker,
-} from "./shortcut-arbitration.js";
+  DeckShortcutController,
+  type PendingDeckCommandCompletionResult,
+} from "./deck-shortcut-controller.js";
 import {
   DeskRenderer,
   type DeskFilingState,
@@ -101,11 +93,8 @@ import {
 } from "./filing-preview.js";
 import {
   attachUnfiledAddressFiling,
-  eventTargetsDeck,
   filingEditorMatchesSource,
   renderInlineFilingEditor,
-  shouldSuspendDeckCommand,
-  shouldSuspendDeckShortcut,
   updateInlineFilingEditor,
   type FilingSourceSurface,
   type InlineFilingEditorElements,
@@ -119,13 +108,8 @@ import {
   type DeckMapSectionMarker,
 } from "./deck-map.js";
 import {
-  IDLE_DECK_COMMAND,
-  advancePendingDeckCommand,
   findAddressInitialIndex,
-  installPendingDeckCommandKeyCapture,
-  startAddressCommand,
-  startPileCommand,
-  type PendingDeckCommand,
+  type PendingDeckCommandCompletion,
 } from "./deck-commands.js";
 import {
   DEFAULT_DECK_MAP_VISIBILITY,
@@ -204,14 +188,9 @@ const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
 const DECK_MAP_SECTION_LABEL_SPACING = 14;
 const DECK_MAP_MARKER_BUDGET = 512;
-const COMMAND_FEEDBACK_DURATION_MS = 1_800;
 const DECK_CARD_DRAG_THRESHOLD_PX = 5;
 const DECK_CARD_CLICK_SUPPRESSION_MS = 400;
 const VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
-const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
-  "find-address-first",
-  "pull-into-pile",
-]);
 let inlineEditStatusSequence = 0;
 
 interface MountedInlineEdit {
@@ -301,19 +280,7 @@ export class DeckView extends ItemView {
   private readonly inferredNavigation: InferredNavigationManager;
   private readonly viewedInferredNavigation: InferredNavigationManager;
   private readonly deskRenderer: DeskRenderer;
-  private deckKeybindingsSuspended = false;
-  private readonly shortcutCommandTracker =
-    new ShortcutCommandTracker<KeyboardEvent, DeckAction>();
-  private commandActionAwaitingKeyup: {
-    readonly action: DeckAction;
-    readonly timestamp: number;
-  } | null = null;
-  private readonly shortcutConflictNoticeTimes = new Map<string, number>();
-  private pendingCommand: PendingDeckCommand = IDLE_DECK_COMMAND;
-  private pendingCommandStartEvent: KeyboardEvent | null = null;
-  private pendingCommandEl: HTMLElement | null = null;
-  private pendingCommandFeedback = "";
-  private pendingCommandFeedbackTimer: number | null = null;
+  private readonly shortcutController: DeckShortcutController;
   private deckMapVisibility: DeckMapVisibility = DEFAULT_DECK_MAP_VISIBILITY;
   private inlineEdit: MountedInlineEdit | null = null;
   private readonly inlineEditFinalization = new InlineEditFinalizationCoordinator();
@@ -335,6 +302,21 @@ export class DeckView extends ItemView {
     private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
+    this.shortcutController = new DeckShortcutController({
+      root: this.contentEl,
+      isMacOS: Platform.isMacOS,
+      isActive: () => this.app.workspace.getActiveViewOfType(DeckView) === this,
+      isFilingInputFocused: () => this.isFilingInputFocused,
+      bindings: () => this.plugin.settings.deckKeybindings,
+      lastEvent: () => this.app.lastEvent,
+      canRun: (action) => this.canRunAction(action),
+      run: (action) => this.runAction(action),
+      completePending: (completion) =>
+        this.completePendingDeckCommand(completion),
+      showNotice: (message, duration) => {
+        new Notice(message, duration);
+      },
+    });
     const footerEnvironment: CardFooterEnvironment = {
       app: this.app,
       leaf: this.leaf,
@@ -418,7 +400,7 @@ export class DeckView extends ItemView {
       cancelFiling: () => void this.cancelFiling(),
       previewFilingPlacement: () => void this.previewFilingPlacement(),
       filingInputFocusChanged: (focused) => {
-        this.setDeckKeybindingsSuspended(focused);
+        this.shortcutController.setSuspended(focused);
         if (focused) {
           this.restoreFilingSourceFocus();
         }
@@ -475,33 +457,8 @@ export class DeckView extends ItemView {
   override async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
+    this.register(this.shortcutController.connect());
     const ownerWindow = this.contentEl.ownerDocument.defaultView;
-    if (ownerWindow !== null) {
-      this.register(installEarlyShortcutObserver(
-        ownerWindow,
-        (event) => this.deferConfiguredDeckShortcut(event),
-      ));
-      this.registerDomEvent(ownerWindow, "keyup", (event) => {
-        this.reportCommandShortcutConflictOnKeyup(event);
-      }, { capture: true });
-    }
-    this.register(installPendingDeckCommandKeyCapture(
-      this.contentEl.ownerDocument,
-      {
-        isPending: () => this.pendingCommand.kind !== "idle",
-        isActive: () => this.app.workspace.getActiveViewOfType(DeckView) === this,
-        shouldIgnore: (event) => {
-          if (event !== this.pendingCommandStartEvent) {
-            return false;
-          }
-          this.pendingCommandStartEvent = null;
-          return true;
-        },
-        handle: (event) => {
-          this.handleDeckCommandContinuation(event);
-        },
-      },
-    ));
     this.registerDomEvent(this.contentEl, "keydown", (event) => {
       if (this.handleDeckEscape(event)) {
         return;
@@ -590,7 +547,7 @@ export class DeckView extends ItemView {
       this.plugin.releaseInlineEdit(editing.controller.snapshot.path, this);
       this.clearInlineEditPolicyMessage();
       this.inlineEdit = null;
-      this.setDeckKeybindingsSuspended(false);
+      this.shortcutController.setSuspended(false);
     }
     this.cancelViewportCentering();
     this.cancelSpaceRecentering();
@@ -613,7 +570,6 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.unloadViewedCardComponent();
-    this.clearPendingCommand();
     this.filingFile = null;
     this.filingSourcePath = null;
     this.filingSourceSurface = null;
@@ -641,8 +597,6 @@ export class DeckView extends ItemView {
     this.deckMapBookmarkMarkerEls.clear();
     this.deckMapSections = [];
     this.deckMapBookmarkCount = 0;
-    this.pendingCommandEl = null;
-    this.pendingCommandStartEvent = null;
   }
 
   override onResize(): void {
@@ -1161,194 +1115,12 @@ export class DeckView extends ItemView {
     }
   }
 
-  private setDeckKeybindingsSuspended(suspended: boolean): void {
-    if (this.deckKeybindingsSuspended === suspended) {
-      return;
-    }
-    if (suspended) {
-      this.clearPendingCommand();
-    }
-    this.deckKeybindingsSuspended = suspended;
-  }
-
   canRunCommandAction(action: DeckAction): boolean {
-    const event = this.app.lastEvent;
-    if (
-      this.deckKeybindingsSuspended ||
-      (
-        event !== null &&
-        "key" in event &&
-        shouldSuspendDeckCommand(
-          event.target,
-          this.isFilingInputFocused,
-          this.contentEl,
-        )
-      )
-    ) {
-      return false;
-    }
-    return this.canRunAction(action);
+    return this.shortcutController.canRunCommand(action);
   }
 
   runCommandAction(action: DeckAction): boolean {
-    const lastEvent = this.app.lastEvent;
-    const keyboardEvent = lastEvent !== null && "key" in lastEvent
-      ? lastEvent
-      : undefined;
-    const deckKeyboardEvent = keyboardEvent !== undefined && eventTargetsDeck(
-      keyboardEvent.target,
-      this.contentEl,
-    )
-      ? keyboardEvent
-      : undefined;
-    const commandEvent = this.shortcutCommandTracker.record(
-      action,
-      deckKeyboardEvent,
-    );
-    const deckCommandEvent = commandEvent !== undefined && eventTargetsDeck(
-      commandEvent.target,
-      this.contentEl,
-    )
-      ? commandEvent
-      : undefined;
-    this.commandActionAwaitingKeyup = deckCommandEvent === undefined
-      ? null
-      : {
-        action,
-        timestamp: Date.now(),
-      };
-    if (
-      deckCommandEvent !== undefined &&
-      !shouldSuspendDeckShortcut(
-        deckCommandEvent.target,
-        this.isFilingInputFocused,
-      )
-    ) {
-      const configuredShortcut = this.configuredDeckShortcut(deckCommandEvent);
-      if (
-        configuredShortcut !== null &&
-        configuredShortcut.definition.id !== action
-      ) {
-        this.reportShortcutConflict(formatKeyBinding(
-          configuredShortcut.binding,
-        ));
-      }
-    }
-    const ran = this.runAction(action);
-    if (
-      ran &&
-      PENDING_COMMAND_ACTIONS.has(action) &&
-      commandEvent !== undefined
-    ) {
-      this.pendingCommandStartEvent = commandEvent;
-    }
-    return ran;
-  }
-
-  private reportCommandShortcutConflictOnKeyup(event: KeyboardEvent): void {
-    const dispatched = this.commandActionAwaitingKeyup;
-    if (dispatched === null) {
-      return;
-    }
-    if (Date.now() - dispatched.timestamp > 2_000) {
-      this.commandActionAwaitingKeyup = null;
-      return;
-    }
-    const configuredShortcut = this.configuredDeckShortcut(event);
-    if (configuredShortcut === null) {
-      return;
-    }
-    this.commandActionAwaitingKeyup = null;
-    if (
-      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
-      configuredShortcut.definition.id === dispatched.action
-    ) {
-      return;
-    }
-    this.reportShortcutConflict(formatKeyBinding(configuredShortcut.binding));
-  }
-
-  private deferConfiguredDeckShortcut(event: KeyboardEvent): void {
-    if (
-      this.deckKeybindingsSuspended ||
-      this.pendingCommand.kind !== "idle" ||
-      this.app.workspace.getActiveViewOfType(DeckView) !== this ||
-      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
-    ) {
-      return;
-    }
-    const shortcut = this.configuredDeckShortcut(event);
-    if (shortcut !== null) {
-      this.deferDeckActionKey(event, shortcut.definition, shortcut.binding);
-    }
-  }
-
-  private configuredDeckShortcut(event: KeyboardEvent): {
-    readonly definition: SlipboxActionDefinition;
-    readonly binding: DeckKeyBinding;
-  } | null {
-    const signature = keyBindingSignature(keyBindingFromKeyboardEvent(
-      event,
-      Platform.isMacOS,
-    ));
-    for (const definition of DECK_ACTION_DEFINITIONS) {
-      const binding = this.plugin.settings.deckKeybindings[definition.id].find(
-        (configured) => keyBindingSignature(configured) === signature,
-      );
-      if (binding !== undefined) {
-        return { definition, binding };
-      }
-    }
-    return null;
-  }
-
-  private deferDeckActionKey(
-    event: KeyboardEvent,
-    definition: SlipboxActionDefinition,
-    binding: DeckKeyBinding,
-  ): void {
-    if (
-      this.pendingCommand.kind !== "idle" ||
-      this.app.workspace.getActiveViewOfType(DeckView) !== this ||
-      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
-    ) {
-      return;
-    }
-    // Observe every configured collision. Contextual action availability is
-    // checked only if Obsidian leaves the shortcut unclaimed.
-    this.shortcutCommandTracker.observe(event);
-    queueMicrotask(() => {
-      const commandAction = this.shortcutCommandTracker.take(event);
-      if (this.app.workspace.getActiveViewOfType(DeckView) !== this) {
-        return;
-      }
-      const claim = classifyShortcutClaim(
-        event.defaultPrevented,
-        definition.id,
-        commandAction,
-      );
-      arbitrateShortcut(
-        claim,
-        () => this.handleDeckActionKey(
-          event,
-          definition.id,
-          definition.repeatable,
-        ),
-        () => this.reportShortcutConflict(formatKeyBinding(binding)),
-      );
-    });
-  }
-
-  private reportShortcutConflict(shortcut: string): void {
-    const message = `${shortcut} is already handled by an Obsidian hotkey; Slipbox Desk left it unchanged.`;
-    this.showCommandFeedback(message);
-    const now = Date.now();
-    const lastNotice = this.shortcutConflictNoticeTimes.get(shortcut) ?? 0;
-    if (now - lastNotice < 5_000) {
-      return;
-    }
-    this.shortcutConflictNoticeTimes.set(shortcut, now);
-    new Notice(`Slipbox Desk shortcut conflict: ${message}`, 6_000);
+    return this.shortcutController.runCommand(action);
   }
 
   private handleDeckEscape(event: KeyboardEvent): boolean {
@@ -1357,7 +1129,7 @@ export class DeckView extends ItemView {
     }
     const action = resolveDeckEscapeAction(event, {
       editing: this.inlineEdit !== null,
-      pendingCommand: this.pendingCommand.kind !== "idle",
+      pendingCommand: this.shortcutController.hasPendingCommand,
       filing: this.filingFile !== null && !this.filingConfirmationInProgress,
     });
     if (action === null) {
@@ -1368,7 +1140,7 @@ export class DeckView extends ItemView {
     if (action === "finish-editing") {
       void this.finishInlineEditing("escape");
     } else if (action === "cancel-pending-command") {
-      this.handleDeckCommandContinuation(event);
+      this.shortcutController.cancelPendingCommand();
     } else if (action === "cancel-filing") {
       void this.cancelFiling();
     }
@@ -1584,10 +1356,10 @@ export class DeckView extends ItemView {
         }
         break;
       case "find-address-first":
-        this.beginAddressCommand();
+        this.shortcutController.beginAddressCommand();
         break;
       case "pull-into-pile":
-        this.beginPileCommand();
+        this.shortcutController.beginPileCommand();
         break;
       case "next-pile":
         this.cyclePileFocus(1);
@@ -1918,7 +1690,7 @@ export class DeckView extends ItemView {
     this.clearInlineEditPolicyMessage();
     this.inlineEdit = null;
     this.plugin.releaseInlineEdit(path, this);
-    this.setDeckKeybindingsSuspended(false);
+    this.shortcutController.setSuspended(false);
     editing.cardEl.removeClass("is-inline-editing");
     editing.bodyEl.removeClasses([
       "is-inline-editing",
@@ -2151,7 +1923,7 @@ export class DeckView extends ItemView {
         );
         this.applyInlineEditFailure(mounted.controller.snapshot.failure);
       }
-      this.setDeckKeybindingsSuspended(true);
+      this.shortcutController.setSuspended(true);
       mounted.textarea.win.requestAnimationFrame(() => {
         if (this.inlineEdit === mounted) {
           mounted.textarea.focus({ preventScroll: true });
@@ -2608,7 +2380,6 @@ export class DeckView extends ItemView {
     this.deckMapBookmarkMarkerEls.clear();
     this.deckMapSections = [];
     this.deckMapBookmarkCount = 0;
-    this.pendingCommandEl = null;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.viewedFilingEditor = null;
@@ -2618,7 +2389,7 @@ export class DeckView extends ItemView {
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
     this.renderDeckMap(shell);
-    this.renderPendingCommandStatus(shell);
+    this.shortcutController.renderStatus(shell);
     this.applyDeckMapVisibility();
 
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
@@ -2820,86 +2591,33 @@ export class DeckView extends ItemView {
     );
   }
 
-  private renderPendingCommandStatus(shell: HTMLElement): void {
-    this.pendingCommandEl = shell.createDiv({
-      cls: "slipbox-pending-command-status",
-      attr: {
-        role: "status",
-        "aria-live": "polite",
-        "aria-atomic": "true",
-      },
-    });
-    this.updatePendingCommandStatus();
+  private completePendingDeckCommand(
+    completion: PendingDeckCommandCompletion,
+  ): PendingDeckCommandCompletionResult {
+    return completion.kind === "address"
+      ? this.completeAddressCommand(completion.initial)
+      : this.completePileCommand(completion.digits);
   }
 
-  private updatePendingCommandStatus(): void {
-    const status = this.pendingCommandEl;
-    if (status === null) {
-      return;
-    }
-    let instruction = "";
-    if (this.pendingCommand.kind === "address") {
-      instruction = "Find from start: type an address initial · Esc to cancel";
-    } else if (this.pendingCommand.kind === "pile") {
-      const digits = this.pendingCommand.digits === ""
-        ? "…"
-        : this.pendingCommand.digits;
-      instruction = `Pile number: ${digits} · Enter to confirm · Esc to cancel`;
-    }
-    const text = this.pendingCommandFeedback || instruction;
-    status.hidden = text === "";
-    status.setText(text);
-  }
-
-  private clearPendingCommand(): void {
-    if (this.pendingCommandFeedbackTimer !== null) {
-      this.contentEl.win.clearTimeout(this.pendingCommandFeedbackTimer);
-      this.pendingCommandFeedbackTimer = null;
-    }
-    this.pendingCommand = IDLE_DECK_COMMAND;
-    this.pendingCommandFeedback = "";
-    this.updatePendingCommandStatus();
-  }
-
-  private showCommandFeedback(message: string): void {
-    if (this.pendingCommandFeedbackTimer !== null) {
-      this.contentEl.win.clearTimeout(this.pendingCommandFeedbackTimer);
-    }
-    this.pendingCommandFeedback = message;
-    this.updatePendingCommandStatus();
-    this.pendingCommandFeedbackTimer = this.contentEl.win.setTimeout(() => {
-      this.pendingCommandFeedbackTimer = null;
-      this.pendingCommandFeedback = "";
-      this.updatePendingCommandStatus();
-    }, COMMAND_FEEDBACK_DURATION_MS);
-  }
-
-  private beginAddressCommand(): void {
-    this.pendingCommandStartEvent = null;
-    this.clearPendingCommand();
-    this.pendingCommand = startAddressCommand();
-    this.updatePendingCommandStatus();
-  }
-
-  private beginPileCommand(): void {
-    this.pendingCommandStartEvent = null;
-    this.clearPendingCommand();
-    this.pendingCommand = startPileCommand();
-    this.updatePendingCommandStatus();
-  }
-
-  private completeAddressCommand(initial: string): void {
+  private completeAddressCommand(
+    initial: string,
+  ): PendingDeckCommandCompletionResult {
     const filed = this.plugin.index.snapshot.filed;
     const targetIndex = findAddressInitialIndex(filed, initial);
     const target = targetIndex === null ? undefined : filed[targetIndex];
     if (target === undefined) {
-      this.showCommandFeedback(`No filed card begins with “${initial}”.`);
-      return;
+      return {
+        kind: "complete",
+        feedback: `No filed card begins with “${initial}”.`,
+      };
     }
     void this.jumpToPath(target.path);
+    return { kind: "complete" };
   }
 
-  private completePileCommand(digits: string): void {
+  private completePileCommand(
+    digits: string,
+  ): PendingDeckCommandCompletionResult {
     const ordinal = Number(digits);
     const pileCount = this.plugin.desk.piles.length;
     if (
@@ -2908,20 +2626,22 @@ export class DeckView extends ItemView {
       ordinal <= 0 ||
       ordinal > pileCount
     ) {
-      this.pendingCommandFeedback = digits === ""
-        ? "Enter a pile number before confirming."
-        : pileCount === 0
-          ? "There are no piles."
-          : `Pile ${digits} does not exist.`;
-      this.updatePendingCommandStatus();
-      return;
+      return {
+        kind: "continue",
+        feedback: digits === ""
+          ? "Enter a pile number before confirming."
+          : pileCount === 0
+            ? "There are no piles."
+            : `Pile ${digits} does not exist.`,
+      };
     }
 
     const card = this.focusedFiledCard;
     if (card === null) {
-      this.clearPendingCommand();
-      this.showCommandFeedback("There is no focused filed card.");
-      return;
+      return {
+        kind: "complete",
+        feedback: "There is no focused filed card.",
+      };
     }
     const source = cardPosition(this.plugin.desk, card.path);
     const next = placeFiledCardInPileOrdinal(
@@ -2929,21 +2649,23 @@ export class DeckView extends ItemView {
       card.path,
       ordinal,
     );
-    this.clearPendingCommand();
     if (next === this.plugin.desk) {
-      this.showCommandFeedback(`The focused card is already in pile ${ordinal}.`);
-      return;
+      return {
+        kind: "complete",
+        feedback: `The focused card is already in pile ${ordinal}.`,
+      };
     }
-    this.showCommandFeedback(
-      source === null
-        ? `Put the focused card into pile ${ordinal}.`
-        : `Moved the focused card to pile ${ordinal}.`,
-    );
     const targetPile = this.plugin.desk.piles[ordinal - 1];
     if (targetPile !== undefined) {
       this.assignCardFocus(deskCardFocus(card.path, targetPile.id));
     }
     void this.plugin.updateDesk(next);
+    return {
+      kind: "complete",
+      feedback: source === null
+        ? `Put the focused card into pile ${ordinal}.`
+        : `Moved the focused card to pile ${ordinal}.`,
+    };
   }
 
   private updateDeckMapBookmarks(bookmarkedPaths: Set<string>): void {
@@ -3505,7 +3227,7 @@ export class DeckView extends ItemView {
           onCancel: () => void this.cancelFiling(),
           onPreview: () => void this.previewFilingPlacement(),
           onFocusChange: (focused) => {
-            this.setDeckKeybindingsSuspended(focused);
+            this.shortcutController.setSuspended(focused);
             if (focused) {
               this.restoreFilingSourceFocus();
             }
@@ -4370,66 +4092,6 @@ export class DeckView extends ItemView {
       return;
     }
     void this.goToPath(target.path);
-  }
-
-  private handleDeckActionKey(
-    event: KeyboardEvent,
-    action: DeckAction,
-    repeatable = false,
-  ): void {
-    if (
-      this.pendingCommand.kind !== "idle" ||
-      shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused) ||
-      !this.canRunAction(action)
-    ) {
-      return;
-    }
-    event.preventDefault();
-    if (!event.repeat || repeatable) {
-      this.runAction(action);
-      if (!event.repeat && PENDING_COMMAND_ACTIONS.has(action)) {
-        this.pendingCommandStartEvent = event;
-      }
-    }
-  }
-
-  private handleDeckCommandContinuation(event: KeyboardEvent): boolean {
-    if (event === this.pendingCommandStartEvent) {
-      this.pendingCommandStartEvent = null;
-      return false;
-    }
-    this.pendingCommandStartEvent = null;
-    if (this.pendingCommand.kind !== "idle") {
-      if (shouldSuspendDeckShortcut(
-        event.target,
-        this.isFilingInputFocused,
-      )) {
-        this.clearPendingCommand();
-        return false;
-      }
-      const step = advancePendingDeckCommand(this.pendingCommand, event.key);
-      if (!step.consumed) {
-        return false;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      this.pendingCommand = step.state;
-      this.pendingCommandFeedback = "";
-      this.updatePendingCommandStatus();
-      if ("cancelled" in step) {
-        this.showCommandFeedback("Command cancelled.");
-      } else if ("completion" in step) {
-        if (step.completion.kind === "address") {
-          this.completeAddressCommand(step.completion.initial);
-        } else {
-          this.completePileCommand(step.completion.digits);
-        }
-      }
-      return true;
-    }
-
-    return false;
   }
 
   private selectCardWithoutMoving(path: string): void {

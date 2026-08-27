@@ -8,15 +8,17 @@ export type PendingDeckCommand =
   | { readonly kind: "address" }
   | { readonly kind: "pile"; readonly digits: string };
 
+export type PendingDeckCommandCompletion =
+  | { readonly kind: "address"; readonly initial: string }
+  | { readonly kind: "pile"; readonly digits: string };
+
 export type PendingDeckCommandStep =
   | { readonly consumed: false; readonly state: PendingDeckCommand }
   | { readonly consumed: true; readonly state: PendingDeckCommand }
   | {
       readonly consumed: true;
       readonly state: PendingDeckCommand;
-      readonly completion:
-        | { readonly kind: "address"; readonly initial: string }
-        | { readonly kind: "pile"; readonly digits: string };
+      readonly completion: PendingDeckCommandCompletion;
     }
   | { readonly consumed: true; readonly state: PendingDeckCommand; readonly cancelled: true };
 

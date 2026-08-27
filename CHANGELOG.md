@@ -6,6 +6,11 @@ initial public beta.
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept late metadata updates from remounting a card as inline editing closes.
+- Kept a viewed card mounted when one of its links moves the Deck anchor.
+
 ## [0.12.2] - 2026-08-26
 
 ### Fixed

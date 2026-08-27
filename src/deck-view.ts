@@ -134,9 +134,11 @@ import {
   dispatchInlineAwareDeckAction,
   inlineEditPresentationFingerprint,
   isInlineEditBodyTarget,
+  matchesInlineEditRefreshGuard,
   resolveDeckEscapeAction,
   shouldFinishInlineEditFromPointerDown,
   shouldNavigateDeckFromWheel,
+  type InlineEditRefreshGuard,
 } from "./inline-edit-interactions.js";
 import {
   beginPointerActionAfterGate,
@@ -299,9 +301,7 @@ export class DeckView extends ItemView {
   private inlineIndexRefreshDeferred = false;
   private recentInlineEditRefresh: {
     readonly path: string;
-    readonly presentationFingerprint: string;
-    readonly expiresAt: number;
-  } | null = null;
+  } & InlineEditRefreshGuard | null = null;
   private viewedCard: ViewedCardState | null = null;
   private viewedCardEl: HTMLElement | null = null;
   private viewedCardBodyEl: HTMLElement | null = null;
@@ -1520,17 +1520,19 @@ export class DeckView extends ItemView {
       return;
     }
     const recent = this.recentInlineEditRefresh;
-    this.recentInlineEditRefresh = null;
     if (
       reason === "index" &&
       recent !== null &&
-      Date.now() <= recent.expiresAt &&
-      recent.presentationFingerprint ===
-        this.currentInlineEditPresentationFingerprint(recent.path)
+      matchesInlineEditRefreshGuard(
+        recent,
+        this.plugin.index.fileAtPath(recent.path)?.stat.mtime ?? null,
+        this.currentInlineEditPresentationFingerprint(recent.path),
+      )
     ) {
       this.refreshInlineEditBacklinks();
       return;
     }
+    this.recentInlineEditRefresh = null;
     const restoreFilingInputFocus = this.isFilingInputFocused;
     this.cancelViewportCentering();
     this.recalculateFilingPreview();
@@ -1678,7 +1680,6 @@ export class DeckView extends ItemView {
     if (editing === null) {
       return true;
     }
-    const edited = editing.controller.snapshot.version > 0;
     const saved = await editing.controller.finish();
     if (!saved) {
       this.applyInlineEditFailure(editing.controller.snapshot.failure);
@@ -1714,18 +1715,19 @@ export class DeckView extends ItemView {
         this.recentInlineEditRefresh = null;
         await this.refresh();
       } else {
+        const modified = this.plugin.index.fileAtPath(path)?.stat.mtime ??
+          editing.file.stat.mtime;
+        this.recentInlineEditRefresh = {
+          path,
+          modified,
+          presentationFingerprint:
+            this.currentInlineEditPresentationFingerprint(path),
+          expiresAt: Date.now() + 2_000,
+        };
         await this.rerenderEditedPath(editing.file, editing.bodyEl, editing.renderedScrollTop);
         await this.trayRenderer.rerenderPath(editing.file);
         if (refreshBacklinks) {
           this.refreshInlineEditBacklinks();
-        }
-        if (edited) {
-          this.recentInlineEditRefresh = {
-            path,
-            presentationFingerprint:
-              this.currentInlineEditPresentationFingerprint(path),
-            expiresAt: Date.now() + 2_000,
-          };
         }
       }
     }
@@ -2250,7 +2252,10 @@ export class DeckView extends ItemView {
     this.setDeckAnchor(path);
     this.viewportOffset = 0;
     const restoreFilingInputFocus = this.isFilingInputFocused;
-    await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
+    // Anchor navigation changes the Deck window, not the surrounding Desk or
+    // viewed-card surfaces. Keeping those nodes mounted avoids a visible flash.
+    await this.refreshDeckCardWindow();
+    this.updateActiveUi();
     if (this.filingFile !== null && !restoreFilingInputFocus) {
       this.contentEl.focus({ preventScroll: true });
     }

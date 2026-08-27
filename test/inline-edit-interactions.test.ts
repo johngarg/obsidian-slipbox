@@ -7,6 +7,7 @@ import {
   dispatchInlineAwareDeckAction,
   inlineEditPresentationFingerprint,
   isInlineEditBodyTarget,
+  matchesInlineEditRefreshGuard,
   resolveDeckEscapeAction,
   shouldFinishInlineEditFromPointerDown,
   shouldNavigateDeckFromWheel,
@@ -322,5 +323,44 @@ describe("inline edit exit arbitration", () => {
       ...state,
       context: { settings: "changed" },
     }), baseline);
+  });
+
+  test("suppresses late index echoes only for the saved card revision", () => {
+    const guard = {
+      modified: 20,
+      presentationFingerprint: "same-presentation",
+      expiresAt: 3_000,
+    };
+
+    assert.equal(matchesInlineEditRefreshGuard(
+      guard,
+      20,
+      "same-presentation",
+      1_000,
+    ), true);
+    assert.equal(matchesInlineEditRefreshGuard(
+      guard,
+      20,
+      "same-presentation",
+      2_000,
+    ), true);
+    assert.equal(matchesInlineEditRefreshGuard(
+      guard,
+      21,
+      "same-presentation",
+      2_000,
+    ), false);
+    assert.equal(matchesInlineEditRefreshGuard(
+      guard,
+      20,
+      "changed-presentation",
+      2_000,
+    ), false);
+    assert.equal(matchesInlineEditRefreshGuard(
+      guard,
+      20,
+      "same-presentation",
+      3_001,
+    ), false);
   });
 });

@@ -21,6 +21,12 @@ export interface InlineEditPresentationState {
   readonly context: unknown;
 }
 
+export interface InlineEditRefreshGuard {
+  readonly modified: number;
+  readonly presentationFingerprint: string;
+  readonly expiresAt: number;
+}
+
 export type DeckEscapeAction =
   | "finish-editing"
   | "cancel-pending-command"
@@ -86,6 +92,19 @@ export function inlineEditPresentationFingerprint(
     })),
     context: state.context,
   });
+}
+
+/** Suppress late index echoes only while they describe the saved card revision. */
+export function matchesInlineEditRefreshGuard(
+  guard: InlineEditRefreshGuard | null,
+  modified: number | null,
+  presentationFingerprint: string,
+  now = Date.now(),
+): boolean {
+  return guard !== null &&
+    now <= guard.expiresAt &&
+    modified === guard.modified &&
+    presentationFingerprint === guard.presentationFingerprint;
 }
 
 /** Let card-header controls dispatch their own save-before-action sequence. */

@@ -7,6 +7,7 @@ import {
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
+  branchLinkMarkerError,
   formatKeyBinding,
   hasTitleAddressPropertyCollision,
   keyBindingFromKeyboardEvent,
@@ -16,6 +17,7 @@ import {
   normalizeKeyBinding,
   normalizeCardSize,
   normalizeCardSpread,
+  normalizeBranchLinkMarker,
   normalizeFolderPath,
   normalizeSettings,
   settingsForPersistence,
@@ -119,6 +121,18 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.mainCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.trayCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
+    assert.equal(DEFAULT_SETTINGS.explicitBranchLinks, false);
+    assert.equal(DEFAULT_SETTINGS.branchLinkMarker, "+");
+    assert.equal(DEFAULT_SETTINGS.showBranchLabels, true);
+    assert.equal(DEFAULT_SETTINGS.inferAddressBranches, false);
+    assert.equal(DEFAULT_SETTINGS.showInferredBranchNavigation, true);
+    for (const action of [
+      "jump-inferred-parent",
+      "cycle-forward-inferred-siblings",
+      "cycle-backward-inferred-siblings",
+    ] as const) {
+      assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings[action], []);
+    }
     assert.equal(DEFAULT_SETTINGS.showCardTooltips, false);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
     assert.equal(DEFAULT_SETTINGS.restrictViewedCardPaste, true);
@@ -183,6 +197,85 @@ describe("Slipbox settings", () => {
     assert.equal(settings.cardHeaderButtons.deck["copy-link"], true);
   });
 
+  test("normalizes branching settings and rejects unsafe markers", () => {
+    const settings = normalizeSettings({
+      explicitBranchLinks: true,
+      branchLinkMarker: "  →→  ",
+      showBranchLabels: false,
+      inferAddressBranches: true,
+      showInferredBranchNavigation: false,
+    });
+    assert.equal(settings.explicitBranchLinks, true);
+    assert.equal(settings.branchLinkMarker, "→→");
+    assert.equal(settings.showBranchLabels, false);
+    assert.equal(settings.inferAddressBranches, true);
+    assert.equal(settings.showInferredBranchNavigation, false);
+
+    for (const marker of ["", "   ", "+\n", "x\u007f", "x\u2028"]) {
+      assert.notEqual(branchLinkMarkerError(marker), null);
+      assert.equal(normalizeBranchLinkMarker(marker), "+");
+    }
+    assert.equal(branchLinkMarkerError(" § "), null);
+    assert.equal(normalizeBranchLinkMarker(" § "), "§");
+    assert.equal(
+      normalizeSettings({ showInferredBranchNavigation: "invalid" })
+        .showInferredBranchNavigation,
+      true,
+    );
+    const persisted = settingsForPersistence({}, settings);
+    assert.equal(persisted.explicitBranchLinks, true);
+    assert.equal(persisted.branchLinkMarker, "→→");
+    assert.equal(persisted.showBranchLabels, false);
+    assert.equal(persisted.inferAddressBranches, true);
+    assert.equal(persisted.showInferredBranchNavigation, false);
+
+    const migrated = normalizeSettings({ inferApparentBranches: true });
+    assert.equal(migrated.inferAddressBranches, true);
+    const migratedPersistence = settingsForPersistence(
+      { inferApparentBranches: true },
+      migrated,
+    );
+    assert.equal("inferApparentBranches" in migratedPersistence, false);
+    assert.equal(migratedPersistence.inferAddressBranches, true);
+  });
+
+  test("migrates retired inference bindings and drops their old targets", () => {
+    const legacy = {
+      "jump-apparent-parent": [{ key: "u", modifiers: ["Alt"] }],
+      "cycle-backward-apparent-siblings": [{ key: "[", modifiers: ["Alt"] }],
+      "jump-next-apparent-peer": [{ key: "]", modifiers: ["Alt"] }],
+      "jump-past-apparent-descendants": [{ key: "p", modifiers: ["Alt"] }],
+      "jump-first-apparent-child": [{ key: "c", modifiers: ["Alt"] }],
+    };
+    const normalized = normalizeDeckKeybindings(legacy);
+    assert.deepEqual(normalized["jump-inferred-parent"], [{
+      key: "u",
+      modifiers: ["Alt"],
+    }]);
+    assert.deepEqual(normalized["cycle-backward-inferred-siblings"], [{
+      key: "[",
+      modifiers: ["Alt"],
+    }]);
+    assert.deepEqual(normalized["cycle-forward-inferred-siblings"], [{
+      key: "]",
+      modifiers: ["Alt"],
+    }]);
+    assert.equal(
+      Object.values(normalized).flat().some((binding) =>
+        binding.key === "p" && binding.modifiers.includes("Alt")
+      ),
+      false,
+    );
+    const persisted = settingsForPersistence(
+      { deckKeybindings: legacy },
+      { ...DEFAULT_SETTINGS, deckKeybindings: normalized },
+    );
+    const persistedBindings = persisted.deckKeybindings as Record<string, unknown>;
+    for (const removed of Object.keys(legacy)) {
+      assert.equal(removed in persistedBindings, false);
+    }
+  });
+
   test("falls back to filename titles when title and address keys collide", () => {
     const raw = {
       addressProperty: " card-key ",
@@ -228,6 +321,34 @@ describe("Slipbox settings", () => {
       );
       assert.equal(definition?.scope, "active-view");
       assert.equal(definition?.target, "focused-card");
+    }
+    for (const action of [
+      "jump-inferred-parent",
+      "cycle-forward-inferred-siblings",
+      "cycle-backward-inferred-siblings",
+    ] as const) {
+      const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
+        candidate.id === action
+      );
+      assert.equal(definition?.scope, "active-view");
+      assert.equal(definition?.target, "deck-anchor");
+      assert.deepEqual(definition?.defaultBindings, []);
+    }
+    assert.equal(
+      DECK_ACTION_DEFINITIONS.find((definition) =>
+        definition.id === "jump-inferred-parent"
+      )?.repeatable,
+      false,
+    );
+    for (const action of [
+      "cycle-forward-inferred-siblings",
+      "cycle-backward-inferred-siblings",
+    ] as const) {
+      assert.equal(
+        DECK_ACTION_DEFINITIONS.find((definition) => definition.id === action)
+          ?.repeatable,
+        true,
+      );
     }
   });
 

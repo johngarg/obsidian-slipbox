@@ -17,6 +17,7 @@ import {
   DEFAULT_SETTINGS,
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
+  branchLinkMarkerError,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
@@ -87,6 +88,39 @@ export class SlipboxSettingTab extends PluginSettingTab {
             "Card spread",
             "Set the separation between neighbouring Deck cards.",
             (setting) => this.renderCardSpread(setting),
+          ),
+        ],
+      },
+      {
+        type: "group",
+        heading: "Branching",
+        items: [
+          this.subheading("Explicit branching"),
+          this.definition(
+            "Recognise explicit branch links",
+            "Treat internal links with an explicitly displayed marked alias, such as [[card|+a]], as branch assertions. This reads cached links and never edits notes.",
+            (setting) => this.renderExplicitBranchLinks(setting),
+          ),
+          this.definition(
+            "Branch-link marker",
+            "Complete prefix that marks an explicit link alias. The remaining trimmed alias is shown as its branch label.",
+            (setting) => this.renderBranchLinkMarker(setting),
+          ),
+          this.definition(
+            "Show branch labels",
+            "Show incoming explicit branch labels beside card addresses. Labels return the Deck anchor to the source card.",
+            (setting) => this.renderShowBranchLabels(setting),
+          ),
+          this.subheading("Inferred branching"),
+          this.definition(
+            "Infer branches from addresses",
+            "Derive an inferred hierarchy from address extension and make structural navigation commands available. This is heuristic and never modifies notes.",
+            (setting) => this.renderInferAddressBranches(setting),
+          ),
+          this.definition(
+            "Show inferred branch navigation",
+            "Show parent, sibling and child navigation menus beneath interactive cards when branches are inferred from addresses.",
+            (setting) => this.renderShowInferredBranchNavigation(setting),
           ),
         ],
       },
@@ -202,6 +236,15 @@ export class SlipboxSettingTab extends PluginSettingTab {
     return { name, desc, render };
   }
 
+  private subheading(name: string): SettingDefinition {
+    return {
+      name,
+      render: (setting) => {
+        setting.setHeading();
+      },
+    };
+  }
+
   private renderTitleSource(setting: Setting): void {
     setting.addDropdown((dropdown) => {
       dropdown
@@ -225,6 +268,85 @@ export class SlipboxSettingTab extends PluginSettingTab {
             titleSource: value === "frontmatter" ? "frontmatter" : "filename",
           }).then(() => this.updatePreservingScroll());
         });
+    });
+  }
+
+  private renderExplicitBranchLinks(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.explicitBranchLinks)
+        .onChange((explicitBranchLinks) => void this.save({
+          ...this.slipbox.settings,
+          explicitBranchLinks,
+        }).then(() => this.updatePreservingScroll()));
+    });
+  }
+
+  private renderBranchLinkMarker(setting: Setting): void {
+    const disabled = !this.slipbox.settings.explicitBranchLinks;
+    setting.setDisabled(disabled);
+    setting.addText((text) => {
+      let marker = this.slipbox.settings.branchLinkMarker;
+      const queueCommit = this.debounceTextCommit(text.inputEl, () => {
+        if (
+          branchLinkMarkerError(marker) === null &&
+          marker !== this.slipbox.settings.branchLinkMarker
+        ) {
+          void this.save({
+            ...this.slipbox.settings,
+            branchLinkMarker: marker,
+          });
+        }
+      });
+      text
+        .setPlaceholder(DEFAULT_SETTINGS.branchLinkMarker)
+        .setValue(this.slipbox.settings.branchLinkMarker)
+        .setDisabled(disabled)
+        .onChange((value) => {
+          marker = value.trim();
+          const error = branchLinkMarkerError(value);
+          this.setTextValidity(setting, error === null, error ?? "");
+          queueCommit();
+        });
+    });
+  }
+
+  private renderShowBranchLabels(setting: Setting): void {
+    const disabled = !this.slipbox.settings.explicitBranchLinks;
+    setting.setDisabled(disabled);
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.showBranchLabels)
+        .setDisabled(disabled)
+        .onChange((showBranchLabels) => void this.save({
+          ...this.slipbox.settings,
+          showBranchLabels,
+        }));
+    });
+  }
+
+  private renderInferAddressBranches(setting: Setting): void {
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.inferAddressBranches)
+        .onChange((inferAddressBranches) => void this.save({
+          ...this.slipbox.settings,
+          inferAddressBranches,
+        }).then(() => this.updatePreservingScroll()));
+    });
+  }
+
+  private renderShowInferredBranchNavigation(setting: Setting): void {
+    const disabled = !this.slipbox.settings.inferAddressBranches;
+    setting.setDisabled(disabled);
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.showInferredBranchNavigation)
+        .setDisabled(disabled)
+        .onChange((showInferredBranchNavigation) => void this.save({
+          ...this.slipbox.settings,
+          showInferredBranchNavigation,
+        }));
     });
   }
 

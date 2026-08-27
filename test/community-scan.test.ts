@@ -13,4 +13,11 @@ describe("community scanner CSS compatibility", () => {
   test("does not use partially supported display contents", () => {
     assert.doesNotMatch(styles, /display\s*:\s*contents\b/);
   });
+
+  test("gives annotated Desk signatures a stable inline allocation", () => {
+    assert.match(
+      styles,
+      /\.slipbox-tray-card-identity\s*>\s*\.slipbox-card-signature\.has-branch-annotations\s*\{[^}]*flex:\s*0 0 min\([^;]+;[^}]*--slipbox-card-signature-intrinsic-width[^}]*contain:\s*inline-size;/su,
+    );
+  });
 });

@@ -98,6 +98,30 @@ export function addressComparatorFor(
     : compareAddressesNatural;
 }
 
+/** Interpret a proper address prefix according to the selected Deck ordering. */
+export function isInferredAddressAncestor(
+  parent: string,
+  candidate: string,
+  ordering: DeckOrdering,
+): boolean {
+  if (
+    parent === "" ||
+    candidate.length <= parent.length ||
+    !candidate.startsWith(parent)
+  ) {
+    return false;
+  }
+  if (ordering === "lexicographic") {
+    return true;
+  }
+  const finalParentCharacter = parent[parent.length - 1] ?? "";
+  const firstAppendedCharacter = candidate[parent.length] ?? "";
+  return !(
+    /^[0-9]$/u.test(finalParentCharacter) &&
+    /^[0-9]$/u.test(firstAppendedCharacter)
+  );
+}
+
 /** Deterministic vault-path comparison, independent of the host locale. */
 export function compareVaultPaths(left: string, right: string): number {
   return compareCodeUnits(left, right);

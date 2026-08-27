@@ -6,10 +6,36 @@ initial public beta.
 
 ## [Unreleased]
 
+### Added
+
+- Added optional explicit branch links marked through displayed aliases such as
+  `[[card|+a]]`, with interactive incoming labels on Deck, Desk, and viewed
+  cards. Labels that do not fit the header collapse into a `+N` menu.
+- Added optional hierarchy inference from address extension, with
+  commands for parent movement and wrapped forward/backward sibling cycling.
+- Added low-clutter parent, sibling, and child menus beneath interactive cards
+  when branches are inferred. Each direction shows only the nearest
+  sibling; the commands continue to cycle through the full sibling axis.
+- Added a Branching settings group. Both branch models are derived in memory
+  and never rewrite notes or addresses.
+
 ### Fixed
 
 - Kept late metadata updates from remounting a card as inline editing closes.
 - Kept a viewed card mounted when one of its links moves the Deck anchor.
+- Kept annotated Desk-card headers stable while labels, titles, and action
+  overflow are fitted, reserved only the signature’s measured content width,
+  and omitted the address separator when no annotation is present.
+- Restricted inferred-navigation arrows in expanded Desk piles to the focused
+  card and transferred them in place when Desk focus changes.
+- Kept available Deck commands runnable from the command palette while its
+  search field is focused.
+
+### Changed
+
+- Standardised address-derived hierarchy terminology on “inferred” throughout
+  the interface, commands, settings, and documentation.
+- Divided the Branching settings into explicit and inferred subsections.
 
 ## [0.12.2] - 2026-08-26
 

@@ -89,6 +89,35 @@ export function shouldSuspendDeckShortcut(
     target.isContentEditable === true;
 }
 
+export function eventTargetsDeck(
+  eventTarget: EventTarget | null,
+  deckRoot: HTMLElement,
+): boolean {
+  return eventTarget !== null &&
+    typeof eventTarget === "object" &&
+    "nodeType" in eventTarget &&
+    deckRoot.contains(eventTarget as Node);
+}
+
+/**
+ * Obsidian command-palette events can retain the palette input as lastEvent's
+ * target while the Deck remains the active view. Only editable controls inside
+ * this Deck should suppress one of its registered commands.
+ */
+export function shouldSuspendDeckCommand(
+  eventTarget: EventTarget | null,
+  filingInputFocused: boolean,
+  deckRoot: HTMLElement,
+): boolean {
+  if (filingInputFocused) {
+    return true;
+  }
+  if (!eventTargetsDeck(eventTarget, deckRoot)) {
+    return false;
+  }
+  return shouldSuspendDeckShortcut(eventTarget, false);
+}
+
 export function renderInlineFilingEditor(
   addressSlot: HTMLElement,
   card: HTMLElement,

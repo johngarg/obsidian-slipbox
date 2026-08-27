@@ -46,6 +46,44 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] Confirm expected Windows/Linux modifier-key behavior and no shortcut trap.
 - [ ] Confirm no unexpected console error occurred during the completed checks.
 
+## Branching and structural navigation
+
+- [ ] Enable explicit branch links and confirm marked Wiki and Markdown aliases
+  show incoming labels on the active Deck card, expanded Desk cards, and the
+  viewed card.
+- [ ] Use a long label and several incoming branches; confirm the header keeps
+  clear of the title and a `+N` menu exposes every hidden annotation.
+- [ ] Turn off ordinary card-link following and confirm a branch-label button
+  still recentres its source card without closing or flashing the viewed card.
+- [ ] Edit a branch alias inline, leave with `Escape`, and confirm its label
+  updates without flashing or remounting the card.
+- [ ] Put a labelled card on the Desk and hover/focus it repeatedly; confirm
+  the address, annotation, title, and action toolbar remain stationary while
+  annotations fit into the `+N` menu. A short annotation should reserve only
+  its content width so the title can use the remaining header space.
+- [ ] Disable labels or inspect a card without incoming branch annotations and
+  confirm no separator dot follows its canonical address.
+- [ ] Change the marker and branching toggles; confirm the UI refreshes and no
+  Markdown or frontmatter changes.
+- [ ] Enable address-derived inference for roots `7`, `8`, and `17`; confirm forward
+  cycling produces `8 → 17 → 7 → 8` and backward cycling reverses it.
+- [ ] With `8a`, `8b`, `8a1`, `8a2`, and an unrelated equal-depth branch,
+  confirm sibling cycling wraps locally and never crosses between parents.
+- [ ] On `8`, confirm the left menu shows `7`; the right menu shows `17`, a
+  gap, then immediate children `8a` and `8b`, with no visible headings or
+  current-card row. Add more roots on either side and confirm each menu still
+  shows only the nearest sibling in its direction.
+- [ ] Confirm inferred-navigation arrows appear only on the active Deck card,
+  the focused card in an expanded Desk pile, and the viewed card; moving Desk
+  focus transfers the arrows without remounting either card. Disabled sides
+  remain subtly visible, and the presentation toggle hides both arrows without
+  rebuilding the index.
+- [ ] Verify click, hover, keyboard opening, `Escape`, child counts, preview
+  policy, structural activation with body-link following off, and long-list
+  scrolling in both light and dark themes.
+- [ ] Switch between natural and lexicographic Deck ordering and confirm numeric
+  prefix ancestry changes immediately.
+
 ## Minimum-version compatibility subset
 
 Complete this section on Obsidian 1.13.0 on at least one tested platform.

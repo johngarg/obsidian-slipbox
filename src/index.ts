@@ -5,9 +5,44 @@ export {
   compareAddressesLexicographic,
   compareAddressesNatural,
   compareVaultPaths,
+  isInferredAddressAncestor,
   normalizeAddressInput,
   validateAddress,
 } from "./address-order.js";
+export {
+  EMPTY_EXPLICIT_BRANCH_INDEX,
+  explicitBranchLabel,
+  indexExplicitBranches,
+} from "./branch-links.js";
+export type {
+  BranchLinkReference,
+  ExplicitBranch,
+  ExplicitBranchIndex,
+  ExplicitBranchSource,
+} from "./branch-links.js";
+export {
+  EMPTY_INFERRED_STRUCTURE,
+  inferredChildAddresses,
+  inferredNextSiblingAddresses,
+  inferredParentAddress,
+  inferredPreviousSiblingAddresses,
+  buildInferredStructure,
+  cycleBackwardInferredSiblingAddress,
+  cycleForwardInferredSiblingAddress,
+} from "./inferred-structure.js";
+export type {
+  InferredAddressNode,
+  InferredStructureIndex,
+} from "./inferred-structure.js";
+export type {
+  InferredNavigationRelations,
+  InferredNavigationTarget,
+} from "./card-index.js";
+export { InferredNavigationManager } from "./inferred-navigation.js";
+export type {
+  InferredNavigationEnvironment,
+  InferredNavigationRenderOptions,
+} from "./inferred-navigation.js";
 export type {
   AddressedPath,
   AddressValidation,
@@ -18,6 +53,13 @@ export {
   UNFILED_ADDRESS_LABEL,
 } from "./card-address.js";
 export type { CardAddressOptions } from "./card-address.js";
+export { CardSignatureManager } from "./card-signature.js";
+export type {
+  CardSignatureBranch,
+  CardSignatureEnvironment,
+  CardSignatureOverflowItem,
+  CardSignatureRenderOptions,
+} from "./card-signature.js";
 export {
   buildFiledCardLookups,
   cardMetadataRecord,
@@ -103,12 +145,14 @@ export {
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
+  branchLinkMarkerError,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
   normalizeDeckKeybindings,
   normalizeCardHeaderButtons,
   normalizeCardSpread,
+  normalizeBranchLinkMarker,
   normalizeFolderPath,
   normalizeSettings,
   settingsForPersistence,

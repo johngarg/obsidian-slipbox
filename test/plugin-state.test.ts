@@ -64,14 +64,19 @@ describe("normalizePluginState", () => {
 });
 
 describe("normalizePluginData", () => {
-  test("migrates legacy flat state into schema-11 settings and state", () => {
+  test("migrates legacy flat state into schema-12 settings and state", () => {
     const data = normalizePluginData({
       entryPoints: [{ name: "Start", id: "1/1" }],
       bookmarks: [{ zettelId: "1/1" }],
       deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
       spread: 0.7,
     });
-    assert.equal(data.schemaVersion, 11);
+    assert.equal(data.schemaVersion, 12);
+    assert.equal(data.settings.explicitBranchLinks, false);
+    assert.equal(data.settings.branchLinkMarker, "+");
+    assert.equal(data.settings.showBranchLabels, true);
+    assert.equal(data.settings.inferAddressBranches, false);
+    assert.equal(data.settings.showInferredBranchNavigation, true);
     assert.equal(data.settings.restrictViewedCardPaste, false);
     assert.equal(data.settings.previewLinksOnHover, true);
     assert.equal(data.settings.followLinksFromCards, true);
@@ -117,7 +122,7 @@ describe("normalizePluginData", () => {
         history: { entries: ["Cards/here.md"], index: 0 },
       },
     });
-    assert.equal(data.schemaVersion, 11);
+    assert.equal(data.schemaVersion, 12);
     assert.equal(data.settings.addressProperty, "signature");
     assert.equal(data.settings.titleProperty, "name");
     assert.equal(data.settings.newCardFolder, "Cards");
@@ -242,7 +247,7 @@ describe("normalizePluginData", () => {
     assert.equal(data.settings.allowCardScrolling, true);
   });
 
-  test("preserves explicit schema-11 paper-display settings", () => {
+  test("migrates schema-11 display settings and supplies safe branching defaults", () => {
     const data = normalizePluginData({
       schemaVersion: 11,
       settings: {
@@ -251,9 +256,12 @@ describe("normalizePluginData", () => {
       },
       state: {},
     });
-    assert.equal(data.schemaVersion, 11);
+    assert.equal(data.schemaVersion, 12);
     assert.equal(data.settings.showAutomaticBacklinks, false);
     assert.equal(data.settings.allowCardScrolling, false);
+    assert.equal(data.settings.explicitBranchLinks, false);
+    assert.equal(data.settings.inferAddressBranches, false);
+    assert.equal(data.settings.showInferredBranchNavigation, true);
   });
 
   test("detects removed entry-point data for eager persistence cleanup", () => {
@@ -283,12 +291,13 @@ describe("normalizePluginData", () => {
     };
     assert.equal(needsPluginDataMigration(collision), true);
     assert.equal(hasTitleAddressCollisionData(collision), true);
-    assert.equal(normalizePluginData(collision).schemaVersion, 11);
+    assert.equal(normalizePluginData(collision).schemaVersion, 12);
     assert.equal(normalizePluginData(collision).settings.titleSource, "filename");
     assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 8 }), true);
     assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 9 }), true);
     assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 10 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 11 }), false);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 11 }), true);
+    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 12 }), false);
     assert.equal(hasTitleAddressCollisionData(null), false);
   });
 });

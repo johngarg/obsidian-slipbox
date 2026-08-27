@@ -200,6 +200,9 @@ export default class SlipboxPlugin extends Plugin {
       this.settings.addressProperty,
       this.settings.deckOrdering,
       this.settings.duplicateAddresses,
+      this.settings.explicitBranchLinks,
+      this.settings.branchLinkMarker,
+      this.settings.inferAddressBranches,
     );
     this.canvas = new CanvasBridge(this.app);
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
@@ -461,18 +464,28 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
+    const previousSettings = this.settings;
     const previousAddressProperty = this.settings.addressProperty;
     const previousOrdering = this.settings.deckOrdering;
     const previousDuplicatePolicy = this.settings.duplicateAddresses;
+    const previousExplicitBranchLinks = this.settings.explicitBranchLinks;
+    const previousBranchLinkMarker = this.settings.branchLinkMarker;
+    const previousInferAddressBranches = this.settings.inferAddressBranches;
     this.settings = normalizeSettings(value);
     this.index.setAddressProperty(this.settings.addressProperty);
     this.index.setDeckOrdering(this.settings.deckOrdering);
     this.index.setDuplicateAddressPolicy(this.settings.duplicateAddresses);
+    this.index.setExplicitBranchLinks(this.settings.explicitBranchLinks);
+    this.index.setBranchLinkMarker(this.settings.branchLinkMarker);
+    this.index.setInferAddressBranches(this.settings.inferAddressBranches);
     await this.persistState();
     if (
       this.settings.addressProperty !== previousAddressProperty ||
       this.settings.deckOrdering !== previousOrdering ||
-      this.settings.duplicateAddresses !== previousDuplicatePolicy
+      this.settings.duplicateAddresses !== previousDuplicatePolicy ||
+      this.settings.explicitBranchLinks !== previousExplicitBranchLinks ||
+      this.settings.branchLinkMarker !== previousBranchLinkMarker ||
+      this.settings.inferAddressBranches !== previousInferAddressBranches
     ) {
       await this.refreshIndex();
       if (this.settings.deckOrdering !== previousOrdering) {
@@ -480,6 +493,15 @@ export default class SlipboxPlugin extends Plugin {
           if (leaf.view instanceof DeckView) {
             await leaf.view.handleDeckOrderingChanged();
           }
+        }
+      }
+    } else if (settingsEqualExceptBranchingPresentation(
+      previousSettings,
+      this.settings,
+    )) {
+      for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+        if (leaf.view instanceof DeckView) {
+          leaf.view.refreshBranchPresentation();
         }
       }
     } else {
@@ -1658,6 +1680,29 @@ export default class SlipboxPlugin extends Plugin {
       : ` Skipped ${skipped} existing node${skipped === 1 ? "" : "s"}.`;
     new Notice(`${summary}${existing}`);
   }
+}
+
+function settingsEqualExceptBranchingPresentation(
+  left: SlipboxSettings,
+  right: SlipboxSettings,
+): boolean {
+  if (
+    left.showBranchLabels === right.showBranchLabels &&
+    left.showInferredBranchNavigation === right.showInferredBranchNavigation
+  ) {
+    return false;
+  }
+  const {
+    showBranchLabels: _leftLabels,
+    showInferredBranchNavigation: _leftNavigation,
+    ...leftComparable
+  } = left;
+  const {
+    showBranchLabels: _rightLabels,
+    showInferredBranchNavigation: _rightNavigation,
+    ...rightComparable
+  } = right;
+  return JSON.stringify(leftComparable) === JSON.stringify(rightComparable);
 }
 
 function errorMessage(error: unknown): string {

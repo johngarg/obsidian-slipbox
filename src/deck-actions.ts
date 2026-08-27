@@ -4,6 +4,9 @@ export interface DeckActionContext {
   readonly hasActiveCard: boolean;
   readonly hasPreviousCard: boolean;
   readonly hasNextCard: boolean;
+  readonly hasInferredParent: boolean;
+  readonly hasForwardInferredSiblingCycle: boolean;
+  readonly hasBackwardInferredSiblingCycle: boolean;
   readonly hasPreviousBookmark: boolean;
   readonly hasNextBookmark: boolean;
   readonly hasProblems: boolean;
@@ -61,6 +64,12 @@ export function canRunDeckAction(
       return context.hasPreviousCard;
     case "next-card":
       return context.hasNextCard;
+    case "jump-inferred-parent":
+      return context.hasInferredParent;
+    case "cycle-forward-inferred-siblings":
+      return context.hasForwardInferredSiblingCycle;
+    case "cycle-backward-inferred-siblings":
+      return context.hasBackwardInferredSiblingCycle;
     case "previous-bookmark":
       return context.hasPreviousBookmark;
     case "next-bookmark":

@@ -19,10 +19,13 @@ import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
+import { UNFILED_ADDRESS_LABEL } from "./card-address.js";
 import {
-  renderCardAddress,
-  UNFILED_ADDRESS_LABEL,
-} from "./card-address.js";
+  CardSignatureManager,
+  type CardSignatureBranch,
+} from "./card-signature.js";
+import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
+import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
@@ -87,7 +90,7 @@ export interface TrayViewActions {
   ): Promise<boolean>;
   previewLink(
     event: MouseEvent,
-    link: HTMLAnchorElement,
+    link: HTMLElement,
     linktext: string,
     sourcePath: string,
   ): void;
@@ -109,18 +112,58 @@ export class TrayRenderer {
   private filingEditor: InlineFilingEditorElements | null = null;
   private suppressClickUntil = 0;
   private pendingCardClickTimer: number | null = null;
+  private readonly cardSignatures: CardSignatureManager;
+  private readonly inferredNavigation: InferredNavigationManager;
 
   constructor(
     private readonly app: App,
     private readonly plugin: SlipboxPlugin,
     private readonly actions: TrayViewActions,
-  ) {}
+  ) {
+    this.cardSignatures = new CardSignatureManager({
+      showBranchLabels: () => this.plugin.settings.showBranchLabels,
+      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      branchesForPath: (path) => this.cardSignatureBranches(path),
+      preview: (event, target, branch, targetPath) => {
+        this.actions.previewLink(event, target, branch.linktext, targetPath);
+      },
+      activate: (branch) => this.actions.jumpToFiledCard(branch.sourcePath),
+      showOverflowMenu: showCardSignatureOverflowMenu,
+      runAfterEditing: (reason, action) => {
+        void this.actions.runAfterEditing(reason, action);
+      },
+    });
+    this.inferredNavigation = new InferredNavigationManager({
+      showNavigation: () =>
+        this.plugin.settings.inferAddressBranches &&
+        this.plugin.settings.showInferredBranchNavigation,
+      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      relationsForPath: (path) => this.plugin.index.inferredNavigationForPath(path),
+      preview: (event, target, destination, sourcePath) => {
+        const file = this.plugin.index.fileAtPath(destination.path);
+        this.actions.previewLink(
+          event,
+          target,
+          file === undefined
+            ? destination.path
+            : this.app.metadataCache.fileToLinktext(file, sourcePath),
+          sourcePath,
+        );
+      },
+      activate: (destination) => this.actions.jumpToFiledCard(destination.path),
+      runAfterEditing: (reason, action) => {
+        void this.actions.runAfterEditing(reason, action);
+      },
+    });
+  }
 
   clear(): void {
     for (const controller of this.cardHeaderButtonControllers) {
       controller.disconnect();
     }
     this.cardHeaderButtonControllers.clear();
+    this.cardSignatures.clear();
+    this.inferredNavigation.clear();
     if (this.pendingCardClickTimer !== null) {
       window.clearTimeout(this.pendingCardClickTimer);
       this.pendingCardClickTimer = null;
@@ -199,6 +242,52 @@ export class TrayRenderer {
     } catch {
       preview.setText("Preview unavailable");
     }
+  }
+
+  refreshBranchMetadata(): void {
+    this.cardSignatures.refreshBranches();
+  }
+
+  refreshInferredNavigation(): void {
+    this.inferredNavigation.refresh();
+  }
+
+  refreshFocusedInferredNavigation(): void {
+    if (this.rootEl === null) {
+      return;
+    }
+    this.rootEl.querySelectorAll<HTMLElement>(".slipbox-tray-card")
+      .forEach((card) => {
+        const path = card.dataset.cardRef;
+        const pileId = card.dataset.pileId;
+        this.inferredNavigation.setInteractive(
+          card,
+          !card.hasClass("is-viewed-ghost") &&
+            path !== undefined &&
+            pileId !== undefined &&
+            this.actions.isDeskCardFocused(path, pileId),
+        );
+      });
+  }
+
+  scheduleBranchLayout(): void {
+    this.cardSignatures.scheduleLayout();
+  }
+
+  private cardSignatureBranches(path: string): readonly CardSignatureBranch[] {
+    return this.plugin.index.incomingBranchesForPath(path).flatMap((branch) => {
+      const source = this.plugin.index.filedByPath(branch.sourcePath);
+      if (source === undefined) {
+        return [];
+      }
+      return [{
+        label: branch.label,
+        sourcePath: source.path,
+        sourceAddress: source.address,
+        sourceTitle: this.plugin.cardTitle(source.file),
+        linktext: this.app.metadataCache.fileToLinktext(source.file, path),
+      }];
+    });
   }
 
   async render(
@@ -529,7 +618,10 @@ export class TrayRenderer {
     const addressLabel = address ?? UNFILED_ADDRESS_LABEL;
     const title = this.plugin.cardTitle(file);
     const isViewed = viewedPath === card.cardRef;
-    const miniature = parent.createDiv({
+    const isFocused = !isViewed &&
+      this.actions.isDeskCardFocused(card.cardRef, pile.id);
+    const shell = parent.createDiv({ cls: "slipbox-tray-card-shell" });
+    const miniature = shell.createDiv({
       cls: "slipbox-tray-card",
       attr: {
         "data-card-ref": card.cardRef,
@@ -556,10 +648,7 @@ export class TrayRenderer {
     miniature.toggleClass("is-filed", filed !== undefined);
     miniature.toggleClass("is-unfiled", filed === undefined);
     miniature.toggleClass("is-viewed-ghost", isViewed);
-    miniature.toggleClass(
-      "is-card-focused",
-      !isViewed && this.actions.isDeskCardFocused(card.cardRef, pile.id),
-    );
+    miniature.toggleClass("is-card-focused", isFocused);
     miniature.addEventListener("focusin", () => {
       if (isViewed) {
         this.actions.focusViewedCard();
@@ -580,9 +669,11 @@ export class TrayRenderer {
     );
 
     const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
-    const addressEl = renderCardAddress(identity, {
-      cls: "slipbox-tray-card-address",
+    const addressEl = this.cardSignatures.render(identity, {
+      path: file.path,
       address,
+      addressClass: "slipbox-tray-card-address",
+      interactive: expanded && !isViewed,
     });
     if (isFilingSource && filing !== null) {
       this.filingEditor = renderInlineFilingEditor(
@@ -680,6 +771,13 @@ export class TrayRenderer {
       cls: "slipbox-tray-card-preview markdown-rendered",
     });
     this.previews.set(file.path, preview);
+    if (filed !== undefined && expanded) {
+      this.inferredNavigation.render(miniature, {
+        path: filed.path,
+        interactive: isFocused,
+        mount: shell,
+      });
+    }
     preview.addEventListener("dblclick", (event) => {
       if (
         event.target instanceof Element &&

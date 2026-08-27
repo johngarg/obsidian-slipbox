@@ -41,6 +41,7 @@ The Deck is the canonical sequence, while the Desk is a temporary working area b
 - View and edit Desk cards inside the Slipbox workspace.
 - File an unfiled card while checking where it will enter the real Deck.
 - Follow card links, copy links, insert links from an Obsidian editor, and show automatic backlinks.
+- Mark explicit branches with link aliases and navigate an optional address-derived hierarchy.
 - Configure card sizes, titles, header actions, ordering, shortcuts, and the paper workflow.
 
 See the [changelog](CHANGELOG.md) for user-facing release history.
@@ -75,6 +76,18 @@ Any trimmed, nonempty, single-line string without control characters is a valid 
 
 Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox Desk never rewrites an existing address automatically.
 
+## Branching and structural navigation
+
+The optional **Recognise explicit branch links** setting treats a marked link alias such as `[[Child card|+a]]` as an asserted branch. The complete marker is configurable. Its remaining alias, `a` in this example, appears beside the child card's address and returns the Deck anchor to the source card. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
+
+The separate **Infer branches from addresses** setting derives an ephemeral hierarchy from address extension. With natural ordering, `2a` can be a child of `2`, while `20` is not; lexicographic ordering uses every proper literal prefix. Duplicate-address cards share one structural node. Three unbound commands move to the inferred parent or cycle forward and backward through local siblings, wrapping within the same parent. Roots form their own sibling axis; equal-depth cards under different parents do not.
+
+When **Show inferred branch navigation** is enabled, the active Deck card, the focused card in an expanded Desk pile, and the viewed card show subtle arrows beneath their lower corners. The left menu lists the inferred parent and nearest preceding sibling; the right menu lists the nearest following sibling and immediate children. Rows show canonical addresses and immediate-child counts, support keyboard operation, and preview targets according to **Preview links on hover**. Selecting one recentres the target structurally even if ordinary card-link following is disabled.
+
+The full sibling axis remains available through **Cycle Deck anchor forward through inferred siblings** and **Cycle Deck anchor backward through inferred siblings**. These commands wrap and have no default shortcuts; assign them under **Settings → Slipbox Desk → Keyboard shortcuts** or Obsidian's hotkey settings.
+
+Both forms of branching are derived in memory. Enabling, disabling, or navigating them never writes Markdown, frontmatter, or addresses.
+
 ## Essential keys
 
 There are some actions that are very quick to do in the real world, but take time in the digital world. For this reason, a default set of vim-inspired keybindings tries to streamline the process of all such card actions.
@@ -99,7 +112,7 @@ These shortcuts apply only while a Slipbox Desk view is active. You can change t
 
 Slipbox Desk works locally and offline. It makes no network requests, collects no telemetry, and does not load remote code.
 
-To build the Deck, Slipbox Desk checks the frontmatter of Markdown files through Obsidian's metadata cache. It reads note bodies when displaying or editing cards, and writes vault files only when you create, edit, file, link, delete, or move piles to Canvas. The Desk is session-only; settings and bookmarks are stored as plugin data.
+To build the Deck, Slipbox Desk checks the frontmatter of Markdown files through Obsidian's metadata cache. When explicit branching is enabled, it also reads cached ordinary links and their display text; it does not scan note bodies to find branch assertions. It reads note bodies when displaying or editing cards, and writes vault files only when you create, edit, file, link, delete, or move piles to Canvas. The Desk is session-only; settings and bookmarks are stored as plugin data.
 
 ## Development
 

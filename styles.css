@@ -398,6 +398,20 @@ button.slipbox-tray-pile-cycle svg {
   transition: transform 140ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
+.slipbox-tray-card-shell {
+  position: relative;
+  flex: 0 0 var(--slipbox-tray-card-width);
+  width: var(--slipbox-tray-card-width);
+  aspect-ratio: 3 / 2;
+  overflow: visible;
+}
+
+.slipbox-tray-card-shell > .slipbox-tray-card {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+}
+
 .slipbox-tray-pile.is-collapsed:hover .slipbox-tray-card {
   box-shadow: 0 10px 25px rgb(0 0 0 / 0.2);
   transform: translateY(-2px) rotate(var(--slipbox-tray-card-tilt, -0.45deg));
@@ -517,6 +531,29 @@ button.slipbox-tray-pile-cycle svg {
   font-family: var(--font-monospace);
   font-size: 0.66rem;
   font-weight: var(--font-semibold);
+}
+
+.slipbox-tray-card-identity > .slipbox-card-signature {
+  flex: 0 1 auto;
+}
+
+/* Keep annotated Desk signatures independent of their fitted contents. Without
+   a stable inline allocation, showing or hiding an annotation changes the
+   space available to both the title and action toolbar, which can make their
+   resize observers repeatedly undo one another. */
+.slipbox-tray-card-identity
+  > .slipbox-card-signature.has-branch-annotations {
+  flex: 0 0 min(
+    var(--slipbox-card-signature-intrinsic-width, 42%),
+    42%,
+    14rem
+  );
+  width: min(
+    var(--slipbox-card-signature-intrinsic-width, 42%),
+    42%,
+    14rem
+  );
+  contain: inline-size;
 }
 
 .slipbox-tray-card.is-unfiled:not(.is-filing-source) .slipbox-tray-card-address {
@@ -838,6 +875,286 @@ button.slipbox-tray-pile-cycle svg {
   font-weight: 600;
   letter-spacing: 0.075em;
   font-variant-numeric: tabular-nums;
+}
+
+.slipbox-card-signature {
+  position: relative;
+  display: inline-flex;
+  grid-column: 1;
+  justify-self: start;
+  align-items: baseline;
+  max-width: 100%;
+  min-width: 0;
+  gap: 0.38em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.slipbox-card-signature > .slipbox-card-address {
+  grid-column: auto;
+}
+
+.slipbox-card-signature-branches {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  min-width: 0;
+  gap: 0.38em;
+  overflow: hidden;
+  color: var(--text-accent);
+  font-family: var(--font-monospace);
+  font-size: 0.72rem;
+  letter-spacing: normal;
+}
+
+.slipbox-card-signature-branches[hidden] {
+  display: none;
+}
+
+.slipbox-tray-card .slipbox-card-signature-branches {
+  font-size: 0.62rem;
+}
+
+.slipbox-card-signature-separator {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.slipbox-card-signature-content,
+.slipbox-card-signature-measure {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.slipbox-card-signature-content > .slipbox-card-signature-separator,
+.slipbox-card-signature-measure > .slipbox-card-signature-separator {
+  padding: 0 0.38em;
+}
+
+.slipbox-card-signature-content {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.slipbox-card-signature-measure {
+  position: absolute;
+  top: 0;
+  left: -100000px;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.slipbox-card-signature-intrinsic-sizer {
+  position: absolute;
+  top: 0;
+  left: -100000px;
+  display: inline-flex;
+  align-items: baseline;
+  width: max-content;
+  gap: 0.38em;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.slipbox-card-signature .slipbox-card-branch-label,
+.slipbox-card-signature .slipbox-card-branch-label:hover,
+.slipbox-card-signature .slipbox-card-branch-label:active,
+.slipbox-card-signature .slipbox-card-branch-overflow,
+.slipbox-card-signature .slipbox-card-branch-overflow:hover,
+.slipbox-card-signature .slipbox-card-branch-overflow:active {
+  flex: 0 0 auto;
+  appearance: none;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  font: inherit;
+  font-weight: var(--font-semibold);
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.slipbox-card-signature .slipbox-card-branch-label:disabled {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  opacity: 0.68;
+  cursor: default;
+}
+
+.slipbox-card-signature .slipbox-card-branch-overflow:disabled {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  opacity: 0.68;
+  cursor: default;
+}
+
+.slipbox-card-signature .slipbox-card-branch-label:focus-visible,
+.slipbox-card-signature .slipbox-card-branch-overflow:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+
+.slipbox-card-branch-overflow-item {
+  color: var(--text-accent);
+  font-family: var(--font-monospace);
+  font-weight: var(--font-semibold);
+}
+
+.slipbox-inferred-navigation {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: 28;
+  height: 28px;
+  pointer-events: none;
+}
+
+.slipbox-inferred-navigation[hidden],
+.slipbox-inferred-navigation:empty {
+  display: none;
+}
+
+button.slipbox-inferred-navigation-arrow,
+button.slipbox-inferred-navigation-arrow:hover,
+button.slipbox-inferred-navigation-arrow:active {
+  position: absolute;
+  top: 1px;
+  display: inline-flex;
+  width: 30px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.68;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+button.slipbox-inferred-navigation-arrow.is-left {
+  left: 0;
+}
+
+button.slipbox-inferred-navigation-arrow.is-right {
+  right: 0;
+}
+
+button.slipbox-inferred-navigation-arrow:hover,
+button.slipbox-inferred-navigation-arrow:focus-visible {
+  color: var(--text-accent);
+  opacity: 1;
+}
+
+button.slipbox-inferred-navigation-arrow:focus-visible {
+  outline: 2px solid var(--text-accent);
+  outline-offset: -3px;
+  border-radius: 5px;
+}
+
+button.slipbox-inferred-navigation-arrow:disabled,
+button.slipbox-inferred-navigation-arrow:disabled:hover {
+  color: var(--text-muted);
+  opacity: 0.26;
+  cursor: default;
+}
+
+.slipbox-inferred-navigation-menu {
+  z-index: var(--layer-menu, 1000);
+  display: flex;
+  width: min(280px, calc(100vw - 16px));
+  max-height: min(320px, calc(100vh - 16px));
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+button.slipbox-inferred-navigation-item,
+button.slipbox-inferred-navigation-item:hover,
+button.slipbox-inferred-navigation-item:active {
+  display: flex;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0;
+  padding: var(--size-2-2) var(--size-4-2);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+}
+
+button.slipbox-inferred-navigation-item:hover,
+button.slipbox-inferred-navigation-item:focus-visible {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+
+button.slipbox-inferred-navigation-item:focus-visible {
+  outline: 2px solid var(--text-accent);
+  outline-offset: -2px;
+}
+
+.slipbox-inferred-navigation-address {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  letter-spacing: 0.075em;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slipbox-inferred-navigation-child-count {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.slipbox-inferred-navigation-gap {
+  flex: 0 0 auto;
+  height: 7px;
+  min-height: 7px;
+  margin: 2px 0;
+  border: 0;
+  background: transparent;
+}
+
+.slipbox-card.is-dragging-to-desk > .slipbox-inferred-navigation,
+.slipbox-tray-card-shell:has(.slipbox-tray-card.is-dragging)
+  > .slipbox-inferred-navigation,
+.slipbox-viewed-card.is-dragging > .slipbox-inferred-navigation {
+  display: none;
 }
 
 /* Viewed and Desk cards share the same empty-slot filing affordance. */

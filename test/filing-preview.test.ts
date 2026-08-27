@@ -13,8 +13,10 @@ import {
   updateInlineFilingEditor,
 } from "../src/index.js";
 import {
+  eventTargetsDeck,
   filingEditorMatchesSource,
   handleFilingEscape,
+  shouldSuspendDeckCommand,
   shouldSuspendDeckShortcut,
 } from "../src/filing-editor.js";
 import { filingPreviewGuidance } from "../src/filing-preview.js";
@@ -296,6 +298,49 @@ describe("inline filing editor DOM", () => {
     assert.equal(shouldSuspendDeckShortcut(
       deck as unknown as EventTarget,
       false,
+    ), true);
+  });
+
+  test("does not suppress Deck commands from the external command palette", () => {
+    const window = new Window();
+    const deckRoot = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    const deckInput = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "input",
+    );
+    const paletteInput = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "input",
+    );
+    deckRoot.append(deckInput);
+    window.document.body.append(deckRoot, paletteInput);
+    const commandRoot = deckRoot as unknown as HTMLElement;
+
+    assert.equal(eventTargetsDeck(
+      deckInput as unknown as EventTarget,
+      commandRoot,
+    ), true);
+    assert.equal(eventTargetsDeck(
+      paletteInput as unknown as EventTarget,
+      commandRoot,
+    ), false);
+    assert.equal(shouldSuspendDeckCommand(
+      deckInput as unknown as EventTarget,
+      false,
+      commandRoot,
+    ), true);
+    assert.equal(shouldSuspendDeckCommand(
+      paletteInput as unknown as EventTarget,
+      false,
+      commandRoot,
+    ), false);
+    assert.equal(shouldSuspendDeckCommand(
+      paletteInput as unknown as EventTarget,
+      true,
+      commandRoot,
     ), true);
   });
 

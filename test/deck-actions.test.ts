@@ -13,6 +13,9 @@ const READY: DeckActionContext = {
   hasActiveCard: true,
   hasPreviousCard: true,
   hasNextCard: true,
+  hasInferredParent: true,
+  hasForwardInferredSiblingCycle: true,
+  hasBackwardInferredSiblingCycle: true,
   hasPreviousBookmark: true,
   hasNextBookmark: true,
   hasProblems: true,
@@ -35,6 +38,9 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("previous-card", READY), true);
     assert.equal(canRunDeckAction("previous-bookmark", READY), true);
     assert.equal(canRunDeckAction("next-bookmark", READY), true);
+    assert.equal(canRunDeckAction("jump-inferred-parent", READY), true);
+    assert.equal(canRunDeckAction("cycle-forward-inferred-siblings", READY), true);
+    assert.equal(canRunDeckAction("cycle-backward-inferred-siblings", READY), true);
     assert.equal(canRunDeckAction("open-note", READY), true);
     assert.equal(canRunDeckAction("copy-link", READY), true);
     assert.equal(canRunDeckAction("toggle-tray", READY), true);
@@ -49,6 +55,9 @@ describe("Deck action availability", () => {
       hasActiveCard: false,
       hasPreviousCard: false,
       hasNextCard: false,
+      hasInferredParent: false,
+      hasForwardInferredSiblingCycle: false,
+      hasBackwardInferredSiblingCycle: false,
       hasPreviousBookmark: false,
       hasNextBookmark: false,
       hasProblems: false,
@@ -68,6 +77,9 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("next-card", unavailable), false);
     assert.equal(canRunDeckAction("previous-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("next-bookmark", unavailable), false);
+    assert.equal(canRunDeckAction("jump-inferred-parent", unavailable), false);
+    assert.equal(canRunDeckAction("cycle-forward-inferred-siblings", unavailable), false);
+    assert.equal(canRunDeckAction("cycle-backward-inferred-siblings", unavailable), false);
     assert.equal(canRunDeckAction("forward-ten-cards", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);
@@ -165,6 +177,46 @@ describe("Deck action availability", () => {
         definition.defaultBindings.some((binding) => binding.key === "a")),
       false,
     );
+  });
+
+  test("exposes only parent and wrapped sibling actions for inferred navigation", () => {
+    const expected = [
+      {
+        id: "jump-inferred-parent",
+        label: "Move Deck anchor to inferred parent",
+        repeatable: false,
+      },
+      {
+        id: "cycle-forward-inferred-siblings",
+        label: "Cycle Deck anchor forward through inferred siblings",
+        repeatable: true,
+      },
+      {
+        id: "cycle-backward-inferred-siblings",
+        label: "Cycle Deck anchor backward through inferred siblings",
+        repeatable: true,
+      },
+    ];
+    for (const expectedAction of expected) {
+      const definition = DECK_ACTION_DEFINITIONS.find(
+        (candidate) => candidate.id === expectedAction.id,
+      );
+      assert.equal(definition?.label, expectedAction.label);
+      assert.equal(definition?.repeatable, expectedAction.repeatable);
+      assert.deepEqual(definition?.defaultBindings, []);
+      assert.equal(definition?.target, "deck-anchor");
+    }
+    for (const removed of [
+      "jump-previous-inferred-peer",
+      "jump-next-inferred-peer",
+      "jump-past-inferred-descendants",
+      "jump-first-inferred-child",
+    ]) {
+      assert.equal(
+        DECK_ACTION_DEFINITIONS.some((definition) => definition.id === removed),
+        false,
+      );
+    }
   });
 
   test("does not expose browser history or toolbar actions and leaves H, L, and t free", () => {

@@ -1,7 +1,7 @@
 import type { DeckOrdering } from "./address-order.js";
 import type { DuplicateAddressPolicy } from "./card-metadata.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 11;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 12;
 
 export const DEFAULT_CARD_SPREAD = 0.58;
 export const MIN_CARD_SPREAD = 0.18;
@@ -66,6 +66,9 @@ export const CARD_HEADER_BUTTON_ACTIONS: readonly CardHeaderButtonAction[] = [
 export type SlipboxAction =
   | "previous-card"
   | "next-card"
+  | "jump-inferred-parent"
+  | "cycle-forward-inferred-siblings"
+  | "cycle-backward-inferred-siblings"
   | "previous-bookmark"
   | "next-bookmark"
   | "forward-ten-cards"
@@ -149,6 +152,24 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     label: "Move Deck anchor to next card",
     repeatable: true,
     defaultBindings: [binding("ArrowRight"), binding("j")],
+  },
+  {
+    id: "jump-inferred-parent",
+    label: "Move Deck anchor to inferred parent",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "cycle-forward-inferred-siblings",
+    label: "Cycle Deck anchor forward through inferred siblings",
+    repeatable: true,
+    defaultBindings: [],
+  },
+  {
+    id: "cycle-backward-inferred-siblings",
+    label: "Cycle Deck anchor backward through inferred siblings",
+    repeatable: true,
+    defaultBindings: [],
   },
   {
     id: "previous-bookmark",
@@ -426,6 +447,11 @@ export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly deckOrdering: DeckOrdering;
   readonly duplicateAddresses: DuplicateAddressPolicy;
+  readonly explicitBranchLinks: boolean;
+  readonly branchLinkMarker: string;
+  readonly showBranchLabels: boolean;
+  readonly inferAddressBranches: boolean;
+  readonly showInferredBranchNavigation: boolean;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
   readonly mainCardSize: CardSize;
@@ -512,6 +538,11 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "slipbox-id",
   deckOrdering: "natural",
   duplicateAddresses: "allowed",
+  explicitBranchLinks: false,
+  branchLinkMarker: "+",
+  showBranchLabels: true,
+  inferAddressBranches: false,
+  showInferredBranchNavigation: true,
   titleSource: "filename",
   titleProperty: "slipbox-title",
   mainCardSize: "medium",
@@ -542,6 +573,31 @@ export function normalizePropertyName(value: unknown, fallback: string): string 
   return typeof value === "string" && value.trim() !== ""
     ? value.trim()
     : fallback;
+}
+
+export function branchLinkMarkerError(marker: string): string | null {
+  if (marker.trim() === "") {
+    return "A non-empty branch-link marker is required.";
+  }
+  for (const character of marker) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (
+      codePoint <= 0x1f ||
+      (codePoint >= 0x7f && codePoint <= 0x9f) ||
+      codePoint === 0x2028 ||
+      codePoint === 0x2029
+    ) {
+      return "The branch-link marker cannot contain control characters or line separators.";
+    }
+  }
+  return null;
+}
+
+export function normalizeBranchLinkMarker(value: unknown): string {
+  if (typeof value !== "string" || branchLinkMarkerError(value) !== null) {
+    return DEFAULT_SETTINGS.branchLinkMarker;
+  }
+  return value.trim();
 }
 
 export function normalizeFolderPath(value: unknown): string {
@@ -677,7 +733,33 @@ function isCompletePreviousDefaultMap(source: Record<string, unknown>): boolean 
 export function normalizeDeckKeybindings(
   value: unknown,
 ): Readonly<Record<DeckAction, readonly DeckKeyBinding[]>> {
-  const source = isRecord(value) ? value : {};
+  const rawSource = isRecord(value) ? value : {};
+  const source: Record<string, unknown> = { ...rawSource };
+  const renamedActions = [
+    [
+      "jump-inferred-parent",
+      ["jump-apparent-parent"],
+    ],
+    [
+      "cycle-backward-inferred-siblings",
+      ["cycle-backward-apparent-siblings", "jump-previous-apparent-peer"],
+    ],
+    [
+      "cycle-forward-inferred-siblings",
+      ["cycle-forward-apparent-siblings", "jump-next-apparent-peer"],
+    ],
+  ] as const;
+  for (const [currentAction, legacyActions] of renamedActions) {
+    if (Array.isArray(source[currentAction])) {
+      continue;
+    }
+    const migrated = legacyActions
+      .map((legacyAction) => rawSource[legacyAction])
+      .find(Array.isArray);
+    if (migrated !== undefined) {
+      source[currentAction] = migrated;
+    }
+  }
   if (isCompletePreviousDefaultMap(source)) {
     return DEFAULT_DECK_KEYBINDINGS;
   }
@@ -788,6 +870,25 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       source.deckOrdering === "lexicographic" ? "lexicographic" : "natural",
     duplicateAddresses:
       source.duplicateAddresses === "problem" ? "problem" : "allowed",
+    explicitBranchLinks:
+      typeof source.explicitBranchLinks === "boolean"
+        ? source.explicitBranchLinks
+        : DEFAULT_SETTINGS.explicitBranchLinks,
+    branchLinkMarker: normalizeBranchLinkMarker(source.branchLinkMarker),
+    showBranchLabels:
+      typeof source.showBranchLabels === "boolean"
+        ? source.showBranchLabels
+        : DEFAULT_SETTINGS.showBranchLabels,
+    inferAddressBranches:
+      typeof source.inferAddressBranches === "boolean"
+        ? source.inferAddressBranches
+        : typeof source.inferApparentBranches === "boolean"
+          ? source.inferApparentBranches
+          : DEFAULT_SETTINGS.inferAddressBranches,
+    showInferredBranchNavigation:
+      typeof source.showInferredBranchNavigation === "boolean"
+        ? source.showInferredBranchNavigation
+        : DEFAULT_SETTINGS.showInferredBranchNavigation,
     titleSource:
       requestedTitleSource === "frontmatter" && titleProperty === addressProperty
         ? "filename"
@@ -856,6 +957,7 @@ export function settingsForPersistence(
     showDeckToolbar: _showDeckToolbar,
     useTemplatesForNewNotes: _useTemplatesForNewNotes,
     newNoteTemplatePath: _newNoteTemplatePath,
+    inferApparentBranches: _legacyInferApparentBranches,
     ...retainedRaw
   } = raw;
   const rawKeybindingsSource = isRecord(raw.deckKeybindings)
@@ -868,7 +970,14 @@ export function settingsForPersistence(
       key !== "forward" &&
       key !== "toggle-toolbar" &&
       key !== "find-address-forward" &&
-      key !== "find-address-backward"
+      key !== "find-address-backward" &&
+      key !== "jump-apparent-parent" &&
+      key !== "cycle-backward-apparent-siblings" &&
+      key !== "cycle-forward-apparent-siblings" &&
+      key !== "jump-previous-apparent-peer" &&
+      key !== "jump-next-apparent-peer" &&
+      key !== "jump-past-apparent-descendants" &&
+      key !== "jump-first-apparent-child"
     ),
   );
   return {

@@ -34,10 +34,14 @@ import {
   CardFooterManager,
   type CardFooterEnvironment,
 } from "./card-footer.js";
+import { UNFILED_ADDRESS_LABEL } from "./card-address.js";
 import {
-  renderCardAddress,
-  UNFILED_ADDRESS_LABEL,
-} from "./card-address.js";
+  CardSignatureManager,
+  type CardSignatureBranch,
+  type CardSignatureEnvironment,
+} from "./card-signature.js";
+import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
+import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import {
@@ -93,8 +97,10 @@ import {
 } from "./filing-preview.js";
 import {
   attachUnfiledAddressFiling,
+  eventTargetsDeck,
   filingEditorMatchesSource,
   renderInlineFilingEditor,
+  shouldSuspendDeckCommand,
   shouldSuspendDeckShortcut,
   updateInlineFilingEditor,
   type FilingSourceSurface,
@@ -279,6 +285,10 @@ export class DeckView extends ItemView {
   private positioningRetriesRemaining = 0;
   private readonly cardFooters: CardFooterManager;
   private readonly viewedCardFooter: CardFooterManager;
+  private readonly cardSignatures: CardSignatureManager;
+  private readonly viewedCardSignature: CardSignatureManager;
+  private readonly inferredNavigation: InferredNavigationManager;
+  private readonly viewedInferredNavigation: InferredNavigationManager;
   private readonly trayRenderer: TrayRenderer;
   private deckKeybindingsSuspended = false;
   private readonly shortcutCommandTracker =
@@ -328,6 +338,65 @@ export class DeckView extends ItemView {
     };
     this.cardFooters = new CardFooterManager(footerEnvironment);
     this.viewedCardFooter = new CardFooterManager(footerEnvironment);
+    const signatureEnvironment: CardSignatureEnvironment = {
+      showBranchLabels: () => this.plugin.settings.showBranchLabels,
+      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      branchesForPath: (path) => this.cardSignatureBranches(path),
+      preview: (event, target, branch, targetPath) => {
+        this.app.workspace.trigger("hover-link", {
+          event,
+          source: DECK_VIEW_TYPE,
+          hoverParent: this.leaf,
+          targetEl: target,
+          linktext: branch.linktext,
+          sourcePath: targetPath,
+        });
+      },
+      activate: (branch) => this.jumpToPath(branch.sourcePath),
+      showOverflowMenu: showCardSignatureOverflowMenu,
+      runAfterEditing: (reason, action) => {
+        void this.runAfterInlineEditing(reason, action);
+      },
+    };
+    this.cardSignatures = new CardSignatureManager(signatureEnvironment);
+    this.viewedCardSignature = new CardSignatureManager(signatureEnvironment);
+    const inferredNavigationEnvironment = {
+      showNavigation: () =>
+        this.plugin.settings.inferAddressBranches &&
+        this.plugin.settings.showInferredBranchNavigation,
+      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      relationsForPath: (path: string) =>
+        this.plugin.index.inferredNavigationForPath(path),
+      preview: (
+        event: MouseEvent,
+        target: HTMLElement,
+        destination: { readonly path: string },
+        sourcePath: string,
+      ) => {
+        const file = this.plugin.index.fileAtPath(destination.path);
+        this.app.workspace.trigger("hover-link", {
+          event,
+          source: DECK_VIEW_TYPE,
+          hoverParent: this.leaf,
+          targetEl: target,
+          linktext: file === undefined
+            ? destination.path
+            : this.app.metadataCache.fileToLinktext(file, sourcePath),
+          sourcePath,
+        });
+      },
+      activate: (destination: { readonly path: string }) =>
+        this.jumpToPath(destination.path),
+      runAfterEditing: (reason: string, action: () => void | Promise<void>) => {
+        void this.runAfterInlineEditing(reason, action);
+      },
+    };
+    this.inferredNavigation = new InferredNavigationManager(
+      inferredNavigationEnvironment,
+    );
+    this.viewedInferredNavigation = new InferredNavigationManager(
+      inferredNavigationEnvironment,
+    );
     this.trayRenderer = new TrayRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
       updateFilingInput: (value) => this.updateFilingInput(value),
@@ -365,6 +434,9 @@ export class DeckView extends ItemView {
       this.app.workspace.on("css-change", () => {
         this.cardFooters.scheduleLayout();
         this.viewedCardFooter.scheduleLayout();
+        this.cardSignatures.scheduleLayout();
+        this.viewedCardSignature.scheduleLayout();
+        this.trayRenderer.scheduleBranchLayout();
       }),
     );
     this.scope = new Scope(this.app.scope);
@@ -508,6 +580,10 @@ export class DeckView extends ItemView {
     this.cancelSpaceRecentering();
     this.cardFooters.clear();
     this.viewedCardFooter.clear();
+    this.cardSignatures.clear();
+    this.inferredNavigation.clear();
+    this.viewedCardSignature.clear();
+    this.viewedInferredNavigation.clear();
     this.trayRenderer.clear();
     this.clearCardHeaderButtonControllers();
     this.clearViewedCardHeaderButtonController();
@@ -557,6 +633,9 @@ export class DeckView extends ItemView {
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
     this.viewedCardFooter.scheduleLayout();
+    this.cardSignatures.scheduleLayout();
+    this.viewedCardSignature.scheduleLayout();
+    this.trayRenderer.scheduleBranchLayout();
     this.updateDeckMapSectionLabels();
     this.constrainViewedCard();
   }
@@ -864,6 +943,7 @@ export class DeckView extends ItemView {
           this.cardFocus.pileId === pileId,
         );
       });
+    this.trayRenderer.refreshFocusedInferredNavigation();
     if (this.viewedCardEl !== null) {
       this.viewedCardEl.toggleClass(
         "is-card-focused",
@@ -1073,11 +1153,15 @@ export class DeckView extends ItemView {
   canRunCommandAction(action: DeckAction): boolean {
     const event = this.app.lastEvent;
     if (
-      event !== null &&
-      "key" in event &&
+      this.deckKeybindingsSuspended ||
       (
-        this.deckKeybindingsSuspended ||
-        shouldSuspendDeckShortcut(event.target, this.isFilingInputFocused)
+        event !== null &&
+        "key" in event &&
+        shouldSuspendDeckCommand(
+          event.target,
+          this.isFilingInputFocused,
+          this.contentEl,
+        )
       )
     ) {
       return false;
@@ -1086,22 +1170,40 @@ export class DeckView extends ItemView {
   }
 
   runCommandAction(action: DeckAction): boolean {
-    this.commandActionAwaitingKeyup = {
-      action,
-      timestamp: Date.now(),
-    };
     const lastEvent = this.app.lastEvent;
     const keyboardEvent = lastEvent !== null && "key" in lastEvent
       ? lastEvent
       : undefined;
+    const deckKeyboardEvent = keyboardEvent !== undefined && eventTargetsDeck(
+      keyboardEvent.target,
+      this.contentEl,
+    )
+      ? keyboardEvent
+      : undefined;
+    const commandEvent = this.shortcutCommandTracker.record(
+      action,
+      deckKeyboardEvent,
+    );
+    const deckCommandEvent = commandEvent !== undefined && eventTargetsDeck(
+      commandEvent.target,
+      this.contentEl,
+    )
+      ? commandEvent
+      : undefined;
+    this.commandActionAwaitingKeyup = deckCommandEvent === undefined
+      ? null
+      : {
+        action,
+        timestamp: Date.now(),
+      };
     if (
-      keyboardEvent !== undefined &&
+      deckCommandEvent !== undefined &&
       !shouldSuspendDeckShortcut(
-        keyboardEvent.target,
+        deckCommandEvent.target,
         this.isFilingInputFocused,
       )
     ) {
-      const configuredShortcut = this.configuredDeckShortcut(keyboardEvent);
+      const configuredShortcut = this.configuredDeckShortcut(deckCommandEvent);
       if (
         configuredShortcut !== null &&
         configuredShortcut.definition.id !== action
@@ -1111,7 +1213,6 @@ export class DeckView extends ItemView {
         ));
       }
     }
-    const commandEvent = this.shortcutCommandTracker.record(action, keyboardEvent);
     const ran = this.runAction(action);
     if (
       ran &&
@@ -1287,6 +1388,15 @@ export class DeckView extends ItemView {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
       hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
+      hasInferredParent:
+        active !== null &&
+        this.plugin.index.inferredParentForPath(active.path) !== undefined,
+      hasForwardInferredSiblingCycle:
+        active !== null &&
+        this.plugin.index.cycleForwardInferredSiblingForPath(active.path) !== undefined,
+      hasBackwardInferredSiblingCycle:
+        active !== null &&
+        this.plugin.index.cycleBackwardInferredSiblingForPath(active.path) !== undefined,
       hasPreviousBookmark:
         action === "previous-bookmark" &&
         adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
@@ -1350,6 +1460,21 @@ export class DeckView extends ItemView {
         break;
       case "next-card":
         this.moveBy(1);
+        break;
+      case "jump-inferred-parent":
+        this.jumpToInferredCard((path) =>
+          this.plugin.index.inferredParentForPath(path)
+        );
+        break;
+      case "cycle-forward-inferred-siblings":
+        this.jumpToInferredCard((path) =>
+          this.plugin.index.cycleForwardInferredSiblingForPath(path)
+        );
+        break;
+      case "cycle-backward-inferred-siblings":
+        this.jumpToInferredCard((path) =>
+          this.plugin.index.cycleBackwardInferredSiblingForPath(path)
+        );
         break;
       case "previous-bookmark":
         this.jumpToAdjacentBookmark(-1);
@@ -1502,6 +1627,19 @@ export class DeckView extends ItemView {
     }
   }
 
+  private jumpToInferredCard(
+    destination: (path: string) => FiledCard | undefined,
+  ): void {
+    const active = this.activeCard;
+    if (active === null) {
+      return;
+    }
+    const target = destination(active.path);
+    if (target !== undefined) {
+      void this.jumpToPath(target.path);
+    }
+  }
+
   async refresh(reason: DeckRefreshReason = "full"): Promise<void> {
     if (this.inlineEdit !== null || this.inlineEditStarting) {
       const editing = this.inlineEdit;
@@ -1529,7 +1667,7 @@ export class DeckView extends ItemView {
         this.currentInlineEditPresentationFingerprint(recent.path),
       )
     ) {
-      this.refreshInlineEditBacklinks();
+      this.refreshInlineEditLinkMetadata();
       return;
     }
     this.recentInlineEditRefresh = null;
@@ -1727,7 +1865,7 @@ export class DeckView extends ItemView {
         await this.rerenderEditedPath(editing.file, editing.bodyEl, editing.renderedScrollTop);
         await this.trayRenderer.rerenderPath(editing.file);
         if (refreshBacklinks) {
-          this.refreshInlineEditBacklinks();
+          this.refreshInlineEditLinkMetadata();
         }
       }
     }
@@ -2101,11 +2239,37 @@ export class DeckView extends ItemView {
     });
   }
 
-  private refreshInlineEditBacklinks(): void {
+  private refreshInlineEditLinkMetadata(): void {
     const backlinksForPath = (path: string) =>
       this.plugin.index.backlinksForPath(path);
     this.cardFooters.refreshBacklinks(backlinksForPath);
     this.viewedCardFooter.refreshBacklinks(backlinksForPath);
+    this.refreshBranchPresentation();
+  }
+
+  refreshBranchPresentation(): void {
+    this.cardSignatures.refreshBranches();
+    this.viewedCardSignature.refreshBranches();
+    this.trayRenderer.refreshBranchMetadata();
+    this.inferredNavigation.refresh();
+    this.viewedInferredNavigation.refresh();
+    this.trayRenderer.refreshInferredNavigation();
+  }
+
+  private cardSignatureBranches(path: string): readonly CardSignatureBranch[] {
+    return this.plugin.index.incomingBranchesForPath(path).flatMap((branch) => {
+      const source = this.plugin.index.filedByPath(branch.sourcePath);
+      if (source === undefined) {
+        return [];
+      }
+      return [{
+        label: branch.label,
+        sourcePath: source.path,
+        sourceAddress: source.address,
+        sourceTitle: this.plugin.cardTitle(source.file),
+        linktext: this.app.metadataCache.fileToLinktext(source.file, path),
+      }];
+    });
   }
 
   private reportInlineEditFailure(failure: InlineEditFailure): void {
@@ -2347,9 +2511,13 @@ export class DeckView extends ItemView {
     }
     this.unloadRenderComponents();
     this.cardFooters.clear();
+    this.cardSignatures.clear();
+    this.inferredNavigation.clear();
     this.trayRenderer.clear();
     this.clearCardHeaderButtonControllers();
     this.viewedCardFooter.clear();
+    this.viewedCardSignature.clear();
+    this.viewedInferredNavigation.clear();
     this.clearViewedCardHeaderButtonController();
     this.unloadViewedCardComponent();
     this.contentEl.empty();
@@ -2438,6 +2606,8 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.cardFooters.clear();
+    this.cardSignatures.clear();
+    this.inferredNavigation.clear();
     this.clearCardHeaderButtonControllers();
     this.deckCardsEl?.remove();
     this.renderedCards = [];
@@ -2892,7 +3062,12 @@ export class DeckView extends ItemView {
         this.attachDeckCardDragging(addressRow, cardEl, card);
       }
       const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-      identity.createSpan({ cls: "slipbox-card-address", text: card.address });
+      this.cardSignatures.render(identity, {
+        path: card.path,
+        address: card.address,
+        addressClass: "slipbox-card-address",
+        interactive: filedIndex === activeIndex,
+      });
       const headerTitle = cardHeaderTitle(
         title,
         this.plugin.settings.showTitleInDeck,
@@ -2941,6 +3116,10 @@ export class DeckView extends ItemView {
           activate: (backlink) => this.jumpToPath(backlink.path),
         });
       }
+      this.inferredNavigation.render(cardEl, {
+        path: card.path,
+        interactive: filedIndex === activeIndex,
+      });
       jobs.push(this.renderMarkdownCard(card, scroll, deckVersion));
       cardEl.addEventListener("contextmenu", (event) => {
         const target = event.target;
@@ -3230,9 +3409,11 @@ export class DeckView extends ItemView {
       { placement: "top", delay: 500 },
     );
     const identity = addressRow.createDiv({ cls: "slipbox-card-header-identity" });
-    const addressEl = renderCardAddress(identity, {
-      cls: "slipbox-card-address",
+    const addressEl = this.viewedCardSignature.render(identity, {
+      path: file.path,
       address,
+      addressClass: "slipbox-card-address",
+      interactive: true,
     });
     if (isFilingSource && filing !== null) {
       this.viewedFilingEditor = renderInlineFilingEditor(
@@ -3331,6 +3512,12 @@ export class DeckView extends ItemView {
         backlinks: this.plugin.index.backlinksForPath(filed.path),
         interactive: true,
         activate: (backlink) => this.jumpToPath(backlink.path),
+      });
+    }
+    if (filed !== undefined) {
+      this.viewedInferredNavigation.render(card, {
+        path: filed.path,
+        interactive: true,
       });
     }
     card.addEventListener("contextmenu", (event) => {
@@ -4339,6 +4526,8 @@ export class DeckView extends ItemView {
       );
       setCardStackOrder(card, cardStackOrder(filedIndex, activeIndex));
       this.cardFooters.setInteractive(card, filedIndex === activeIndex);
+      this.cardSignatures.setInteractive(card, filedIndex === activeIndex);
+      this.inferredNavigation.setInteractive(card, filedIndex === activeIndex);
     }
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);

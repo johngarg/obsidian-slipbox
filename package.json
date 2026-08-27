@@ -1,6 +1,6 @@
 {
   "name": "slipbox",
-  "version": "0.12.2",
+  "version": "0.13.0",
   "private": true,
   "description": "A tactile, sequential card index for Obsidian",
   "license": "0BSD",

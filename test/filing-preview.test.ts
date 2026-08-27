@@ -373,7 +373,7 @@ describe("inline filing editor DOM", () => {
     assert.equal(cancelCount, 1);
   });
 
-  test("keeps unfiled-address pointer events away from tray dragging", () => {
+  test("keeps unfiled-address pointer events away from Desk dragging", () => {
     const window = new Window();
     const parent = window.document.createElementNS(
       "http://www.w3.org/1999/xhtml",
@@ -450,6 +450,7 @@ describe("inline filing editor DOM", () => {
     );
     assert.equal(address.querySelector("input"), editor.input);
     assert.equal(editor.input.value, "A/12");
+    assert.equal(card.querySelectorAll(".slipbox-desk-filing-input").length, 1);
     assert.equal(card.querySelectorAll(".slipbox-tray-filing-input").length, 1);
     assert.match(editor.feedback.textContent ?? "", /a\.md/);
     assert.match(editor.feedback.textContent ?? "", /z\.md/);

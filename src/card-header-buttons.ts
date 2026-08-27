@@ -15,6 +15,7 @@ import {
   releasePointerActivatedButtonFocus,
 } from "./pointer-button-focus.js";
 import { setCardTooltip } from "./card-tooltip.js";
+import { deskClassNames } from "./desk-dom.js";
 
 export interface CardHeaderButtonRenderOptions {
   readonly container: HTMLElement;
@@ -73,8 +74,18 @@ export class CardHeaderButtonController {
   private renderButton(
     presentation: CardHeaderActionPresentation,
   ): HTMLButtonElement {
+    const deskToggleClasses = presentation.action === "toggle-desk"
+      ? deskClassNames(
+          "slipbox-card-desk-toggle",
+          presentation.pressed === true ? "is-on-desk" : "",
+        )
+      : "";
     const button = this.options.container.createEl("button", {
-      cls: `clickable-icon slipbox-card-header-action ${this.options.buttonClass}`,
+      cls: deskClassNames(
+        "clickable-icon slipbox-card-header-action",
+        this.options.buttonClass,
+        deskToggleClasses,
+      ),
       attr: {
         type: "button",
         "data-slipbox-action": presentation.action,

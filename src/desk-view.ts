@@ -27,6 +27,7 @@ import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
 import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
+import { deskClassNames, setDeskCustomProperty } from "./desk-dom.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
 import {
   attachUnfiledAddressFiling,
@@ -264,7 +265,7 @@ export class DeskRenderer {
     if (this.rootEl === null) {
       return;
     }
-    this.rootEl.querySelectorAll<HTMLElement>(".slipbox-tray-card")
+    this.rootEl.querySelectorAll<HTMLElement>(".slipbox-desk-card")
       .forEach((card) => {
         const path = card.dataset.cardRef;
         const pileId = card.dataset.pileId;
@@ -312,7 +313,7 @@ export class DeskRenderer {
     );
     this.attachBackgroundMenu(stage);
     this.workspaceEl = stage;
-    const deskEl = space.createDiv({ cls: "slipbox-tray" });
+    const deskEl = space.createDiv({ cls: deskClassNames("slipbox-desk") });
     setCardTooltip(
       deskEl,
       `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
@@ -321,7 +322,9 @@ export class DeskRenderer {
     );
     this.rootEl = deskEl;
 
-    const piles = deskEl.createDiv({ cls: "slipbox-tray-piles" });
+    const piles = deskEl.createDiv({
+      cls: deskClassNames("slipbox-desk-piles"),
+    });
     this.pilesAnchorEl = piles;
     if (cardCount === 0) {
       return;
@@ -417,7 +420,9 @@ export class DeskRenderer {
     isCurrent: () => boolean,
   ): Promise<void>[] {
     const pileEl = parent.createDiv({
-      cls: `slipbox-tray-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
+      cls: deskClassNames(
+        `slipbox-desk-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
+      ),
       attr: {
         "data-pile-id": pile.id,
       },
@@ -460,7 +465,7 @@ export class DeskRenderer {
       }
     }
     const count = pileEl.createSpan({
-      cls: "slipbox-tray-pile-count",
+      cls: deskClassNames("slipbox-desk-pile-count"),
       text: String(pile.cards.length),
     });
     setCardTooltip(
@@ -472,7 +477,7 @@ export class DeskRenderer {
     let dragSurface: HTMLElement = pileEl;
     if (expanded) {
       const handle = pileEl.createEl("button", {
-        cls: "slipbox-tray-pile-handle",
+        cls: deskClassNames("slipbox-desk-pile-handle"),
         attr: {
           type: "button",
         },
@@ -502,7 +507,9 @@ export class DeskRenderer {
       });
       dragSurface = handle;
     }
-    const sequence = pileEl.createDiv({ cls: "slipbox-tray-sequence" });
+    const sequence = pileEl.createDiv({
+      cls: deskClassNames("slipbox-desk-sequence"),
+    });
     const visibleCards = expanded ? pile.cards : pile.cards.slice(0, 1);
     const jobs = visibleCards.map((card, cardIndex) => this.renderCard(
       sequence,
@@ -531,7 +538,7 @@ export class DeskRenderer {
       if (
         expanded &&
         event.targetNode?.instanceOf(Element) === true &&
-        event.targetNode.closest(".slipbox-tray-card") !== null
+        event.targetNode.closest(".slipbox-desk-card") !== null
       ) {
         return;
       }
@@ -570,9 +577,11 @@ export class DeskRenderer {
     const previous = direction === -1;
     const label = `${previous ? "Previous" : "Next"} card in pile ${pileIndex + 1}`;
     const button = parent.createEl("button", {
-      cls: `clickable-icon slipbox-tray-pile-cycle ${
-        previous ? "is-previous" : "is-next"
-      }`,
+      cls: deskClassNames(
+        `clickable-icon slipbox-desk-pile-cycle ${
+          previous ? "is-previous" : "is-next"
+        }`,
+      ),
       attr: { type: "button" },
     });
     setIcon(button, previous ? "chevron-left" : "chevron-right");
@@ -602,10 +611,10 @@ export class DeskRenderer {
       return;
     }
     const pile = Array.from(this.rootEl.querySelectorAll<HTMLElement>(
-      ".slipbox-tray-pile",
+      ".slipbox-desk-pile",
     )).find((candidate) => candidate.dataset.pileId === pileId);
     pile?.querySelector<HTMLButtonElement>(
-      `.slipbox-tray-pile-cycle.${direction === -1 ? "is-previous" : "is-next"}`,
+      `.slipbox-desk-pile-cycle.${direction === -1 ? "is-previous" : "is-next"}`,
     )?.focus({ preventScroll: true });
   }
 
@@ -631,9 +640,11 @@ export class DeskRenderer {
     const isViewed = viewedPath === card.cardRef;
     const isFocused = !isViewed &&
       this.actions.isDeskCardFocused(card.cardRef, pile.id);
-    const shell = parent.createDiv({ cls: "slipbox-tray-card-shell" });
+    const shell = parent.createDiv({
+      cls: deskClassNames("slipbox-desk-card-shell"),
+    });
     const miniature = shell.createDiv({
-      cls: "slipbox-tray-card",
+      cls: deskClassNames("slipbox-desk-card"),
       attr: {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== undefined ? "button" : "group",
@@ -651,8 +662,9 @@ export class DeskRenderer {
     );
     miniature.dataset.pileId = pile.id;
     const jitter = deskStackJitter(card.cardRef, cardIndex);
-    miniature.style.setProperty(
-      "--slipbox-tray-card-tilt",
+    setDeskCustomProperty(
+      miniature,
+      "--slipbox-desk-card-tilt",
       `${jitter.rotationDegrees}deg`,
     );
     miniature.tabIndex = expanded ? 0 : -1;
@@ -679,11 +691,13 @@ export class DeskRenderer {
       filed !== undefined && this.plugin.bookmarkAtPath(filed.path) !== undefined,
     );
 
-    const identity = miniature.createDiv({ cls: "slipbox-tray-card-identity" });
+    const identity = miniature.createDiv({
+      cls: deskClassNames("slipbox-desk-card-identity"),
+    });
     const addressEl = this.cardSignatures.render(identity, {
       path: file.path,
       address,
-      addressClass: "slipbox-tray-card-address",
+      addressClass: deskClassNames("slipbox-desk-card-address"),
       interactive: expanded && !isViewed,
     });
     if (isFilingSource && filing !== null) {
@@ -720,12 +734,14 @@ export class DeskRenderer {
     );
     if (headerTitle !== null) {
       identity.createSpan({
-        cls: "slipbox-tray-card-title",
+        cls: deskClassNames("slipbox-desk-card-title"),
         text: headerTitle,
       });
     }
     if (!isFilingSource && !isViewed) {
-      const controls = identity.createDiv({ cls: "slipbox-tray-card-actions" });
+      const controls = identity.createDiv({
+        cls: deskClassNames("slipbox-desk-card-actions"),
+      });
       this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
         container: controls,
         context: {
@@ -739,7 +755,7 @@ export class DeskRenderer {
           canMoveRight: cardIndex < pile.cards.length - 1,
         },
         settings: this.plugin.settings.cardHeaderButtons,
-        buttonClass: "slipbox-tray-card-action",
+        buttonClass: deskClassNames("slipbox-desk-card-action"),
         showTooltips: this.plugin.settings.showTooltips,
         tooltipPlacement: "bottom",
         run: (action) =>
@@ -778,7 +794,7 @@ export class DeskRenderer {
     }
 
     const preview = miniature.createDiv({
-      cls: "slipbox-tray-card-preview markdown-rendered",
+      cls: deskClassNames("slipbox-desk-card-preview markdown-rendered"),
     });
     this.previews.set(file.path, preview);
     if (filed !== undefined && expanded) {
@@ -841,7 +857,7 @@ export class DeskRenderer {
       }
       if (
         event.targetNode?.instanceOf(Element) === true &&
-        event.targetNode.closest(".slipbox-tray-card-preview") !== null
+        event.targetNode.closest(".slipbox-desk-card-preview") !== null
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -889,7 +905,7 @@ export class DeskRenderer {
       const depth = index + 1;
       const jitter = deskStackJitter(card.cardRef, depth);
       const layer = parent.createDiv({
-        cls: "slipbox-tray-stack-layer",
+        cls: deskClassNames("slipbox-desk-stack-layer"),
         attr: { "aria-hidden": "true" },
       });
       layer.style.setProperty("--slipbox-stack-depth", String(depth));
@@ -1006,7 +1022,7 @@ export class DeskRenderer {
       return;
     }
     const pileEl = (event.currentTarget as HTMLElement | null)
-      ?.closest<HTMLElement>(".slipbox-tray-pile") ?? null;
+      ?.closest<HTMLElement>(".slipbox-desk-pile") ?? null;
     const pileOrigin = pile.position ?? this.renderedPilePosition(pileEl) ?? {
       x: 0,
       y: 0,
@@ -1283,7 +1299,7 @@ export class DeskRenderer {
     const targetPileId = targetPileEl?.dataset.pileId;
     if (targetPileEl !== null && targetPileId !== undefined) {
       const cards = Array.from(targetPileEl.querySelectorAll<HTMLElement>(
-        ".slipbox-tray-card:not(.is-dragging)",
+        ".slipbox-desk-card:not(.is-dragging)",
       ));
       const insertionIndex = insertionIndexForPoint(
         x,
@@ -1313,7 +1329,7 @@ export class DeskRenderer {
     const state = this.plugin.desk;
     const target = this.elementsBelowPoint(x, y, dragged)
       .find((element) =>
-        element.matches(".slipbox-tray-pile") &&
+        element.matches(".slipbox-desk-pile") &&
         (element as HTMLElement).dataset.pileId !== sourcePileId,
       ) as HTMLElement | undefined;
     const targetId = target?.dataset.pileId;
@@ -1346,7 +1362,7 @@ export class DeskRenderer {
         : "is-card-drop-target",
     );
     const targetCard = elements.find(
-      (element) => element.matches(".slipbox-tray-card"),
+      (element) => element.matches(".slipbox-desk-card"),
     );
     targetCard?.addClass("is-insertion-target");
   }
@@ -1362,7 +1378,7 @@ export class DeskRenderer {
       event.clientY,
       dragged,
     ).find((element) =>
-      element.matches(".slipbox-tray-pile") &&
+      element.matches(".slipbox-desk-pile") &&
       (element as HTMLElement).dataset.pileId !== sourcePileId,
     ) as HTMLElement | undefined;
     if (target === undefined) {
@@ -1459,7 +1475,7 @@ export class DeskRenderer {
       ownerWindow?.requestAnimationFrame(() => {
         const escaped = CSS.escape(cardRef);
         this.rootEl
-          ?.querySelector<HTMLElement>(`.slipbox-tray-card[data-card-ref="${escaped}"]`)
+          ?.querySelector<HTMLElement>(`.slipbox-desk-card[data-card-ref="${escaped}"]`)
           ?.focus({ preventScroll: true });
       });
     });

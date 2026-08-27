@@ -319,6 +319,7 @@ export type {
   DeckHeaderButton,
   DeckKeyBinding,
   KeyModifier,
+  LegacyDeckHeaderButton,
   SlipboxAction,
   SlipboxActionDefinition,
   SlipboxActionScope,

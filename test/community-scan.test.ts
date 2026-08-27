@@ -22,14 +22,27 @@ describe("community scanner CSS compatibility", () => {
     assert.doesNotMatch(styles, /:has\(/);
     assert.match(
       styles,
-      /\.slipbox-tray-card\.is-dragging\s*\+\s*\.slipbox-inferred-navigation/,
+      /\.slipbox-desk-card\.is-dragging\s*\+\s*\.slipbox-inferred-navigation/,
     );
   });
 
   test("gives annotated Desk signatures a stable inline allocation", () => {
     assert.match(
       styles,
-      /\.slipbox-tray-card-identity\s*>\s*\.slipbox-card-signature\.has-branch-annotations\s*\{[^}]*flex:\s*0 0 min\([^;]+;[^}]*--slipbox-card-signature-intrinsic-width[^}]*contain:\s*inline-size;/su,
+      /\.slipbox-desk-card-identity\s*>\s*\.slipbox-card-signature\.has-branch-annotations\s*\{[^}]*flex:\s*0 0 min\([^;]+;[^}]*--slipbox-card-signature-intrinsic-width[^}]*contain:\s*inline-size;/su,
+    );
+  });
+
+  test("uses Desk selectors while bridging legacy Tray custom properties", () => {
+    assert.doesNotMatch(styles, /\.slipbox-tray/u);
+    assert.match(styles, /\[data-desk-card-size="small"\]/u);
+    assert.match(
+      styles,
+      /--slipbox-desk-card-width:\s*var\(--slipbox-tray-card-width\)/u,
+    );
+    assert.match(
+      styles,
+      /--slipbox-desk-pile-height:\s*var\(--slipbox-tray-pile-height\)/u,
     );
   });
 });

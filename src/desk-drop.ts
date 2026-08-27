@@ -36,7 +36,7 @@ export interface ResolvedDeckCardDrop {
 }
 
 const INTERACTIVE_DROP_BLOCKER =
-  ".slipbox-card-actions, .slipbox-tray-card-actions, " +
+  ".slipbox-card-actions, .slipbox-desk-card-actions, " +
   "button, a, input, textarea, select, [contenteditable='true']";
 
 /** Resolve a Deck-card drop without treating covered cards or controls as free space. */
@@ -47,7 +47,7 @@ export function deckCardDropTarget(
     if (element.closest(INTERACTIVE_DROP_BLOCKER) !== null) {
       return null;
     }
-    const pile = element.closest<HTMLElement>(".slipbox-tray-pile");
+    const pile = element.closest<HTMLElement>(".slipbox-desk-pile");
     if (pile?.dataset.pileId !== undefined) {
       return { kind: "pile", pile };
     }
@@ -126,15 +126,15 @@ export function cardDropTargetPile(
   sourcePileId: string,
 ): HTMLElement | null {
   const targetCard = elements.find((element) =>
-    element.matches(".slipbox-tray-card:not(.is-dragging)")
+    element.matches(".slipbox-desk-card:not(.is-dragging)")
   );
-  const cardPile = targetCard?.closest<HTMLElement>(".slipbox-tray-pile");
+  const cardPile = targetCard?.closest<HTMLElement>(".slipbox-desk-pile");
   if (cardPile?.dataset.pileId !== undefined) {
     return cardPile;
   }
 
   const pile = elements.find((element) =>
-    element.matches(".slipbox-tray-pile")
+    element.matches(".slipbox-desk-pile")
   ) as HTMLElement | undefined;
   return pile?.dataset.pileId !== undefined &&
       pile.dataset.pileId !== sourcePileId

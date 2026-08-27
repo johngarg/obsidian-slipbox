@@ -23,11 +23,14 @@ export function metadataPropertyError(
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
 
-export type DeckHeaderButton =
+export type LegacyDeckHeaderButton =
   | "open-note"
   | "copy-link"
   | "tray"
   | "bookmark";
+
+/** Compatibility alias retained for the retired deckHeaderButtons setting. */
+export type DeckHeaderButton = LegacyDeckHeaderButton;
 
 export type CardButtonSurface = "deck" | "desk" | "viewed";
 
@@ -478,12 +481,17 @@ export interface SlipboxSettings {
   readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
 }
 
-export const DEFAULT_DECK_HEADER_BUTTONS: Readonly<Record<DeckHeaderButton, boolean>> = {
+export const LEGACY_DEFAULT_DECK_HEADER_BUTTONS: Readonly<
+  Record<LegacyDeckHeaderButton, boolean>
+> = {
   "open-note": true,
   "copy-link": true,
   tray: true,
   bookmark: true,
 };
+
+/** Compatibility alias retained for the retired deckHeaderButtons setting. */
+export const DEFAULT_DECK_HEADER_BUTTONS = LEGACY_DEFAULT_DECK_HEADER_BUTTONS;
 
 const allCardHeaderButtons = (
   enabled: readonly CardHeaderButtonAction[],

@@ -20,13 +20,13 @@ function pile(
     "http://www.w3.org/1999/xhtml",
     "div",
   ) as unknown as HTMLElement;
-  pile.className = "slipbox-tray-pile is-expanded";
+  pile.className = "slipbox-desk-pile is-expanded";
   pile.dataset.pileId = id;
   const card = window.document.createElementNS(
     "http://www.w3.org/1999/xhtml",
     "div",
   ) as unknown as HTMLElement;
-  card.className = "slipbox-tray-card";
+  card.className = "slipbox-desk-card";
   pile.append(card);
   return { pile, card };
 }
@@ -201,7 +201,7 @@ describe("Deck card drops", () => {
     const window = new Window();
     const expanded = pile(window, "expanded");
     const collapsed = pile(window, "collapsed");
-    collapsed.pile.className = "slipbox-tray-pile is-collapsed";
+    collapsed.pile.className = "slipbox-desk-pile is-collapsed";
 
     const expandedTarget = deckCardDropTarget([
       expanded.card,

@@ -1,4 +1,5 @@
 import { setCardTooltip } from "./card-tooltip.js";
+import { deskClassNames } from "./desk-dom.js";
 
 export interface InlineFilingEditorState {
   readonly value: string;
@@ -130,7 +131,7 @@ export function renderInlineFilingEditor(
   addressSlot.replaceChildren();
   addressSlot.classList.add("is-editing");
   const input = createHtmlElement(addressSlot.ownerDocument, "input");
-  input.className = "slipbox-tray-filing-input";
+  input.className = deskClassNames("slipbox-desk-filing-input");
   input.type = "text";
   input.autocomplete = "off";
   input.spellcheck = false;
@@ -142,7 +143,7 @@ export function renderInlineFilingEditor(
   addressSlot.append(input);
 
   const feedback = createHtmlElement(card.ownerDocument, "div");
-  feedback.className = "slipbox-tray-filing-feedback";
+  feedback.className = deskClassNames("slipbox-desk-filing-feedback");
   feedback.setAttribute("aria-live", "polite");
   card.append(feedback);
 
@@ -189,7 +190,7 @@ export function updateInlineFilingEditor(
   feedback.classList.toggle("is-invalid", state.invalid);
   if (state.message !== "") {
     const message = createHtmlElement(feedback.ownerDocument, "span");
-    message.className = "slipbox-tray-filing-message";
+    message.className = deskClassNames("slipbox-desk-filing-message");
     message.textContent = state.message;
     feedback.append(message);
   }
@@ -198,7 +199,7 @@ export function updateInlineFilingEditor(
   }
 
   const details = createHtmlElement(feedback.ownerDocument, "details");
-  details.className = "slipbox-tray-filing-duplicates";
+  details.className = deskClassNames("slipbox-desk-filing-duplicates");
   const summary = createHtmlElement(feedback.ownerDocument, "summary");
   summary.textContent = `${state.address} is used by ${state.duplicatePaths.length} card${
     state.duplicatePaths.length === 1 ? "" : "s"

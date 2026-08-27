@@ -28,6 +28,9 @@ initial public beta.
 - Divided the Branching settings into explicit and inferred subsections.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.
+- Standardised the current Desk implementation and styling hooks on “Desk”
+  while retaining compatibility with existing Tray-named settings, commands,
+  hotkeys, and CSS customisations.
 
 ### Fixed
 

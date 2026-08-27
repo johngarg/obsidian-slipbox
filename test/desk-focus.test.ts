@@ -15,7 +15,7 @@ describe("Desk pile focus routing", () => {
     const handle = element("button");
     const card = element("article");
     const cardControl = element("button");
-    card.className = "slipbox-tray-card";
+    card.className = "slipbox-desk-card";
     card.append(cardControl);
     pile.append(handle, card);
 

@@ -44,6 +44,10 @@ import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import {
+  setDeskCardSizeData,
+  toggleDeskPresenceClass,
+} from "./desk-dom.js";
+import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
@@ -768,7 +772,7 @@ export class DeckView extends ItemView {
       return;
     }
     this.stageEl?.querySelector<HTMLElement>(
-      `.slipbox-tray-card[data-card-ref="${CSS.escape(card.path)}"]`,
+      `.slipbox-desk-card[data-card-ref="${CSS.escape(card.path)}"]`,
     )?.focus({ preventScroll: true });
   }
 
@@ -939,7 +943,7 @@ export class DeckView extends ItemView {
         this.cardFocus.path === path,
       );
     }
-    this.stageEl?.querySelectorAll<HTMLElement>(".slipbox-tray-card")
+    this.stageEl?.querySelectorAll<HTMLElement>(".slipbox-desk-card")
       .forEach((card) => {
         const path = card.dataset.cardRef;
         const pileId = card.dataset.pileId;
@@ -2070,7 +2074,7 @@ export class DeckView extends ItemView {
       await this.renderDeck(false);
       const deskCard = returnTarget?.surface === "desk"
         ? this.stageEl?.querySelector<HTMLElement>(
-            `.slipbox-tray-card[data-card-ref="${CSS.escape(viewed.path)}"]`,
+            `.slipbox-desk-card[data-card-ref="${CSS.escape(viewed.path)}"]`,
           ) ?? null
         : null;
       (deskCard ?? this.contentEl).focus({ preventScroll: true });
@@ -2607,7 +2611,7 @@ export class DeckView extends ItemView {
     this.viewedCardBodyEl = null;
     this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
-    this.contentEl.dataset.trayCardSize = this.plugin.settings.deskCardSize;
+    setDeskCardSizeData(this.contentEl, this.plugin.settings.deskCardSize);
     this.applyDeckPositionMode();
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
@@ -2748,8 +2752,8 @@ export class DeckView extends ItemView {
         cls: "slipbox-deck-map-marker",
       });
       const card = filed[index];
-      marker.toggleClass(
-        "is-in-tray",
+      toggleDeskPresenceClass(
+        marker,
         card !== undefined && this.plugin.isFileOnDesk(card.file),
       );
       marker.style.setProperty(
@@ -2961,8 +2965,8 @@ export class DeckView extends ItemView {
         cls: "slipbox-deck-map-marker is-bookmarked",
       });
       const card = this.plugin.index.filedByPath(path);
-      marker.toggleClass(
-        "is-in-tray",
+      toggleDeskPresenceClass(
+        marker,
         card !== undefined && this.plugin.isFileOnDesk(card.file),
       );
       marker.style.setProperty(
@@ -3085,7 +3089,7 @@ export class DeckView extends ItemView {
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isOnDesk = this.plugin.isFileOnDesk(card.file);
-      cardEl.toggleClass("is-in-tray", isOnDesk);
+      toggleDeskPresenceClass(cardEl, isOnDesk);
       cardEl.toggleClass("can-drag-to-desk", !isOnDesk);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.address} · ${title}${
@@ -3397,7 +3401,7 @@ export class DeckView extends ItemView {
 
   private clearDeckCardDropCues(): void {
     this.stageEl?.querySelectorAll<HTMLElement>(
-      ".slipbox-tray-pile.is-card-drop-target",
+      ".slipbox-desk-pile.is-card-drop-target",
     ).forEach((pile) => pile.removeClass("is-card-drop-target"));
   }
 
@@ -3411,7 +3415,7 @@ export class DeckView extends ItemView {
     await this.plugin.updateDesk(result.state);
     this.contentEl.win.requestAnimationFrame(() => {
       this.stageEl?.querySelector<HTMLElement>(
-        `.slipbox-tray-card[data-card-ref="${CSS.escape(result.focusPath)}"]`,
+        `.slipbox-desk-card[data-card-ref="${CSS.escape(result.focusPath)}"]`,
       )?.focus({ preventScroll: true });
     });
   }

@@ -34,14 +34,14 @@ describe("card address rendering", () => {
   test("renders an unfiled card as an empty slot", () => {
     const parent = container();
     const element = renderCardAddress(parent, {
-      cls: "slipbox-tray-card-address",
+      cls: "slipbox-desk-card-address",
       address: null,
     });
 
     assert.equal(element.textContent, "");
     assert.equal(
       element.className,
-      "slipbox-tray-card-address is-unfiled-slot",
+      "slipbox-desk-card-address is-unfiled-slot",
     );
   });
 
@@ -69,7 +69,7 @@ describe("card address rendering", () => {
   test("hands the empty slot over to the inline filing editor", () => {
     const parent = container();
     const slot = renderCardAddress(parent, {
-      cls: "slipbox-tray-card-address",
+      cls: "slipbox-desk-card-address",
       address: null,
     });
 

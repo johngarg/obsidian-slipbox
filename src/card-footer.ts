@@ -478,7 +478,7 @@ export class CardFooterManager {
         .setTitle(deskToggleLabel(onDesk))
         .setIcon(onDesk ? "undo-2" : "bring-to-front")
         .onClick(() => this.environment.runAfterEditing(
-          "backlink-tray-toggle",
+          "backlink-desk-toggle",
           () => {
             this.environment.runAction("toggle-desk", backlink);
           },

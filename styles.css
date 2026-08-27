@@ -427,9 +427,6 @@ button.slipbox-tray-pile-cycle svg {
   z-index: 30;
   opacity: 0.82;
   transition: none;
-}
-
-.slipbox-tray-card.is-dragging {
   box-shadow: 0 15px 34px rgb(0 0 0 / 0.28);
 }
 

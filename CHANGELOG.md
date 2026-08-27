@@ -26,6 +26,8 @@ initial public beta.
 - Standardised address-derived hierarchy terminology on “inferred” throughout
   the interface, commands, settings, and documentation.
 - Divided the Branching settings into explicit and inferred subsections.
+- Coalesced metadata-driven index rebuilds and removed redundant Deck renders
+  when ordering, creating Desk cards, filing, or adjusting card spread.
 
 ### Fixed
 
@@ -42,6 +44,8 @@ initial public beta.
   preserving signature focus and drag-time navigation behavior.
 - Desk piles can now be laid out on existing Canvases, including newly created
   empty Canvases.
+- Kept card interactions, dragging, links, modals, and fitted controls in the
+  correct window after moving Slipbox Desk to an Obsidian popout.
 
 ## [0.13.0] - 2026-08-27
 

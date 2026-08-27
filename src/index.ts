@@ -60,6 +60,8 @@ export type {
   CardSignatureOverflowItem,
   CardSignatureRenderOptions,
 } from "./card-signature.js";
+export { deleteCardWithConfirmation } from "./card-deletion.js";
+export type { CardDeletionFileManager } from "./card-deletion.js";
 export {
   buildFiledCardLookups,
   cardMetadataRecord,
@@ -223,6 +225,7 @@ export {
   mergePiles,
   moveCardBetweenPiles,
   moveCardWithinPile,
+  movePileToOrdinalBoundary,
   placeFiledCardInPileOrdinal,
   pruneTrayCards,
   reconcileTray,

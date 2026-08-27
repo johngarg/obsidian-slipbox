@@ -326,6 +326,21 @@ export function reorderPiles(
   return cleanTray({ ...state, piles });
 }
 
+export function movePileToOrdinalBoundary(
+  state: TrayState,
+  pileId: string,
+  boundary: "front" | "back",
+): TrayState {
+  const fromIndex = state.piles.findIndex((pile) => pile.id === pileId);
+  if (fromIndex < 0) {
+    return state;
+  }
+  const toIndex = boundary === "front" ? state.piles.length - 1 : 0;
+  return fromIndex === toIndex
+    ? state
+    : reorderPiles(state, fromIndex, toIndex);
+}
+
 export function setPilePosition(
   state: TrayState,
   pileId: string,

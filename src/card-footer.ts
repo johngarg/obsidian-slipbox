@@ -7,6 +7,7 @@ import {
 } from "obsidian";
 
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
+import { setCardTooltip } from "./card-tooltip.js";
 import { trayToggleLabel } from "./deck-actions.js";
 import type { FiledCard } from "./card-index.js";
 import {
@@ -21,6 +22,7 @@ export interface CardFooterEnvironment {
   readonly hoverSource: string;
   readonly previewLinksOnHover: () => boolean;
   readonly followLinksFromCards: () => boolean;
+  readonly showTooltips: () => boolean;
   readonly isInTray: (file: TFile) => boolean;
   readonly runAction: (action: SlipboxAction, target: FiledCard) => boolean;
   readonly runAfterEditing: (
@@ -271,11 +273,16 @@ export class CardFooterManager {
         text: `+${fit.hiddenCount}`,
         attr: {
           type: "button",
-          "aria-label": `Show ${fit.hiddenCount} more backlink${
-            fit.hiddenCount === 1 ? "" : "s"
-          }`,
         },
       });
+      setCardTooltip(
+        overflow,
+        `Show ${fit.hiddenCount} more backlink${
+          fit.hiddenCount === 1 ? "" : "s"
+        }`,
+        this.environment.showTooltips(),
+        { placement: "top", delay: 250 },
+      );
       overflow.addEventListener("pointerdown", (event) => event.stopPropagation());
       overflow.addEventListener("click", (event) => {
         event.preventDefault();
@@ -313,9 +320,14 @@ export class CardFooterManager {
       text: backlink.address,
       attr: {
         href: linktext,
-        "aria-label": `Backlink from card ${backlink.address}`,
       },
     });
+    setCardTooltip(
+      anchor,
+      `Backlink from card ${backlink.address}`,
+      this.environment.showTooltips(),
+      { placement: "top", delay: 250 },
+    );
     anchor.dataset.href = linktext;
     anchor.draggable = false;
     const policy = this.linkPolicy(entry);

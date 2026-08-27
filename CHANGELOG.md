@@ -19,10 +19,14 @@ initial public beta.
 - Added a Branching settings group. Both branch models are derived in memory
   and never rewrite notes or addresses.
 
+### Changed
+
+- Standardised address-derived hierarchy terminology on “inferred” throughout
+  the interface, commands, settings, and documentation.
+- Divided the Branching settings into explicit and inferred subsections.
+
 ### Fixed
 
-- Kept late metadata updates from remounting a card as inline editing closes.
-- Kept a viewed card mounted when one of its links moves the Deck anchor.
 - Kept annotated Desk-card headers stable while labels, titles, and action
   overflow are fitted, reserved only the signature’s measured content width,
   and omitted the address separator when no annotation is present.
@@ -31,11 +35,27 @@ initial public beta.
 - Kept available Deck commands runnable from the command palette while its
   search field is focused.
 
+## [0.13.0] - 2026-08-27
+
+### Added
+
+- Added pile context-menu actions for bringing a pile to the highest ordinal
+  or sending it to the lowest, while expanded piles remain above collapsed
+  piles.
+
 ### Changed
 
-- Standardised address-derived hierarchy terminology on “inferred” throughout
-  the interface, commands, settings, and documentation.
-- Divided the Branching settings into explicit and inferred subsections.
+- Replaced **Show card tooltips** with **Show tooltips**, which controls all
+  Slipbox-view tooltips while retaining accessible labels when disabled.
+
+### Fixed
+
+- Kept late metadata updates from remounting a card as inline editing closes.
+- Kept a viewed card mounted when one of its links moves the Deck anchor.
+- Deleted cards now follow Obsidian's confirmation and trash workflow once,
+  without a second trash attempt or an erroneous missing-file notice.
+- Card-header buttons now act on their own card without first moving card
+  focus or the Deck anchor.
 
 ## [0.12.2] - 2026-08-26
 
@@ -81,7 +101,8 @@ Initial public beta.
 - Improved default pile placement and kept the Deck stable as cards and piles
   are added or moved.
 
-[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...HEAD
+[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.13.0...HEAD
+[0.13.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...0.13.0
 [0.12.2]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.1...0.12.2
 [0.12.1]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.0...0.12.1
 [0.12.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.11.1...0.12.0

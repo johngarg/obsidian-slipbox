@@ -438,6 +438,7 @@ describe("inline filing editor DOM", () => {
         duplicatePaths: ["a.md", "z.md"],
       },
       {
+        showTooltips: false,
         onInput: (value) => {
           changedValue = value;
         },

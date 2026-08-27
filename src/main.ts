@@ -33,6 +33,7 @@ import {
   applicableCardHeaderActions,
   type CardHeaderActionContext,
 } from "./card-header-actions.js";
+import { deleteCardWithConfirmation } from "./card-deletion.js";
 import {
   removeDeskPath,
   renameDeskCard,
@@ -562,12 +563,8 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async deleteCard(file: TFile): Promise<boolean> {
-    if (!(await this.app.fileManager.promptForDeletion(file))) {
-      return false;
-    }
     try {
-      await this.app.fileManager.trashFile(file);
-      return true;
+      return await deleteCardWithConfirmation(this.app.fileManager, file);
     } catch (error) {
       new Notice(`Could not delete ${this.cardTitle(file)}: ${errorMessage(error)}`);
       return false;

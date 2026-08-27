@@ -5,7 +5,6 @@ import {
   TFile,
   getLinkpath,
   setIcon,
-  setTooltip,
   type App,
 } from "obsidian";
 
@@ -45,6 +44,7 @@ import {
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
+  movePileToOrdinalBoundary,
   setPilePosition,
   splitCardIntoNewPile,
   trayStackJitter,
@@ -84,6 +84,11 @@ export interface TrayViewActions {
   isDeskCardFocused(path: string, pileId: string): boolean;
   canRunAction(action: SlipboxAction): boolean;
   runAction(action: SlipboxAction): boolean;
+  runCardAction(
+    action: SlipboxAction,
+    path: string,
+    pileId: string,
+  ): boolean;
   runAfterEditing(
     reason: string,
     action: () => void | Promise<void>,
@@ -213,7 +218,11 @@ export class TrayRenderer {
 
   private applyFilingGuidance(input: HTMLInputElement, guidance: string): void {
     input.setAttribute("aria-description", guidance);
-    setTooltip(input, guidance, { placement: "bottom", delay: 350 });
+    setCardTooltip(input, guidance, this.plugin.settings.showTooltips, {
+      placement: "bottom",
+      delay: 350,
+      accessibleLabel: "Card address",
+    });
   }
 
   async rerenderPath(file: TFile): Promise<void> {
@@ -308,7 +317,7 @@ export class TrayRenderer {
     setCardTooltip(
       tray,
       `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
-      this.plugin.settings.showCardTooltips,
+      this.plugin.settings.showTooltips,
       { placement: "bottom", delay: 350 },
     );
     this.rootEl = tray;
@@ -419,7 +428,7 @@ export class TrayRenderer {
       `Pile ${pileIndex + 1}, ${pile.cards.length} card${
         pile.cards.length === 1 ? "" : "s"
       }`,
-      this.plugin.settings.showCardTooltips,
+      this.plugin.settings.showTooltips,
       { placement: "bottom", delay: 350 },
     );
     pileEl.tabIndex = expanded ? -1 : 0;
@@ -460,7 +469,7 @@ export class TrayRenderer {
     setCardTooltip(
       count,
       `${pile.cards.length} card${pile.cards.length === 1 ? "" : "s"}`,
-      this.plugin.settings.showCardTooltips,
+      this.plugin.settings.showTooltips,
       { placement: "top", delay: 250 },
     );
     let dragSurface: HTMLElement = pileEl;
@@ -475,7 +484,7 @@ export class TrayRenderer {
       setCardTooltip(
         handle,
         `Move or collapse pile ${pileIndex + 1}. Drag to move; click to collapse.`,
-        this.plugin.settings.showCardTooltips,
+        this.plugin.settings.showTooltips,
         { placement: "left", delay: 250 },
       );
       handle.addEventListener("click", (event) => {
@@ -488,6 +497,11 @@ export class TrayRenderer {
           "tray-collapse-pile",
           () => this.plugin.setTrayPileExpanded(pile.id, false),
         );
+      });
+      handle.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.showPileMenu(event, pile);
       });
       dragSurface = handle;
     }
@@ -565,7 +579,7 @@ export class TrayRenderer {
       attr: { type: "button" },
     });
     setIcon(button, previous ? "chevron-left" : "chevron-right");
-    setCardTooltip(button, label, this.plugin.settings.showCardTooltips, {
+    setCardTooltip(button, label, this.plugin.settings.showTooltips, {
       placement: previous ? "left" : "right",
       delay: 250,
     });
@@ -635,7 +649,7 @@ export class TrayRenderer {
         : `${addressLabel}, ${title}; card ${cardIndex + 1} of ${
             pile.cards.length
           } in pile ${pileIndex + 1}`,
-      this.plugin.settings.showCardTooltips,
+      this.plugin.settings.showTooltips,
       { placement: "bottom", delay: 350 },
     );
     miniature.dataset.pileId = pile.id;
@@ -681,6 +695,7 @@ export class TrayRenderer {
         miniature,
         filing,
         {
+          showTooltips: this.plugin.settings.showTooltips,
           onInput: (value) => this.actions.updateFilingInput(value),
           onConfirm: () => this.actions.confirmFiling(),
           onCancel: () => this.actions.cancelFiling(),
@@ -694,7 +709,7 @@ export class TrayRenderer {
       setCardTooltip(
         addressEl,
         "Unfiled card address; double-click to enter an address",
-        this.plugin.settings.showCardTooltips,
+        this.plugin.settings.showTooltips,
         { placement: "bottom", delay: 350 },
       );
       attachUnfiledAddressFiling(addressEl, () => {
@@ -728,12 +743,10 @@ export class TrayRenderer {
         },
         settings: this.plugin.settings.cardHeaderButtons,
         buttonClass: "slipbox-tray-card-action",
-        showTooltips: this.plugin.settings.showCardTooltips,
+        showTooltips: this.plugin.settings.showTooltips,
         tooltipPlacement: "bottom",
-        run: (action) => {
-          this.actions.focusDeskCard(card.cardRef, pile.id);
-          this.actions.runAction(action);
-        },
+        run: (action) =>
+          this.actions.runCardAction(action, card.cardRef, pile.id),
       }));
     }
 
@@ -943,6 +956,8 @@ export class TrayRenderer {
     ) {
       menu.addSeparator();
     }
+    this.addPileOrderingMenuItems(menu, pile);
+    menu.addSeparator();
     menu.addItem((item) => {
       item
         .setTitle("Lay out pile on active Canvas")
@@ -1048,7 +1063,45 @@ export class TrayRenderer {
           );
         });
     });
+    menu.addSeparator();
+    this.addPileOrderingMenuItems(menu, pile);
     menu.showAtMouseEvent(event);
+  }
+
+  private addPileOrderingMenuItems(menu: Menu, pile: TrayPile): void {
+    const state = this.plugin.tray;
+    const pileIndex = state.piles.findIndex((candidate) =>
+      candidate.id === pile.id
+    );
+    const lastPileIndex = state.piles.length - 1;
+    menu.addItem((item) => {
+      item
+        .setTitle("Bring pile to front")
+        .setIcon("bring-to-front")
+        .setDisabled(pileIndex < 0 || pileIndex === lastPileIndex)
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-bring-pile-to-front",
+          () => this.plugin.updateTray(movePileToOrdinalBoundary(
+            this.plugin.tray,
+            pile.id,
+            "front",
+          )),
+        ));
+    });
+    menu.addItem((item) => {
+      item
+        .setTitle("Send pile to back")
+        .setIcon("send-to-back")
+        .setDisabled(pileIndex <= 0)
+        .onClick(() => this.actions.runAfterEditing(
+          "tray-send-pile-to-back",
+          () => this.plugin.updateTray(movePileToOrdinalBoundary(
+            this.plugin.tray,
+            pile.id,
+            "back",
+          )),
+        ));
+    });
   }
 
   private addCardFileMenuItems(

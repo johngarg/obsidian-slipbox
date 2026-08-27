@@ -1,7 +1,7 @@
 import type { DeckOrdering } from "./address-order.js";
 import type { DuplicateAddressPolicy } from "./card-metadata.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 12;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 13;
 
 export const DEFAULT_CARD_SPREAD = 0.58;
 export const MIN_CARD_SPREAD = 0.18;
@@ -459,7 +459,7 @@ export interface SlipboxSettings {
   readonly newCardFolder: string;
   readonly newNoteTimestampFormat: string;
   readonly showTitleInDeck: boolean;
-  readonly showCardTooltips: boolean;
+  readonly showTooltips: boolean;
   readonly showDeckMap: boolean;
   readonly restrictViewedCardPaste: boolean;
   readonly previewLinksOnHover: boolean;
@@ -550,7 +550,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   newCardFolder: "",
   newNoteTimestampFormat: "YYYYMMDDTHHmmss",
   showTitleInDeck: false,
-  showCardTooltips: false,
+  showTooltips: false,
   showDeckMap: true,
   restrictViewedCardPaste: true,
   previewLinksOnHover: false,
@@ -905,10 +905,12 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.showTitleInDeck === "boolean"
         ? source.showTitleInDeck
         : DEFAULT_SETTINGS.showTitleInDeck,
-    showCardTooltips:
-      typeof source.showCardTooltips === "boolean"
-        ? source.showCardTooltips
-        : DEFAULT_SETTINGS.showCardTooltips,
+    showTooltips:
+      typeof source.showTooltips === "boolean"
+        ? source.showTooltips
+        : typeof source.showCardTooltips === "boolean"
+          ? source.showCardTooltips
+          : DEFAULT_SETTINGS.showTooltips,
     showDeckMap:
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap
@@ -954,6 +956,7 @@ export function settingsForPersistence(
   const raw = isRecord(rawValue) ? rawValue : {};
   const {
     deckHeaderButtons: _legacyDeckHeaderButtons,
+    showCardTooltips: _legacyShowCardTooltips,
     showDeckToolbar: _showDeckToolbar,
     useTemplatesForNewNotes: _useTemplatesForNewNotes,
     newNoteTemplatePath: _newNoteTemplatePath,

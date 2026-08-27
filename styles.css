@@ -1859,6 +1859,16 @@ button.slipbox-card-backlink-overflow:disabled {
   font-size: var(--font-ui-smaller);
 }
 
+.slipbox-text-setting-with-error .setting-item-control {
+  flex-wrap: wrap;
+}
+
+.slipbox-text-setting-with-error .slipbox-setting-error {
+  flex: 1 0 100%;
+  width: 100%;
+  text-align: left;
+}
+
 .slipbox-setting-error:empty {
   display: none;
 }

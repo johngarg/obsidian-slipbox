@@ -11,6 +11,7 @@ import {
 
 import type SlipboxPlugin from "./main.js";
 import { cardHeaderButtonDefinitionsForSurface } from "./card-header-actions.js";
+import { setTextSettingValidity } from "./setting-validation.js";
 import {
   DECK_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
@@ -909,12 +910,12 @@ export class SlipboxSettingTab extends PluginSettingTab {
     valid: boolean,
     message: string,
   ): void {
-    setting.settingEl.toggleClass("is-invalid", !valid);
-    let error = setting.settingEl.querySelector<HTMLElement>(".slipbox-setting-error");
-    if (!valid && error === null) {
-      error = setting.settingEl.createDiv({ cls: "slipbox-setting-error" });
-    }
-    error?.setText(valid ? "" : message);
+    setTextSettingValidity(
+      setting.settingEl,
+      setting.controlEl,
+      valid,
+      message,
+    );
   }
 
   private async save(settings: SlipboxSettings): Promise<void> {

@@ -36,6 +36,7 @@ initial public beta.
   card and transferred them in place when Desk focus changes.
 - Kept available Deck commands runnable from the command palette while its
   search field is focused.
+- Kept text-setting validation messages on their own row beneath the input.
 - Removed CSS constructs flagged by Obsidian's community-plugin scanner while
   preserving signature focus and drag-time navigation behavior.
 

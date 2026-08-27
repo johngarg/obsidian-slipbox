@@ -117,6 +117,7 @@ export class TrayRenderer {
   private filingEditor: InlineFilingEditorElements | null = null;
   private suppressClickUntil = 0;
   private pendingCardClickTimer: number | null = null;
+  private pendingCardClickWindow: Window | null = null;
   private readonly cardSignatures: CardSignatureManager;
   private readonly inferredNavigation: InferredNavigationManager;
 
@@ -169,10 +170,7 @@ export class TrayRenderer {
     this.cardHeaderButtonControllers.clear();
     this.cardSignatures.clear();
     this.inferredNavigation.clear();
-    if (this.pendingCardClickTimer !== null) {
-      window.clearTimeout(this.pendingCardClickTimer);
-      this.pendingCardClickTimer = null;
-    }
+    this.cancelPendingCardClick();
     if (this.filingEditor !== null) {
       this.actions.filingInputFocusChanged(false);
     }
@@ -197,7 +195,8 @@ export class TrayRenderer {
   }
 
   focusFilingInput(): void {
-    window.requestAnimationFrame(() => this.focusFilingInputNow());
+    const input = this.filingEditor?.input;
+    input?.win.requestAnimationFrame(() => this.focusFilingInputNow());
   }
 
   focusFilingInputNow(): void {
@@ -444,10 +443,8 @@ export class TrayRenderer {
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));
     pileEl.addEventListener("focusin", (event) => {
-      if (
-        event.target instanceof Element &&
-        isDeskCardFocusTarget(event.target)
-      ) {
+      const target = event.targetNode;
+      if (target?.instanceOf(Element) === true && isDeskCardFocusTarget(target)) {
         return;
       }
       const top = pile.cards[0];
@@ -490,7 +487,7 @@ export class TrayRenderer {
       handle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (performance.now() < this.suppressClickUntil) {
+        if (event.win.performance.now() < this.suppressClickUntil) {
           return;
         }
         void this.actions.runAfterEditing(
@@ -520,21 +517,21 @@ export class TrayRenderer {
     ));
 
     pileEl.addEventListener("click", (event) => {
-      if (performance.now() < this.suppressClickUntil) {
+      if (event.win.performance.now() < this.suppressClickUntil) {
         event.preventDefault();
         event.stopPropagation();
         return;
       }
       if (
-        event.target instanceof Element &&
-        event.target.closest("button, a, input, textarea, select") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest("button, a, input, textarea, select") !== null
       ) {
         return;
       }
       if (
         expanded &&
-        event.target instanceof Element &&
-        event.target.closest(".slipbox-tray-card") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest(".slipbox-tray-card") !== null
       ) {
         return;
       }
@@ -547,8 +544,8 @@ export class TrayRenderer {
     });
     pileEl.addEventListener("contextmenu", (event) => {
       if (
-        event.target instanceof Element &&
-        event.target.closest("button, a, input, textarea, select") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest("button, a, input, textarea, select") !== null
       ) {
         return;
       }
@@ -793,8 +790,10 @@ export class TrayRenderer {
     }
     preview.addEventListener("dblclick", (event) => {
       if (
-        event.target instanceof Element &&
-        event.target.closest("a, button, input, textarea, select, [contenteditable='true']") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest(
+          "a, button, input, textarea, select, [contenteditable='true']",
+        ) !== null
       ) {
         return;
       }
@@ -829,20 +828,20 @@ export class TrayRenderer {
 
     miniature.addEventListener("click", (event) => {
       this.actions.focusDeskCard(card.cardRef, pile.id);
-      if (performance.now() < this.suppressClickUntil) {
+      if (event.win.performance.now() < this.suppressClickUntil) {
         event.preventDefault();
         event.stopPropagation();
         return;
       }
       if (
-        event.target instanceof Element &&
-        event.target.closest("button, a, input, textarea, select") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest("button, a, input, textarea, select") !== null
       ) {
         return;
       }
       if (
-        event.target instanceof Element &&
-        event.target.closest(".slipbox-tray-card-preview") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest(".slipbox-tray-card-preview") !== null
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -867,8 +866,8 @@ export class TrayRenderer {
     });
     miniature.addEventListener("contextmenu", (event) => {
       if (
-        event.target instanceof Element &&
-        event.target.closest("button, a, input, textarea, select") !== null
+        event.targetNode?.instanceOf(Element) === true &&
+        event.targetNode.closest("button, a, input, textarea, select") !== null
       ) {
         return;
       }
@@ -937,7 +936,7 @@ export class TrayRenderer {
               newLeaf,
             );
           } else {
-            window.open(link.href, "_blank", "noopener");
+            link.win.open(link.href, "_blank", "noopener");
           }
         });
       },
@@ -1156,8 +1155,8 @@ export class TrayRenderer {
       if (
         event.button !== 0 ||
         (
-          event.target instanceof Element &&
-          event.target.closest("button, a, input, textarea, select") !== null
+          event.targetNode?.instanceOf(Element) === true &&
+          event.targetNode.closest("button, a, input, textarea, select") !== null
         )
       ) {
         return;
@@ -1184,7 +1183,7 @@ export class TrayRenderer {
               this.updateCardDropCues(moveEvent, pile.id, element);
             },
             onDrop: (upEvent) => {
-              this.suppressClickUntil = performance.now() + 400;
+              this.suppressClickUntil = upEvent.win.performance.now() + 400;
               const next = this.cardDropState(
                 card.cardRef,
                 pile.id,
@@ -1216,8 +1215,8 @@ export class TrayRenderer {
         event.button !== 0 ||
         (
           dragSurface === element &&
-          event.target instanceof Element &&
-          event.target.closest("button, a, input, textarea, select") !== null
+          event.targetNode?.instanceOf(Element) === true &&
+          event.targetNode.closest("button, a, input, textarea, select") !== null
         )
       ) {
         return;
@@ -1245,7 +1244,7 @@ export class TrayRenderer {
               this.updatePileDropCues(moveEvent, pile.id, element);
             },
             onDrop: (upEvent) => {
-              this.suppressClickUntil = performance.now() + 400;
+              this.suppressClickUntil = upEvent.win.performance.now() + 400;
               const next = this.pileDropState(
                 pile.id,
                 upEvent.clientX,
@@ -1381,7 +1380,7 @@ export class TrayRenderer {
   ): Element[] {
     dragged.addClass("slipbox-ignore-pointer-events");
     try {
-      return document.elementsFromPoint(x, y);
+      return dragged.doc.elementsFromPoint(x, y);
     } finally {
       dragged.removeClass("slipbox-ignore-pointer-events");
     }
@@ -1456,7 +1455,8 @@ export class TrayRenderer {
   private moveAndFocus(nextState: TrayState, cardRef: string): void {
     void this.actions.runAfterEditing("tray-menu-move-card", async () => {
       await this.plugin.updateTray(nextState);
-      window.requestAnimationFrame(() => {
+      const ownerWindow = this.rootEl?.win;
+      ownerWindow?.requestAnimationFrame(() => {
         const escaped = CSS.escape(cardRef);
         this.rootEl
           ?.querySelector<HTMLElement>(`.slipbox-tray-card[data-card-ref="${escaped}"]`)
@@ -1467,16 +1467,26 @@ export class TrayRenderer {
 
   private scheduleCardClick(action: () => void): void {
     this.cancelPendingCardClick();
-    this.pendingCardClickTimer = window.setTimeout(() => {
+    const ownerWindow = this.rootEl?.win;
+    if (ownerWindow === undefined) {
+      return;
+    }
+    this.pendingCardClickWindow = ownerWindow;
+    this.pendingCardClickTimer = ownerWindow.setTimeout(() => {
       this.pendingCardClickTimer = null;
+      this.pendingCardClickWindow = null;
       action();
     }, TRAY_SINGLE_CLICK_DELAY_MS);
   }
 
   private cancelPendingCardClick(): void {
-    if (this.pendingCardClickTimer !== null) {
-      window.clearTimeout(this.pendingCardClickTimer);
+    if (
+      this.pendingCardClickTimer !== null &&
+      this.pendingCardClickWindow !== null
+    ) {
+      this.pendingCardClickWindow.clearTimeout(this.pendingCardClickTimer);
       this.pendingCardClickTimer = null;
+      this.pendingCardClickWindow = null;
     }
   }
 }

@@ -68,7 +68,7 @@ export class TextPromptModal extends Modal {
     });
     activateDefaultButtonOnEnter(contentEl, submit);
 
-    window.setTimeout(() => {
+    input.win.setTimeout(() => {
       input.focus();
       input.select();
     });
@@ -108,7 +108,7 @@ export function promptForNewCardTitle(
     );
     // A Deck letter shortcut can create the modal during its own keydown.
     // Open on the next task so that keystroke cannot become the first title character.
-    window.setTimeout(() => modal.open());
+    modal.contentEl.win.setTimeout(() => modal.open());
   });
 }
 
@@ -122,7 +122,7 @@ class CanvasPromptModal extends FuzzySuggestModal<TFile> {
   ) {
     super(app);
     this.choice = modalChoice(resolveFile, (task) => {
-      window.setTimeout(task);
+      this.contentEl.win.setTimeout(task);
     });
     this.setPlaceholder("Choose a Canvas (Esc to cancel)");
   }
@@ -164,7 +164,7 @@ class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
   ) {
     super(app);
     this.choice = modalChoice(resolveSuggestion, (task) => {
-      window.setTimeout(task);
+      this.contentEl.win.setTimeout(task);
     });
     this.setPlaceholder("Card address or title (Esc to cancel)");
     this.emptyStateText = "No filed card matches.";
@@ -503,9 +503,9 @@ function activateDefaultButtonOnEnter(
     ) {
       return;
     }
-    const target = event.target;
+    const target = event.targetNode;
     if (
-      target instanceof Element &&
+      target?.instanceOf(Element) === true &&
       target.closest("button, a, textarea, select, [contenteditable='true']") !== null
     ) {
       return;

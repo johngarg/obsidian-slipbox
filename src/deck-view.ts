@@ -600,7 +600,7 @@ export class DeckView extends ItemView {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
-      window.cancelAnimationFrame(this.positioningFrame);
+      this.contentEl.win.cancelAnimationFrame(this.positioningFrame);
       this.positioningFrame = null;
     }
     this.positioningRetriesRemaining = 0;
@@ -1022,7 +1022,8 @@ export class DeckView extends ItemView {
   }
 
   private focusFilingInput(): void {
-    window.requestAnimationFrame(() => this.focusFilingInputNow());
+    const input = this.filingInput;
+    input?.win.requestAnimationFrame(() => this.focusFilingInputNow());
   }
 
   private focusFilingInputNow(): void {
@@ -2152,7 +2153,7 @@ export class DeckView extends ItemView {
         this.applyInlineEditFailure(mounted.controller.snapshot.failure);
       }
       this.setDeckKeybindingsSuspended(true);
-      window.requestAnimationFrame(() => {
+      mounted.textarea.win.requestAnimationFrame(() => {
         if (this.inlineEdit === mounted) {
           mounted.textarea.focus({ preventScroll: true });
           mounted.textarea.setSelectionRange(
@@ -2232,8 +2233,8 @@ export class DeckView extends ItemView {
           return result;
         },
         flushOpenViews: (path) => this.plugin.flushOpenTextViews(path),
-        schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
-        cancelScheduled: (handle) => window.clearTimeout(handle as number),
+        schedule: (callback, delayMs) => textarea.win.setTimeout(callback, delayMs),
+        cancelScheduled: (handle) => textarea.win.clearTimeout(handle as number),
         reportFailure: (failure) => this.reportInlineEditFailure(failure),
       },
       protectedBody,
@@ -2387,13 +2388,13 @@ export class DeckView extends ItemView {
       return;
     }
     if (editing.policyStatusTimer !== null) {
-      window.clearTimeout(editing.policyStatusTimer);
+      editing.textarea.win.clearTimeout(editing.policyStatusTimer);
     }
     editing.statusEl.addClass("is-policy-message");
     editing.statusEl.setAttr("aria-live", "polite");
     editing.statusEl.setText(message);
     editing.statusEl.hidden = false;
-    editing.policyStatusTimer = window.setTimeout(() => {
+    editing.policyStatusTimer = editing.textarea.win.setTimeout(() => {
       if (this.inlineEdit === editing) {
         this.clearInlineEditPolicyMessage();
       }
@@ -2406,7 +2407,7 @@ export class DeckView extends ItemView {
       return;
     }
     if (editing.policyStatusTimer !== null) {
-      window.clearTimeout(editing.policyStatusTimer);
+      editing.textarea.win.clearTimeout(editing.policyStatusTimer);
       editing.policyStatusTimer = null;
     }
     if (!editing.statusEl.hasClass("is-policy-message")) {
@@ -2853,7 +2854,7 @@ export class DeckView extends ItemView {
 
   private clearPendingCommand(): void {
     if (this.pendingCommandFeedbackTimer !== null) {
-      window.clearTimeout(this.pendingCommandFeedbackTimer);
+      this.contentEl.win.clearTimeout(this.pendingCommandFeedbackTimer);
       this.pendingCommandFeedbackTimer = null;
     }
     this.pendingCommand = IDLE_DECK_COMMAND;
@@ -2863,11 +2864,11 @@ export class DeckView extends ItemView {
 
   private showCommandFeedback(message: string): void {
     if (this.pendingCommandFeedbackTimer !== null) {
-      window.clearTimeout(this.pendingCommandFeedbackTimer);
+      this.contentEl.win.clearTimeout(this.pendingCommandFeedbackTimer);
     }
     this.pendingCommandFeedback = message;
     this.updatePendingCommandStatus();
-    this.pendingCommandFeedbackTimer = window.setTimeout(() => {
+    this.pendingCommandFeedbackTimer = this.contentEl.win.setTimeout(() => {
       this.pendingCommandFeedbackTimer = null;
       this.pendingCommandFeedback = "";
       this.updatePendingCommandStatus();
@@ -3200,9 +3201,9 @@ export class DeckView extends ItemView {
       });
       jobs.push(this.renderMarkdownCard(card, scroll, deckVersion));
       cardEl.addEventListener("contextmenu", (event) => {
-        const target = event.target;
+        const target = event.targetNode;
         if (
-          !(target instanceof Element) ||
+          target?.instanceOf(Element) !== true ||
           target.closest("a, button, input, textarea, select") !== null
         ) {
           return;
@@ -3219,13 +3220,13 @@ export class DeckView extends ItemView {
       });
 
       cardEl.addEventListener("click", (event) => {
-        if (performance.now() < this.suppressDeckCardClickUntil) {
+        if (event.win.performance.now() < this.suppressDeckCardClickUntil) {
           event.preventDefault();
           event.stopPropagation();
           return;
         }
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) {
+        const target = event.targetNode;
+        if (target?.instanceOf(HTMLElement) !== true) {
           return;
         }
         if (card.path === this.activePath) {
@@ -3255,8 +3256,8 @@ export class DeckView extends ItemView {
       if (
         event.button !== 0 ||
         (
-          event.target instanceof Element &&
-          event.target.closest(
+          event.targetNode?.instanceOf(Element) === true &&
+          event.targetNode.closest(
             ".slipbox-card-actions, button, a, input, textarea, select, " +
             "[contenteditable='true']",
           ) !== null
@@ -3290,7 +3291,7 @@ export class DeckView extends ItemView {
               this.updateDeckCardDropCue(moveEvent, cardEl);
             },
             onDrop: (upEvent) => {
-              this.suppressDeckCardClickUntil = performance.now() +
+              this.suppressDeckCardClickUntil = upEvent.win.performance.now() +
                 DECK_CARD_CLICK_SUPPRESSION_MS;
               const result = this.deckCardDropResult(
                 card,
@@ -3309,7 +3310,7 @@ export class DeckView extends ItemView {
               void this.applyDeckCardDrop(result);
             },
             onCancel: () => {
-              this.suppressDeckCardClickUntil = performance.now() +
+              this.suppressDeckCardClickUntil = cardEl.win.performance.now() +
                 DECK_CARD_CLICK_SUPPRESSION_MS;
               this.clearDeckCardDrag(cardEl);
             },
@@ -3373,7 +3374,7 @@ export class DeckView extends ItemView {
   ): Element[] {
     dragged.addClass("slipbox-ignore-pointer-events");
     try {
-      return dragged.ownerDocument.elementsFromPoint(x, y);
+      return dragged.doc.elementsFromPoint(x, y);
     } finally {
       dragged.removeClass("slipbox-ignore-pointer-events");
     }
@@ -3415,7 +3416,7 @@ export class DeckView extends ItemView {
 
   private async applyDeckCardDrop(result: ResolvedDeckCardDrop): Promise<void> {
     await this.plugin.updateTray(result.state);
-    window.requestAnimationFrame(() => {
+    this.contentEl.win.requestAnimationFrame(() => {
       this.stageEl?.querySelector<HTMLElement>(
         `.slipbox-tray-card[data-card-ref="${CSS.escape(result.focusPath)}"]`,
       )?.focus({ preventScroll: true });
@@ -3597,9 +3598,9 @@ export class DeckView extends ItemView {
       });
     }
     card.addEventListener("contextmenu", (event) => {
-      const target = event.target;
+      const target = event.targetNode;
       if (
-        !(target instanceof Element) ||
+        target?.instanceOf(Element) !== true ||
         target.closest("a, button, input, textarea, select") !== null
       ) {
         return;
@@ -3620,7 +3621,7 @@ export class DeckView extends ItemView {
     if (version !== this.renderVersion || this.viewedCardEl !== card) {
       return;
     }
-    window.requestAnimationFrame(() => {
+    card.win.requestAnimationFrame(() => {
       if (this.viewedCardEl === card) {
         this.constrainViewedCard();
       }
@@ -3672,8 +3673,8 @@ export class DeckView extends ItemView {
       if (
         event.button !== 0 ||
         (
-          event.target instanceof Element &&
-          event.target.closest("button, a, input, textarea, select") !== null
+          event.targetNode?.instanceOf(Element) === true &&
+          event.targetNode.closest("button, a, input, textarea, select") !== null
         )
       ) {
         return;
@@ -3867,7 +3868,7 @@ export class DeckView extends ItemView {
               newLeaf,
             );
           } else {
-            window.open(link.href, "_blank", "noopener");
+            link.win.open(link.href, "_blank", "noopener");
           }
         });
       },
@@ -4193,7 +4194,7 @@ export class DeckView extends ItemView {
     if (!shouldAnimate) {
       return;
     }
-    this.spaceRecenteringTimer = window.setTimeout(() => {
+    this.spaceRecenteringTimer = space.win.setTimeout(() => {
       space.removeClass("is-recentering");
       this.spaceRecenteringTimer = null;
     }, SPACE_RECENTER_DURATION_MS);
@@ -4201,7 +4202,9 @@ export class DeckView extends ItemView {
 
   private cancelSpaceRecentering(): void {
     if (this.spaceRecenteringTimer !== null) {
-      window.clearTimeout(this.spaceRecenteringTimer);
+      (this.spaceEl?.win ?? this.contentEl.win).clearTimeout(
+        this.spaceRecenteringTimer,
+      );
       this.spaceRecenteringTimer = null;
     }
     this.spaceEl?.removeClass("is-recentering");
@@ -4271,7 +4274,8 @@ export class DeckView extends ItemView {
     const startPosition = this.viewportPosition(activeIndex);
     this.cancelViewportCentering();
 
-    const reducedMotion = window.matchMedia(
+    const ownerWindow = this.contentEl.win;
+    const reducedMotion = ownerWindow.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     if (
@@ -4287,7 +4291,7 @@ export class DeckView extends ItemView {
     }
 
     const activePath = this.activePath;
-    const startedAt = window.performance.now();
+    const startedAt = ownerWindow.performance.now();
     this.positionCards();
     this.updateActiveUi();
     this.queueRenderWindowRefresh();
@@ -4313,7 +4317,7 @@ export class DeckView extends ItemView {
       this.queueRenderWindowRefresh();
 
       if (progress < 1) {
-        this.viewportCenteringFrame = window.requestAnimationFrame(advance);
+        this.viewportCenteringFrame = ownerWindow.requestAnimationFrame(advance);
         return;
       }
 
@@ -4325,12 +4329,12 @@ export class DeckView extends ItemView {
       }
     };
 
-    this.viewportCenteringFrame = window.requestAnimationFrame(advance);
+    this.viewportCenteringFrame = ownerWindow.requestAnimationFrame(advance);
   }
 
   private cancelViewportCentering(): void {
     if (this.viewportCenteringFrame !== null) {
-      window.cancelAnimationFrame(this.viewportCenteringFrame);
+      this.contentEl.win.cancelAnimationFrame(this.viewportCenteringFrame);
       this.viewportCenteringFrame = null;
     }
   }
@@ -4539,11 +4543,17 @@ export class DeckView extends ItemView {
 
   private observeDeckSize(): void {
     this.resizeObserver?.disconnect();
-    this.resizeObserver = new ResizeObserver(() => {
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (ownerWindow === null) {
+      this.resizeObserver = null;
+      return;
+    }
+    const resizeObserver = new ownerWindow.ResizeObserver(() => {
       this.scheduleCardPositioning();
       this.updateDeckMapSectionLabels();
     });
-    this.resizeObserver.observe(this.contentEl);
+    this.resizeObserver = resizeObserver;
+    resizeObserver.observe(this.contentEl);
   }
 
   private scheduleCardPositioning(
@@ -4556,7 +4566,7 @@ export class DeckView extends ItemView {
     if (this.positioningFrame !== null) {
       return;
     }
-    this.positioningFrame = window.requestAnimationFrame(() => {
+    this.positioningFrame = this.contentEl.win.requestAnimationFrame(() => {
       this.flushScheduledCardPositioning();
     });
   }
@@ -4578,7 +4588,7 @@ export class DeckView extends ItemView {
       this.positioningRetriesRemaining > 0
     ) {
       this.positioningRetriesRemaining -= 1;
-      this.positioningFrame = window.requestAnimationFrame(() => {
+      this.positioningFrame = this.contentEl.win.requestAnimationFrame(() => {
         this.flushScheduledCardPositioning();
       });
       return;
@@ -4710,7 +4720,7 @@ export class DeckView extends ItemView {
     }
 
     this.renderRefreshPending = true;
-    window.requestAnimationFrame(() => {
+    this.contentEl.win.requestAnimationFrame(() => {
       this.renderRefreshPending = false;
       if (this.stageEl !== null) {
         this.renderRefreshRunning = true;

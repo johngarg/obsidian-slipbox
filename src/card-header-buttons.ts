@@ -48,7 +48,12 @@ export class CardHeaderButtonController {
       button: this.renderButton(presentation),
     }));
     this.moreButton = this.renderMoreButton();
-    this.observer = new ResizeObserver(() => this.scheduleLayout());
+    const ownerWindow = options.container.ownerDocument.defaultView;
+    if (ownerWindow === null) {
+      throw new Error("Card-header controls require an attached document");
+    }
+    this.observer = new ownerWindow.ResizeObserver(() =>
+      this.scheduleLayout());
     this.observer.observe(options.container);
     const parent = options.container.parentElement;
     if (parent !== null) {
@@ -59,9 +64,8 @@ export class CardHeaderButtonController {
 
   disconnect(): void {
     this.observer.disconnect();
-    const ownerWindow = this.options.container.ownerDocument.defaultView;
-    if (this.frame !== null && ownerWindow !== null) {
-      ownerWindow.cancelAnimationFrame(this.frame);
+    if (this.frame !== null) {
+      this.options.container.win.cancelAnimationFrame(this.frame);
     }
     this.frame = null;
   }
@@ -134,10 +138,7 @@ export class CardHeaderButtonController {
     if (this.frame !== null) {
       return;
     }
-    const ownerWindow = this.options.container.ownerDocument.defaultView;
-    if (ownerWindow === null) {
-      return;
-    }
+    const ownerWindow = this.options.container.win;
     this.frame = ownerWindow.requestAnimationFrame(() => {
       this.frame = null;
       this.layout();
@@ -160,7 +161,7 @@ export class CardHeaderButtonController {
     if (available <= 0) {
       return;
     }
-    const style = container.ownerDocument.defaultView?.getComputedStyle(container);
+    const style = container.win.getComputedStyle(container);
     const rawGap = style?.columnGap === "normal" ? "0" : style?.columnGap;
     const gap = Number.parseFloat(rawGap ?? "0") || 0;
     const widths = this.rendered.map(({ button }) => button.offsetWidth);

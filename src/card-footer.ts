@@ -53,19 +53,22 @@ interface RenderedFooter {
 
 const BACKLINK_MEASUREMENT_LIMIT = 64;
 
+type ResizeObserverWindow = Window & {
+  readonly ResizeObserver: typeof ResizeObserver;
+};
+
 /** Shared, view-agnostic renderer for the fixed card backlink footer. */
 export class CardFooterManager {
   private readonly entries = new Set<RenderedFooter>();
   private readonly entriesByFooter = new Map<HTMLElement, RenderedFooter>();
-  private readonly resizeObserver: ResizeObserver;
+  private resizeObserver: ResizeObserver | null = null;
+  private ownerWindow: ResizeObserverWindow | null = null;
   private layoutFrame: number | null = null;
   private layoutTimer: number | null = null;
   private overflowMenu: Menu | null = null;
   private overflowEntry: RenderedFooter | null = null;
 
-  constructor(private readonly environment: CardFooterEnvironment) {
-    this.resizeObserver = new ResizeObserver(() => this.scheduleLayout());
-  }
+  constructor(private readonly environment: CardFooterEnvironment) {}
 
   render(parent: HTMLElement, options: CardFooterRenderOptions): HTMLElement {
     const footer = parent.createDiv({ cls: "slipbox-card-footer" });
@@ -87,7 +90,11 @@ export class CardFooterManager {
     this.entries.add(entry);
     this.entriesByFooter.set(footer, entry);
     this.applyInteractiveState(entry);
-    this.resizeObserver.observe(footer);
+    const ownerWindow = footer.ownerDocument.defaultView;
+    if (ownerWindow !== null) {
+      this.ensureOwnerWindow(ownerWindow);
+    }
+    this.resizeObserver?.observe(footer);
     this.scheduleLayout();
     return footer;
   }
@@ -134,28 +141,35 @@ export class CardFooterManager {
   }
 
   scheduleLayout(): void {
-    if (this.layoutFrame !== null || this.layoutTimer !== null) {
+    const ownerWindow = this.ownerWindow;
+    if (
+      ownerWindow === null ||
+      this.layoutFrame !== null ||
+      this.layoutTimer !== null
+    ) {
       return;
     }
-    this.layoutFrame = window.requestAnimationFrame(() => {
+    this.layoutFrame = ownerWindow.requestAnimationFrame(() => {
       this.flushLayout();
     });
-    this.layoutTimer = window.setTimeout(() => this.flushLayout(), 120);
+    this.layoutTimer = ownerWindow.setTimeout(() => this.flushLayout(), 120);
   }
 
   clear(): void {
     this.closeOverflowMenu();
-    this.resizeObserver.disconnect();
+    this.resizeObserver?.disconnect();
     this.entries.clear();
     this.entriesByFooter.clear();
-    if (this.layoutFrame !== null) {
-      window.cancelAnimationFrame(this.layoutFrame);
+    if (this.ownerWindow !== null && this.layoutFrame !== null) {
+      this.ownerWindow.cancelAnimationFrame(this.layoutFrame);
       this.layoutFrame = null;
     }
-    if (this.layoutTimer !== null) {
-      window.clearTimeout(this.layoutTimer);
+    if (this.ownerWindow !== null && this.layoutTimer !== null) {
+      this.ownerWindow.clearTimeout(this.layoutTimer);
       this.layoutTimer = null;
     }
+    this.resizeObserver = null;
+    this.ownerWindow = null;
   }
 
   private populate(
@@ -207,16 +221,39 @@ export class CardFooterManager {
   }
 
   private flushLayout(): void {
-    if (this.layoutFrame !== null) {
-      window.cancelAnimationFrame(this.layoutFrame);
+    const ownerWindow = this.ownerWindow;
+    if (ownerWindow !== null && this.layoutFrame !== null) {
+      ownerWindow.cancelAnimationFrame(this.layoutFrame);
       this.layoutFrame = null;
     }
-    if (this.layoutTimer !== null) {
-      window.clearTimeout(this.layoutTimer);
+    if (ownerWindow !== null && this.layoutTimer !== null) {
+      ownerWindow.clearTimeout(this.layoutTimer);
       this.layoutTimer = null;
     }
     for (const entry of this.entries) {
       this.layout(entry);
+    }
+  }
+
+  private ensureOwnerWindow(ownerWindow: ResizeObserverWindow): void {
+    if (this.ownerWindow === ownerWindow) {
+      return;
+    }
+    this.resizeObserver?.disconnect();
+    if (this.ownerWindow !== null && this.layoutFrame !== null) {
+      this.ownerWindow.cancelAnimationFrame(this.layoutFrame);
+      this.layoutFrame = null;
+    }
+    if (this.ownerWindow !== null && this.layoutTimer !== null) {
+      this.ownerWindow.clearTimeout(this.layoutTimer);
+      this.layoutTimer = null;
+    }
+    this.ownerWindow = ownerWindow;
+    const resizeObserver = new ownerWindow.ResizeObserver(() =>
+      this.scheduleLayout());
+    this.resizeObserver = resizeObserver;
+    for (const entry of this.entries) {
+      resizeObserver.observe(entry.footer);
     }
   }
 
@@ -381,7 +418,7 @@ export class CardFooterManager {
       return;
     }
     const newLeaf = Keymap.isModEvent(event) ||
-      (event instanceof MouseEvent && event.button === 1);
+      (event.instanceOf(MouseEvent) && event.button === 1);
     this.environment.runAfterEditing("backlink", async () => {
       if (newLeaf) {
         await this.environment.app.workspace.openLinkText(

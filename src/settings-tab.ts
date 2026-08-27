@@ -94,9 +94,8 @@ export class SlipboxSettingTab extends PluginSettingTab {
       },
       {
         type: "group",
-        heading: "Branching",
+        heading: "Explicit branching",
         items: [
-          this.subheading("Explicit branching"),
           this.definition(
             "Recognise explicit branch links",
             "Treat internal links with an explicitly displayed marked alias, such as [[card|+a]], as branch assertions. This reads cached links and never edits notes.",
@@ -112,7 +111,12 @@ export class SlipboxSettingTab extends PluginSettingTab {
             "Show incoming explicit branch labels beside card addresses. Labels return the Deck anchor to the source card.",
             (setting) => this.renderShowBranchLabels(setting),
           ),
-          this.subheading("Inferred branching"),
+        ],
+      },
+      {
+        type: "group",
+        heading: "Inferred branching",
+        items: [
           this.definition(
             "Infer branches from addresses",
             "Derive an inferred hierarchy from address extension and make structural navigation commands available. This is heuristic and never modifies notes.",
@@ -235,15 +239,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
     render: (setting: Setting) => void,
   ): SettingDefinition {
     return { name, desc, render };
-  }
-
-  private subheading(name: string): SettingDefinition {
-    return {
-      name,
-      render: (setting) => {
-        setting.setHeading();
-      },
-    };
   }
 
   private renderTitleSource(setting: Setting): void {

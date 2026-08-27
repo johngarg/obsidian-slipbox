@@ -37,6 +37,7 @@ initial public beta.
 - Kept available Deck commands runnable from the command palette while its
   search field is focused.
 - Kept text-setting validation messages on their own row beneath the input.
+- Promoted explicit and inferred branching to separate top-level settings groups.
 - Removed CSS constructs flagged by Obsidian's community-plugin scanner while
   preserving signature focus and drag-time navigation behavior.
 

@@ -243,7 +243,7 @@ export class DeckView extends ItemView {
    * neither the view scope nor the content-element listener receives a
    * keystroke while a modal holds focus.
    */
-  navigation = false;
+  override navigation = false;
   private activePath: string | null = null;
   private cardFocus: CardFocus | null = null;
   private lastFocusedPileId: string | null = null;
@@ -462,11 +462,11 @@ export class DeckView extends ItemView {
     return "Slipbox Desk";
   }
 
-  getIcon(): string {
+  override getIcon(): string {
     return "archive";
   }
 
-  async onOpen(): Promise<void> {
+  override async onOpen(): Promise<void> {
     this.contentEl.addClass("slipbox-deck-view");
     this.contentEl.tabIndex = 0;
     const ownerWindow = this.contentEl.ownerDocument.defaultView;
@@ -565,7 +565,7 @@ export class DeckView extends ItemView {
     await this.restoreDetachedInlineEdit();
   }
 
-  async onClose(): Promise<void> {
+  override async onClose(): Promise<void> {
     const saved = await this.finishInlineEditing("view-close");
     if (!saved && this.inlineEdit !== null) {
       const editing = this.inlineEdit;
@@ -639,7 +639,7 @@ export class DeckView extends ItemView {
     this.pendingCommandStartEvent = null;
   }
 
-  onResize(): void {
+  override onResize(): void {
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
     this.viewedCardFooter.scheduleLayout();

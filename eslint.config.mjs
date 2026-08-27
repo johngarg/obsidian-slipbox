@@ -51,6 +51,8 @@ export default defineConfig(
   {
     files: ["src/**/*.ts"],
     rules: {
+      "obsidianmd/prefer-active-doc": "error",
+      "obsidianmd/prefer-instanceof": "error",
       "obsidianmd/ui/sentence-case": [
         "warn",
         {

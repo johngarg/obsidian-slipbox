@@ -35,7 +35,7 @@ export class TextPromptModal extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: this.heading });
@@ -74,7 +74,7 @@ export class TextPromptModal extends Modal {
     });
   }
 
-  onClose(): void {
+  override onClose(): void {
     this.contentEl.empty();
     if (!this.settled) {
       this.settled = true;
@@ -139,7 +139,7 @@ class CanvasPromptModal extends FuzzySuggestModal<TFile> {
     this.choice.choose(file);
   }
 
-  onClose(): void {
+  override onClose(): void {
     super.onClose();
     this.choice.cancel();
   }
@@ -190,7 +190,7 @@ class CardLinkSuggestModal extends SuggestModal<CardLinkSuggestion> {
     this.choice.choose(suggestion);
   }
 
-  onClose(): void {
+  override onClose(): void {
     super.onClose();
     this.choice.cancel();
   }
@@ -235,7 +235,7 @@ class ConfirmationModal extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: this.heading });
@@ -253,7 +253,7 @@ class ConfirmationModal extends Modal {
     confirm.focus({ preventScroll: true });
   }
 
-  onClose(): void {
+  override onClose(): void {
     this.contentEl.empty();
     if (!this.settled) {
       this.settled = true;
@@ -305,7 +305,7 @@ export class BookmarksModal extends Modal {
     this.bookmarks = [...bookmarks];
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Bookmarks" });
@@ -324,7 +324,7 @@ export class BookmarksModal extends Modal {
     });
   }
 
-  onClose(): void {
+  override onClose(): void {
     this.contentEl.empty();
     this.listEl = null;
     this.addButton = null;
@@ -439,7 +439,7 @@ export class IssuesModal extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     const { contentEl } = this;
     contentEl.addClass("slipbox-modal");
     contentEl.createEl("h2", { text: "Card address issues" });
@@ -468,7 +468,7 @@ export class IssuesModal extends Modal {
     }
   }
 
-  onClose(): void {
+  override onClose(): void {
     this.contentEl.empty();
   }
 }

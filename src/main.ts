@@ -178,7 +178,7 @@ interface DetachedInlineEditPresentation {
 
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
-  settings: SlipboxSettings = DEFAULT_SETTINGS;
+  override settings: SlipboxSettings = DEFAULT_SETTINGS;
   tray: TrayState = EMPTY_TRAY;
   index!: CardIndex;
   canvas!: CanvasBridge;
@@ -205,7 +205,7 @@ export default class SlipboxPlugin extends Plugin {
     DetachedInlineEditDraft
   >();
 
-  async onload(): Promise<void> {
+  override async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
     const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
     const migrateTitleCollision = hasTitleAddressCollisionData(loadedData);
@@ -266,7 +266,7 @@ export default class SlipboxPlugin extends Plugin {
     });
   }
 
-  onunload(): void {
+  override onunload(): void {
     void this.finishInlineEdits("plugin-unload");
     this.indexRefreshCoordinator.dispose();
     if (this.cardSpreadSaveTimer !== null) {

@@ -39,7 +39,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     super(app, slipbox);
   }
 
-  getSettingDefinitions(): SettingDefinitionItem[] {
+  override getSettingDefinitions(): SettingDefinitionItem[] {
     return [
       {
         type: "group",

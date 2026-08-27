@@ -6,6 +6,11 @@ initial public beta.
 
 ## [Unreleased]
 
+### Fixed
+
+- Desk piles can now be laid out on existing Canvases, including newly created
+  empty Canvases.
+
 ## [0.13.0] - 2026-08-27
 
 ### Added

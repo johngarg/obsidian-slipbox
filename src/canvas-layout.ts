@@ -58,10 +58,20 @@ export function parseCanvasDocument(source: string): CanvasDocument {
   } catch {
     throw new Error("The Canvas file does not contain valid JSON");
   }
-  if (!isRecord(value) || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
-    throw new Error("The Canvas file is missing its nodes or edges array");
+  if (!isRecord(value) || Array.isArray(value)) {
+    throw new Error("The Canvas file does not contain a JSON object");
   }
-  return value as unknown as CanvasDocument;
+  if (value.nodes !== undefined && !Array.isArray(value.nodes)) {
+    throw new Error("The Canvas file's nodes field is not an array");
+  }
+  if (value.edges !== undefined && !Array.isArray(value.edges)) {
+    throw new Error("The Canvas file's edges field is not an array");
+  }
+  return {
+    ...value,
+    nodes: value.nodes ?? [],
+    edges: value.edges ?? [],
+  };
 }
 
 export function serializeCanvasDocument(data: CanvasDocument): string {

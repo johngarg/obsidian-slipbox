@@ -6,6 +6,8 @@ initial public beta.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-27
+
 ### Added
 
 - Added pile context-menu actions for bringing a pile to the highest ordinal
@@ -70,7 +72,8 @@ Initial public beta.
 - Improved default pile placement and kept the Deck stable as cards and piles
   are added or moved.
 
-[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...HEAD
+[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.13.0...HEAD
+[0.13.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...0.13.0
 [0.12.2]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.1...0.12.2
 [0.12.1]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.0...0.12.1
 [0.12.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.11.1...0.12.0

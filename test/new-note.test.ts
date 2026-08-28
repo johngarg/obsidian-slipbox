@@ -6,33 +6,33 @@ import {
   newCardFrontmatterTitle,
   newCardTitlePlaceholder,
   newNoteBasename,
-  resolveNewCardTitle,
+  resolveNewCardInput,
   safeNoteBasename,
 } from "../src/new-note.js";
 
 describe("new-note filenames", () => {
   test("uses the default title without opening the title prompt", async () => {
     let promptCount = 0;
-    const title = await resolveNewCardTitle("default", async () => {
+    const input = await resolveNewCardInput("quick", async () => {
       promptCount += 1;
-      return "Prompted title";
+      return { title: "Prompted title", color: "blue" };
     });
 
-    assert.equal(title, "");
+    assert.deepEqual(input, { title: "", color: null });
     assert.equal(promptCount, 0);
   });
 
-  test("asks for and returns the title in the prompted workflow", async () => {
+  test("asks for and returns creation options in the prompted workflow", async () => {
     let promptCount = 0;
-    const title = await resolveNewCardTitle("prompt", async () => {
+    const input = await resolveNewCardInput("options", async () => {
       promptCount += 1;
-      return "Prompted title";
+      return { title: "Prompted title", color: "blue" };
     });
 
-    assert.equal(title, "Prompted title");
+    assert.deepEqual(input, { title: "Prompted title", color: "blue" });
     assert.equal(promptCount, 1);
     assert.equal(
-      await resolveNewCardTitle("prompt", async () => null),
+      await resolveNewCardInput("options", async () => null),
       null,
     );
   });

@@ -92,26 +92,6 @@ export class TextPromptModal extends Modal {
   }
 }
 
-export function promptForNewCardTitle(
-  app: App,
-  placeholder: string,
-): Promise<string | null> {
-  return new Promise((resolve) => {
-    const modal = new TextPromptModal(
-      app,
-      "New card title",
-      placeholder,
-      "",
-      resolve,
-      true,
-      "Create",
-    );
-    // A Deck letter shortcut can create the modal during its own keydown.
-    // Open on the next task so that keystroke cannot become the first title character.
-    modal.contentEl.win.setTimeout(() => modal.open());
-  });
-}
-
 class CanvasPromptModal extends FuzzySuggestModal<TFile> {
   private readonly choice: ModalChoice<TFile>;
 

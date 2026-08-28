@@ -24,9 +24,9 @@ import {
   IssuesModal,
   promptForCanvas,
   promptForCardLink,
-  promptForNewCardTitle,
   promptForText,
 } from "./modals.js";
+import { promptForNewCardOptions } from "./new-card-modal.js";
 import {
   DEFAULT_STATE,
   loadPluginData,
@@ -137,8 +137,8 @@ export default class SlipboxPlugin extends Plugin {
       activeCreationSourcePath: () =>
         this.app.workspace.getActiveViewOfType(DeckView)?.activeCard?.file.path ??
         this.app.workspace.getActiveFile()?.path,
-      promptForTitle: (placeholder) =>
-        promptForNewCardTitle(this.app, placeholder),
+      promptForNewCardOptions: (placeholder) =>
+        promptForNewCardOptions(this.app, placeholder),
       promptForLink: (suggestions) =>
         promptForCardLink(this.app, suggestions),
       normalizePath,
@@ -397,25 +397,25 @@ export default class SlipboxPlugin extends Plugin {
     this.addCommand({
       id: "new-card",
       name: "New card",
-      callback: () => void this.cards.createAndOpen("default"),
+      callback: () => void this.cards.createAndOpen("quick"),
     });
 
     this.addCommand({
       id: "new-card-with-title",
-      name: "New card with title",
-      callback: () => void this.cards.createAndOpen("prompt"),
+      name: "New card with options",
+      callback: () => void this.cards.createAndOpen("options"),
     });
 
     this.addCommand({
       id: "new-card-on-desk",
       name: "New card on Desk",
-      callback: () => void this.cards.createOnDesk("default"),
+      callback: () => void this.cards.createOnDesk("quick"),
     });
 
     this.addCommand({
       id: "new-card-with-title-on-desk",
-      name: "New card with title on Desk",
-      callback: () => void this.cards.createOnDesk("prompt"),
+      name: "New card with options on Desk",
+      callback: () => void this.cards.createOnDesk("options"),
     });
 
     this.addCommand({

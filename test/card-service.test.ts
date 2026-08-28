@@ -7,6 +7,7 @@ import type { CardIndexRuntime } from "../src/card-index-runtime.js";
 import { CardService } from "../src/card-service.js";
 import type { DeskService } from "../src/desk-service.js";
 import type { MetadataCacheWaiter } from "../src/metadata-cache-waiter.js";
+import type { NewCardInput } from "../src/new-note.js";
 import { DEFAULT_SETTINGS, type SlipboxSettings } from "../src/settings.js";
 
 function file(path: string): TFile {
@@ -31,7 +32,7 @@ function subject(overrides: Partial<SlipboxSettings> = {}) {
   let refreshed = 0;
   let openedDesk = 0;
   let waited = 0;
-  let promptResult: string | null = "Title";
+  let promptResult: NewCardInput | null = { title: "Title", color: null };
   let configuredFolder: TFolder | null = {
     path: "Cards",
     isRoot: () => false,
@@ -76,7 +77,7 @@ function subject(overrides: Partial<SlipboxSettings> = {}) {
     settings: () => settings,
     timestamp: () => "20260828T120000",
     activeCreationSourcePath: () => "Source.md",
-    promptForTitle: async () => promptResult,
+    promptForNewCardOptions: async () => promptResult,
     promptForLink: async () => null,
     normalizePath: (path) => path,
     serializeProperties: (properties) => JSON.stringify(properties),
@@ -98,7 +99,7 @@ function subject(overrides: Partial<SlipboxSettings> = {}) {
     refreshed: () => refreshed,
     openedDesk: () => openedDesk,
     waited: () => waited,
-    setPrompt: (value: string | null) => { promptResult = value; },
+    setPrompt: (value: NewCardInput | null) => { promptResult = value; },
     loseFolder: () => { configuredFolder = null; },
   };
 }
@@ -107,36 +108,54 @@ describe("CardService creation", () => {
   test("cancels prompted creation without side effects", async () => {
     const value = subject();
     value.setPrompt(null);
-    await value.service.createAndOpen("prompt");
+    await value.service.createAndOpen("options");
     assert.equal(value.created.length, 0);
     assert.deepEqual(value.opened, []);
     assert.deepEqual(value.notices, []);
   });
 
+  test("writes only a selected creation colour", async () => {
+    const colored = subject({ newCardFolder: "" });
+    colored.setPrompt({ title: "Coloured", color: "purple" });
+    await colored.service.createAndOpen("options");
+    assert.match(
+      colored.created[0]?.content ?? "",
+      /"slipbox-card-color":"purple"/,
+    );
+
+    const uncolored = subject({ newCardFolder: "" });
+    uncolored.setPrompt({ title: "Plain", color: null });
+    await uncolored.service.createAndOpen("options");
+    assert.doesNotMatch(
+      uncolored.created[0]?.content ?? "",
+      /slipbox-card-color/,
+    );
+  });
+
   test("uses Obsidian-style suffixes for filename collisions", async () => {
     const value = subject({ newCardFolder: "" });
     value.existing.set("20260828T120000.md", file("20260828T120000.md"));
-    await value.service.createAndOpen("default");
+    await value.service.createAndOpen("quick");
     assert.equal(value.created[0]?.path, "20260828T120000 1.md");
   });
 
   test("reports a missing configured folder without creating a note", async () => {
     const value = subject({ newCardFolder: "Missing" });
     value.loseFolder();
-    await value.service.createAndOpen("default");
+    await value.service.createAndOpen("quick");
     assert.equal(value.created.length, 0);
     assert.match(value.notices[0] ?? "", /configured new-card folder/);
   });
 
   test("opens ordinary creations but coordinates Desk creations", async () => {
     const opened = subject({ newCardFolder: "" });
-    await opened.service.createAndOpen("default");
+    await opened.service.createAndOpen("quick");
     assert.deepEqual(opened.opened, ["20260828T120000.md"]);
     assert.equal(opened.queued(), 1);
     assert.equal(opened.refreshed(), 0);
 
     const desk = subject({ newCardFolder: "" });
-    await desk.service.createOnDesk("default");
+    await desk.service.createOnDesk("quick");
     assert.equal(desk.openedDesk(), 1);
     assert.deepEqual(desk.opened, []);
     assert.equal(desk.waited(), 1);
@@ -146,7 +165,15 @@ describe("CardService creation", () => {
 
   test("places a positioned Desk creation after reconciliation", async () => {
     const value = subject({ newCardFolder: "" });
-    await value.service.createAtDeskPosition({ x: 120, y: 80 });
-    assert.deepEqual(value.positioned, ["20260828T120000.md"]);
+    value.setPrompt({ title: "Positioned", color: "cyan" });
+    await value.service.createAtDeskPosition(
+      { x: 120, y: 80 },
+      "options",
+    );
+    assert.deepEqual(value.positioned, ["Positioned.md"]);
+    assert.match(
+      value.created[0]?.content ?? "",
+      /"slipbox-card-color":"cyan"/,
+    );
   });
 });

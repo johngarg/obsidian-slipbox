@@ -10,6 +10,7 @@ import {
 
 import { addCardContextMenuItems } from "./card-context-menu.js";
 import type { BookmarkService } from "./bookmark-service.js";
+import { applyCardColor } from "./card-color.js";
 import type { CardIndex } from "./card-index.js";
 import type { CardService } from "./card-service.js";
 import type { DeskCanvasService } from "./desk-canvas-service.js";
@@ -400,7 +401,7 @@ export class DeskRenderer {
       });
       menu.addItem((item) => {
         item
-          .setTitle("New card with title here")
+          .setTitle("New card with options here")
           .setIcon("file-pen-line")
           .setDisabled(position === null)
           .onClick(() => {
@@ -409,7 +410,7 @@ export class DeskRenderer {
                 "desk-new-card",
                 () => this.plugin.cards.createAtDeskPosition(
                   position,
-                  "prompt",
+                  "options",
                 ),
               );
             }
@@ -683,6 +684,7 @@ export class DeskRenderer {
       { placement: "bottom", delay: 350 },
     );
     miniature.dataset.pileId = pile.id;
+    applyCardColor(miniature, this.plugin.cards.color(file));
     const jitter = deskStackJitter(card.cardRef, cardIndex);
     miniature.style.setProperty(
       "--slipbox-desk-card-tilt",

@@ -8,6 +8,10 @@ initial public beta.
 
 ### Added
 
+- Added optional theme-aware card colours selected through the combined new-card
+  options dialog. Quick creation remains uncoloured, while the prompted commands
+  retain their IDs and now expose an accessible fixed colour row alongside the
+  optional title.
 - Added optional explicit branch links using the fixed canonical `+` alias
   syntax, such as `[[card|+a]]`, with interactive incoming labels on Deck,
   Desk, and viewed cards. Marked aliases can receive a quiet outline in

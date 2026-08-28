@@ -8,6 +8,11 @@ import type {
 } from "obsidian";
 
 import { validateAddress } from "./address-order.js";
+import {
+  CARD_COLOR_PROPERTY,
+  parseCardColor,
+  type CardColor,
+} from "./card-color.js";
 import { deleteCardWithConfirmation } from "./card-deletion.js";
 import type { CardIndex, FiledCard } from "./card-index.js";
 import type { CardIndexRuntime } from "./card-index-runtime.js";
@@ -28,8 +33,9 @@ import {
   newCardFrontmatterTitle,
   newCardTitlePlaceholder,
   newNoteBasename,
-  resolveNewCardTitle,
-  type NewCardTitleMode,
+  resolveNewCardInput,
+  type NewCardCreationMode,
+  type NewCardInput,
 } from "./new-note.js";
 import type { SlipboxSettings } from "./settings.js";
 
@@ -44,7 +50,7 @@ export interface CardServiceEnvironment {
   settings(): SlipboxSettings;
   timestamp(): string;
   activeCreationSourcePath(): string | undefined;
-  promptForTitle(placeholder: string): Promise<string | null>;
+  promptForNewCardOptions(placeholder: string): Promise<NewCardInput | null>;
   promptForLink(
     suggestions: readonly CardLinkSuggestion[],
   ): Promise<CardLinkSuggestion | null>;
@@ -74,6 +80,12 @@ export class CardService {
       this.environment.app.metadataCache.getFileCache(file)?.frontmatter,
       this.environment.settings(),
     );
+  }
+
+  color(file: TFile): CardColor | null {
+    const frontmatter =
+      this.environment.app.metadataCache.getFileCache(file)?.frontmatter;
+    return parseCardColor(frontmatter?.[CARD_COLOR_PROPERTY]);
   }
 
   metadataState(file: TFile): CardMetadataState {
@@ -150,23 +162,23 @@ export class CardService {
     }
   }
 
-  async createAndOpen(titleMode: NewCardTitleMode): Promise<void> {
+  async createAndOpen(creationMode: NewCardCreationMode): Promise<void> {
     await this.runCreation(async (file) => {
       await this.open(file);
       this.environment.indexRuntime.queue();
-    }, titleMode);
+    }, creationMode);
   }
 
-  async createOnDesk(titleMode: NewCardTitleMode): Promise<void> {
+  async createOnDesk(creationMode: NewCardCreationMode): Promise<void> {
     await this.environment.openDesk();
-    await this.createOnDeskAt(titleMode);
+    await this.createOnDeskAt(creationMode);
   }
 
   async createAtDeskPosition(
     position: DeskPilePosition,
-    titleMode: NewCardTitleMode = "default",
+    creationMode: NewCardCreationMode = "quick",
   ): Promise<void> {
-    await this.createOnDeskAt(titleMode, position);
+    await this.createOnDeskAt(creationMode, position);
   }
 
   async insertLink(
@@ -214,7 +226,7 @@ export class CardService {
   }
 
   private async createOnDeskAt(
-    titleMode: NewCardTitleMode,
+    creationMode: NewCardCreationMode,
     position?: DeskPilePosition,
   ): Promise<void> {
     await this.runCreation(async (file) => {
@@ -234,15 +246,15 @@ export class CardService {
             }),
       });
       this.environment.focusDeskCard(file.path);
-    }, titleMode);
+    }, creationMode);
   }
 
   private async runCreation(
     complete: (file: TFile) => Promise<void>,
-    titleMode: NewCardTitleMode,
+    creationMode: NewCardCreationMode,
   ): Promise<void> {
     try {
-      const file = await this.createFile(titleMode);
+      const file = await this.createFile(creationMode);
       if (file !== null) {
         await complete(file);
       }
@@ -253,20 +265,21 @@ export class CardService {
 
   /** Create the note only; callers choose opening or Desk placement explicitly. */
   private async createFile(
-    titleMode: NewCardTitleMode,
+    creationMode: NewCardCreationMode,
     sourcePath = this.environment.activeCreationSourcePath(),
   ): Promise<TFile | null> {
     const settings = this.environment.settings();
     const timestamp = newNoteBasename("", this.environment.timestamp());
-    const title = await resolveNewCardTitle(
-      titleMode,
-      () => this.environment.promptForTitle(
+    const input = await resolveNewCardInput(
+      creationMode,
+      () => this.environment.promptForNewCardOptions(
         newCardTitlePlaceholder(timestamp, settings.titleSource),
       ),
     );
-    if (title === null) {
+    if (input === null) {
       return null;
     }
+    const { title, color } = input;
     const basename = newCardBasename(title, timestamp, settings.titleSource);
     const parent = this.newCardParent(sourcePath);
     const prefix = parent.isRoot() ? "" : `${parent.path}/`;
@@ -290,6 +303,9 @@ export class CardService {
     );
     if (frontmatterTitle !== null) {
       properties[settings.titleProperty] = frontmatterTitle;
+    }
+    if (color !== null) {
+      properties[CARD_COLOR_PROPERTY] = color;
     }
     const frontmatter = this.environment.serializeProperties(properties);
     return this.environment.app.vault.create(

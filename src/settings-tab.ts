@@ -68,7 +68,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Title source",
-            "Choose the filename or a top-level frontmatter property for card titles. New card with title writes the entered title to the selected location; New card uses a timestamp filename and leaves a frontmatter title empty.",
+            "Choose the filename or a top-level frontmatter property for card titles. New card with options writes the entered title to the selected location; New card uses a timestamp filename and leaves a frontmatter title empty.",
             (setting) => this.renderTitleSource(setting),
           ),
           this.definition(

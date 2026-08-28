@@ -11,6 +11,7 @@ import {
 } from "obsidian";
 
 import type { CardIndexRuntime } from "./card-index-runtime.js";
+import { applyCardColor } from "./card-color.js";
 import type { FilingService } from "./filing-service.js";
 import type { InlineEditRegistry } from "./inline-edit-registry.js";
 import {
@@ -2847,6 +2848,7 @@ export class DeckView extends ItemView {
       cardEl.dataset.index = String(filedIndex);
       cardEl.dataset.filedIndex = String(filedIndex);
       cardEl.dataset.path = card.path;
+      applyCardColor(cardEl, this.plugin.cards.color(card.file));
       cardEl.toggleClass("is-deck-anchor", filedIndex === activeIndex);
       cardEl.toggleClass(
         "is-card-focused",
@@ -3238,6 +3240,7 @@ export class DeckView extends ItemView {
       this.setCardFocus(viewedCardFocus(file.path, position?.pileId));
     });
     card.dataset.path = file.path;
+    applyCardColor(card, this.plugin.cards.color(file));
     card.toggleClass("is-bookmarked", filed !== undefined &&
       this.plugin.bookmarks.at(filed.path) !== undefined);
     this.viewedCardEl = card;

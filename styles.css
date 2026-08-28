@@ -380,6 +380,58 @@ button.slipbox-desk-pile-cycle svg {
   overflow: visible;
 }
 
+.slipbox-card,
+.slipbox-desk-card {
+  --slipbox-card-body-background: var(--background-primary);
+  --slipbox-card-chrome-background: var(--background-primary-alt);
+}
+
+[data-slipbox-card-color="red"] {
+  --slipbox-card-tone: var(--color-red);
+}
+
+[data-slipbox-card-color="orange"] {
+  --slipbox-card-tone: var(--color-orange);
+}
+
+[data-slipbox-card-color="yellow"] {
+  --slipbox-card-tone: var(--color-yellow);
+}
+
+[data-slipbox-card-color="green"] {
+  --slipbox-card-tone: var(--color-green);
+}
+
+[data-slipbox-card-color="cyan"] {
+  --slipbox-card-tone: var(--color-cyan);
+}
+
+[data-slipbox-card-color="blue"] {
+  --slipbox-card-tone: var(--color-blue);
+}
+
+[data-slipbox-card-color="purple"] {
+  --slipbox-card-tone: var(--color-purple);
+}
+
+[data-slipbox-card-color="pink"] {
+  --slipbox-card-tone: var(--color-pink);
+}
+
+.slipbox-card[data-slipbox-card-color],
+.slipbox-desk-card[data-slipbox-card-color] {
+  --slipbox-card-body-background: color-mix(
+    in oklch,
+    var(--slipbox-card-tone) 9%,
+    var(--background-primary)
+  );
+  --slipbox-card-chrome-background: color-mix(
+    in oklch,
+    var(--slipbox-card-tone) 14%,
+    var(--background-primary-alt)
+  );
+}
+
 .slipbox-desk-card {
   position: relative;
   display: flex;
@@ -391,7 +443,7 @@ button.slipbox-desk-pile-cycle svg {
   border: 1px solid var(--background-modifier-border);
   border-radius: 7px;
   outline: none;
-  background: var(--background-primary);
+  background: var(--slipbox-card-body-background);
   box-shadow: 0 7px 20px rgb(0 0 0 / 0.16);
   transform: rotate(var(--slipbox-desk-card-tilt, -0.45deg));
   transform-origin: center;
@@ -492,14 +544,14 @@ button.slipbox-desk-pile-cycle svg {
   min-height: 27px;
   padding: 4px 7px;
   border-bottom: 1px solid var(--background-modifier-border);
-  background: var(--background-primary-alt);
+  background: var(--slipbox-card-chrome-background);
 }
 
 .slipbox-desk-card.is-bookmarked .slipbox-desk-card-identity {
   background: color-mix(
     in srgb,
     var(--interactive-accent) 10%,
-    var(--background-primary-alt)
+    var(--slipbox-card-chrome-background)
   );
 }
 
@@ -518,7 +570,7 @@ button.slipbox-desk-pile-cycle svg {
   background: color-mix(
     in srgb,
     var(--interactive-accent) 12%,
-    var(--background-primary-alt)
+    var(--slipbox-card-chrome-background)
   );
 }
 
@@ -788,7 +840,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.12),
     0 12px 36px rgb(0 0 0 / 0.12);
-  background: var(--background-primary);
+  background: var(--slipbox-card-body-background);
   cursor: pointer;
   pointer-events: auto;
   z-index: var(--slipbox-card-z-index, auto);
@@ -818,7 +870,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   flex-direction: column;
   overflow: hidden;
   border-radius: calc(var(--slipbox-card-radius) - 1px);
-  background: var(--background-primary);
+  background: var(--slipbox-card-body-background);
 }
 
 .slipbox-card.is-deck-anchor {
@@ -880,14 +932,14 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   min-height: 39px;
   padding: 8px 15px 7px;
   border-bottom: 1px solid var(--background-modifier-border);
-  background: var(--background-primary-alt);
+  background: var(--slipbox-card-chrome-background);
 }
 
 .slipbox-card.is-bookmarked .slipbox-card-address-row {
   background: color-mix(
     in srgb,
     var(--interactive-accent) 10%,
-    var(--background-primary-alt)
+    var(--slipbox-card-chrome-background)
   );
 }
 
@@ -1230,7 +1282,7 @@ button.slipbox-inferred-navigation-item:focus-visible {
   background: color-mix(
     in srgb,
     var(--interactive-accent) 12%,
-    var(--background-primary-alt)
+    var(--slipbox-card-chrome-background)
   );
 }
 
@@ -1409,7 +1461,7 @@ button.slipbox-inferred-navigation-item:focus-visible {
   border-radius: 0;
   outline: none;
   color: var(--text-normal);
-  background: var(--background-primary);
+  background: var(--slipbox-card-body-background);
   box-shadow: none;
   font-family: inherit;
   font-size: inherit;
@@ -1548,7 +1600,7 @@ a.slipbox-explicit-branch-link:focus-visible {
   overflow: hidden;
   border-top: 1px solid var(--background-modifier-border);
   color: var(--text-muted);
-  background: var(--background-primary-alt);
+  background: var(--slipbox-card-chrome-background);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   font-variant-numeric: tabular-nums;
@@ -1738,8 +1790,88 @@ button.slipbox-card-backlink-overflow:disabled {
   gap: 14px;
 }
 
-.slipbox-prompt-form input {
+.slipbox-prompt-form input[type="text"] {
   width: 100%;
+}
+
+.slipbox-card-color-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.slipbox-card-color-field legend {
+  margin-bottom: 9px;
+  padding: 0;
+  color: var(--text-normal);
+}
+
+.slipbox-card-color-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 4px;
+}
+
+.slipbox-card-color-choice {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.slipbox-card-color-swatch {
+  position: relative;
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(
+    in oklch,
+    var(--slipbox-card-tone, var(--text-muted)) 58%,
+    var(--background-modifier-border)
+  );
+  border-radius: 50%;
+  background: var(--slipbox-card-tone, var(--background-primary));
+  transition: box-shadow 100ms ease, transform 100ms ease;
+}
+
+.slipbox-card-color-choice:hover .slipbox-card-color-swatch {
+  transform: scale(1.08);
+}
+
+.slipbox-card-color-input:checked + .slipbox-card-color-swatch {
+  box-shadow:
+    0 0 0 2px var(--background-primary),
+    0 0 0 4px var(--interactive-accent);
+}
+
+.slipbox-card-color-input:focus-visible + .slipbox-card-color-swatch {
+  outline: 2px solid var(--text-normal);
+  outline-offset: 6px;
+}
+
+.slipbox-card-color-choice.is-no-color .slipbox-card-color-swatch::after {
+  position: absolute;
+  top: 2px;
+  left: 9px;
+  width: 2px;
+  height: 16px;
+  border-radius: 1px;
+  background: var(--text-muted);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.slipbox-card-color-selection {
+  min-height: 1.3em;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 .slipbox-field {

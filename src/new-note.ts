@@ -1,17 +1,24 @@
+import type { CardColor } from "./card-color.js";
+
 const UNSAFE_FILENAME_CHARACTERS = new Set('\\/:*?"<>|');
 
-export type NewCardTitleMode = "default" | "prompt";
+export type NewCardCreationMode = "quick" | "options";
+
+export interface NewCardInput {
+  readonly title: string;
+  readonly color: CardColor | null;
+}
 
 /**
- * Resolve the title input for a creation command. The ordinary New card path
- * deliberately avoids constructing a prompt and uses the established blank
- * input semantics, while New card with title delegates to the title prompt.
+ * Resolve all user input for a creation command. The ordinary New card path
+ * remains prompt-free, while New card with options delegates to one combined
+ * title-and-colour dialog.
  */
-export async function resolveNewCardTitle(
-  mode: NewCardTitleMode,
-  prompt: () => Promise<string | null>,
-): Promise<string | null> {
-  return mode === "default" ? "" : prompt();
+export async function resolveNewCardInput(
+  mode: NewCardCreationMode,
+  prompt: () => Promise<NewCardInput | null>,
+): Promise<NewCardInput | null> {
+  return mode === "quick" ? { title: "", color: null } : prompt();
 }
 
 function replaceUnsafeFilenameCharacters(

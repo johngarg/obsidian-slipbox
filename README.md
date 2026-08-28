@@ -76,6 +76,30 @@ Any trimmed, nonempty, single-line string without control characters is a valid 
 
 Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox Desk never rewrites an existing address automatically.
 
+### Card colours
+
+Run **Slipbox Desk: New card with options** or its Desk variant to choose an
+optional card colour while creating the note. The compact colour row offers
+**No colour**, selected by default, followed by red, orange, yellow, green,
+cyan, blue, purple, and pink. The quick **New card** commands remain immediate
+and create uncoloured cards.
+
+The selected value is stored in the fixed `slipbox-card-color` property:
+
+```yaml
+---
+slipbox-id: "68/1a"
+slipbox-card-color: yellow
+---
+```
+
+Slipbox Desk reads this property on Deck, Desk, and viewed cards but offers no
+way to change it after creation. As ordinary Markdown frontmatter, it remains
+directly editable in Obsidian. Missing and unsupported values simply display
+an uncoloured card. Card surfaces mix the selected colour with Obsidian's
+semantic background variables, so the tint follows light, dark, and community
+themes while normal text and interaction colours retain the theme's contrast.
+
 ## Branching and structural navigation
 
 The optional **Recognise explicit branch links** setting treats a link alias beginning with the canonical `+` syntax, such as `[[Child card|+a]]`, as an asserted branch. Its remaining alias, `a` in this example, appears beside the child card's address. When **Follow links from cards** is enabled, activating the label returns the Deck anchor to the source card; hover previews remain independently controlled by **Preview links on hover**. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
@@ -118,7 +142,7 @@ These shortcuts apply only while a Slipbox Desk view is active. You can change t
 
 Slipbox Desk works locally and offline. It makes no network requests, collects no telemetry, and does not load remote code.
 
-To build the Deck, Slipbox Desk checks the frontmatter of Markdown files through Obsidian's metadata cache. When explicit branching is enabled, it also reads cached ordinary links and their display text; it does not scan note bodies to find branch assertions. It reads note bodies when displaying or editing cards, and writes vault files only when you create, edit, file, link, delete, or move piles to Canvas. The Desk is session-only; settings and bookmarks are stored as plugin data.
+To build the Deck, Slipbox Desk checks the frontmatter of Markdown files through Obsidian's metadata cache. When explicit branching is enabled, it also reads cached ordinary links and their display text; it does not scan note bodies to find branch assertions. It reads note bodies when displaying or editing cards, and writes vault files only when you create, edit, file, link, delete, or move piles to Canvas. New-card creation can also write the selected `slipbox-card-color`; Slipbox does not change that property afterward. The Desk is session-only; settings and bookmarks are stored as plugin data.
 
 ## Development
 

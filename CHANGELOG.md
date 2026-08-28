@@ -40,6 +40,8 @@ initial public beta.
 
 ### Fixed
 
+- Disabled filing confirmation while the duplicate-address policy blocks the
+  entered address.
 - Made the tooltip preference apply to inferred navigation, branch annotations,
   and links rendered inside Deck and Desk cards.
 - Kept annotated Desk-card headers stable while labels, titles, and action

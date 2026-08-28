@@ -34,9 +34,8 @@ import {
   renderInlineFilingEditor,
   updateInlineFilingEditor,
   type InlineFilingEditorElements,
-  type InlineFilingEditorState,
-  type FilingSourceSurface,
 } from "./filing-editor.js";
+import type { FilingSessionSnapshot } from "./filing-session.js";
 import {
   cardPosition,
   cyclePileTopCard,
@@ -99,12 +98,6 @@ export interface DeskViewActions {
     linktext: string,
     sourcePath: string,
   ): void;
-}
-
-export interface DeskFilingState extends InlineFilingEditorState {
-  readonly sourcePath: string;
-  readonly sourceSurface: FilingSourceSurface;
-  readonly guidance: string;
 }
 
 export class DeskRenderer {
@@ -210,7 +203,7 @@ export class DeskRenderer {
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  updateFilingState(state: DeskFilingState): void {
+  updateFilingState(state: FilingSessionSnapshot): void {
     if (this.filingEditor !== null) {
       updateInlineFilingEditor(this.filingEditor, state);
       this.applyFilingGuidance(this.filingEditor.input, state.guidance);
@@ -304,7 +297,7 @@ export class DeskRenderer {
   async render(
     stage: HTMLElement,
     space: HTMLElement,
-    filing: DeskFilingState | null,
+    filing: FilingSessionSnapshot | null,
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {
@@ -417,7 +410,7 @@ export class DeskRenderer {
     pileIndex: number,
     position: DeskPilePosition | null,
     expanded: boolean,
-    filing: DeskFilingState | null,
+    filing: FilingSessionSnapshot | null,
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void>[] {
@@ -623,7 +616,7 @@ export class DeskRenderer {
     cardIndex: number,
     pileIndex: number,
     expanded: boolean,
-    filing: DeskFilingState | null,
+    filing: FilingSessionSnapshot | null,
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {

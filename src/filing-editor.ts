@@ -1,15 +1,8 @@
 import { setCardTooltip } from "./card-tooltip.js";
-
-export interface InlineFilingEditorState {
-  readonly value: string;
-  readonly address: string | null;
-  readonly message: string;
-  readonly invalid: boolean;
-  readonly confirmationInProgress: boolean;
-  readonly duplicatePaths: readonly string[];
-}
-
-export type FilingSourceSurface = "desk" | "viewed";
+import type {
+  FilingSessionSnapshot,
+  FilingSourceSurface,
+} from "./filing-session.js";
 
 export function filingEditorMatchesSource(
   sourcePath: string,
@@ -124,7 +117,7 @@ export function shouldSuspendDeckCommand(
 export function renderInlineFilingEditor(
   addressSlot: HTMLElement,
   card: HTMLElement,
-  state: InlineFilingEditorState,
+  state: FilingSessionSnapshot,
   actions: InlineFilingEditorActions,
 ): InlineFilingEditorElements {
   addressSlot.replaceChildren();
@@ -175,13 +168,13 @@ export function renderInlineFilingEditor(
 
 export function updateInlineFilingEditor(
   elements: InlineFilingEditorElements,
-  state: InlineFilingEditorState,
+  state: FilingSessionSnapshot,
 ): void {
   const { input, feedback } = elements;
   if (input.value !== state.value) {
     input.value = state.value;
   }
-  input.disabled = state.confirmationInProgress;
+  input.disabled = state.phase === "confirming";
   input.setAttribute("aria-invalid", String(state.invalid));
   input.classList.toggle("is-invalid", state.invalid);
 

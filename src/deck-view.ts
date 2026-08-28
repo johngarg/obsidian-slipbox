@@ -63,10 +63,7 @@ import {
   DeckShortcutController,
   type PendingDeckCommandCompletionResult,
 } from "./deck-shortcut-controller.js";
-import {
-  DeskRenderer,
-  type DeskFilingState,
-} from "./desk-view.js";
+import { DeskRenderer } from "./desk-view.js";
 import {
   collapseAllPiles,
   cardPosition,
@@ -79,22 +76,23 @@ import {
   pathIsAtOrBelow,
   renamePathReference,
 } from "./path-reference.js";
-import { normalizeAddressInput } from "./address-order.js";
 import {
-  duplicateFilingMessage,
-  filingPreviewGuidance,
   filingPreviewFocusPath,
   initialFilingAddress,
-  type FilingPreview,
 } from "./filing-preview.js";
 import {
   attachUnfiledAddressFiling,
   filingEditorMatchesSource,
   renderInlineFilingEditor,
   updateInlineFilingEditor,
-  type FilingSourceSurface,
   type InlineFilingEditorElements,
 } from "./filing-editor.js";
+import {
+  FilingSession,
+  type FilingResolution,
+  type FilingSessionSnapshot,
+  type FilingSourceSurface,
+} from "./filing-session.js";
 import {
   buildDeckMapSectionMarkers,
   deckMapCoordinate,
@@ -227,13 +225,7 @@ export class DeckView extends ItemView {
   private cardFocus: CardFocus | null = null;
   private lastFocusedPileId: string | null = null;
   private lastPileFocusWasViewed = false;
-  private filingFile: TFile | null = null;
-  private filingSourcePath: string | null = null;
-  private filingSourceSurface: FilingSourceSurface | null = null;
-  private filingInputValue = "";
-  private filingPreview: FilingPreview | null = null;
-  private filingMessage = "Enter an address.";
-  private filingConfirmationInProgress = false;
+  private readonly filingSession: FilingSession;
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
   private deckCardsEl: HTMLElement | null = null;
@@ -298,6 +290,10 @@ export class DeckView extends ItemView {
     private readonly plugin: SlipboxPlugin,
   ) {
     super(leaf);
+    this.filingSession = new FilingSession({
+      resolve: (file, sourcePath, address) =>
+        this.resolveFiling(file, sourcePath, address),
+    });
     this.shortcutController = new DeckShortcutController({
       root: this.contentEl,
       isMacOS: Platform.isMacOS,
@@ -460,7 +456,7 @@ export class DeckView extends ItemView {
         return;
       }
       if (
-        this.filingFile !== null &&
+        this.filingSession.isActive &&
         event.key === "Tab" &&
         event.shiftKey &&
         event.target !== this.filingInput
@@ -566,11 +562,7 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.unloadViewedCardComponent();
-    this.filingFile = null;
-    this.filingSourcePath = null;
-    this.filingSourceSurface = null;
-    this.filingPreview = null;
-    this.filingConfirmationInProgress = false;
+    this.filingSession.reset();
     this.stageEl = null;
     this.spaceEl = null;
     this.deckCardsEl = null;
@@ -963,11 +955,11 @@ export class DeckView extends ItemView {
   }
 
   get isFiling(): boolean {
-    return this.filingFile !== null;
+    return this.filingSession.isActive;
   }
 
   private get filingInput(): HTMLInputElement | null {
-    return this.filingSourceSurface === "viewed"
+    return this.filingSession.snapshot?.sourceSurface === "viewed"
       ? this.viewedFilingEditor?.input ?? null
       : this.deskRenderer.filingInput;
   }
@@ -991,7 +983,7 @@ export class DeckView extends ItemView {
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  private updateRenderedFilingState(state: DeskFilingState): void {
+  private updateRenderedFilingState(state: FilingSessionSnapshot): void {
     this.deskRenderer.updateFilingState(state);
     if (this.viewedFilingEditor !== null) {
       updateInlineFilingEditor(this.viewedFilingEditor, state);
@@ -1006,6 +998,30 @@ export class DeckView extends ItemView {
       delay: 350,
       accessibleLabel: "Card address",
     });
+  }
+
+  private resolveFiling(
+    file: TFile,
+    sourcePath: string,
+    address: string,
+  ): FilingResolution {
+    if (
+      file.path !== sourcePath ||
+      this.plugin.index.fileAtPath(sourcePath) !== file
+    ) {
+      return { kind: "missing" };
+    }
+    if (!this.plugin.isUnfiledCard(file)) {
+      return { kind: "not-unfiled" };
+    }
+    return {
+      kind: "ready",
+      preview: this.plugin.filingPreviewFor(file, address),
+      duplicatePaths: this.plugin.index.filedAtAddress(address).map(
+        (card) => card.path,
+      ),
+      duplicatesBlocked: this.plugin.duplicateOccupants(address).length > 0,
+    };
   }
 
   handlePathRename(oldPath: string, newPath: string): void {
@@ -1049,14 +1065,7 @@ export class DeckView extends ItemView {
         scroll,
       ]),
     );
-    if (this.filingSourcePath !== null) {
-      this.filingSourcePath = renamePathReference(
-        this.filingSourcePath,
-        oldPath,
-        newPath,
-      );
-      this.recalculateFilingPreview();
-    }
+    this.filingSession.renamePath(oldPath, newPath);
     const viewed = this.viewedCard;
     if (viewed !== null) {
       const renamedPath = renamePathReference(viewed.path, oldPath, newPath);
@@ -1093,13 +1102,7 @@ export class DeckView extends ItemView {
         this.cardScrollPositions.delete(path);
       }
     }
-    if (
-      this.filingSourcePath !== null &&
-      pathIsAtOrBelow(this.filingSourcePath, deletedPath)
-    ) {
-      this.clearFilingPlacement();
-      this.filingMessage = "The source card no longer exists.";
-    }
+    this.filingSession.deletePath(deletedPath);
     if (
       this.viewedCard !== null &&
       pathIsAtOrBelow(this.viewedCard.path, deletedPath) &&
@@ -1126,7 +1129,7 @@ export class DeckView extends ItemView {
     const action = resolveDeckEscapeAction(event, {
       editing: this.inlineEdit !== null,
       pendingCommand: this.shortcutController.hasPendingCommand,
-      filing: this.filingFile !== null && !this.filingConfirmationInProgress,
+      filing: this.filingSession.canCancel,
     });
     if (action === null) {
       return false;
@@ -1157,12 +1160,10 @@ export class DeckView extends ItemView {
     target: CardActionTarget | null,
   ): boolean {
     if (action === "confirm-filing") {
-      return this.filingFile !== null &&
-        this.filingPreview !== null &&
-        !this.filingConfirmationInProgress;
+      return this.filingSession.canConfirm;
     }
     if (action === "cancel-filing") {
-      return this.filingFile !== null && !this.filingConfirmationInProgress;
+      return this.filingSession.canCancel;
     }
     const filed = this.plugin.index.snapshot.filed;
     const active = this.activeCard;
@@ -1205,7 +1206,7 @@ export class DeckView extends ItemView {
         action === "next-bookmark" &&
         adjacentBookmarkIndex(bookmarkIndices, activeIndex, 1) !== null,
       hasProblems: this.plugin.index.snapshot.issues.length > 0,
-      filing: this.filingFile !== null,
+      filing: this.filingSession.isActive,
       hasFocusedCard: focusedFile !== null,
       focusedCardFiled: focusedFiled !== null,
       focusedCardUnfiled:
@@ -1525,7 +1526,7 @@ export class DeckView extends ItemView {
     this.recentInlineEditRefresh = null;
     const restoreFilingInputFocus = this.isFilingInputFocused;
     this.cancelViewportCentering();
-    this.recalculateFilingPreview();
+    this.filingSession.refresh();
     const previousActivePath = this.activePath;
     this.reconcileScrollPositions();
     this.chooseAvailableActiveCard();
@@ -1534,7 +1535,9 @@ export class DeckView extends ItemView {
       this.viewportOffset = 0;
     }
     this.clampViewportOffset();
-    await this.renderDeck(this.filingFile === null || restoreFilingInputFocus);
+    await this.renderDeck(
+      !this.filingSession.isActive || restoreFilingInputFocus,
+    );
   }
 
   async startFiling(
@@ -1556,35 +1559,20 @@ export class DeckView extends ItemView {
       await this.plugin.setDeskPileExpanded(deskPosition.pileId, true);
     }
     const initialAddress = initialFilingAddress(this.activeCard);
-    this.filingFile = file;
-    this.filingSourcePath = file.path;
-    this.filingSourceSurface = sourceSurface;
-    this.filingInputValue = initialAddress;
-    this.filingPreview = null;
-    this.filingMessage = "Enter an address.";
-    this.filingConfirmationInProgress = false;
-    this.recalculateFilingPreview();
+    this.filingSession.start(file, sourceSurface, initialAddress);
     await this.renderDeck();
     this.focusFilingInput();
   }
 
   async cancelFiling(): Promise<void> {
-    if (this.filingConfirmationInProgress) {
+    const cancellation = this.filingSession.cancel();
+    if (cancellation === null) {
       return;
     }
-    const sourcePath = this.filingSourcePath;
-    const sourceSurface = this.filingSourceSurface;
-    this.filingFile = null;
-    this.filingSourcePath = null;
-    this.filingSourceSurface = null;
-    this.filingPreview = null;
-    this.filingInputValue = "";
-    this.filingConfirmationInProgress = false;
     await this.renderDeck(false);
     if (
-      sourceSurface === "viewed" &&
-      sourcePath !== null &&
-      this.viewedCard?.path === sourcePath
+      cancellation.sourceSurface === "viewed" &&
+      this.viewedCard?.path === cancellation.sourcePath
     ) {
       this.focusViewedCard();
     }
@@ -1743,7 +1731,7 @@ export class DeckView extends ItemView {
       new Notice("Put the card on the Desk before viewing it.");
       return;
     }
-    if (this.filingFile !== null) {
+    if (this.filingSession.isActive) {
       new Notice("Finish filing before viewing another card.");
       return;
     }
@@ -1771,7 +1759,7 @@ export class DeckView extends ItemView {
       new Notice("Put the card on the Desk before editing it.");
       return;
     }
-    if (this.filingFile !== null) {
+    if (this.filingSession.isActive) {
       new Notice("Finish filing before editing a card body.");
       return;
     }
@@ -1814,9 +1802,10 @@ export class DeckView extends ItemView {
     if (viewed === null) {
       return;
     }
+    const filing = this.filingSession.snapshot;
     if (
-      this.filingSourceSurface === "viewed" &&
-      this.filingSourcePath === viewed.path
+      filing?.sourceSurface === "viewed" &&
+      filing.sourcePath === viewed.path
     ) {
       new Notice("Finish or cancel filing before closing the viewed card.");
       return;
@@ -1866,7 +1855,7 @@ export class DeckView extends ItemView {
       readonly renderedScrollTop: number;
     },
   ): Promise<void> {
-    if (this.filingFile !== null) {
+    if (this.filingSession.isActive) {
       new Notice("Finish filing before editing a card body.");
       return;
     }
@@ -2265,7 +2254,7 @@ export class DeckView extends ItemView {
     // viewed-card surfaces. Keeping those nodes mounted avoids a visible flash.
     await this.refreshDeckCardWindow();
     this.updateActiveUi();
-    if (this.filingFile !== null && !restoreFilingInputFocus) {
+    if (this.filingSession.isActive && !restoreFilingInputFocus) {
       this.contentEl.focus({ preventScroll: true });
     }
     return true;
@@ -2399,7 +2388,7 @@ export class DeckView extends ItemView {
     const deskJob = this.deskRenderer.render(
       stage,
       space,
-      this.currentFilingState(),
+      this.filingSession.snapshot,
       this.viewedCard?.path ?? null,
       () => version === this.renderVersion,
     );
@@ -3155,7 +3144,7 @@ export class DeckView extends ItemView {
     }
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? null;
-    const filing = this.currentFilingState();
+    const filing = this.filingSession.snapshot;
     const isFilingSource = filed === undefined &&
       filing !== null &&
       filingEditorMatchesSource(
@@ -3593,83 +3582,19 @@ export class DeckView extends ItemView {
     });
   }
 
-  private recalculateFilingPreview(): void {
-    const file = this.filingFile;
-    const sourcePath = this.filingSourcePath;
-    if (file === null || sourcePath === null) {
-      this.clearFilingPlacement();
-      return;
-    }
-    if (
-      file.path !== sourcePath ||
-      this.plugin.index.fileAtPath(sourcePath) !== file
-    ) {
-      this.clearFilingPlacement();
-      this.filingMessage = "The source card no longer exists.";
-      return;
-    }
-    if (!this.plugin.isUnfiledCard(file)) {
-      this.clearFilingPlacement();
-      this.filingMessage = "The source card is no longer unfiled.";
-      return;
-    }
-    const validation = normalizeAddressInput(this.filingInputValue);
-    if (!validation.valid) {
-      this.clearFilingPlacement();
-      this.filingMessage = validation.message;
-      return;
-    }
-    this.filingPreview = this.plugin.filingPreviewFor(file, validation.address);
-    this.filingMessage = "";
-  }
-
-  private clearFilingPlacement(): void {
-    this.filingPreview = null;
-  }
-
   private updateFilingInput(value: string): void {
-    if (this.filingConfirmationInProgress) {
+    if (!this.filingSession.updateInput(value)) {
       return;
     }
-    this.filingInputValue = value;
-    this.recalculateFilingPreview();
-    const filing = this.currentFilingState();
+    const filing = this.filingSession.snapshot;
     if (filing !== null) {
       this.updateRenderedFilingState(filing);
     }
   }
 
-  private currentFilingState(): DeskFilingState | null {
-    const sourcePath = this.filingSourcePath;
-    const sourceSurface = this.filingSourceSurface;
-    if (sourcePath === null || sourceSurface === null) {
-      return null;
-    }
-    const preview = this.filingPreview;
-    const duplicatePaths = preview === null
-      ? []
-      : this.plugin.index.filedAtAddress(preview.address).map((card) => card.path);
-    const blockedByDuplicate = preview !== null &&
-      this.plugin.duplicateOccupants(preview.address).length > 0;
-    return {
-      sourcePath,
-      sourceSurface,
-      value: this.filingInputValue,
-      address: preview?.address ?? null,
-      message: blockedByDuplicate && preview !== null
-        ? duplicateFilingMessage(preview.address, duplicatePaths.length)
-        : this.filingMessage,
-      invalid: blockedByDuplicate ||
-        (preview === null && this.filingMessage !== "Enter an address."),
-      confirmationInProgress: this.filingConfirmationInProgress,
-      duplicatePaths,
-      guidance: filingPreviewGuidance(preview),
-    };
-  }
-
   private async previewFilingPlacement(): Promise<void> {
     this.contentEl.focus({ preventScroll: true });
-    const preview = this.filingPreview;
+    const preview = this.filingSession.snapshot?.preview ?? null;
     if (preview === null) {
       return;
     }
@@ -3683,13 +3608,14 @@ export class DeckView extends ItemView {
   }
 
   private restoreFilingSourceFocus(): void {
-    const path = this.filingSourcePath;
-    if (path === null) {
+    const filing = this.filingSession.snapshot;
+    if (filing === null) {
       return;
     }
+    const path = filing.sourcePath;
     const position = cardPosition(this.plugin.desk, path);
     if (
-      this.filingSourceSurface === "viewed" &&
+      filing.sourceSurface === "viewed" &&
       this.viewedCard?.path === path
     ) {
       this.setCardFocus(viewedCardFocus(path, position?.pileId));
@@ -3699,66 +3625,50 @@ export class DeckView extends ItemView {
   }
 
   private async confirmFiling(): Promise<void> {
-    const file = this.filingFile;
-    const preview = this.filingPreview;
-    if (
-      file === null ||
-      preview === null ||
-      this.filingConfirmationInProgress
-    ) {
-      this.recalculateFilingPreview();
-      const filing = this.currentFilingState();
-      if (filing !== null) {
-        this.updateRenderedFilingState(filing);
-      }
-      return;
-    }
-    if (this.plugin.duplicateOccupants(preview.address).length > 0) {
-      const filing = this.currentFilingState();
+    const request = this.filingSession.beginConfirmation();
+    if (request === null) {
+      const filing = this.filingSession.snapshot;
       if (filing !== null) {
         this.updateRenderedFilingState(filing);
       }
       return;
     }
     const restoreFilingInputFocus = this.isFilingInputFocused;
-    const sourceSurface = this.filingSourceSurface;
-    this.filingConfirmationInProgress = true;
-    const pending = this.currentFilingState();
+    const pending = this.filingSession.snapshot;
     if (pending !== null) {
       this.updateRenderedFilingState(pending);
     }
     try {
-      const result = await this.plugin.fileCard(file, preview);
+      const result = await this.plugin.fileCard(request.file, request.preview);
       if (result.status === "preview-changed") {
-        this.recalculateFilingPreview();
+        this.filingSession.finishConfirmation();
         await this.renderDeck(restoreFilingInputFocus);
         new Notice("The Deck changed. Review the updated position and confirm again.");
         return;
       }
       if (result.status === "failed") {
-        this.recalculateFilingPreview();
+        this.filingSession.finishConfirmation();
         await this.renderDeck(restoreFilingInputFocus);
         return;
       }
-      this.filingFile = null;
-      this.filingSourcePath = null;
-      this.filingSourceSurface = null;
-      this.filingPreview = null;
-      this.filingInputValue = "";
-      if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
+      this.filingSession.complete();
+      if (
+        request.sourceSurface === "viewed" &&
+        this.viewedCard?.path === request.file.path
+      ) {
         this.viewedCard = null;
         this.viewedCardEl = null;
         this.viewedCardBodyEl = null;
         this.viewedFilingEditor = null;
         this.unloadViewedCardComponent();
       }
-      this.setDeckAnchor(file.path);
-      this.assignCardFocus(deckCardFocus(file.path));
+      this.setDeckAnchor(request.file.path);
+      this.assignCardFocus(deckCardFocus(request.file.path));
       this.viewportOffset = 0;
       await this.plugin.refreshDeckViews();
     } finally {
-      this.filingConfirmationInProgress = false;
-      const filing = this.currentFilingState();
+      this.filingSession.finishConfirmation();
+      const filing = this.filingSession.snapshot;
       if (filing !== null) {
         this.updateRenderedFilingState(filing);
       }

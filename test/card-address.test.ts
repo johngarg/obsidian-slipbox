@@ -77,12 +77,16 @@ describe("card address rendering", () => {
       slot,
       parent,
       {
+        phase: "editing",
+        sourcePath: "source.md",
+        sourceSurface: "desk",
         value: "",
         address: null,
+        preview: null,
         message: "",
         invalid: false,
-        confirmationInProgress: false,
         duplicatePaths: [],
+        guidance: "Enter a valid address.",
       },
       {
         showTooltips: false,

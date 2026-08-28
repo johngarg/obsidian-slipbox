@@ -432,12 +432,16 @@ describe("inline filing editor DOM", () => {
       address,
       card,
       {
+        phase: "editing",
+        sourcePath: "source.md",
+        sourceSurface: "desk",
         value: "A/12",
         address: "A/12",
+        preview: null,
         message: "",
         invalid: false,
-        confirmationInProgress: false,
         duplicatePaths: ["a.md", "z.md"],
+        guidance: "Tab previews this card's Deck position.",
       },
       {
         showTooltips: false,
@@ -482,14 +486,36 @@ describe("inline filing editor DOM", () => {
     updateInlineFilingEditor(
       editor,
       {
-        value: "bad\naddress",
-        address: null,
-        message: "Address must be a single line.",
-        invalid: true,
-        confirmationInProgress: false,
+        phase: "confirming",
+        sourcePath: "source.md",
+        sourceSurface: "desk",
+        value: "A/12",
+        address: "A/12",
+        preview: null,
+        message: "",
+        invalid: false,
         duplicatePaths: [],
+        guidance: "Tab previews this card's Deck position.",
       },
     );
+    assert.equal(editor.input.disabled, true);
+
+    updateInlineFilingEditor(
+      editor,
+      {
+        phase: "editing",
+        sourcePath: "source.md",
+        sourceSurface: "desk",
+        value: "bad\naddress",
+        address: null,
+        preview: null,
+        message: "Address must be a single line.",
+        invalid: true,
+        duplicatePaths: [],
+        guidance: "Enter a valid address.",
+      },
+    );
+    assert.equal(editor.input.disabled, false);
     assert.equal(editor.input.getAttribute("aria-invalid"), "true");
     assert.equal(editor.feedback.querySelector("details"), null);
     assert.equal(editor.feedback.textContent, "Address must be a single line.");

@@ -12,18 +12,16 @@ import {
 
 import type SlipboxPlugin from "./main.js";
 import {
-  activeIndexForViewport,
   adjacentBookmarkIndex,
   bookmarkEdgeTargets,
   cardMotionStyle,
   cardStackOrder,
   setCardMotionOpacity,
   setCardStackOrder,
-  centredViewportPosition,
-  clampViewportPosition,
-  deckIndexByDelta,
-  stationarySelectionOffset,
 } from "./deck-motion.js";
+import {
+  DeckViewport,
+} from "./deck-viewport.js";
 import type { FiledCard } from "./card-index.js";
 import {
   configureRenderedCardBody,
@@ -171,12 +169,10 @@ import {
 import {
   deckPositionModeForPileCount,
   deckTopForPileAnchor,
-  type DeckPositionMode,
 } from "./workspace-layout.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
 
-const RENDER_EDGE_BUFFER = 2;
 const LAYOUT_MEASUREMENT_RETRIES = 2;
 const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
@@ -221,7 +217,7 @@ export class DeckView extends ItemView {
    * keystroke while a modal holds focus.
    */
   override navigation = false;
-  private activePath: string | null = null;
+  private readonly deckViewport = new DeckViewport();
   private cardFocus: CardFocus | null = null;
   private lastFocusedPileId: string | null = null;
   private lastPileFocusWasViewed = false;
@@ -232,8 +228,6 @@ export class DeckView extends ItemView {
   private renderedCards: HTMLElement[] = [];
   private renderComponents = new Map<string, Component>();
   private cardScrollPositions = new Map<string, number>();
-  private viewportOffset = 0;
-  private deckPositionMode: DeckPositionMode | null = null;
   private pointerLastX: number | null = null;
   private pointerLastY: number | null = null;
   private suppressDeckCardClickUntil = 0;
@@ -241,8 +235,6 @@ export class DeckView extends ItemView {
   private spaceOffsetY = 0;
   private spaceRecenteringTimer: number | null = null;
   private viewportCenteringFrame: number | null = null;
-  private renderWindowStart = 0;
-  private renderWindowEnd = -1;
   private renderRefreshPending = false;
   private renderRefreshRunning = false;
   private renderRefreshQueued = false;
@@ -563,6 +555,7 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.unloadViewedCardComponent();
     this.filingSession.reset();
+    this.deckViewport.reset();
     this.stageEl = null;
     this.spaceEl = null;
     this.deckCardsEl = null;
@@ -599,10 +592,11 @@ export class DeckView extends ItemView {
   }
 
   get activeCard(): FiledCard | null {
-    if (this.activePath === null) {
+    const anchorPath = this.deckViewport.anchorPath;
+    if (anchorPath === null) {
       return null;
     }
-    return this.plugin.index.filedByPath(this.activePath) ?? null;
+    return this.plugin.index.filedByPath(anchorPath) ?? null;
   }
 
   get focusedCardFile(): TFile | null {
@@ -695,9 +689,8 @@ export class DeckView extends ItemView {
         this.viewedCardEl = null;
         this.viewedCardBodyEl = null;
       }
-      this.setDeckAnchor(card.path);
+      this.deckViewport.navigate(card.path, this.plugin.index.snapshot.filed);
       this.assignCardFocus(deckCardFocus(card.path));
-      this.viewportOffset = 0;
     }
 
     // toggleFileOnDesk updates the shared Desk synchronously before refreshing
@@ -724,7 +717,7 @@ export class DeckView extends ItemView {
     if (this.plugin.index.filedByPath(path) === undefined) {
       return;
     }
-    if (path !== this.activePath) {
+    if (path !== this.deckViewport.anchorPath) {
       this.selectCardWithoutMoving(path);
     }
     if (this.viewedCard?.path === path) {
@@ -766,11 +759,12 @@ export class DeckView extends ItemView {
     preferredPath?: string,
   ): void {
     if (target.surface === "deck") {
-      if (this.activePath !== null) {
-        if (this.viewedCard?.path === this.activePath) {
+      const anchorPath = this.deckViewport.anchorPath;
+      if (anchorPath !== null) {
+        if (this.viewedCard?.path === anchorPath) {
           this.focusViewedCard();
         } else {
-          this.setCardFocus(deckCardFocus(this.activePath));
+          this.setCardFocus(deckCardFocus(anchorPath));
         }
       }
       return;
@@ -791,7 +785,7 @@ export class DeckView extends ItemView {
     const target = cyclePileFocusTarget(
       this.plugin.desk.piles.map((pile) => pile.id),
       this.pileFocusLocation(),
-      this.activePath !== null,
+      this.deckViewport.anchorPath !== null,
       direction,
     );
     if (target !== null) {
@@ -813,7 +807,7 @@ export class DeckView extends ItemView {
       this.plugin.desk.piles.map((pile) => pile.id),
       current,
       this.lastFocusedPileId,
-      this.activePath !== null,
+      this.deckViewport.anchorPath !== null,
     );
     if (target !== null) {
       const viewedPath = target.surface === "desk" &&
@@ -867,8 +861,11 @@ export class DeckView extends ItemView {
     }
   }
 
-  private setDeckAnchor(path: string): void {
-    this.activePath = path;
+  private followViewportAnchor(previousPath: string | null): void {
+    const path = this.deckViewport.anchorPath;
+    if (path === null || path === previousPath) {
+      return;
+    }
     this.assignCardFocus(moveDeckFocusWithAnchor(
       this.cardFocus,
       path,
@@ -877,9 +874,10 @@ export class DeckView extends ItemView {
   }
 
   private applyCardFocusClasses(): void {
+    const anchorPath = this.deckViewport.anchorPath;
     for (const card of this.renderedCards) {
       const path = card.dataset.path;
-      card.toggleClass("is-deck-anchor", path === this.activePath);
+      card.toggleClass("is-deck-anchor", path === anchorPath);
       card.toggleClass(
         "is-card-focused",
         path !== undefined &&
@@ -914,8 +912,9 @@ export class DeckView extends ItemView {
 
   private reconcileCardFocus(): void {
     const focus = this.cardFocus;
-    if (focus?.surface === "deck" && this.activePath !== null) {
-      this.assignCardFocus(deckCardFocus(this.activePath));
+    const anchorPath = this.deckViewport.anchorPath;
+    if (focus?.surface === "deck" && anchorPath !== null) {
+      this.assignCardFocus(deckCardFocus(anchorPath));
       return;
     }
     if (
@@ -943,8 +942,8 @@ export class DeckView extends ItemView {
         }
       }
     }
-    if (this.activePath !== null) {
-      this.assignCardFocus(deckCardFocus(this.activePath));
+    if (anchorPath !== null) {
+      this.assignCardFocus(deckCardFocus(anchorPath));
       return;
     }
     const firstPile = this.plugin.desk.piles[0];
@@ -1055,9 +1054,7 @@ export class DeckView extends ItemView {
         }
       }
     }
-    if (this.activePath !== null) {
-      this.activePath = renamePathReference(this.activePath, oldPath, newPath);
-    }
+    this.deckViewport.renamePath(oldPath, newPath);
     this.cardFocus = renameCardFocus(this.cardFocus, oldPath, newPath);
     this.cardScrollPositions = new Map(
       [...this.cardScrollPositions].map(([path, scroll]) => [
@@ -1087,12 +1084,8 @@ export class DeckView extends ItemView {
       );
       this.applyInlineEditFailure(this.inlineEdit?.controller.snapshot.failure ?? null);
     }
-    if (
-      this.activePath !== null &&
-      pathIsAtOrBelow(this.activePath, deletedPath) &&
-      this.activePath !== editingPath
-    ) {
-      this.activePath = null;
+    if (this.deckViewport.anchorPath !== editingPath) {
+      this.deckViewport.deletePath(deletedPath);
     }
     if (cardFocusDeleted(this.cardFocus, deletedPath)) {
       this.cardFocus = null;
@@ -1471,9 +1464,11 @@ export class DeckView extends ItemView {
           this.cardFocus?.surface === "desk" &&
           this.plugin.isFileOnDesk(card.file)
         ) {
-          this.setDeckAnchor(card.path);
+          this.deckViewport.navigate(
+            card.path,
+            this.plugin.index.snapshot.filed,
+          );
           this.assignCardFocus(deckCardFocus(card.path));
-          this.viewportOffset = 0;
         }
         void this.plugin.clearDesk();
         break;
@@ -1527,14 +1522,12 @@ export class DeckView extends ItemView {
     const restoreFilingInputFocus = this.isFilingInputFocused;
     this.cancelViewportCentering();
     this.filingSession.refresh();
-    const previousActivePath = this.activePath;
     this.reconcileScrollPositions();
-    this.chooseAvailableActiveCard();
+    this.deckViewport.reconcile(
+      this.plugin.index.snapshot.filed,
+      reason === "ordering",
+    );
     this.reconcileCardFocus();
-    if (reason === "ordering" || this.activePath !== previousActivePath) {
-      this.viewportOffset = 0;
-    }
-    this.clampViewportOffset();
     await this.renderDeck(
       !this.filingSession.isActive || restoreFilingInputFocus,
     );
@@ -1600,7 +1593,9 @@ export class DeckView extends ItemView {
   }
 
   private jumpToAdjacentBookmark(direction: -1 | 1): void {
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const activeIndex = this.plugin.index.filedIndexForPath(
+      this.deckViewport.anchorPath,
+    );
     const targetIndex = adjacentBookmarkIndex(
       this.bookmarkIndices(),
       activeIndex,
@@ -1821,9 +1816,11 @@ export class DeckView extends ItemView {
         position?.pileId,
       );
       if (returnTarget?.surface === "deck") {
-        this.setDeckAnchor(viewed.path);
+        this.deckViewport.navigate(
+          viewed.path,
+          this.plugin.index.snapshot.filed,
+        );
         this.assignCardFocus(deckCardFocus(viewed.path));
-        this.viewportOffset = 0;
       } else if (returnTarget?.surface === "desk") {
         this.assignCardFocus(deskCardFocus(viewed.path, returnTarget.pileId));
       } else {
@@ -2247,8 +2244,9 @@ export class DeckView extends ItemView {
       return false;
     }
     this.cancelViewportCentering();
-    this.setDeckAnchor(path);
-    this.viewportOffset = 0;
+    const previousAnchor = this.deckViewport.anchorPath;
+    this.deckViewport.navigate(path, this.plugin.index.snapshot.filed);
+    this.followViewportAnchor(previousAnchor);
     const restoreFilingInputFocus = this.isFilingInputFocused;
     // Anchor navigation changes the Deck window, not the surrounding Desk or
     // viewed-card surfaces. Keeping those nodes mounted avoids a visible flash.
@@ -2258,17 +2256,6 @@ export class DeckView extends ItemView {
       this.contentEl.focus({ preventScroll: true });
     }
     return true;
-  }
-
-  private chooseAvailableActiveCard(): void {
-    const filed = this.plugin.index.snapshot.filed;
-    const availablePaths = new Set(filed.map((card) => card.path));
-
-    if (this.activePath !== null && availablePaths.has(this.activePath)) {
-      return;
-    }
-
-    this.activePath = filed[0]?.path ?? null;
   }
 
   private async showFocusedCardInDeck(path: string): Promise<void> {
@@ -2287,7 +2274,7 @@ export class DeckView extends ItemView {
     const filed = this.plugin.index.snapshot.filed;
     const deckIndex = this.plugin.index.filedIndexForPath(file.path);
     const nextDeckPath = deckIndex < 0
-      ? this.activePath
+      ? this.deckViewport.anchorPath
       : filed[deckIndex + 1]?.path ?? filed[deckIndex - 1]?.path ?? null;
     const position = cardPosition(this.plugin.desk, file.path);
     const pile = position === null
@@ -2312,9 +2299,11 @@ export class DeckView extends ItemView {
     ) {
       this.assignCardFocus(deskCardFocus(nextDeskPath, position.pileId));
     } else if (nextDeckPath !== null) {
-      this.setDeckAnchor(nextDeckPath);
+      this.deckViewport.navigate(
+        nextDeckPath,
+        this.plugin.index.snapshot.filed,
+      );
       this.assignCardFocus(deckCardFocus(nextDeckPath));
-      this.viewportOffset = 0;
     } else {
       this.assignCardFocus(null);
     }
@@ -2396,7 +2385,9 @@ export class DeckView extends ItemView {
     if (filed.length === 0) {
       this.renderEmptyDeck(deckCards);
     } else {
-      const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+      const activeIndex = this.plugin.index.filedIndexForPath(
+        this.deckViewport.anchorPath,
+      );
       await this.renderCardWindow(deckCards, filed, activeIndex, deckVersion);
     }
 
@@ -2452,7 +2443,9 @@ export class DeckView extends ItemView {
     if (filed.length === 0) {
       this.renderEmptyDeck(deckCards);
     } else {
-      const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+      const activeIndex = this.plugin.index.filedIndexForPath(
+        this.deckViewport.anchorPath,
+      );
       await this.renderCardWindow(deckCards, filed, activeIndex, deckVersion);
     }
 
@@ -2541,7 +2534,10 @@ export class DeckView extends ItemView {
         cards.length,
       );
       const target = targetIndex === null ? undefined : cards[targetIndex];
-      if (target !== undefined && target.path !== this.activePath) {
+      if (
+        target !== undefined &&
+        target.path !== this.deckViewport.anchorPath
+      ) {
         void this.runAfterInlineEditing(
           "deck-map-jump",
           () => this.jumpToPath(target.path),
@@ -2719,7 +2715,9 @@ export class DeckView extends ItemView {
     }
 
     const cardCount = this.plugin.index.snapshot.filed.length;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const activeIndex = this.plugin.index.filedIndexForPath(
+      this.deckViewport.anchorPath,
+    );
     const position = deckMapCoordinate(activeIndex, cardCount);
     const activeMarker = this.deckMapActiveMarkerEl;
     const bookmarkLabel =
@@ -2763,16 +2761,14 @@ export class DeckView extends ItemView {
     activeIndex: number,
     deckVersion: number,
   ): Promise<void> {
-    const viewportPosition = this.viewportPosition(activeIndex);
-    const viewportIndex = Math.round(viewportPosition);
-    const radius = Math.min(
-      8,
-      Math.max(3, Math.ceil(1 / this.plugin.settings.cardSpread) + 2),
+    const renderedWindow = this.deckViewport.recordRenderedWindow(
+      filed,
+      this.plugin.settings.cardSpread,
     );
-    const start = Math.max(0, viewportIndex - radius);
-    const end = Math.min(filed.length - 1, viewportIndex + radius);
-    this.renderWindowStart = start;
-    this.renderWindowEnd = end;
+    if (renderedWindow === null) {
+      return;
+    }
+    const { start, end } = renderedWindow;
     const jobs: Promise<void>[] = [];
 
     const focusDisplayIndex = activeIndex;
@@ -2935,7 +2931,7 @@ export class DeckView extends ItemView {
         if (target?.instanceOf(HTMLElement) !== true) {
           return;
         }
-        if (card.path === this.activePath) {
+        if (card.path === this.deckViewport.anchorPath) {
           this.setCardFocus(deckCardFocus(card.path));
           return;
         }
@@ -3662,9 +3658,11 @@ export class DeckView extends ItemView {
         this.viewedFilingEditor = null;
         this.unloadViewedCardComponent();
       }
-      this.setDeckAnchor(request.file.path);
+      this.deckViewport.navigate(
+        request.file.path,
+        this.plugin.index.snapshot.filed,
+      );
       this.assignCardFocus(deckCardFocus(request.file.path));
-      this.viewportOffset = 0;
       await this.plugin.refreshDeckViews();
     } finally {
       this.filingSession.finishConfirmation();
@@ -3681,11 +3679,12 @@ export class DeckView extends ItemView {
   ): void {
     stage.querySelectorAll<HTMLElement>(".slipbox-bookmark-edge-tab")
       .forEach((tab) => tab.remove());
-    if (this.activePath === null || bookmarkedPaths.size === 0) {
+    const anchorPath = this.deckViewport.anchorPath;
+    if (anchorPath === null || bookmarkedPaths.size === 0) {
       return;
     }
     const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const activeIndex = this.plugin.index.filedIndexForPath(anchorPath);
     const cardWidth = this.renderedCards[0]?.offsetWidth ?? 0;
     if (activeIndex < 0 || cardWidth <= 0) {
       return;
@@ -3696,7 +3695,8 @@ export class DeckView extends ItemView {
     });
     const targets = bookmarkEdgeTargets(
       bookmarkIndices,
-      this.viewportPosition(activeIndex) - this.spaceOffsetX / this.cardStep(),
+      this.deckViewport.position(filed) -
+        this.spaceOffsetX / this.cardStep(),
       this.cardStep(),
       stage.clientWidth,
       cardWidth,
@@ -3840,8 +3840,7 @@ export class DeckView extends ItemView {
 
   private moveViewportByPixels(deltaPixels: number): void {
     this.cancelViewportCentering();
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (activeIndex < 0) {
+    if (this.deckViewport.anchorPath === null) {
       return;
     }
 
@@ -3849,39 +3848,47 @@ export class DeckView extends ItemView {
     if (step <= 0) {
       return;
     }
-    const nextPosition = this.viewportPosition(activeIndex) + deltaPixels / step;
-    this.applyViewportPosition(nextPosition);
+    const cards = this.plugin.index.snapshot.filed;
+    const nextPosition = this.deckViewport.position(cards) +
+      deltaPixels / step;
+    const previousAnchor = this.deckViewport.anchorPath;
+    this.deckViewport.panTo(nextPosition, cards);
+    this.followViewportAnchor(previousAnchor);
+    this.positionCards();
+    this.updateActiveUi();
+    if (this.pointerLastX === null) {
+      this.queueRenderWindowRefresh();
+    }
   }
 
   private moveBy(delta: number): void {
-    const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (activeIndex < 0) {
+    const previousAnchor = this.deckViewport.anchorPath;
+    const cards = this.plugin.index.snapshot.filed;
+    if (!this.deckViewport.moveBy(delta, cards)) {
       return;
     }
-    const targetIndex = deckIndexByDelta(activeIndex, delta, filed.length);
-    const target = filed[targetIndex];
-    if (target === undefined || target.path === this.activePath) {
+    this.followViewportAnchor(previousAnchor);
+    const targetIndex = this.plugin.index.filedIndexForPath(
+      this.deckViewport.anchorPath,
+    );
+    if (targetIndex < 0) {
       return;
     }
-
-    const viewportPosition = this.viewportPosition(activeIndex);
-    this.setDeckAnchor(target.path);
-    this.viewportOffset = viewportPosition - targetIndex;
     this.centerViewportOnActive(targetIndex, true);
   }
 
   private centerActiveCard(): void {
-    this.deckPositionMode = deckPositionModeForPileCount(
+    this.deckViewport.setPositionMode(deckPositionModeForPileCount(
       this.plugin.desk.piles.length,
-    );
+    ));
     this.applyDeckPositionMode();
     this.recenterSpace();
-    if (this.activePath === null) {
+    const anchorPath = this.deckViewport.anchorPath;
+    if (anchorPath === null) {
       new Notice("There is no Deck anchor to centre.");
       return;
     }
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const activeIndex = this.plugin.index.filedIndexForPath(anchorPath);
     if (activeIndex < 0) {
       return;
     }
@@ -3889,7 +3896,8 @@ export class DeckView extends ItemView {
   }
 
   private applyDeckPositionMode(): void {
-    const mode = this.deckPositionMode ?? this.plugin.startupDeckPositionMode;
+    const mode = this.deckViewport.positionModeOverride ??
+      this.plugin.startupDeckPositionMode;
     this.contentEl.toggleClass("is-deck-centered-position", mode === "centered");
   }
 
@@ -3897,9 +3905,9 @@ export class DeckView extends ItemView {
     activeIndex: number,
     smoothly: boolean,
   ): void {
-    const cardCount = this.plugin.index.snapshot.filed.length;
-    const targetPosition = centredViewportPosition(activeIndex, cardCount);
-    const startPosition = this.viewportPosition(activeIndex);
+    const targetPosition = activeIndex;
+    const cards = this.plugin.index.snapshot.filed;
+    const startPosition = this.deckViewport.position(cards);
     this.cancelViewportCentering();
 
     const ownerWindow = this.contentEl.win;
@@ -3911,14 +3919,14 @@ export class DeckView extends ItemView {
       reducedMotion ||
       Math.abs(targetPosition - startPosition) < 0.001
     ) {
-      this.viewportOffset = targetPosition - activeIndex;
+      this.deckViewport.placeAt(targetPosition, cards);
       this.positionCards();
       this.updateActiveUi();
       this.queueRenderWindowRefresh();
       return;
     }
 
-    const activePath = this.activePath;
+    const activePath = this.deckViewport.anchorPath;
     const startedAt = ownerWindow.performance.now();
     this.positionCards();
     this.updateActiveUi();
@@ -3926,7 +3934,7 @@ export class DeckView extends ItemView {
 
     const advance = (timestamp: number): void => {
       if (
-        this.activePath !== activePath ||
+        this.deckViewport.anchorPath !== activePath ||
         this.plugin.index.filedIndexForPath(activePath) !== activeIndex
       ) {
         this.viewportCenteringFrame = null;
@@ -3940,7 +3948,7 @@ export class DeckView extends ItemView {
       const easedProgress = 1 - (1 - progress) ** 3;
       const viewportPosition =
         startPosition + (targetPosition - startPosition) * easedProgress;
-      this.viewportOffset = viewportPosition - activeIndex;
+      this.deckViewport.placeAt(viewportPosition, cards);
       this.positionCards();
       this.queueRenderWindowRefresh();
 
@@ -3950,7 +3958,7 @@ export class DeckView extends ItemView {
       }
 
       this.viewportCenteringFrame = null;
-      this.viewportOffset = targetPosition - activeIndex;
+      this.deckViewport.placeAt(targetPosition, cards);
       this.positionCards();
       if (this.stageEl !== null) {
         this.renderBookmarkEdgeTabs(this.stageEl);
@@ -4002,51 +4010,21 @@ export class DeckView extends ItemView {
 
   private selectCardWithoutMoving(path: string): void {
     this.cancelViewportCentering();
-    const previousActiveIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    const targetIndex = this.plugin.index.filedIndexForPath(path);
-    if (targetIndex < 0) {
+    const previousAnchor = this.deckViewport.anchorPath;
+    if (!this.deckViewport.selectWithoutMoving(
+      path,
+      this.plugin.index.snapshot.filed,
+    )) {
       return;
     }
-
-    this.setDeckAnchor(path);
-    this.viewportOffset = stationarySelectionOffset(
-      previousActiveIndex,
-      targetIndex,
-      this.viewportOffset,
-    );
+    this.followViewportAnchor(previousAnchor);
     this.positionCards();
     this.updateActiveUi();
-  }
-
-  private applyViewportPosition(nextPosition: number): void {
-    const filed = this.plugin.index.snapshot.filed;
-    const previousActiveIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (previousActiveIndex < 0) {
-      return;
-    }
-
-    const viewportPosition = clampViewportPosition(nextPosition, filed.length);
-    const activeIndex = activeIndexForViewport(
-      viewportPosition,
-      previousActiveIndex,
-      filed.length,
-    );
-    const activeCard = filed[activeIndex];
-    if (activeCard === undefined) {
-      return;
-    }
-
-    this.setDeckAnchor(activeCard.path);
-    this.viewportOffset = viewportPosition - activeIndex;
-    this.positionCards();
-    this.updateActiveUi();
-    if (this.pointerLastX === null) {
-      this.queueRenderWindowRefresh();
-    }
   }
 
   private positionCards(): boolean {
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const anchorPath = this.deckViewport.anchorPath;
+    const activeIndex = this.plugin.index.filedIndexForPath(anchorPath);
     if (
       this.renderedCards.length === 0 ||
       activeIndex < 0
@@ -4059,11 +4037,13 @@ export class DeckView extends ItemView {
       return false;
     }
     const focusDisplayIndex = activeIndex;
-    const viewportPosition = this.viewportPosition(activeIndex);
+    const viewportPosition = this.deckViewport.position(
+      this.plugin.index.snapshot.filed,
+    );
 
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
-      const isActive = card.dataset.path === this.activePath;
+      const isActive = card.dataset.path === anchorPath;
       card.toggleClass("is-deck-anchor", isActive);
       card.toggleClass(
         "is-card-focused",
@@ -4087,10 +4067,11 @@ export class DeckView extends ItemView {
 
   private updatePileAnchorFromDeck(): boolean {
     const space = this.spaceEl;
-    const activeCard = this.activePath === null
+    const anchorPath = this.deckViewport.anchorPath;
+    const activeCard = anchorPath === null
       ? null
       : this.renderedCards.find(
-        (card) => card.dataset.path === this.activePath,
+        (card) => card.dataset.path === anchorPath,
       ) ?? null;
     const deckFootprint = activeCard ?? this.deckCardsEl?.querySelector<HTMLElement>(
       ".slipbox-deck-empty",
@@ -4165,7 +4146,9 @@ export class DeckView extends ItemView {
   }
 
   private updateActiveUi(): void {
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
+    const activeIndex = this.plugin.index.filedIndexForPath(
+      this.deckViewport.anchorPath,
+    );
     if (activeIndex < 0) {
       return;
     }
@@ -4236,24 +4219,6 @@ export class DeckView extends ItemView {
     this.updateDeckMapBookmarks(bookmarkedPaths);
   }
 
-  private viewportPosition(activeIndex: number): number {
-    return activeIndex + this.viewportOffset;
-  }
-
-  private clampViewportOffset(): void {
-    const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (activeIndex < 0) {
-      this.viewportOffset = 0;
-      return;
-    }
-    const position = clampViewportPosition(
-      this.viewportPosition(activeIndex),
-      filed.length,
-    );
-    this.viewportOffset = position - activeIndex;
-  }
-
   private queueRenderWindowRefresh(): void {
     if (this.inlineEdit !== null || this.inlineEditStarting) {
       this.renderRefreshDeferred = true;
@@ -4265,20 +4230,9 @@ export class DeckView extends ItemView {
     ) {
       return;
     }
-    const filed = this.plugin.index.snapshot.filed;
-    const activeIndex = this.plugin.index.filedIndexForPath(this.activePath);
-    if (activeIndex < 0) {
-      return;
-    }
-    const displayCount = filed.length;
-    const viewportIndex = Math.round(this.viewportPosition(activeIndex));
-    const needsEarlierCards =
-      this.renderWindowStart > 0 &&
-      viewportIndex <= this.renderWindowStart + RENDER_EDGE_BUFFER;
-    const needsLaterCards =
-      this.renderWindowEnd < displayCount - 1 &&
-      viewportIndex >= this.renderWindowEnd - RENDER_EDGE_BUFFER;
-    if (!needsEarlierCards && !needsLaterCards) {
+    if (!this.deckViewport.needsRenderWindowRefresh(
+      this.plugin.index.snapshot.filed,
+    )) {
       return;
     }
 

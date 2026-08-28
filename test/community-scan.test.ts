@@ -45,4 +45,15 @@ describe("community scanner CSS compatibility", () => {
       /--slipbox-desk-pile-height:\s*min\(/u,
     );
   });
+
+  test("uses a quiet theme-aware outline for rendered branch links", () => {
+    assert.match(
+      styles,
+      /a\.slipbox-explicit-branch-link\s*\{[^}]*border:\s*1px solid var\(--background-modifier-border-hover\);[^}]*border-radius:\s*var\(--radius-s\);[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/su,
+    );
+    const baseRule = styles.match(
+      /a\.slipbox-explicit-branch-link\s*\{(?<body>[^}]*)\}/u,
+    )?.groups?.body ?? "";
+    assert.doesNotMatch(baseRule, /(?:^|;)\s*color\s*:/u);
+  });
 });

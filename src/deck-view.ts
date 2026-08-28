@@ -144,6 +144,7 @@ import {
 } from "./desk-drop.js";
 import { attachPaperWorkflowTextarea } from "./paper-workflow-dom.js";
 import { attachRenderedLinkInteractions } from "./rendered-link-interactions.js";
+import { applyRenderedBranchLinkOutlines } from "./rendered-branch-links.js";
 import {
   ViewedCardSession,
   type ViewedCardReturnTarget,
@@ -2141,6 +2142,8 @@ export class DeckView extends ItemView {
     this.cardSignatures.refreshBranches();
     this.viewedCardSignature.refreshBranches();
     this.deskRenderer.refreshBranchMetadata();
+    this.refreshBranchLinkOutlines();
+    this.deskRenderer.refreshBranchLinkOutlines();
     this.inferredNavigation.refresh();
     this.viewedInferredNavigation.refresh();
     this.deskRenderer.refreshInferredNavigation();
@@ -3409,6 +3412,7 @@ export class DeckView extends ItemView {
         file.path,
         component,
       );
+      this.applyBranchLinkOutlines(target, file);
       this.attachInternalLinkInteractions(target, file.path);
       configureRenderedCardBody(
         target,
@@ -3560,6 +3564,7 @@ export class DeckView extends ItemView {
         card.file.path,
         component,
       );
+      this.applyBranchLinkOutlines(target, card.file);
       this.attachInternalLinkInteractions(target, card.file.path);
       configureRenderedCardBody(
         target,
@@ -3632,6 +3637,54 @@ export class DeckView extends ItemView {
         });
       },
     });
+  }
+
+  private applyBranchLinkOutlines(target: HTMLElement, file: TFile): void {
+    applyRenderedBranchLinkOutlines(target, {
+      enabled: this.plugin.settings.explicitBranchLinks,
+      outline: this.plugin.settings.outlineBranchLinks,
+      hideMarker: this.plugin.settings.hideBranchLinkMarkers,
+      links: this.app.metadataCache.getFileCache(file)?.links ?? [],
+      targetAddressForLink: (link) =>
+        this.filedAddressForRenderedLink(link, file.path),
+    });
+  }
+
+  private filedAddressForRenderedLink(
+    link: string,
+    sourcePath: string,
+  ): string | undefined {
+    const target = resolveFiledCardLink(getLinkpath(link), sourcePath, {
+      resolveFile: (path, source) =>
+        this.app.metadataCache.getFirstLinkpathDest(path, source),
+      filedPathForFile: (file) =>
+        this.plugin.index.filedByFile(file)?.path,
+      firstFiledPathAtAddress: (address) =>
+        this.plugin.index.firstFiledAtAddress(address)?.path,
+    });
+    return target === undefined
+      ? undefined
+      : this.plugin.index.filedByPath(target.path)?.address;
+  }
+
+  private refreshBranchLinkOutlines(): void {
+    this.contentEl.querySelectorAll<HTMLElement>(".slipbox-card[data-path]")
+      .forEach((card) => {
+        const path = card.dataset.path;
+        const target = card.querySelector<HTMLElement>(".slipbox-card-scroll");
+        if (path === undefined || target === null) {
+          return;
+        }
+        const file = this.plugin.index.fileAtPath(path);
+        if (file instanceof TFile) {
+          this.applyBranchLinkOutlines(target, file);
+        } else {
+          applyRenderedBranchLinkOutlines(target, {
+            enabled: false,
+            links: [],
+          });
+        }
+      });
   }
 
   private updateFilingInput(value: string): void {

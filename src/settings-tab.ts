@@ -18,7 +18,6 @@ import {
   DEFAULT_SETTINGS,
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
-  branchLinkMarkerError,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
@@ -94,7 +93,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Card spread",
-            "Set the separation between neighbouring Deck cards.",
+            "Set the visual separation between neighbouring Deck cards.",
             (setting) => this.renderCardSpread(setting),
           ),
         ],
@@ -105,17 +104,22 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "Recognise explicit branch links",
-            "Treat internal links with an explicitly displayed marked alias, such as [[card|+a]], as branch assertions. This reads cached links and never edits notes.",
+            "Treat internal links with an explicitly displayed + alias, such as [[card|+a]], as branch assertions.",
             (setting) => this.renderExplicitBranchLinks(setting),
           ),
           this.definition(
-            "Branch-link marker",
-            "Complete prefix that marks an explicit link alias. The remaining trimmed alias is shown as its branch label.",
-            (setting) => this.renderBranchLinkMarker(setting),
+            "Outline branch links in cards",
+            "Draw a quiet outline around marked aliases in rendered Slipbox cards. This indicates branch syntax; ordinary Markdown views are unaffected.",
+            (setting) => this.renderOutlineBranchLinks(setting),
+          ),
+          this.definition(
+            "Hide branch-link markers in cards",
+            "Hide the + prefix on explicit aliases in rendered Slipbox cards. Link targets and ordinary Markdown views are unaffected.",
+            (setting) => this.renderHideBranchLinkMarkers(setting),
           ),
           this.definition(
             "Show branch labels",
-            "Show incoming explicit branch labels beside card addresses. Labels return the Deck anchor to the source card.",
+            "Show incoming explicit branch labels beside card addresses. Clicked labels return the Deck anchor to the source card.",
             (setting) => this.renderShowBranchLabels(setting),
           ),
         ],
@@ -126,7 +130,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "Infer branches from addresses",
-            "Derive an inferred hierarchy from address extension and make structural navigation commands available. This is heuristic and never modifies notes.",
+            "Derive an inferred hierarchy from address extension and make structural navigation commands available.",
             (setting) => this.renderInferAddressBranches(setting),
           ),
           this.definition(
@@ -158,7 +162,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "Restrict pasting in viewed cards",
-            "In the Slipbox Desk viewed-card editor, paste one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
+            "In the Slipbox Desk viewed-card editor, allow paste for only one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
             (setting) => this.renderRestrictViewedCardPaste(setting),
           ),
           this.definition(
@@ -285,35 +289,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
   }
 
-  private renderBranchLinkMarker(setting: Setting): void {
-    const disabled = !this.slipbox.settings.explicitBranchLinks;
-    setting.setDisabled(disabled);
-    setting.addText((text) => {
-      let marker = this.slipbox.settings.branchLinkMarker;
-      const queueCommit = this.debounceTextCommit(text.inputEl, () => {
-        if (
-          branchLinkMarkerError(marker) === null &&
-          marker !== this.slipbox.settings.branchLinkMarker
-        ) {
-          void this.save({
-            ...this.slipbox.settings,
-            branchLinkMarker: marker,
-          });
-        }
-      });
-      text
-        .setPlaceholder(DEFAULT_SETTINGS.branchLinkMarker)
-        .setValue(this.slipbox.settings.branchLinkMarker)
-        .setDisabled(disabled)
-        .onChange((value) => {
-          marker = value.trim();
-          const error = branchLinkMarkerError(value);
-          this.setTextValidity(setting, error === null, error ?? "");
-          queueCommit();
-        });
-    });
-  }
-
   private renderShowBranchLabels(setting: Setting): void {
     const disabled = !this.slipbox.settings.explicitBranchLinks;
     setting.setDisabled(disabled);
@@ -324,6 +299,34 @@ export class SlipboxSettingTab extends PluginSettingTab {
         .onChange((showBranchLabels) => void this.save({
           ...this.slipbox.settings,
           showBranchLabels,
+        }));
+    });
+  }
+
+  private renderOutlineBranchLinks(setting: Setting): void {
+    const disabled = !this.slipbox.settings.explicitBranchLinks;
+    setting.setDisabled(disabled);
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.outlineBranchLinks)
+        .setDisabled(disabled)
+        .onChange((outlineBranchLinks) => void this.save({
+          ...this.slipbox.settings,
+          outlineBranchLinks,
+        }));
+    });
+  }
+
+  private renderHideBranchLinkMarkers(setting: Setting): void {
+    const disabled = !this.slipbox.settings.explicitBranchLinks;
+    setting.setDisabled(disabled);
+    setting.addToggle((toggle) => {
+      toggle
+        .setValue(this.slipbox.settings.hideBranchLinkMarkers)
+        .setDisabled(disabled)
+        .onChange((hideBranchLinkMarkers) => void this.save({
+          ...this.slipbox.settings,
+          hideBranchLinkMarkers,
         }));
     });
   }

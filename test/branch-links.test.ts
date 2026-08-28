@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  EXPLICIT_BRANCH_MARKER,
   explicitBranchLabel,
   indexExplicitBranches,
   type BranchLinkReference,
@@ -18,40 +19,64 @@ const reference = (
 });
 
 describe("explicit branch links", () => {
+  test("uses + as the canonical marker", () => {
+    assert.equal(EXPLICIT_BRANCH_MARKER, "+");
+  });
+
   test("recognises only explicit Wiki and Markdown display aliases", () => {
     assert.equal(
-      explicitBranchLabel(reference("[[Card|+a]]", "Card", "+a"), true, "+"),
+      explicitBranchLabel(reference("[[Card|+a]]", "Card", "+a"), true),
       "a",
     );
     assert.equal(
-      explicitBranchLabel(reference("[+β](Card.md)", "Card.md", "+β"), true, "+"),
+      explicitBranchLabel(reference("[+β](Card.md)", "Card.md", "+β"), true),
       "β",
-    );
-    assert.equal(
-      explicitBranchLabel(reference("[[Card|§§ branch ]]", "Card"), true, "§§"),
-      "branch",
     );
     for (const candidate of [
       reference("[[+a]]", "+a", "+a"),
       reference("[[Card|a]]", "Card", "a"),
       reference("[[Card|+ ]]", "Card", "+ "),
+      reference("[[Card|§§ branch ]]", "Card", "§§ branch "),
       reference("[[Card]]", "Card", "+a"),
       reference("![[Card|+a]]", "Card", "+a"),
       reference("bare-cache-token", "Card", "+a"),
     ]) {
-      assert.equal(explicitBranchLabel(candidate, true, "+"), null);
+      assert.equal(explicitBranchLabel(candidate, true), null);
     }
   });
 
-  test("supports marker changes, Unicode labels, and disabled parsing", () => {
-    const candidate = reference("[[Card| →  α/β  ]]", "Card", " →  α/β  ");
-    assert.equal(explicitBranchLabel(candidate, true, "→"), null);
+  test("supports Unicode labels and disabled parsing", () => {
     assert.equal(
-      explicitBranchLabel(reference("[[Card|→  α/β  ]]", "Card"), true, "→"),
+      explicitBranchLabel(reference("[[Card|+  α/β  ]]", "Card"), true),
       "α/β",
     );
-    assert.equal(explicitBranchLabel(candidate, true, "+"), null);
-    assert.equal(explicitBranchLabel(candidate, false, "→"), null);
+    assert.equal(
+      explicitBranchLabel(reference("[[Card|→  α/β]]", "Card"), true),
+      null,
+    );
+    assert.equal(
+      explicitBranchLabel(reference("[[Card|+α/β]]", "Card"), false),
+      null,
+    );
+  });
+
+  test("reserves a target's + address as its ordinary alias", () => {
+    assert.equal(
+      explicitBranchLabel(
+        reference("[[Plus|+12]]", "Plus", "+12"),
+        true,
+        "+12",
+      ),
+      null,
+    );
+    assert.equal(
+      explicitBranchLabel(
+        reference("[[Plus|++12]]", "Plus", "++12"),
+        true,
+        "+12",
+      ),
+      "+12",
+    );
   });
 
   test("indexes filed non-self relations with stable deduplication and ordering", () => {
@@ -64,11 +89,13 @@ describe("explicit branch links", () => {
     const indexed = indexExplicitBranches([
       {
         path: "B.md",
+        address: "2",
         deckIndex: 1,
         links: [reference("[[Target|+z]]", "Target", "+z")],
       },
       {
         path: "A.md",
+        address: "1",
         deckIndex: 0,
         links: [
           reference("[[Target|+b]]", "Target", "+b"),
@@ -78,10 +105,9 @@ describe("explicit branch links", () => {
           reference("[[Unfiled|+outside]]", "Unfiled", "+outside"),
         ],
       },
-      { path: "T.md", deckIndex: 2, links: [] },
+      { path: "T.md", address: "3", deckIndex: 2, links: [] },
     ], {
       enabled: true,
-      marker: "+",
       resolveTargetPath: (link, sourcePath) => targets.get(`${sourcePath}::${link}`),
     });
 
@@ -97,15 +123,40 @@ describe("explicit branch links", () => {
     assert.equal(indexed.incomingByTargetPath.has("U.md"), false);
   });
 
+  test("indexes ++address but not an ordinary +address card link", () => {
+    const indexed = indexExplicitBranches([
+      {
+        path: "A.md",
+        address: "1",
+        deckIndex: 0,
+        links: [
+          reference("[[Plus|+12]]", "Plus", "+12"),
+          reference("[[Plus|++12]]", "Plus", "++12"),
+        ],
+      },
+      { path: "Plus.md", address: "+12", deckIndex: 1, links: [] },
+    ], {
+      enabled: true,
+      resolveTargetPath: () => "Plus.md",
+    });
+
+    assert.deepEqual(indexed.outgoingBySourcePath.get("A.md"), [{
+      sourcePath: "A.md",
+      targetPath: "Plus.md",
+      label: "+12",
+      sourceOrder: 1,
+    }]);
+  });
+
   test("returns the stable empty index without resolving links when disabled", () => {
     let resolutions = 0;
     const indexed = indexExplicitBranches([{
       path: "A.md",
+      address: "1",
       deckIndex: 0,
       links: [reference("[[B|+a]]", "B", "+a")],
     }], {
       enabled: false,
-      marker: "+",
       resolveTargetPath: () => {
         resolutions += 1;
         return "B.md";

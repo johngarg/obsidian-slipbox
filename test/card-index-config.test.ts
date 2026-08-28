@@ -19,14 +19,12 @@ describe("card index configuration", () => {
       deckOrdering: "lexicographic",
       duplicateAddresses: "problem",
       explicitBranchLinks: true,
-      branchLinkMarker: "branch:",
       inferAddressBranches: true,
     }), {
       addressProperty: "zettel-id",
       ordering: "lexicographic",
       duplicatePolicy: "problem",
       explicitBranchLinks: true,
-      branchLinkMarker: "branch:",
       inferAddressBranches: true,
     });
   });
@@ -46,7 +44,6 @@ describe("card index configuration", () => {
       { ...BASE_CONFIG, addressProperty: "zettel-id" },
       { ...BASE_CONFIG, duplicatePolicy: "problem" },
       { ...BASE_CONFIG, explicitBranchLinks: true },
-      { ...BASE_CONFIG, branchLinkMarker: "branch:" },
       { ...BASE_CONFIG, inferAddressBranches: true },
     ];
 
@@ -75,6 +72,14 @@ describe("card index configuration", () => {
     assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
       ...DEFAULT_SETTINGS,
       showBranchLabels: !DEFAULT_SETTINGS.showBranchLabels,
+    }), "branch-presentation");
+    assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
+      ...DEFAULT_SETTINGS,
+      outlineBranchLinks: !DEFAULT_SETTINGS.outlineBranchLinks,
+    }), "branch-presentation");
+    assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
+      ...DEFAULT_SETTINGS,
+      hideBranchLinkMarkers: !DEFAULT_SETTINGS.hideBranchLinkMarkers,
     }), "branch-presentation");
     assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
       ...DEFAULT_SETTINGS,

@@ -45,6 +45,7 @@ describe("loadPluginData", () => {
       schemaVersion: 14,
       settings: {
         ...DEFAULT_SETTINGS,
+        branchLinkMarker: "→→",
         addressProperty: " signature ",
         deskCardSize: "large",
         showTooltips: true,
@@ -59,6 +60,9 @@ describe("loadPluginData", () => {
     assert.equal(loaded.data.settings.addressProperty, "signature");
     assert.equal(loaded.data.settings.deskCardSize, "large");
     assert.equal(loaded.data.settings.showTooltips, true);
+    assert.equal(loaded.data.settings.outlineBranchLinks, true);
+    assert.equal(loaded.data.settings.hideBranchLinkMarkers, true);
+    assert.equal(Object.hasOwn(loaded.data.settings, "branchLinkMarker"), false);
     assert.deepEqual(loaded.data.state, {
       bookmarks: [{ path: "Cards/here.md" }],
     });
@@ -123,6 +127,14 @@ describe("loadPluginData", () => {
     assert.equal(loaded.data.settings.addressProperty, DEFAULT_SETTINGS.addressProperty);
     assert.equal(loaded.data.settings.deskCardSize, DEFAULT_SETTINGS.deskCardSize);
     assert.equal(loaded.data.settings.showTooltips, DEFAULT_SETTINGS.showTooltips);
+    assert.equal(
+      loaded.data.settings.outlineBranchLinks,
+      DEFAULT_SETTINGS.outlineBranchLinks,
+    );
+    assert.equal(
+      loaded.data.settings.hideBranchLinkMarkers,
+      DEFAULT_SETTINGS.hideBranchLinkMarkers,
+    );
     assert.deepEqual(loaded.data.state, { bookmarks: [] });
   });
 });

@@ -70,6 +70,7 @@ import {
   applyRenderedLinkAccessibility,
   attachRenderedLinkInteractions,
 } from "./rendered-link-interactions.js";
+import { applyRenderedBranchLinkOutlines } from "./rendered-branch-links.js";
 import { defaultPilePosition } from "./workspace-layout.js";
 
 const DRAG_THRESHOLD_PX = 5;
@@ -251,6 +252,7 @@ export class DeskRenderer {
         file.path,
         component,
       );
+      this.applyBranchLinkOutlines(preview, file);
       applyRenderedLinkAccessibility(
         preview,
         this.plugin.settings.followLinksFromCards,
@@ -263,6 +265,20 @@ export class DeskRenderer {
 
   refreshBranchMetadata(): void {
     this.cardSignatures.refreshBranches();
+  }
+
+  refreshBranchLinkOutlines(): void {
+    for (const [path, preview] of this.previews) {
+      const file = this.plugin.index.fileAtPath(path);
+      if (file instanceof TFile) {
+        this.applyBranchLinkOutlines(preview, file);
+      } else {
+        applyRenderedBranchLinkOutlines(preview, {
+          enabled: false,
+          links: [],
+        });
+      }
+    }
   }
 
   refreshInferredNavigation(): void {
@@ -837,6 +853,7 @@ export class DeskRenderer {
           file.path,
           component,
         );
+        this.applyBranchLinkOutlines(preview, file);
         applyRenderedLinkAccessibility(
           preview,
           this.plugin.settings.followLinksFromCards,
@@ -963,6 +980,34 @@ export class DeskRenderer {
         });
       },
     });
+  }
+
+  private applyBranchLinkOutlines(target: HTMLElement, file: TFile): void {
+    applyRenderedBranchLinkOutlines(target, {
+      enabled: this.plugin.settings.explicitBranchLinks,
+      outline: this.plugin.settings.outlineBranchLinks,
+      hideMarker: this.plugin.settings.hideBranchLinkMarkers,
+      links: this.app.metadataCache.getFileCache(file)?.links ?? [],
+      targetAddressForLink: (link) =>
+        this.filedAddressForRenderedLink(link, file.path),
+    });
+  }
+
+  private filedAddressForRenderedLink(
+    link: string,
+    sourcePath: string,
+  ): string | undefined {
+    const target = resolveFiledCardLink(getLinkpath(link), sourcePath, {
+      resolveFile: (path, source) =>
+        this.app.metadataCache.getFirstLinkpathDest(path, source),
+      filedPathForFile: (file) =>
+        this.plugin.index.filedByFile(file)?.path,
+      firstFiledPathAtAddress: (address) =>
+        this.plugin.index.firstFiledAtAddress(address)?.path,
+    });
+    return target === undefined
+      ? undefined
+      : this.plugin.index.filedByPath(target.path)?.address;
   }
 
   private showPileMenu(

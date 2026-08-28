@@ -1506,6 +1506,33 @@ button.slipbox-inferred-navigation-item:focus-visible {
   margin-bottom: 0;
 }
 
+a.slipbox-explicit-branch-link {
+  padding: 0 0.22em;
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: var(--radius-s);
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+}
+
+.slipbox-explicit-branch-marker {
+  display: none;
+}
+
+a.slipbox-explicit-branch-link:not([aria-disabled="true"]):hover {
+  border-color: var(--background-modifier-border-focus);
+  background: var(--background-modifier-hover);
+}
+
+a.slipbox-explicit-branch-link[aria-disabled="true"] {
+  cursor: text;
+}
+
+a.slipbox-explicit-branch-link:focus-visible {
+  outline: 2px solid var(--background-modifier-border-focus);
+  outline-offset: 2px;
+}
+
 .slipbox-card-footer {
   position: relative;
   display: flex;
@@ -1962,6 +1989,16 @@ button.slipbox-card-backlink-overflow:disabled {
   }
 
   .slipbox-deck-map:focus-visible {
+    outline-color: Highlight;
+  }
+
+  a.slipbox-explicit-branch-link {
+    border-color: LinkText;
+  }
+
+  a.slipbox-explicit-branch-link:not([aria-disabled="true"]):hover,
+  a.slipbox-explicit-branch-link:focus-visible {
+    border-color: Highlight;
     outline-color: Highlight;
   }
 }

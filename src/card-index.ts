@@ -136,12 +136,12 @@ export class CardIndex {
       ? indexExplicitBranches(
         filed.map((card, deckIndex) => ({
           path: card.path,
+          address: card.address,
           deckIndex,
           links: this.app.metadataCache.getFileCache(card.file)?.links ?? [],
         })),
         {
           enabled: true,
-          marker: config.branchLinkMarker,
           resolveTargetPath: (link, sourcePath) => resolveFiledCardLink(
             getLinkpath(link),
             sourcePath,

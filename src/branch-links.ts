@@ -4,8 +4,11 @@ export interface BranchLinkReference {
   readonly displayText?: string;
 }
 
+export const EXPLICIT_BRANCH_MARKER = "+";
+
 export interface ExplicitBranchSource {
   readonly path: string;
+  readonly address: string;
   readonly deckIndex: number;
   readonly links: readonly BranchLinkReference[];
 }
@@ -24,7 +27,6 @@ export interface ExplicitBranchIndex {
 
 export interface ExplicitBranchIndexOptions {
   readonly enabled: boolean;
-  readonly marker: string;
   readonly resolveTargetPath: (
     link: string,
     sourcePath: string,
@@ -36,20 +38,27 @@ export const EMPTY_EXPLICIT_BRANCH_INDEX: ExplicitBranchIndex = {
   incomingByTargetPath: new Map(),
 };
 
-/** Extract an asserted label only from an explicitly displayed ordinary link. */
+/**
+ * Extract an asserted label only from an explicitly displayed ordinary link.
+ * An alias equal to the target card's address remains an ordinary card link.
+ */
 export function explicitBranchLabel(
   reference: BranchLinkReference,
   enabled: boolean,
-  marker: string,
+  targetAddress?: string,
 ): string | null {
-  if (!enabled || marker === "") {
+  if (!enabled) {
     return null;
   }
   const displayText = explicitDisplayText(reference);
-  if (displayText === null || !displayText.startsWith(marker)) {
+  if (
+    displayText === null ||
+    !displayText.startsWith(EXPLICIT_BRANCH_MARKER) ||
+    displayText === targetAddress
+  ) {
     return null;
   }
-  const label = displayText.slice(marker.length).trim();
+  const label = displayText.slice(EXPLICIT_BRANCH_MARKER.length).trim();
   return label === "" ? null : label;
 }
 
@@ -65,6 +74,9 @@ export function indexExplicitBranches(
     left.deckIndex - right.deckIndex || compareText(left.path, right.path)
   );
   const filedPaths = new Set(orderedSources.map((source) => source.path));
+  const filedAddressesByPath = new Map(
+    orderedSources.map((source) => [source.path, source.address]),
+  );
   const sourceDeckIndices = new Map(
     orderedSources.map((source) => [source.path, source.deckIndex]),
   );
@@ -73,12 +85,7 @@ export function indexExplicitBranches(
 
   for (const source of orderedSources) {
     source.links.forEach((reference, sourceOrder) => {
-      const label = explicitBranchLabel(
-        reference,
-        options.enabled,
-        options.marker,
-      );
-      if (label === null) {
+      if (explicitBranchLabel(reference, options.enabled) === null) {
         return;
       }
       const targetPath = options.resolveTargetPath(reference.link, source.path);
@@ -87,6 +94,14 @@ export function indexExplicitBranches(
         targetPath === source.path ||
         !filedPaths.has(targetPath)
       ) {
+        return;
+      }
+      const label = explicitBranchLabel(
+        reference,
+        options.enabled,
+        filedAddressesByPath.get(targetPath),
+      );
+      if (label === null) {
         return;
       }
       const key = JSON.stringify([source.path, targetPath, label]);

@@ -7,7 +7,6 @@ import {
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
-  branchLinkMarkerError,
   formatKeyBinding,
   hasTitleAddressPropertyCollision,
   keyBindingFromKeyboardEvent,
@@ -17,7 +16,6 @@ import {
   normalizeKeyBinding,
   normalizeCardSize,
   normalizeCardSpread,
-  normalizeBranchLinkMarker,
   normalizeFolderPath,
   normalizeSettings,
 } from "../src/settings.js";
@@ -121,7 +119,8 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.deskCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
     assert.equal(DEFAULT_SETTINGS.explicitBranchLinks, false);
-    assert.equal(DEFAULT_SETTINGS.branchLinkMarker, "+");
+    assert.equal(DEFAULT_SETTINGS.outlineBranchLinks, true);
+    assert.equal(DEFAULT_SETTINGS.hideBranchLinkMarkers, true);
     assert.equal(DEFAULT_SETTINGS.showBranchLabels, true);
     assert.equal(DEFAULT_SETTINGS.inferAddressBranches, false);
     assert.equal(DEFAULT_SETTINGS.showInferredBranchNavigation, true);
@@ -247,30 +246,37 @@ describe("Slipbox settings", () => {
     }]);
   });
 
-  test("normalizes branching settings and rejects unsafe markers", () => {
+  test("normalizes branching settings and ignores the retired marker field", () => {
     const settings = normalizeSettings({
       explicitBranchLinks: true,
       branchLinkMarker: "  →→  ",
+      outlineBranchLinks: false,
+      hideBranchLinkMarkers: false,
       showBranchLabels: false,
       inferAddressBranches: true,
       showInferredBranchNavigation: false,
     });
     assert.equal(settings.explicitBranchLinks, true);
-    assert.equal(settings.branchLinkMarker, "→→");
+    assert.equal(Object.hasOwn(settings, "branchLinkMarker"), false);
+    assert.equal(settings.outlineBranchLinks, false);
+    assert.equal(settings.hideBranchLinkMarkers, false);
     assert.equal(settings.showBranchLabels, false);
     assert.equal(settings.inferAddressBranches, true);
     assert.equal(settings.showInferredBranchNavigation, false);
 
-    for (const marker of ["", "   ", "+\n", "x\u007f", "x\u2028"]) {
-      assert.notEqual(branchLinkMarkerError(marker), null);
-      assert.equal(normalizeBranchLinkMarker(marker), "+");
-    }
-    assert.equal(branchLinkMarkerError(" § "), null);
-    assert.equal(normalizeBranchLinkMarker(" § "), "§");
     assert.equal(
       normalizeSettings({ showInferredBranchNavigation: "invalid" })
         .showInferredBranchNavigation,
       true,
+    );
+    assert.equal(
+      normalizeSettings({ outlineBranchLinks: "invalid" }).outlineBranchLinks,
+      DEFAULT_SETTINGS.outlineBranchLinks,
+    );
+    assert.equal(
+      normalizeSettings({ hideBranchLinkMarkers: "invalid" })
+        .hideBranchLinkMarkers,
+      DEFAULT_SETTINGS.hideBranchLinkMarkers,
     );
     assert.equal(
       normalizeSettings({ inferApparentBranches: true }).inferAddressBranches,

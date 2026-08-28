@@ -13,7 +13,6 @@ export interface CardIndexConfig {
   readonly ordering: DeckOrdering;
   readonly duplicatePolicy: DuplicateAddressPolicy;
   readonly explicitBranchLinks: boolean;
-  readonly branchLinkMarker: string;
   readonly inferAddressBranches: boolean;
 }
 
@@ -32,7 +31,6 @@ export function cardIndexConfig(settings: SlipboxSettings): CardIndexConfig {
     ordering: settings.deckOrdering,
     duplicatePolicy: settings.duplicateAddresses,
     explicitBranchLinks: settings.explicitBranchLinks,
-    branchLinkMarker: settings.branchLinkMarker,
     inferAddressBranches: settings.inferAddressBranches,
   };
 }
@@ -99,6 +97,8 @@ export function settingsRefreshImpact(
     return indexChange;
   }
   const branchPresentationChanged =
+    previous.outlineBranchLinks !== next.outlineBranchLinks ||
+    previous.hideBranchLinkMarkers !== next.hideBranchLinkMarkers ||
     previous.showBranchLabels !== next.showBranchLabels ||
     previous.showInferredBranchNavigation !== next.showInferredBranchNavigation;
   if (branchPresentationChanged && nonPresentationSettingsEqual(previous, next)) {

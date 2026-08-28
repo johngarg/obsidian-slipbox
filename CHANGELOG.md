@@ -8,9 +8,13 @@ initial public beta.
 
 ### Added
 
-- Added optional explicit branch links marked through displayed aliases such as
-  `[[card|+a]]`, with interactive incoming labels on Deck, Desk, and viewed
-  cards. Labels that do not fit the header collapse into a `+N` menu.
+- Added optional explicit branch links using the fixed canonical `+` alias
+  syntax, such as `[[card|+a]]`, with interactive incoming labels on Deck,
+  Desk, and viewed cards. Marked aliases can receive a quiet outline in
+  rendered Slipbox card bodies and hide their `+` prefix there by default,
+  while labels that do not fit the header collapse into a `+N` menu. Exact
+  aliases for `+`-addressed cards remain ordinary; `++address` asserts a branch
+  whose label is `+address`.
 - Added optional hierarchy inference from address extension, with
   commands for parent movement and wrapped forward/backward sibling cycling.
 - Added low-clutter parent, sibling, and child menus beneath interactive cards

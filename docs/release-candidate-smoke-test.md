@@ -51,6 +51,21 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] Enable explicit branch links and confirm marked Wiki and Markdown aliases
   show incoming labels on the active Deck card, expanded Desk cards, and the
   viewed card.
+- [ ] File a card at `+12`. Confirm a normal link displayed as `+12` remains
+  ordinary, while an explicit alias `++12` is indexed and presented as a branch
+  with label `+12`.
+- [ ] With **Outline branch links in cards** enabled, confirm marked aliases
+  receive a quiet outline in Deck, Desk, and viewed-card bodies but not in
+  ordinary Reading view, Live Preview, source mode, or Slipbox inline editing.
+  Confirm unresolved, unfiled-target, and self-link aliases are outlined while
+  `[[+a]]`, embeds, external links, and unmarked aliases remain ordinary.
+- [ ] Disable ordinary card-link following and confirm outlined aliases remain
+  visible but do not acquire a clickable hover treatment. Toggle outlining and
+  confirm existing cards update without moving focus, scroll, or card layout.
+- [ ] With **Hide branch-link markers in cards** enabled, confirm `+` disappears
+  from marked aliases in Deck, Desk, and viewed card bodies while their labels
+  and link targets remain intact. Toggle it and confirm `+` returns in place;
+  ordinary Markdown views and inline editing remain unchanged.
 - [ ] Use a long label and several incoming branches; confirm the header keeps
   clear of the title and a `+N` menu exposes every hidden annotation.
 - [ ] Turn off ordinary card-link following and confirm a branch-label button

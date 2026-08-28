@@ -431,7 +431,8 @@ export interface SlipboxSettings {
   readonly deckOrdering: DeckOrdering;
   readonly duplicateAddresses: DuplicateAddressPolicy;
   readonly explicitBranchLinks: boolean;
-  readonly branchLinkMarker: string;
+  readonly outlineBranchLinks: boolean;
+  readonly hideBranchLinkMarkers: boolean;
   readonly showBranchLabels: boolean;
   readonly inferAddressBranches: boolean;
   readonly showInferredBranchNavigation: boolean;
@@ -497,7 +498,8 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   deckOrdering: "natural",
   duplicateAddresses: "allowed",
   explicitBranchLinks: false,
-  branchLinkMarker: "+",
+  outlineBranchLinks: true,
+  hideBranchLinkMarkers: true,
   showBranchLabels: true,
   inferAddressBranches: false,
   showInferredBranchNavigation: true,
@@ -531,31 +533,6 @@ export function normalizePropertyName(value: unknown, fallback: string): string 
   return typeof value === "string" && value.trim() !== ""
     ? value.trim()
     : fallback;
-}
-
-export function branchLinkMarkerError(marker: string): string | null {
-  if (marker.trim() === "") {
-    return "A non-empty branch-link marker is required.";
-  }
-  for (const character of marker) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if (
-      codePoint <= 0x1f ||
-      (codePoint >= 0x7f && codePoint <= 0x9f) ||
-      codePoint === 0x2028 ||
-      codePoint === 0x2029
-    ) {
-      return "The branch-link marker cannot contain control characters or line separators.";
-    }
-  }
-  return null;
-}
-
-export function normalizeBranchLinkMarker(value: unknown): string {
-  if (typeof value !== "string" || branchLinkMarkerError(value) !== null) {
-    return DEFAULT_SETTINGS.branchLinkMarker;
-  }
-  return value.trim();
 }
 
 export function normalizeFolderPath(value: unknown): string {
@@ -761,7 +738,14 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.explicitBranchLinks === "boolean"
         ? source.explicitBranchLinks
         : DEFAULT_SETTINGS.explicitBranchLinks,
-    branchLinkMarker: normalizeBranchLinkMarker(source.branchLinkMarker),
+    outlineBranchLinks:
+      typeof source.outlineBranchLinks === "boolean"
+        ? source.outlineBranchLinks
+        : DEFAULT_SETTINGS.outlineBranchLinks,
+    hideBranchLinkMarkers:
+      typeof source.hideBranchLinkMarkers === "boolean"
+        ? source.hideBranchLinkMarkers
+        : DEFAULT_SETTINGS.hideBranchLinkMarkers,
     showBranchLabels:
       typeof source.showBranchLabels === "boolean"
         ? source.showBranchLabels

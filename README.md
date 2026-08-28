@@ -78,7 +78,11 @@ Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicogra
 
 ## Branching and structural navigation
 
-The optional **Recognise explicit branch links** setting treats a marked link alias such as `[[Child card|+a]]` as an asserted branch. The complete marker is configurable. Its remaining alias, `a` in this example, appears beside the child card's address and returns the Deck anchor to the source card. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
+The optional **Recognise explicit branch links** setting treats a link alias beginning with the canonical `+` syntax, such as `[[Child card|+a]]`, as an asserted branch. Its remaining alias, `a` in this example, appears beside the child card's address and returns the Deck anchor to the source card. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
+
+Card addresses may themselves begin with `+`. An alias exactly matching the resolved target card's address remains an ordinary link, so `[[Plus card|+12]]` is ordinary when the target is addressed `+12`. Add the branch marker separately to assert a branch: `[[Plus card|++12]]` has the branch label `+12`.
+
+**Outline branch links in cards** draws a quiet outline around marked aliases in rendered Deck, Desk, and viewed-card bodies. The outline identifies the explicit alias syntax itself, so it also appears on marked self-links or links whose target is unresolved or unfiled even though those links do not enter the branch index. **Hide branch-link markers in cards**, enabled by default, hides the `+` prefix in those rendered aliases while preserving the link target. Both settings affect only Slipbox cards; ordinary Obsidian Markdown views and editors are unaffected.
 
 The separate **Infer branches from addresses** setting derives an ephemeral hierarchy from address extension. With natural ordering, `2a` can be a child of `2`, while `20` is not; lexicographic ordering uses every proper literal prefix. Duplicate-address cards share one structural node. Three commands move to the inferred parent or cycle forward and backward through local siblings, wrapping within the same parent. Roots form their own sibling axis; equal-depth cards under different parents do not.
 

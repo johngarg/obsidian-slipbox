@@ -7,11 +7,9 @@ import {
 
 import {
   layoutFilesOnCanvas,
-  layoutLegacyDeskOnCanvas,
   parseCanvasDocument,
   serializeCanvasDocument,
   type CanvasLayoutResult,
-  type LegacyDeskCanvasCard,
 } from "./canvas-layout.js";
 
 export interface CanvasWriteResult extends CanvasLayoutResult {
@@ -66,27 +64,12 @@ export class CanvasBridge {
     return this.updateCanvas(file, (data) => layoutFilesOnCanvas(data, filePaths));
   }
 
-  async layoutLegacyDeskOnCanvas(
-    file: TFile,
-    cards: readonly LegacyDeskCanvasCard[],
-  ): Promise<CanvasWriteResult> {
-    return this.updateCanvas(file, (data) => layoutLegacyDeskOnCanvas(data, cards));
-  }
-
   async createCanvas(
     path: string,
     filePaths: readonly string[],
   ): Promise<CanvasWriteResult> {
     return this.createCanvasWithLayout(path, (data) =>
       layoutFilesOnCanvas(data, filePaths));
-  }
-
-  async createLegacyDeskCanvas(
-    path: string,
-    cards: readonly LegacyDeskCanvasCard[],
-  ): Promise<CanvasWriteResult> {
-    return this.createCanvasWithLayout(path, (data) =>
-      layoutLegacyDeskOnCanvas(data, cards));
   }
 
   private async createCanvasWithLayout(

@@ -38,13 +38,6 @@ export interface CanvasLayoutResult {
   readonly skippedPaths: readonly string[];
 }
 
-export interface LegacyDeskCanvasCard {
-  readonly cardRef: string;
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-}
-
 const DEFAULT_NODE_WIDTH = 400;
 const DEFAULT_NODE_HEIGHT = 280;
 const DEFAULT_HORIZONTAL_GAP = 80;
@@ -137,50 +130,6 @@ export function layoutFilesOnCanvas(
   return {
     data: { ...data, nodes: [...data.nodes, ...nodes] },
     addedPaths,
-    skippedPaths,
-  };
-}
-
-export function layoutLegacyDeskOnCanvas(
-  data: CanvasDocument,
-  cards: readonly LegacyDeskCanvasCard[],
-  options: Pick<CanvasLayoutOptions, "originX" | "originY" | "nodeWidth" | "nodeHeight"> = {},
-): CanvasLayoutResult {
-  const existingPaths = new Set(
-    data.nodes.flatMap((node) => isFileNode(node) ? [node.file] : []),
-  );
-  const ordered = [...cards]
-    .filter((card) => card.cardRef !== "")
-    .sort((left, right) => left.z - right.z || left.cardRef.localeCompare(right.cardRef));
-  const seen = new Set<string>();
-  const unique = ordered.filter((card) => {
-    if (seen.has(card.cardRef)) {
-      return false;
-    }
-    seen.add(card.cardRef);
-    return true;
-  });
-  const skippedPaths = unique
-    .filter((card) => existingPaths.has(card.cardRef))
-    .map((card) => card.cardRef);
-  const additions = unique.filter((card) => !existingPaths.has(card.cardRef));
-  const width = positive(options.nodeWidth, DEFAULT_NODE_WIDTH);
-  const height = positive(options.nodeHeight, DEFAULT_NODE_HEIGHT);
-  const originX = finite(options.originX, 0);
-  const originY = finite(options.originY, 0);
-  const usedIds = new Set(data.nodes.map((node) => node.id));
-  const nodes = additions.map((card): CanvasFileNode => ({
-    id: uniqueCanvasNodeId(card.cardRef, usedIds),
-    type: "file",
-    file: card.cardRef,
-    x: originX + card.x,
-    y: originY + card.y,
-    width,
-    height,
-  }));
-  return {
-    data: { ...data, nodes: [...data.nodes, ...nodes] },
-    addedPaths: additions.map((card) => card.cardRef),
     skippedPaths,
   };
 }

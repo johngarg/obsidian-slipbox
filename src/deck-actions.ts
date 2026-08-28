@@ -1,4 +1,4 @@
-import type { DeckAction } from "./settings.js";
+import type { SlipboxAction } from "./settings.js";
 
 export interface DeckActionContext {
   readonly hasActiveCard: boolean;
@@ -56,7 +56,7 @@ export function deskToggleFocusTarget(
 }
 
 export function canRunDeckAction(
-  action: DeckAction,
+  action: SlipboxAction,
   context: DeckActionContext,
 ): boolean {
   switch (action) {

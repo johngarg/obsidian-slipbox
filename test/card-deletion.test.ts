@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { deleteCardWithConfirmation } from "../src/index.js";
+import { deleteCardWithConfirmation } from "../src/card-deletion.js";
 
 interface TestFile {
   readonly path: string;

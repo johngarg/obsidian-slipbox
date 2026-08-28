@@ -4,9 +4,9 @@ import { Window } from "happy-dom";
 
 import {
   renderCardAddress,
-  renderInlineFilingEditor,
   UNFILED_ADDRESS_LABEL,
-} from "../src/index.js";
+} from "../src/card-address.js";
+import { renderInlineFilingEditor } from "../src/filing-editor.js";
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 

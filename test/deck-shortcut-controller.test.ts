@@ -10,7 +10,7 @@ import {
 import type { PendingDeckCommandCompletion } from "../src/deck-commands.js";
 import {
   DEFAULT_DECK_KEYBINDINGS,
-  type DeckAction,
+  type SlipboxAction,
   type SlipboxSettings,
 } from "../src/settings.js";
 
@@ -19,7 +19,7 @@ interface ShortcutSubject {
   readonly root: HTMLElement;
   readonly outside: HTMLElement;
   readonly controller: DeckShortcutController;
-  readonly runs: DeckAction[];
+  readonly runs: SlipboxAction[];
   readonly notices: string[];
   readonly completions: PendingDeckCommandCompletion[];
   setActive(active: boolean): void;
@@ -65,7 +65,7 @@ function createSubject(
   let lastEvent: Event | null = null;
   let bindings = DEFAULT_DECK_KEYBINDINGS;
   let completionResult: PendingDeckCommandCompletionResult = { kind: "complete" };
-  const runs: DeckAction[] = [];
+  const runs: SlipboxAction[] = [];
   const notices: string[] = [];
   const completions: PendingDeckCommandCompletion[] = [];
   let controller: DeckShortcutController;
@@ -368,7 +368,7 @@ describe("DeckShortcutController", () => {
     const rootNode = createHtmlElement(window, "div");
     window.document.body.append(rootNode);
     const root = rootNode as unknown as HTMLElement;
-    const runs: DeckAction[] = [];
+    const runs: SlipboxAction[] = [];
     const controller = new DeckShortcutController({
       root,
       isMacOS: true,

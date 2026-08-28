@@ -5,7 +5,7 @@ import {
   explicitBranchLabel,
   indexExplicitBranches,
   type BranchLinkReference,
-} from "../src/index.js";
+} from "../src/branch-links.js";
 
 const reference = (
   original: string,

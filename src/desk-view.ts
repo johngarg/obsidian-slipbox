@@ -27,7 +27,6 @@ import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
 import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
-import { deskClassNames, setDeskCustomProperty } from "./desk-dom.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
 import {
   attachUnfiledAddressFiling,
@@ -316,7 +315,7 @@ export class DeskRenderer {
     );
     this.attachBackgroundMenu(stage);
     this.workspaceEl = stage;
-    const deskEl = space.createDiv({ cls: deskClassNames("slipbox-desk") });
+    const deskEl = space.createDiv({ cls: "slipbox-desk" });
     setCardTooltip(
       deskEl,
       `Working piles, ${cardCount} card${cardCount === 1 ? "" : "s"}`,
@@ -326,7 +325,7 @@ export class DeskRenderer {
     this.rootEl = deskEl;
 
     const piles = deskEl.createDiv({
-      cls: deskClassNames("slipbox-desk-piles"),
+      cls: "slipbox-desk-piles",
     });
     this.pilesAnchorEl = piles;
     if (cardCount === 0) {
@@ -423,9 +422,7 @@ export class DeskRenderer {
     isCurrent: () => boolean,
   ): Promise<void>[] {
     const pileEl = parent.createDiv({
-      cls: deskClassNames(
-        `slipbox-desk-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
-      ),
+      cls: `slipbox-desk-pile ${expanded ? "is-expanded" : "is-collapsed"}`,
       attr: {
         "data-pile-id": pile.id,
       },
@@ -468,7 +465,7 @@ export class DeskRenderer {
       }
     }
     const count = pileEl.createSpan({
-      cls: deskClassNames("slipbox-desk-pile-count"),
+      cls: "slipbox-desk-pile-count",
       text: String(pile.cards.length),
     });
     setCardTooltip(
@@ -480,7 +477,7 @@ export class DeskRenderer {
     let dragSurface: HTMLElement = pileEl;
     if (expanded) {
       const handle = pileEl.createEl("button", {
-        cls: deskClassNames("slipbox-desk-pile-handle"),
+        cls: "slipbox-desk-pile-handle",
         attr: {
           type: "button",
         },
@@ -511,7 +508,7 @@ export class DeskRenderer {
       dragSurface = handle;
     }
     const sequence = pileEl.createDiv({
-      cls: deskClassNames("slipbox-desk-sequence"),
+      cls: "slipbox-desk-sequence",
     });
     const visibleCards = expanded ? pile.cards : pile.cards.slice(0, 1);
     const jobs = visibleCards.map((card, cardIndex) => this.renderCard(
@@ -580,11 +577,9 @@ export class DeskRenderer {
     const previous = direction === -1;
     const label = `${previous ? "Previous" : "Next"} card in pile ${pileIndex + 1}`;
     const button = parent.createEl("button", {
-      cls: deskClassNames(
-        `clickable-icon slipbox-desk-pile-cycle ${
-          previous ? "is-previous" : "is-next"
-        }`,
-      ),
+      cls: `clickable-icon slipbox-desk-pile-cycle ${
+        previous ? "is-previous" : "is-next"
+      }`,
       attr: { type: "button" },
     });
     setIcon(button, previous ? "chevron-left" : "chevron-right");
@@ -644,10 +639,10 @@ export class DeskRenderer {
     const isFocused = !isViewed &&
       this.actions.isDeskCardFocused(card.cardRef, pile.id);
     const shell = parent.createDiv({
-      cls: deskClassNames("slipbox-desk-card-shell"),
+      cls: "slipbox-desk-card-shell",
     });
     const miniature = shell.createDiv({
-      cls: deskClassNames("slipbox-desk-card"),
+      cls: "slipbox-desk-card",
       attr: {
         "data-card-ref": card.cardRef,
         role: isViewed || filed !== undefined ? "button" : "group",
@@ -665,8 +660,7 @@ export class DeskRenderer {
     );
     miniature.dataset.pileId = pile.id;
     const jitter = deskStackJitter(card.cardRef, cardIndex);
-    setDeskCustomProperty(
-      miniature,
+    miniature.style.setProperty(
       "--slipbox-desk-card-tilt",
       `${jitter.rotationDegrees}deg`,
     );
@@ -695,12 +689,12 @@ export class DeskRenderer {
     );
 
     const identity = miniature.createDiv({
-      cls: deskClassNames("slipbox-desk-card-identity"),
+      cls: "slipbox-desk-card-identity",
     });
     const addressEl = this.cardSignatures.render(identity, {
       path: file.path,
       address,
-      addressClass: deskClassNames("slipbox-desk-card-address"),
+      addressClass: "slipbox-desk-card-address",
       interactive: expanded && !isViewed,
     });
     if (isFilingSource && filing !== null) {
@@ -737,13 +731,13 @@ export class DeskRenderer {
     );
     if (headerTitle !== null) {
       identity.createSpan({
-        cls: deskClassNames("slipbox-desk-card-title"),
+        cls: "slipbox-desk-card-title",
         text: headerTitle,
       });
     }
     if (!isFilingSource && !isViewed) {
       const controls = identity.createDiv({
-        cls: deskClassNames("slipbox-desk-card-actions"),
+        cls: "slipbox-desk-card-actions",
       });
       this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
         container: controls,
@@ -758,7 +752,7 @@ export class DeskRenderer {
           canMoveRight: cardIndex < pile.cards.length - 1,
         },
         settings: this.plugin.settings.cardHeaderButtons,
-        buttonClass: deskClassNames("slipbox-desk-card-action"),
+        buttonClass: "slipbox-desk-card-action",
         showTooltips: this.plugin.settings.showTooltips,
         tooltipPlacement: "bottom",
         run: (action) =>
@@ -797,7 +791,7 @@ export class DeskRenderer {
     }
 
     const preview = miniature.createDiv({
-      cls: deskClassNames("slipbox-desk-card-preview markdown-rendered"),
+      cls: "slipbox-desk-card-preview markdown-rendered",
     });
     this.previews.set(file.path, preview);
     if (filed !== undefined && expanded) {
@@ -909,7 +903,7 @@ export class DeskRenderer {
       const depth = index + 1;
       const jitter = deskStackJitter(card.cardRef, depth);
       const layer = parent.createDiv({
-        cls: deskClassNames("slipbox-desk-stack-layer"),
+        cls: "slipbox-desk-stack-layer",
         attr: { "aria-hidden": "true" },
       });
       layer.style.setProperty("--slipbox-stack-depth", String(depth));

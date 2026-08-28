@@ -9,8 +9,8 @@ import {
   buildInferredStructure,
   cycleBackwardInferredSiblingAddress,
   cycleForwardInferredSiblingAddress,
-  isInferredAddressAncestor,
-} from "../src/index.js";
+} from "../src/inferred-structure.js";
+import { isInferredAddressAncestor } from "../src/address-order.js";
 
 const cards = (addresses: readonly string[]) => addresses.map((address, index) => ({
   address,

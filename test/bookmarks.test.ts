@@ -4,12 +4,11 @@ import { describe, test } from "node:test";
 import {
   createBookmark,
   deleteBookmark,
-  migrateAddressBookmarks,
   normalizeBookmarks,
   removeBookmarkPaths,
   renameBookmarkPaths,
   type DeckBookmark,
-} from "../src/index.js";
+} from "../src/bookmarks.js";
 
 describe("bookmarks", () => {
   const first: DeckBookmark = { path: "Cards/first.md" };
@@ -39,7 +38,7 @@ describe("bookmarks", () => {
     );
   });
 
-  test("loads path records and retains valid address records for migration", () => {
+  test("loads unique path records and drops every other shape", () => {
     assert.deepEqual(
       normalizeBookmarks([
         first,
@@ -49,21 +48,7 @@ describe("bookmarks", () => {
         { zettelId: "17/4a" },
         { zettelId: " 01/1" },
       ]),
-      [first, { path: "Cards/second.md" }, { zettelId: "17/4a" }],
-    );
-  });
-
-  test("migrates an address bookmark to the first path-sorted card", () => {
-    const paths = new Map([
-      ["17/4a", "Cards/a.md"],
-      ["99/1", "Cards/z.md"],
-    ]);
-    assert.deepEqual(
-      migrateAddressBookmarks(
-        [{ zettelId: "17/4a" }, { path: "Cards/existing.md" }],
-        (address) => paths.get(address),
-      ),
-      [{ path: "Cards/a.md" }, { path: "Cards/existing.md" }],
+      [first, { path: "Cards/second.md" }],
     );
   });
 

@@ -13,11 +13,11 @@ import {
   shouldSuspendDeckShortcut,
 } from "./filing-editor.js";
 import {
-  DECK_ACTION_DEFINITIONS,
+  SLIPBOX_ACTION_DEFINITIONS,
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingSignature,
-  type DeckAction,
+  type SlipboxAction,
   type DeckKeyBinding,
   type SlipboxActionDefinition,
   type SlipboxSettings,
@@ -35,7 +35,7 @@ const CONFLICT_NOTICE_THROTTLE_MS = 5_000;
 const CONFLICT_NOTICE_DURATION_MS = 6_000;
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
-const PENDING_COMMAND_ACTIONS = new Set<DeckAction>([
+const PENDING_COMMAND_ACTIONS = new Set<SlipboxAction>([
   "find-address-first",
   "pull-into-pile",
 ]);
@@ -51,8 +51,8 @@ export interface DeckShortcutEnvironment {
   readonly isFilingInputFocused: () => boolean;
   readonly bindings: () => SlipboxSettings["deckKeybindings"];
   readonly lastEvent: () => Event | null;
-  readonly canRun: (action: DeckAction) => boolean;
-  readonly run: (action: DeckAction) => boolean;
+  readonly canRun: (action: SlipboxAction) => boolean;
+  readonly run: (action: SlipboxAction) => boolean;
   readonly completePending: (
     completion: PendingDeckCommandCompletion,
   ) => PendingDeckCommandCompletionResult;
@@ -70,9 +70,9 @@ export class DeckShortcutController {
   private suspended = false;
   private connected = false;
   private readonly commandTracker =
-    new ShortcutCommandTracker<KeyboardEvent, DeckAction>();
+    new ShortcutCommandTracker<KeyboardEvent, SlipboxAction>();
   private commandActionAwaitingKeyup: {
-    readonly action: DeckAction;
+    readonly action: SlipboxAction;
     readonly timestamp: number;
   } | null = null;
   private readonly conflictNoticeTimes = new Map<string, number>();
@@ -154,7 +154,7 @@ export class DeckShortcutController {
     this.suspended = suspended;
   }
 
-  canRunCommand(action: DeckAction): boolean {
+  canRunCommand(action: SlipboxAction): boolean {
     const event = keyboardEvent(this.environment.lastEvent());
     if (
       this.suspended ||
@@ -172,7 +172,7 @@ export class DeckShortcutController {
     return this.environment.canRun(action);
   }
 
-  runCommand(action: DeckAction): boolean {
+  runCommand(action: SlipboxAction): boolean {
     const lastEvent = keyboardEvent(this.environment.lastEvent());
     const deckEvent = lastEvent !== undefined && eventTargetsDeck(
       lastEvent.target,
@@ -283,7 +283,7 @@ export class DeckShortcutController {
       this.environment.isMacOS,
     ));
     const bindings = this.environment.bindings();
-    for (const definition of DECK_ACTION_DEFINITIONS) {
+    for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
       const configured = bindings[definition.id].find(
         (binding) => keyBindingSignature(binding) === signature,
       );

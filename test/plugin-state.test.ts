@@ -3,332 +3,122 @@ import { describe, test } from "node:test";
 
 import {
   DEFAULT_DATA,
-  hasRemovedEntryPointData,
-  hasTitleAddressCollisionData,
-  needsPluginDataMigration,
-  normalizePluginData,
+  loadPluginData,
   normalizePluginState,
 } from "../src/plugin-state.js";
-import { MAX_CARD_SPREAD, MIN_CARD_SPREAD } from "../src/settings.js";
+import { DEFAULT_SETTINGS } from "../src/settings.js";
 
 describe("normalizePluginState", () => {
-  test("loads valid persistent workspace state and drops retired fields", () => {
-    assert.deepEqual(
-      normalizePluginState({
-        entryPoints: [{ name: " Systems ", id: "1/1" }],
-        lastActiveId: "2/3a",
-        history: { entries: ["Cards/here.md"], index: 0 },
-        toolbarOverride: false,
-        bookmarks: [
-          { path: "Cards/here.md", label: " Here ", color: "blue" },
-        ],
-        legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
-        spread: 0.75,
-      }),
-      {
-        bookmarks: [
-          { path: "Cards/here.md" },
-        ],
-        legacyDeskCards: [{ cardRef: "Ideas/one.md", x: 120, y: 240, z: 3 }],
-      },
-    );
-  });
-
-  test("drops removed entry points and malformed Desk data", () => {
-    assert.deepEqual(
-      normalizePluginState({
-        entryPoints: [
-          { name: "", id: "1/1" },
-          { name: "Bad", id: " A/1" },
-          { name: "Good", id: "3/1a" },
-        ],
-        lastActiveId: "not-an-id",
-        bookmarks: [
-          { id: "bad", zettelId: " A/1", color: "infrared" },
-          { path: "Cards/good.md", color: "infrared" },
-        ],
-        deskCards: [{ cardRef: "", x: 0, y: 0, z: 0 }],
-        spread: 99,
-      }),
-      {
-        bookmarks: [
-          { path: "Cards/good.md" },
-        ],
-      },
-    );
-  });
-
-  test("uses defaults for unknown data", () => {
-    assert.deepEqual(normalizePluginState(null), { bookmarks: [] });
-  });
-
-  test("loads the historical deskCards persistence key", () => {
+  test("loads unique path bookmarks and drops every other state field", () => {
     assert.deepEqual(normalizePluginState({
-      deskCards: [{ cardRef: "Archive/one.md", x: 10, y: 20, z: 1 }],
+      bookmarks: [
+        { path: "Cards/here.md", label: "Old label" },
+        { path: "Cards/here.md" },
+        { zettelId: "8a" },
+        { path: "Cards/there.md" },
+      ],
+      legacyDeskCards: [{ cardRef: "Cards/here.md", x: 1, y: 2, z: 3 }],
+      entryPoints: [{ name: "Start", id: "8" }],
     }), {
-      bookmarks: [],
-      legacyDeskCards: [
-        { cardRef: "Archive/one.md", x: 10, y: 20, z: 1 },
+      bookmarks: [
+        { path: "Cards/here.md" },
+        { path: "Cards/there.md" },
       ],
     });
   });
+
+  test("uses empty state for unknown data", () => {
+    assert.deepEqual(normalizePluginState(null), { bookmarks: [] });
+  });
 });
 
-describe("normalizePluginData", () => {
-  test("migrates legacy flat state into schema-13 settings and state", () => {
-    const data = normalizePluginData({
-      entryPoints: [{ name: "Start", id: "1/1" }],
-      bookmarks: [{ zettelId: "1/1" }],
-      deskCards: [{ cardRef: "Start.md", x: 10, y: 20, z: 1 }],
-      spread: 0.7,
+describe("loadPluginData", () => {
+  test("uses defaults without a reset notice for a new installation", () => {
+    assert.deepEqual(loadPluginData(null), {
+      data: DEFAULT_DATA,
+      reset: false,
     });
-    assert.equal(data.schemaVersion, 13);
-    assert.equal(data.settings.explicitBranchLinks, false);
-    assert.equal(data.settings.branchLinkMarker, "+");
-    assert.equal(data.settings.showBranchLabels, true);
-    assert.equal(data.settings.inferAddressBranches, false);
-    assert.equal(data.settings.showInferredBranchNavigation, true);
-    assert.equal(data.settings.restrictViewedCardPaste, false);
-    assert.equal(data.settings.previewLinksOnHover, true);
-    assert.equal(data.settings.followLinksFromCards, true);
-    assert.equal(data.settings.protectFiledCardText, false);
-    assert.equal(data.settings.showAutomaticBacklinks, true);
-    assert.equal(data.settings.allowCardScrolling, true);
-    assert.equal(data.settings.addressProperty, "slipbox-id");
-    assert.equal(data.settings.titleProperty, "slipbox-title");
-    assert.equal(data.settings.deckOrdering, "natural");
-    assert.equal(data.settings.showDeckMap, true);
-    assert.equal(data.settings.cardSpread, 0.7);
-    assert.equal("entryPoints" in data.state, false);
-    assert.equal("spread" in data.state, false);
-    assert.deepEqual(data.state.bookmarks, [{ zettelId: "1/1" }]);
-    assert.deepEqual(data.state.legacyDeskCards, [
-      { cardRef: "Start.md", x: 10, y: 20, z: 1 },
-    ]);
   });
 
-  test("migrates schema 7 spread and removes history, toolbar, and template settings", () => {
-    const data = normalizePluginData({
-      schemaVersion: 7,
+  test("loads and normalizes only canonical schema-13 fields", () => {
+    const loaded = loadPluginData({
+      schemaVersion: 13,
       settings: {
-        addressProperty: "signature",
-        titleSource: "frontmatter",
-        titleProperty: "name",
-        newCardFolder: "Cards",
-        showTitleInDeck: true,
-        showDeckToolbar: false,
-        showDeckMap: false,
-        useTemplatesForNewNotes: true,
-        newNoteTemplatePath: "Templates/Zettel.md",
-        deckKeybindings: {
-          back: [{ key: "h", modifiers: ["Shift"] }],
-          forward: [{ key: "r", modifiers: ["Alt"] }],
-          "toggle-toolbar": [],
-          "open-note": [{ key: "o", modifiers: [] }],
-        },
-      },
-      state: {
-        bookmarks: [{ path: "Cards/here.md" }],
-        spread: 0.42,
-        history: { entries: ["Cards/here.md"], index: 0 },
-      },
-    });
-    assert.equal(data.schemaVersion, 13);
-    assert.equal(data.settings.addressProperty, "signature");
-    assert.equal(data.settings.titleProperty, "name");
-    assert.equal(data.settings.newCardFolder, "Cards");
-    assert.equal(data.settings.showTitleInDeck, true);
-    assert.equal(data.settings.showDeckMap, false);
-    assert.equal(data.settings.cardSpread, 0.42);
-    assert.equal("showDeckToolbar" in data.settings, false);
-    assert.equal("useTemplatesForNewNotes" in data.settings, false);
-    assert.equal("newNoteTemplatePath" in data.settings, false);
-    assert.equal("back" in data.settings.deckKeybindings, false);
-    assert.equal("forward" in data.settings.deckKeybindings, false);
-    assert.equal("toggle-toolbar" in data.settings.deckKeybindings, false);
-    assert.deepEqual(data.settings.deckKeybindings["open-note"], [
-      { key: "o", modifiers: [] },
-    ]);
-    assert.deepEqual(data.state.bookmarks, [{ path: "Cards/here.md" }]);
-    assert.equal("spread" in data.state, false);
-    assert.equal("history" in data.state, false);
-  });
-
-  test("prefers current cardSpread and clamps migrated legacy spread", () => {
-    const current = normalizePluginData({
-      schemaVersion: 8,
-      settings: { cardSpread: 0.63 },
-      state: { spread: 0.2 },
-    });
-    assert.equal(current.settings.cardSpread, 0.63);
-    assert.equal("spread" in current.state, false);
-
-    const low = normalizePluginData({
-      schemaVersion: 7,
-      settings: {},
-      state: { spread: 0 },
-    });
-    const high = normalizePluginData({
-      schemaVersion: 7,
-      settings: {},
-      state: { spread: 99 },
-    });
-    assert.equal(low.settings.cardSpread, MIN_CARD_SPREAD);
-    assert.equal(high.settings.cardSpread, MAX_CARD_SPREAD);
-  });
-
-  test("normalizes current legacy migration data and removes empty Desk fields", () => {
-    const populated = normalizePluginData({
-      schemaVersion: 2,
-      state: {
-        legacyDeskCards: [{ cardRef: "one.md", x: 1, y: 2, z: 3 }],
-      },
-    });
-    assert.deepEqual(populated.state.legacyDeskCards, [
-      { cardRef: "one.md", x: 1, y: 2, z: 3 },
-    ]);
-
-    const empty = normalizePluginData({
-      schemaVersion: 1,
-      state: { deskCards: [] },
-    });
-    assert.equal("deskCards" in empty.state, false);
-    assert.equal("legacyDeskCards" in empty.state, false);
-  });
-
-  test("uses complete defaults for unknown data", () => {
-    assert.deepEqual(normalizePluginData(null), DEFAULT_DATA);
-    assert.equal(DEFAULT_DATA.settings.restrictViewedCardPaste, true);
-    assert.equal(DEFAULT_DATA.settings.previewLinksOnHover, false);
-    assert.equal(DEFAULT_DATA.settings.followLinksFromCards, false);
-    assert.equal(DEFAULT_DATA.settings.protectFiledCardText, true);
-    assert.equal(DEFAULT_DATA.settings.showAutomaticBacklinks, true);
-    assert.equal(DEFAULT_DATA.settings.allowCardScrolling, true);
-  });
-
-  test("preserves permissive paper-workflow behavior for existing data", () => {
-    for (const existing of [
-      {},
-      { schemaVersion: 9, settings: {}, state: {} },
-      { schemaVersion: 9, settings: { showDeckMap: false }, state: {} },
-    ]) {
-      const data = normalizePluginData(existing);
-      assert.equal(data.settings.restrictViewedCardPaste, false);
-      assert.equal(data.settings.previewLinksOnHover, true);
-      assert.equal(data.settings.followLinksFromCards, true);
-      assert.equal(data.settings.protectFiledCardText, false);
-      assert.equal(data.settings.showAutomaticBacklinks, true);
-      assert.equal(data.settings.allowCardScrolling, true);
-    }
-
-    const explicit = normalizePluginData({
-      schemaVersion: 9,
-      settings: {
-        restrictViewedCardPaste: true,
-        previewLinksOnHover: false,
-        followLinksFromCards: false,
-        protectFiledCardText: true,
-      },
-      state: {},
-    });
-    assert.equal(explicit.settings.restrictViewedCardPaste, true);
-    assert.equal(explicit.settings.previewLinksOnHover, false);
-    assert.equal(explicit.settings.followLinksFromCards, false);
-    assert.equal(explicit.settings.protectFiledCardText, true);
-  });
-
-  test("migrates schema-10 display defaults and invalid values safely", () => {
-    const data = normalizePluginData({
-      schemaVersion: 10,
-      settings: {
-        restrictViewedCardPaste: "yes",
-        previewLinksOnHover: null,
-        followLinksFromCards: 1,
-        protectFiledCardText: {},
-        showAutomaticBacklinks: "yes",
-        allowCardScrolling: null,
-      },
-      state: {},
-    });
-    assert.equal(data.settings.restrictViewedCardPaste, true);
-    assert.equal(data.settings.previewLinksOnHover, false);
-    assert.equal(data.settings.followLinksFromCards, false);
-    assert.equal(data.settings.protectFiledCardText, true);
-    assert.equal(data.settings.showAutomaticBacklinks, true);
-    assert.equal(data.settings.allowCardScrolling, true);
-  });
-
-  test("migrates schema-11 display settings and supplies safe branching defaults", () => {
-    const data = normalizePluginData({
-      schemaVersion: 11,
-      settings: {
-        showAutomaticBacklinks: false,
-        allowCardScrolling: false,
-        showCardTooltips: true,
-      },
-      state: {},
-    });
-    assert.equal(data.schemaVersion, 13);
-    assert.equal(data.settings.showAutomaticBacklinks, false);
-    assert.equal(data.settings.allowCardScrolling, false);
-    assert.equal(data.settings.explicitBranchLinks, false);
-    assert.equal(data.settings.inferAddressBranches, false);
-    assert.equal(data.settings.showInferredBranchNavigation, true);
-    assert.equal(data.settings.showTooltips, true);
-  });
-
-  test("migrates released schema-12 data without losing its settings", () => {
-    const data = normalizePluginData({
-      schemaVersion: 12,
-      settings: {
+        ...DEFAULT_SETTINGS,
+        addressProperty: " signature ",
+        deskCardSize: "large",
         showTooltips: true,
-        showAutomaticBacklinks: false,
       },
-      state: {},
+      state: {
+        bookmarks: [{ path: "Cards/here.md" }, { zettelId: "8a" }],
+        legacyDeskCards: [{ cardRef: "Cards/here.md", x: 1, y: 2, z: 3 }],
+      },
     });
 
-    assert.equal(data.schemaVersion, 13);
-    assert.equal(data.settings.showTooltips, true);
-    assert.equal(data.settings.showAutomaticBacklinks, false);
-    assert.equal(data.settings.explicitBranchLinks, false);
-    assert.equal(data.settings.inferAddressBranches, false);
+    assert.equal(loaded.reset, false);
+    assert.equal(loaded.data.settings.addressProperty, "signature");
+    assert.equal(loaded.data.settings.deskCardSize, "large");
+    assert.equal(loaded.data.settings.showTooltips, true);
+    assert.deepEqual(loaded.data.state, {
+      bookmarks: [{ path: "Cards/here.md" }],
+    });
   });
 
-  test("detects removed entry-point data for eager persistence cleanup", () => {
-    assert.equal(hasRemovedEntryPointData({ entryPoints: [] }), true);
-    assert.equal(hasRemovedEntryPointData({
-      state: { entryPoints: [{ name: "Start", address: "1/1" }] },
-    }), true);
-    assert.equal(hasRemovedEntryPointData({
-      settings: { deckKeybindings: { "entry-points": [] } },
-      state: {},
-    }), true);
-    assert.equal(hasRemovedEntryPointData({
-      settings: { deckKeybindings: { bookmarks: [] } },
-      state: { bookmarks: [] },
-    }), false);
+  test("resets released beta schemas but salvages nested path bookmarks", () => {
+    for (const schemaVersion of [11, 12]) {
+      const loaded = loadPluginData({
+        schemaVersion,
+        settings: {
+          addressProperty: "signature",
+          trayCardSize: "large",
+          showCardTooltips: true,
+        },
+        state: {
+          bookmarks: [
+            { path: "Cards/here.md" },
+            { zettelId: "8a" },
+            { path: "Cards/here.md" },
+          ],
+          legacyDeskCards: [{ cardRef: "Cards/here.md", x: 1, y: 2, z: 3 }],
+        },
+      });
+
+      assert.equal(loaded.reset, true);
+      assert.equal(loaded.data.settings, DEFAULT_SETTINGS);
+      assert.deepEqual(loaded.data.state, {
+        bookmarks: [{ path: "Cards/here.md" }],
+      });
+      assert.equal(loaded.data.schemaVersion, 13);
+    }
   });
 
-  test("detects schema and title-key migrations", () => {
-    const collision = {
-      schemaVersion: 5,
+  test("discards flat pre-schema data and all of its state", () => {
+    const loaded = loadPluginData({
+      addressProperty: "signature",
+      bookmarks: [{ path: "Cards/here.md" }],
+      deskCards: [{ cardRef: "Cards/here.md", x: 1, y: 2, z: 3 }],
+    });
+
+    assert.equal(loaded.reset, true);
+    assert.equal(loaded.data.settings, DEFAULT_SETTINGS);
+    assert.deepEqual(loaded.data.state, { bookmarks: [] });
+  });
+
+  test("normalizes malformed current values instead of invoking a migration", () => {
+    const loaded = loadPluginData({
+      schemaVersion: 13,
       settings: {
-        addressProperty: "legacy-key",
-        titleSource: "frontmatter",
-        titleProperty: "legacy-key",
+        addressProperty: "",
+        deskCardSize: "huge",
+        showTooltips: "yes",
       },
-      state: {},
-    };
-    assert.equal(needsPluginDataMigration(collision), true);
-    assert.equal(hasTitleAddressCollisionData(collision), true);
-    assert.equal(normalizePluginData(collision).schemaVersion, 13);
-    assert.equal(normalizePluginData(collision).settings.titleSource, "filename");
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 8 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 9 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 10 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 11 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 12 }), true);
-    assert.equal(needsPluginDataMigration({ ...collision, schemaVersion: 13 }), false);
-    assert.equal(hasTitleAddressCollisionData(null), false);
+      state: { bookmarks: "invalid" },
+    });
+
+    assert.equal(loaded.reset, false);
+    assert.equal(loaded.data.settings.addressProperty, DEFAULT_SETTINGS.addressProperty);
+    assert.equal(loaded.data.settings.deskCardSize, DEFAULT_SETTINGS.deskCardSize);
+    assert.equal(loaded.data.settings.showTooltips, DEFAULT_SETTINGS.showTooltips);
+    assert.deepEqual(loaded.data.state, { bookmarks: [] });
   });
 });

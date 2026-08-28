@@ -44,10 +44,6 @@ import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import {
-  setDeskCardSizeData,
-  toggleDeskPresenceClass,
-} from "./desk-dom.js";
-import {
   renderedLinkAction,
   resolveFiledCardLink,
 } from "./card-links.js";
@@ -60,7 +56,7 @@ import {
   type CardHeaderButtonController,
 } from "./card-header-buttons.js";
 import {
-  type DeckAction,
+  type SlipboxAction,
   type CardButtonSurface,
 } from "./settings.js";
 import {
@@ -1115,11 +1111,11 @@ export class DeckView extends ItemView {
     }
   }
 
-  canRunCommandAction(action: DeckAction): boolean {
+  canRunCommandAction(action: SlipboxAction): boolean {
     return this.shortcutController.canRunCommand(action);
   }
 
-  runCommandAction(action: DeckAction): boolean {
+  runCommandAction(action: SlipboxAction): boolean {
     return this.shortcutController.runCommand(action);
   }
 
@@ -1147,7 +1143,7 @@ export class DeckView extends ItemView {
     return true;
   }
 
-  canRunAction(action: DeckAction, target?: FiledCard): boolean {
+  canRunAction(action: SlipboxAction, target?: FiledCard): boolean {
     return this.canRunActionForTarget(
       action,
       target === undefined
@@ -1157,7 +1153,7 @@ export class DeckView extends ItemView {
   }
 
   private canRunActionForTarget(
-    action: DeckAction,
+    action: SlipboxAction,
     target: CardActionTarget | null,
   ): boolean {
     if (action === "confirm-filing") {
@@ -1232,7 +1228,7 @@ export class DeckView extends ItemView {
     });
   }
 
-  runAction(action: DeckAction, target?: FiledCard): boolean {
+  runAction(action: SlipboxAction, target?: FiledCard): boolean {
     return this.runActionForTarget(
       action,
       target === undefined
@@ -1242,7 +1238,7 @@ export class DeckView extends ItemView {
   }
 
   private runCardAction(
-    action: DeckAction,
+    action: SlipboxAction,
     path: string,
     surface: CardButtonSurface,
     pileId?: string,
@@ -1260,7 +1256,7 @@ export class DeckView extends ItemView {
   }
 
   private runActionForTarget(
-    action: DeckAction,
+    action: SlipboxAction,
     target: CardActionTarget | null,
   ): boolean {
     if (!this.canRunActionForTarget(action, target)) {
@@ -1282,7 +1278,7 @@ export class DeckView extends ItemView {
   }
 
   private performAction(
-    action: DeckAction,
+    action: SlipboxAction,
     file: TFile | null,
     card: FiledCard | null,
     target: CardActionTarget | null,
@@ -2384,7 +2380,7 @@ export class DeckView extends ItemView {
     this.viewedCardBodyEl = null;
     this.viewedFilingEditor = null;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
-    setDeskCardSizeData(this.contentEl, this.plugin.settings.deskCardSize);
+    this.contentEl.dataset.deskCardSize = this.plugin.settings.deskCardSize;
     this.applyDeckPositionMode();
 
     const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
@@ -2525,8 +2521,8 @@ export class DeckView extends ItemView {
         cls: "slipbox-deck-map-marker",
       });
       const card = filed[index];
-      toggleDeskPresenceClass(
-        marker,
+      marker.toggleClass(
+        "is-on-desk",
         card !== undefined && this.plugin.isFileOnDesk(card.file),
       );
       marker.style.setProperty(
@@ -2689,8 +2685,8 @@ export class DeckView extends ItemView {
         cls: "slipbox-deck-map-marker is-bookmarked",
       });
       const card = this.plugin.index.filedByPath(path);
-      toggleDeskPresenceClass(
-        marker,
+      marker.toggleClass(
+        "is-on-desk",
         card !== undefined && this.plugin.isFileOnDesk(card.file),
       );
       marker.style.setProperty(
@@ -2813,7 +2809,7 @@ export class DeckView extends ItemView {
       const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
       const isOnDesk = this.plugin.isFileOnDesk(card.file);
-      toggleDeskPresenceClass(cardEl, isOnDesk);
+      cardEl.toggleClass("is-on-desk", isOnDesk);
       cardEl.toggleClass("can-drag-to-desk", !isOnDesk);
       const title = this.plugin.cardTitle(card.file);
       const cardLabel = `${card.address} · ${title}${

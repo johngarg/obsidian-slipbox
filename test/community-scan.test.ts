@@ -33,16 +33,16 @@ describe("community scanner CSS compatibility", () => {
     );
   });
 
-  test("uses Desk selectors while bridging legacy Tray custom properties", () => {
-    assert.doesNotMatch(styles, /\.slipbox-tray/u);
+  test("uses only canonical Desk selectors and custom properties", () => {
+    assert.doesNotMatch(styles, /tray/iu);
     assert.match(styles, /\[data-desk-card-size="small"\]/u);
     assert.match(
       styles,
-      /--slipbox-desk-card-width:\s*var\(--slipbox-tray-card-width\)/u,
+      /--slipbox-desk-card-width:\s*min\(/u,
     );
     assert.match(
       styles,
-      /--slipbox-desk-pile-height:\s*var\(--slipbox-tray-pile-height\)/u,
+      /--slipbox-desk-pile-height:\s*min\(/u,
     );
   });
 });

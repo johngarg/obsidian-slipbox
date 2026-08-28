@@ -13,7 +13,7 @@ import type SlipboxPlugin from "./main.js";
 import { cardHeaderButtonDefinitionsForSurface } from "./card-header-actions.js";
 import { setTextSettingValidity } from "./setting-validation.js";
 import {
-  DECK_ACTION_DEFINITIONS,
+  SLIPBOX_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
   DEFAULT_SETTINGS,
   MAX_CARD_SPREAD,
@@ -26,7 +26,7 @@ import {
   metadataPropertyError,
   normalizeCardSize,
   type CardButtonSurface,
-  type DeckActionDefinition,
+  type SlipboxActionDefinition,
   type DeckKeyBinding,
   type SlipboxSettings,
 } from "./settings.js";
@@ -220,7 +220,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
             desc: "Configure shortcuts scoped to Slipbox Desk. Obsidian hotkeys take priority; Slipbox Desk warns and yields when a key is already handled there.",
             render: (setting) => this.renderShortcutIntro(setting),
           },
-          ...DECK_ACTION_DEFINITIONS.map((definition) => ({
+          ...SLIPBOX_ACTION_DEFINITIONS.map((definition) => ({
             name: definition.label,
             ...(definition.description === undefined
               ? {}
@@ -700,7 +700,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
 
   private renderShortcutSetting(
     setting: Setting,
-    definition: DeckActionDefinition,
+    definition: SlipboxActionDefinition,
   ): void {
     const { id: action, label } = definition;
     setting.settingEl.addClass("slipbox-shortcut-setting");
@@ -759,7 +759,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           candidate,
         );
         if (conflict !== null) {
-          const conflictLabel = DECK_ACTION_DEFINITIONS.find(
+          const conflictLabel = SLIPBOX_ACTION_DEFINITIONS.find(
             (candidate) => candidate.id === conflict,
           )?.label ?? conflict;
           error.setText(`${formatKeyBinding(candidate)} is already assigned to ${conflictLabel}.`);
@@ -809,7 +809,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           bindingValue,
         );
         if (conflict !== null) {
-          const conflictLabel = DECK_ACTION_DEFINITIONS.find(
+          const conflictLabel = SLIPBOX_ACTION_DEFINITIONS.find(
             (candidate) => candidate.id === conflict,
           )?.label ?? conflict;
           error.setText(

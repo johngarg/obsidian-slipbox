@@ -28,9 +28,15 @@ initial public beta.
 - Divided the Branching settings into explicit and inferred subsections.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.
-- Standardised the current Desk implementation and styling hooks on “Desk”
-  while retaining compatibility with existing Tray-named settings, commands,
-  hotkeys, and CSS customisations.
+- Standardised the current implementation, commands, and styling hooks on
+  “Desk” and the schema-13 data model.
+
+### Removed
+
+- Removed pre-schema-13 settings migrations, the legacy persistent Desk and
+  Canvas export, Tray-named settings and styling aliases, and deprecated source
+  exports. Upgrading now resets settings while retaining path bookmarks; Desk
+  command hotkeys and Tray-based CSS customisations must be configured again.
 
 ### Fixed
 

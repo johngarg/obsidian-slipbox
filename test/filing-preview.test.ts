@@ -3,21 +3,23 @@ import { describe, test } from "node:test";
 import { Window } from "happy-dom";
 
 import {
-  attachUnfiledAddressFiling,
   cardComparatorFor,
+} from "../src/address-order.js";
+import {
   createFilingPreview,
   filingPlacementMatches,
   filingPreviewFocusPath,
   initialFilingAddress,
-  renderInlineFilingEditor,
-  updateInlineFilingEditor,
-} from "../src/index.js";
+} from "../src/filing-preview.js";
 import {
+  attachUnfiledAddressFiling,
   eventTargetsDeck,
   filingEditorMatchesSource,
   handleFilingEscape,
+  renderInlineFilingEditor,
   shouldSuspendDeckCommand,
   shouldSuspendDeckShortcut,
+  updateInlineFilingEditor,
 } from "../src/filing-editor.js";
 import { filingPreviewGuidance } from "../src/filing-preview.js";
 
@@ -451,7 +453,7 @@ describe("inline filing editor DOM", () => {
     assert.equal(address.querySelector("input"), editor.input);
     assert.equal(editor.input.value, "A/12");
     assert.equal(card.querySelectorAll(".slipbox-desk-filing-input").length, 1);
-    assert.equal(card.querySelectorAll(".slipbox-tray-filing-input").length, 1);
+    assert.equal(card.querySelectorAll("[class*='tray']").length, 0);
     assert.match(editor.feedback.textContent ?? "", /a\.md/);
     assert.match(editor.feedback.textContent ?? "", /z\.md/);
 

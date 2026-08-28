@@ -4,9 +4,11 @@ import { Window } from "happy-dom";
 
 import {
   InferredNavigationManager,
-  type InferredNavigationRelations,
-  type InferredNavigationTarget,
-} from "../src/index.js";
+} from "../src/inferred-navigation.js";
+import type {
+  InferredNavigationRelations,
+  InferredNavigationTarget,
+} from "../src/card-index.js";
 
 const target = (
   address: string,

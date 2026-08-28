@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 
 import {
   layoutFilesOnCanvas,
-  layoutLegacyDeskOnCanvas,
   normalizeCanvasPath,
   parseCanvasDocument,
   serializeCanvasDocument,
@@ -96,18 +95,6 @@ describe("Canvas file-node layout", () => {
       edges: [],
     }, ["A.md"]);
     assert.equal(second.data.nodes[1]?.id, `${id}-2`);
-  });
-
-  test("converts legacy Desk coordinates while retaining z-order", () => {
-    const result = layoutLegacyDeskOnCanvas({ nodes: [], edges: [] }, [
-      { cardRef: "Top.md", x: 300, y: 100, z: 9 },
-      { cardRef: "Bottom.md", x: 20, y: 40, z: 1 },
-    ], { originX: 1000, originY: 500 });
-    assert.deepEqual(result.addedPaths, ["Bottom.md", "Top.md"]);
-    assert.deepEqual(result.data.nodes.map((node) => [node.x, node.y]), [
-      [1020, 540],
-      [1300, 600],
-    ]);
   });
 
   test("parses and serializes Canvas JSON with clear failures", () => {

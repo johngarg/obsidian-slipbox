@@ -3,12 +3,14 @@ import { describe, test } from "node:test";
 
 import {
   DEFAULT_SETTINGS,
-  duplicateFilingMessage,
+  normalizeSettings,
+} from "../src/settings.js";
+import { duplicateFilingMessage } from "../src/filing-preview.js";
+import {
   issueListDescription,
   issueStatusSummary,
-  normalizeSettings,
-} from "../src/index.js";
-import type { CardIssue } from "../src/card-metadata.js";
+  type CardIssue,
+} from "../src/card-metadata.js";
 
 const invalidIssue: CardIssue = {
   kind: "invalid",

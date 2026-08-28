@@ -22,8 +22,6 @@ import {
 import {
   createBookmark,
   deleteBookmark,
-  isPathBookmark,
-  migrateAddressBookmarks,
   removeBookmarkPaths,
   renameBookmarkPaths,
   type DeckBookmark,
@@ -38,15 +36,10 @@ import {
   type CardHeaderActionContext,
 } from "./card-header-actions.js";
 import { deleteCardWithConfirmation } from "./card-deletion.js";
-import {
-  removeLegacyDeskPath,
-  renameLegacyDeskCard,
-} from "./legacy-desk-state.js";
 import { validateAddress } from "./address-order.js";
 import { issueStatusSummary } from "./card-metadata.js";
 import {
   BookmarksModal,
-  confirmAction,
   IssuesModal,
   promptForCanvas,
   promptForCardLink,
@@ -67,10 +60,7 @@ import {
 } from "./new-note.js";
 import {
   DEFAULT_STATE,
-  hasRemovedEntryPointData,
-  hasTitleAddressCollisionData,
-  needsPluginDataMigration,
-  normalizePluginData,
+  loadPluginData,
   type SlipboxPluginState,
 } from "./plugin-state.js";
 import { resolveCardTitle } from "./card-title.js";
@@ -79,7 +69,6 @@ import {
   normalizeCardSpread,
   SLIPBOX_DATA_SCHEMA_VERSION,
   normalizeSettings,
-  settingsForPersistence,
   SLIPBOX_ACTION_DEFINITIONS,
   type SlipboxActionDefinition,
   type SlipboxSettings,
@@ -193,7 +182,6 @@ export default class SlipboxPlugin extends Plugin {
   private persistQueue: Promise<void> = Promise.resolve();
   private deskPileSequence = 0;
   private startupDeckMode: DeckPositionMode | null = null;
-  private rawSettings: unknown = {};
   private readonly indexRefreshCoordinator = new IndexRefreshCoordinator({
     delayMs: 80,
     schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
@@ -211,11 +199,7 @@ export default class SlipboxPlugin extends Plugin {
 
   override async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
-    const purgeRemovedEntryPoints = hasRemovedEntryPointData(loadedData);
-    const migrateTitleCollision = hasTitleAddressCollisionData(loadedData);
-    const migratePluginData = needsPluginDataMigration(loadedData);
-    const data = normalizePluginData(loadedData);
-    this.rawSettings = rawSettingsFromPluginData(loadedData);
+    const { data, reset } = loadPluginData(loadedData);
     this.settings = data.settings;
     this.state = data.state;
     this.index = new CardIndex(this.app, cardIndexConfig(this.settings));
@@ -248,12 +232,10 @@ export default class SlipboxPlugin extends Plugin {
     this.updateProblemStatusBarItem();
 
     this.registerCommands();
-    if (migrateTitleCollision) {
+    if (reset) {
       new Notice(
-        "Slipbox Desk changed title source to filename because the title and address properties used the same key.",
+        "Slipbox Desk reset settings from an earlier beta format. Path bookmarks were kept; review Slipbox settings and Obsidian hotkeys.",
       );
-    }
-    if (purgeRemovedEntryPoints || migrateTitleCollision || migratePluginData) {
       void this.persistState();
     }
     this.app.workspace.onLayoutReady(() => {
@@ -632,8 +614,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   showBookmarks(view: DeckView): void {
-    const bookmarks = this.state.bookmarks.filter(isPathBookmark);
-    new BookmarksModal(this.app, bookmarks, {
+    new BookmarksModal(this.app, this.state.bookmarks, {
       currentPath: view.focusedDeckCardPath,
       isAvailable: (path) => this.index.filedByPath(path) !== undefined,
       label: (path) => this.filedCardLabel(path),
@@ -644,10 +625,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   bookmarkAtPath(path: string): DeckBookmark | undefined {
-    return this.state.bookmarks.find(
-      (bookmark): bookmark is DeckBookmark =>
-        isPathBookmark(bookmark) && bookmark.path === path,
-    );
+    return this.state.bookmarks.find((bookmark) => bookmark.path === path);
   }
 
   async addBookmark(path: string): Promise<void> {
@@ -804,65 +782,6 @@ export default class SlipboxPlugin extends Plugin {
     } catch (error) {
       new Notice(`Could not create the Canvas: ${errorMessage(error)}`);
     }
-  }
-
-  async exportLegacyDeskToCanvas(): Promise<void> {
-    const legacy = this.state.legacyDeskCards ?? [];
-    if (legacy.length === 0) {
-      new Notice("There is no legacy Desk layout to export.");
-      return;
-    }
-    const entered = await promptForText(
-      this.app,
-      "Export legacy Desk to Canvas",
-      "Canvas filename or vault path",
-      "Legacy Slipbox Desk",
-    );
-    if (entered === null) {
-      return;
-    }
-    const path = normalizeCanvasPath(entered);
-    if (path === null) {
-      new Notice("Enter a valid Canvas filename or vault-relative path.");
-      return;
-    }
-
-    const available = legacy.filter(
-      (card) => this.app.vault.getFileByPath(card.cardRef)?.extension === "md",
-    );
-    const missingCount = legacy.length - available.length;
-    if (available.length === 0) {
-      new Notice("None of the cards in the legacy Desk layout still exist. The layout was kept.");
-      return;
-    }
-
-    let result: CanvasWriteResult;
-    try {
-      result = await this.canvas.createLegacyDeskCanvas(path, available);
-    } catch (error) {
-      new Notice(`Could not export the legacy Desk: ${errorMessage(error)}`);
-      return;
-    }
-    const missing = missingCount === 0
-      ? ""
-      : ` Omitted ${missingCount} missing card${missingCount === 1 ? "" : "s"}.`;
-    new Notice(
-      `Exported ${result.addedPaths.length} legacy Desk card${result.addedPaths.length === 1 ? "" : "s"} to ${result.file.basename}.${missing}`,
-    );
-
-    const clear = await confirmAction(
-      this.app,
-      "Clear legacy Desk state?",
-      "The Canvas was created successfully. Clear the old Desk layout from Slipbox Desk’s saved state?",
-      "Clear legacy state",
-    );
-    if (!clear) {
-      return;
-    }
-    const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
-    this.state = state;
-    await this.persistState();
-    new Notice("Legacy Desk state cleared. The Canvas was kept.");
   }
 
   async beginFiling(file: TFile): Promise<void> {
@@ -1073,20 +992,6 @@ export default class SlipboxPlugin extends Plugin {
       },
     });
 
-    this.addCommand({
-      id: "export-legacy-desk-to-canvas",
-      name: "Export legacy Desk to Canvas…",
-      checkCallback: (checking) => {
-        const available = (this.state.legacyDeskCards?.length ?? 0) > 0;
-        if (checking) {
-          return available;
-        }
-        if (available) {
-          void this.exportLegacyDeskToCanvas();
-        }
-        return available;
-      },
-    });
     for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
       this.registerSlipboxActionCommand(definition);
     }
@@ -1451,16 +1356,6 @@ export default class SlipboxPlugin extends Plugin {
 
   private async performIndexRefresh(batch: IndexRefreshBatch): Promise<void> {
     this.index.refresh();
-    if (this.state.bookmarks.some((bookmark) => !isPathBookmark(bookmark))) {
-      this.state = {
-        ...this.state,
-        bookmarks: migrateAddressBookmarks(
-          this.state.bookmarks,
-          (address) => this.index.firstFiledAtAddress(address)?.path,
-        ),
-      };
-      await this.persistState();
-    }
     this.reconcileSessionDesk();
     for (const afterReconcile of batch.afterReconcile) {
       afterReconcile();
@@ -1495,19 +1390,14 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private async persistState(): Promise<void> {
-    const persistedSettings = settingsForPersistence(
-      this.rawSettings,
-      this.settings,
-    );
     const write = this.persistQueue.then(() => this.saveData({
       schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
-      settings: persistedSettings,
+      settings: this.settings,
       state: this.state,
     }));
     this.persistQueue = write.catch(() => undefined);
     try {
       await write;
-      this.rawSettings = persistedSettings;
     } catch (error) {
       new Notice(`Could not save Slipbox Desk state: ${errorMessage(error)}`);
     }
@@ -1580,22 +1470,11 @@ export default class SlipboxPlugin extends Plugin {
         leaf.view.handlePathDeletion(file.path);
       }
     }
-    const prefix = `${file.path.replace(/\/$/, "")}/`;
-    const legacyDeskCards = this.state.legacyDeskCards ?? [];
-    const removesLegacyDeskCard = legacyDeskCards.some(
-      (card) => card.cardRef === file.path || card.cardRef.startsWith(prefix),
-    );
     const nextBookmarks = removeBookmarkPaths(this.state.bookmarks, file.path);
-    if (
-      removesLegacyDeskCard ||
-      nextBookmarks.length !== this.state.bookmarks.length
-    ) {
-      const next = removeLegacyDeskPath(legacyDeskCards, file.path);
-      const { legacyDeskCards: _legacyDeskCards, ...state } = this.state;
+    if (nextBookmarks.length !== this.state.bookmarks.length) {
       this.state = {
-        ...state,
+        ...this.state,
         bookmarks: nextBookmarks,
-        ...(next.length > 0 ? { legacyDeskCards: next } : {}),
       };
       void this.persistState();
     }
@@ -1626,28 +1505,13 @@ export default class SlipboxPlugin extends Plugin {
         leaf.view.handlePathRename(oldPath, file.path);
       }
     }
-    const prefix = `${oldPath.replace(/\/$/, "")}/`;
-    const legacyDeskCards = this.state.legacyDeskCards ?? [];
-    const renamesLegacyDeskCard = legacyDeskCards.some(
-      (card) => card.cardRef === oldPath || card.cardRef.startsWith(prefix),
-    );
     const renamesBookmark = this.state.bookmarks.some(
-      (bookmark) =>
-        isPathBookmark(bookmark) && pathIsAtOrBelow(bookmark.path, oldPath),
+      (bookmark) => pathIsAtOrBelow(bookmark.path, oldPath),
     );
-    if (renamesLegacyDeskCard || renamesBookmark) {
+    if (renamesBookmark) {
       this.state = {
         ...this.state,
         bookmarks: renameBookmarkPaths(this.state.bookmarks, oldPath, file.path),
-        ...(renamesLegacyDeskCard
-          ? {
-              legacyDeskCards: renameLegacyDeskCard(
-                legacyDeskCards,
-                oldPath,
-                file.path,
-              ),
-            }
-          : {}),
       };
       void this.persistState();
     }
@@ -1718,8 +1582,4 @@ function errorMessage(error: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function rawSettingsFromPluginData(value: unknown): unknown {
-  return isRecord(value) && isRecord(value.settings) ? value.settings : {};
 }

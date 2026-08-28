@@ -23,15 +23,6 @@ export function metadataPropertyError(
 export type TitleSource = "filename" | "frontmatter";
 export type CardSize = "small" | "medium" | "large";
 
-export type LegacyDeckHeaderButton =
-  | "open-note"
-  | "copy-link"
-  | "tray"
-  | "bookmark";
-
-/** Compatibility alias retained for the retired deckHeaderButtons setting. */
-export type DeckHeaderButton = LegacyDeckHeaderButton;
-
 export type CardButtonSurface = "deck" | "desk" | "viewed";
 
 export type CardHeaderButtonAction =
@@ -107,14 +98,6 @@ export type SlipboxAction =
   | "collapse-all-piles"
   | "return-all-filed-cards";
 
-const LEGACY_ACTION_IDS = {
-  "toggle-desk": "toggle-tray",
-  "toggle-desk-without-focus": "toggle-tray-without-focus",
-} as const satisfies Partial<Record<SlipboxAction, string>>;
-
-/** Compatibility alias retained for integrations built before schema 6. */
-export type DeckAction = SlipboxAction;
-
 export type KeyModifier = "Mod" | "Ctrl" | "Meta" | "Alt" | "Shift";
 
 export interface DeckKeyBinding {
@@ -136,9 +119,6 @@ export interface SlipboxActionDefinition {
   readonly scope: SlipboxActionScope;
   readonly target: SlipboxActionTarget;
 }
-
-/** Compatibility alias retained for integrations built before schema 6. */
-export type DeckActionDefinition = SlipboxActionDefinition;
 
 const binding = (
   key: string,
@@ -391,15 +371,12 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   "centre-card": "centre-active-card",
   "open-note": "open-current-card-markdown",
   "copy-link": "copy-current-card-link",
-  "toggle-desk": "toggle-tray",
-  "toggle-desk-without-focus": "toggle-tray-without-focus",
   "toggle-bookmark": "add-bookmark-current-card",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
   "toggle-deck-map": "toggle-deck-map-visibility",
   bookmarks: "manage-bookmarks",
   problems: "show-card-problems",
-  "return-all-filed-cards": "clear-tray",
 };
 
 const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
@@ -449,9 +426,6 @@ export const SLIPBOX_ACTION_DEFINITIONS: readonly SlipboxActionDefinition[] =
           : "deck-anchor",
   }));
 
-/** Compatibility alias retained for integrations built before schema 6. */
-export const DECK_ACTION_DEFINITIONS = SLIPBOX_ACTION_DEFINITIONS;
-
 export interface SlipboxSettings {
   readonly addressProperty: string;
   readonly deckOrdering: DeckOrdering;
@@ -478,20 +452,8 @@ export interface SlipboxSettings {
   readonly allowCardScrolling: boolean;
   readonly cardSpread: number;
   readonly cardHeaderButtons: CardHeaderButtonSettings;
-  readonly deckKeybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
+  readonly deckKeybindings: Readonly<Record<SlipboxAction, readonly DeckKeyBinding[]>>;
 }
-
-export const LEGACY_DEFAULT_DECK_HEADER_BUTTONS: Readonly<
-  Record<LegacyDeckHeaderButton, boolean>
-> = {
-  "open-note": true,
-  "copy-link": true,
-  tray: true,
-  bookmark: true,
-};
-
-/** Compatibility alias retained for the retired deckHeaderButtons setting. */
-export const DEFAULT_DECK_HEADER_BUTTONS = LEGACY_DEFAULT_DECK_HEADER_BUTTONS;
 
 const allCardHeaderButtons = (
   enabled: readonly CardHeaderButtonAction[],
@@ -524,43 +486,11 @@ export const DEFAULT_CARD_HEADER_BUTTONS: CardHeaderButtonSettings = {
 };
 
 export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
-  DECK_ACTION_DEFINITIONS.map((definition) => [
+  SLIPBOX_ACTION_DEFINITIONS.map((definition) => [
     definition.id,
     definition.defaultBindings,
   ]),
-) as Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>;
-
-const PREVIOUS_DEFAULT_DECK_KEYBINDINGS: Readonly<Record<string, readonly DeckKeyBinding[]>> = {
-  "previous-card": [binding("ArrowLeft"), binding("k")],
-  "next-card": [binding("ArrowRight"), binding("j")],
-  "centre-card": [binding("c")],
-  "first-card": [binding("g")],
-  "last-card": [binding("g", ["Shift"])],
-  "open-note": [binding("o")],
-  "toggle-desk": [binding("p")],
-  "toggle-bookmark": [binding("b")],
-  back: [],
-  forward: [],
-  bookmarks: [],
-  problems: [],
-  "confirm-filing": [],
-  "cancel-filing": [],
-  "copy-link": [binding("y")],
-};
-
-const PREVIOUS_UNBOUND_INFERRED_DEFAULT_DECK_KEYBINDINGS: Readonly<
-  Record<DeckAction, readonly DeckKeyBinding[]>
-> = {
-  ...DEFAULT_DECK_KEYBINDINGS,
-  "jump-inferred-parent": [],
-  "cycle-forward-inferred-siblings": [],
-  "cycle-backward-inferred-siblings": [],
-};
-
-const PREVIOUS_DEFAULT_DECK_KEYBINDING_MAPS = [
-  PREVIOUS_DEFAULT_DECK_KEYBINDINGS,
-  PREVIOUS_UNBOUND_INFERRED_DEFAULT_DECK_KEYBINDINGS,
-] as const;
+) as Readonly<Record<SlipboxAction, readonly DeckKeyBinding[]>>;
 
 export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "slipbox-id",
@@ -595,36 +525,6 @@ const MODIFIER_ORDER: readonly KeyModifier[] = ["Mod", "Ctrl", "Meta", "Alt", "S
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function hasOwn(source: Readonly<Record<string, unknown>>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(source, key);
-}
-
-function canonicalActionRecord(value: unknown): Record<string, unknown> {
-  const raw = isRecord(value) ? value : {};
-  const canonical: Record<string, unknown> = { ...raw };
-  for (const [action, legacyAction] of Object.entries(LEGACY_ACTION_IDS)) {
-    if (!hasOwn(canonical, action) && hasOwn(raw, legacyAction)) {
-      canonical[action] = raw[legacyAction];
-    }
-  }
-  return canonical;
-}
-
-function persistedActionId(action: string): string {
-  return LEGACY_ACTION_IDS[action as keyof typeof LEGACY_ACTION_IDS] ?? action;
-}
-
-function actionRecordForPersistence<T>(
-  record: Readonly<Record<string, T>>,
-): Readonly<Record<string, T>> {
-  return Object.fromEntries(
-    Object.entries(record).map(([action, value]) => [
-      persistedActionId(action),
-      value,
-    ]),
-  );
 }
 
 export function normalizePropertyName(value: unknown, fallback: string): string {
@@ -760,75 +660,16 @@ export function keyBindingFromKeyboardEvent(
   };
 }
 
-function bindingsEqual(left: readonly DeckKeyBinding[], right: readonly DeckKeyBinding[]): boolean {
-  return left.length === right.length && left.every((candidate, index) => {
-    const expected = right[index];
-    return expected !== undefined &&
-      keyBindingSignature(candidate) === keyBindingSignature(expected);
-  });
-}
-
-function isCompletePreviousDefaultMap(source: Record<string, unknown>): boolean {
-  return PREVIOUS_DEFAULT_DECK_KEYBINDING_MAPS.some((previousDefaults) => {
-    const previousActions = new Set(Object.keys(previousDefaults));
-    if (DECK_ACTION_DEFINITIONS.some((definition) =>
-      !previousActions.has(definition.id) &&
-      Object.prototype.hasOwnProperty.call(source, definition.id))) {
-      return false;
-    }
-    return Object.entries(previousDefaults).every(([action, expected]) => {
-      const candidate = source[action];
-      if (!Array.isArray(candidate)) {
-        return false;
-      }
-      const normalized = candidate.flatMap((value): DeckKeyBinding[] => {
-        const result = normalizeKeyBinding(value);
-        return result === null ? [] : [result];
-      });
-      return bindingsEqual(normalized, expected);
-    });
-  });
-}
-
 export function normalizeDeckKeybindings(
   value: unknown,
-): Readonly<Record<DeckAction, readonly DeckKeyBinding[]>> {
-  const rawSource = isRecord(value) ? value : {};
-  const source = canonicalActionRecord(rawSource);
-  const renamedActions = [
-    [
-      "jump-inferred-parent",
-      ["jump-apparent-parent"],
-    ],
-    [
-      "cycle-backward-inferred-siblings",
-      ["cycle-backward-apparent-siblings", "jump-previous-apparent-peer"],
-    ],
-    [
-      "cycle-forward-inferred-siblings",
-      ["cycle-forward-apparent-siblings", "jump-next-apparent-peer"],
-    ],
-  ] as const;
-  for (const [currentAction, legacyActions] of renamedActions) {
-    if (Array.isArray(source[currentAction])) {
-      continue;
-    }
-    const migrated = legacyActions
-      .map((legacyAction) => rawSource[legacyAction])
-      .find(Array.isArray);
-    if (migrated !== undefined) {
-      source[currentAction] = migrated;
-    }
-  }
-  if (isCompletePreviousDefaultMap(source)) {
-    return DEFAULT_DECK_KEYBINDINGS;
-  }
+): Readonly<Record<SlipboxAction, readonly DeckKeyBinding[]>> {
+  const source = isRecord(value) ? value : {};
   const claimed = new Set<string>();
-  const result = {} as Record<DeckAction, readonly DeckKeyBinding[]>;
+  const result = {} as Record<SlipboxAction, readonly DeckKeyBinding[]>;
 
-  // Existing arrays claim their bindings first so a newly introduced default
-  // can never displace a customized or deliberately retained legacy binding.
-  for (const definition of DECK_ACTION_DEFINITIONS) {
+  // Existing arrays claim their bindings before missing actions receive their
+  // defaults, preventing a default from displacing a current customization.
+  for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
     const candidate = source[definition.id];
     if (!Array.isArray(candidate)) {
       continue;
@@ -849,7 +690,7 @@ export function normalizeDeckKeybindings(
     result[definition.id] = normalized;
   }
 
-  for (const definition of DECK_ACTION_DEFINITIONS) {
+  for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
     if (result[definition.id] !== undefined) {
       continue;
     }
@@ -882,36 +723,16 @@ function normalizeBooleanRecord<K extends string>(
 
 export function normalizeCardHeaderButtons(
   value: unknown,
-  legacyDeckButtons: unknown = undefined,
 ): CardHeaderButtonSettings {
   const source = isRecord(value) ? value : {};
-  const legacy = isRecord(legacyDeckButtons) ? legacyDeckButtons : {};
-  const deckSource = canonicalActionRecord(source.deck);
-  const migratedDeck: Record<string, unknown> = {
-    ...deckSource,
-  };
-  const legacyMappings = {
-    "open-note": "open-note",
-    "copy-link": "copy-link",
-    tray: "toggle-desk",
-    bookmark: "toggle-bookmark",
-  } as const;
-  for (const [legacyKey, action] of Object.entries(legacyMappings)) {
-    if (
-      !hasOwn(migratedDeck, action) &&
-      typeof legacy[legacyKey] === "boolean"
-    ) {
-      migratedDeck[action] = legacy[legacyKey];
-    }
-  }
   return {
-    deck: normalizeBooleanRecord(migratedDeck, DEFAULT_CARD_HEADER_BUTTONS.deck),
+    deck: normalizeBooleanRecord(source.deck, DEFAULT_CARD_HEADER_BUTTONS.deck),
     desk: normalizeBooleanRecord(
-      canonicalActionRecord(source.desk),
+      source.desk,
       DEFAULT_CARD_HEADER_BUTTONS.desk,
     ),
     viewed: normalizeBooleanRecord(
-      canonicalActionRecord(source.viewed),
+      source.viewed,
       DEFAULT_CARD_HEADER_BUTTONS.viewed,
     ),
   };
@@ -948,9 +769,7 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
     inferAddressBranches:
       typeof source.inferAddressBranches === "boolean"
         ? source.inferAddressBranches
-        : typeof source.inferApparentBranches === "boolean"
-          ? source.inferApparentBranches
-          : DEFAULT_SETTINGS.inferAddressBranches,
+        : DEFAULT_SETTINGS.inferAddressBranches,
     showInferredBranchNavigation:
       typeof source.showInferredBranchNavigation === "boolean"
         ? source.showInferredBranchNavigation
@@ -961,11 +780,7 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
         : requestedTitleSource,
     titleProperty,
     mainCardSize: normalizeCardSize(source.mainCardSize),
-    deskCardSize: normalizeCardSize(
-      hasOwn(source, "deskCardSize")
-        ? source.deskCardSize
-        : source.trayCardSize,
-    ),
+    deskCardSize: normalizeCardSize(source.deskCardSize),
     newCardFolder: normalizeFolderPath(source.newCardFolder),
     newNoteTimestampFormat: normalizePropertyName(
       source.newNoteTimestampFormat,
@@ -978,9 +793,7 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
     showTooltips:
       typeof source.showTooltips === "boolean"
         ? source.showTooltips
-        : typeof source.showCardTooltips === "boolean"
-          ? source.showCardTooltips
-          : DEFAULT_SETTINGS.showTooltips,
+        : DEFAULT_SETTINGS.showTooltips,
     showDeckMap:
       typeof source.showDeckMap === "boolean"
         ? source.showDeckMap
@@ -1010,82 +823,18 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
         ? source.allowCardScrolling
         : DEFAULT_SETTINGS.allowCardScrolling,
     cardSpread: normalizeCardSpread(source.cardSpread),
-    cardHeaderButtons: normalizeCardHeaderButtons(
-      source.cardHeaderButtons,
-      source.deckHeaderButtons,
-    ),
+    cardHeaderButtons: normalizeCardHeaderButtons(source.cardHeaderButtons),
     deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings),
   };
 }
 
-/** Keep ignored legacy/unknown keys when writing a normalized settings object. */
-export function settingsForPersistence(
-  rawValue: unknown,
-  settings: SlipboxSettings,
-): Readonly<Record<string, unknown>> {
-  const raw = isRecord(rawValue) ? rawValue : {};
-  const {
-    deckHeaderButtons: _legacyDeckHeaderButtons,
-    deskCardSize: _canonicalDeskCardSize,
-    showCardTooltips: _legacyShowCardTooltips,
-    showDeckToolbar: _showDeckToolbar,
-    useTemplatesForNewNotes: _useTemplatesForNewNotes,
-    newNoteTemplatePath: _newNoteTemplatePath,
-    inferApparentBranches: _legacyInferApparentBranches,
-    ...retainedRaw
-  } = raw;
-  const {
-    deskCardSize,
-    cardHeaderButtons,
-    deckKeybindings,
-    ...legacySettings
-  } = settings;
-  const rawKeybindingsSource = isRecord(raw.deckKeybindings)
-    ? raw.deckKeybindings
-    : {};
-  const rawKeybindings = Object.fromEntries(
-    Object.entries(rawKeybindingsSource).filter(([key]) =>
-      key !== "entry-points" &&
-      key !== "toggle-desk" &&
-      key !== "toggle-desk-without-focus" &&
-      key !== "back" &&
-      key !== "forward" &&
-      key !== "toggle-toolbar" &&
-      key !== "find-address-forward" &&
-      key !== "find-address-backward" &&
-      key !== "jump-apparent-parent" &&
-      key !== "cycle-backward-apparent-siblings" &&
-      key !== "cycle-forward-apparent-siblings" &&
-      key !== "jump-previous-apparent-peer" &&
-      key !== "jump-next-apparent-peer" &&
-      key !== "jump-past-apparent-descendants" &&
-      key !== "jump-first-apparent-child"
-    ),
-  );
-  return {
-    ...retainedRaw,
-    ...legacySettings,
-    trayCardSize: deskCardSize,
-    cardHeaderButtons: Object.fromEntries(
-      Object.entries(cardHeaderButtons).map(([surface, actions]) => [
-        surface,
-        actionRecordForPersistence(actions),
-      ]),
-    ),
-    deckKeybindings: {
-      ...rawKeybindings,
-      ...actionRecordForPersistence(deckKeybindings),
-    },
-  };
-}
-
 export function keyBindingConflict(
-  keybindings: Readonly<Record<DeckAction, readonly DeckKeyBinding[]>>,
-  action: DeckAction,
+  keybindings: Readonly<Record<SlipboxAction, readonly DeckKeyBinding[]>>,
+  action: SlipboxAction,
   bindingValue: DeckKeyBinding,
-): DeckAction | null {
+): SlipboxAction | null {
   const signature = keyBindingSignature(bindingValue);
-  for (const definition of DECK_ACTION_DEFINITIONS) {
+  for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
     if (
       definition.id !== action &&
       keybindings[definition.id].some(

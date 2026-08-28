@@ -6,7 +6,7 @@ import {
   CardSignatureManager,
   type CardSignatureBranch,
   type CardSignatureOverflowItem,
-} from "../src/index.js";
+} from "../src/card-signature.js";
 
 const branch = (
   label: string,

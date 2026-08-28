@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  DECK_ACTION_DEFINITIONS,
+  SLIPBOX_ACTION_DEFINITIONS,
   DEFAULT_CARD_SPREAD,
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
@@ -20,7 +20,6 @@ import {
   normalizeBranchLinkMarker,
   normalizeFolderPath,
   normalizeSettings,
-  settingsForPersistence,
 } from "../src/settings.js";
 
 describe("Slipbox settings", () => {
@@ -162,7 +161,9 @@ describe("Slipbox settings", () => {
       showTooltips: true,
       showDeckMap: false,
       cardSpread: 0.73,
-      deckHeaderButtons: { bookmark: false, tray: false },
+      cardHeaderButtons: {
+        deck: { "toggle-bookmark": false, "toggle-desk": false },
+      },
       deckKeybindings: {
         "previous-card": [
           { key: "K", modifiers: [] },
@@ -201,8 +202,8 @@ describe("Slipbox settings", () => {
     assert.equal(settings.cardHeaderButtons.deck["copy-link"], true);
   });
 
-  test("loads Tray settings into canonical Desk fields and persists only legacy keys", () => {
-    const legacy = normalizeSettings({
+  test("uses only canonical Desk settings and ignores Tray names", () => {
+    const legacyOnly = normalizeSettings({
       trayCardSize: "small",
       cardHeaderButtons: {
         deck: { "toggle-tray": false },
@@ -213,17 +214,19 @@ describe("Slipbox settings", () => {
         "toggle-tray-without-focus": [{ key: "w", modifiers: ["Alt"] }],
       },
     });
-    assert.equal(legacy.deskCardSize, "small");
-    assert.equal(legacy.cardHeaderButtons.deck["toggle-desk"], false);
-    assert.equal(legacy.cardHeaderButtons.desk["toggle-desk"], true);
-    assert.deepEqual(legacy.deckKeybindings["toggle-desk"], [{
-      key: "q",
-      modifiers: ["Alt"],
-    }]);
-    assert.deepEqual(legacy.deckKeybindings["toggle-desk-without-focus"], [{
-      key: "w",
-      modifiers: ["Alt"],
-    }]);
+    assert.equal(legacyOnly.deskCardSize, DEFAULT_SETTINGS.deskCardSize);
+    assert.equal(
+      legacyOnly.cardHeaderButtons.deck["toggle-desk"],
+      DEFAULT_SETTINGS.cardHeaderButtons.deck["toggle-desk"],
+    );
+    assert.deepEqual(
+      legacyOnly.deckKeybindings["toggle-desk"],
+      DEFAULT_SETTINGS.deckKeybindings["toggle-desk"],
+    );
+    assert.deepEqual(
+      legacyOnly.deckKeybindings["toggle-desk-without-focus"],
+      DEFAULT_SETTINGS.deckKeybindings["toggle-desk-without-focus"],
+    );
 
     const canonical = normalizeSettings({
       deskCardSize: "large",
@@ -241,41 +244,6 @@ describe("Slipbox settings", () => {
     assert.deepEqual(canonical.deckKeybindings["toggle-desk"], [{
       key: "d",
       modifiers: ["Alt"],
-    }]);
-
-    const persisted = settingsForPersistence({
-      deskCardSize: "small",
-      opaqueSetting: "retained",
-      deckKeybindings: {
-        "toggle-desk": [],
-        "opaque-action": [{ key: "z", modifiers: ["Ctrl"] }],
-      },
-    }, canonical);
-    assert.equal("deskCardSize" in persisted, false);
-    assert.equal(persisted.trayCardSize, "large");
-    assert.equal(persisted.opaqueSetting, "retained");
-    const persistedButtons = persisted.cardHeaderButtons as Record<
-      string,
-      Record<string, unknown>
-    >;
-    const persistedDeckButtons = persistedButtons.deck;
-    assert.ok(persistedDeckButtons);
-    assert.equal("toggle-desk" in persistedDeckButtons, false);
-    assert.equal(persistedDeckButtons["toggle-tray"], true);
-    const persistedBindings = persisted.deckKeybindings as Record<string, unknown>;
-    assert.equal("toggle-desk" in persistedBindings, false);
-    assert.equal("toggle-desk-without-focus" in persistedBindings, false);
-    assert.deepEqual(persistedBindings["toggle-tray"], [{
-      key: "d",
-      modifiers: ["Alt"],
-    }]);
-    assert.deepEqual(
-      persistedBindings["toggle-tray-without-focus"],
-      canonical.deckKeybindings["toggle-desk-without-focus"],
-    );
-    assert.deepEqual(persistedBindings["opaque-action"], [{
-      key: "z",
-      modifiers: ["Ctrl"],
     }]);
   });
 
@@ -304,24 +272,13 @@ describe("Slipbox settings", () => {
         .showInferredBranchNavigation,
       true,
     );
-    const persisted = settingsForPersistence({}, settings);
-    assert.equal(persisted.explicitBranchLinks, true);
-    assert.equal(persisted.branchLinkMarker, "→→");
-    assert.equal(persisted.showBranchLabels, false);
-    assert.equal(persisted.inferAddressBranches, true);
-    assert.equal(persisted.showInferredBranchNavigation, false);
-
-    const migrated = normalizeSettings({ inferApparentBranches: true });
-    assert.equal(migrated.inferAddressBranches, true);
-    const migratedPersistence = settingsForPersistence(
-      { inferApparentBranches: true },
-      migrated,
+    assert.equal(
+      normalizeSettings({ inferApparentBranches: true }).inferAddressBranches,
+      DEFAULT_SETTINGS.inferAddressBranches,
     );
-    assert.equal("inferApparentBranches" in migratedPersistence, false);
-    assert.equal(migratedPersistence.inferAddressBranches, true);
   });
 
-  test("migrates retired inference bindings and drops their old targets", () => {
+  test("ignores retired inference bindings", () => {
     const legacy = {
       "jump-apparent-parent": [{ key: "u", modifiers: ["Alt"] }],
       "cycle-backward-apparent-siblings": [{ key: "[", modifiers: ["Alt"] }],
@@ -330,32 +287,24 @@ describe("Slipbox settings", () => {
       "jump-first-apparent-child": [{ key: "c", modifiers: ["Alt"] }],
     };
     const normalized = normalizeDeckKeybindings(legacy);
-    assert.deepEqual(normalized["jump-inferred-parent"], [{
-      key: "u",
-      modifiers: ["Alt"],
-    }]);
-    assert.deepEqual(normalized["cycle-backward-inferred-siblings"], [{
-      key: "[",
-      modifiers: ["Alt"],
-    }]);
-    assert.deepEqual(normalized["cycle-forward-inferred-siblings"], [{
-      key: "]",
-      modifiers: ["Alt"],
-    }]);
+    assert.deepEqual(
+      normalized["jump-inferred-parent"],
+      DEFAULT_SETTINGS.deckKeybindings["jump-inferred-parent"],
+    );
+    assert.deepEqual(
+      normalized["cycle-backward-inferred-siblings"],
+      DEFAULT_SETTINGS.deckKeybindings["cycle-backward-inferred-siblings"],
+    );
+    assert.deepEqual(
+      normalized["cycle-forward-inferred-siblings"],
+      DEFAULT_SETTINGS.deckKeybindings["cycle-forward-inferred-siblings"],
+    );
     assert.equal(
       Object.values(normalized).flat().some((binding) =>
         binding.key === "p" && binding.modifiers.includes("Alt")
       ),
       false,
     );
-    const persisted = settingsForPersistence(
-      { deckKeybindings: legacy },
-      { ...DEFAULT_SETTINGS, deckKeybindings: normalized },
-    );
-    const persistedBindings = persisted.deckKeybindings as Record<string, unknown>;
-    for (const removed of Object.keys(legacy)) {
-      assert.equal(removed in persistedBindings, false);
-    }
   });
 
   test("falls back to filename titles when title and address keys collide", () => {
@@ -376,36 +325,36 @@ describe("Slipbox settings", () => {
   });
 
   test("gives every registered action a unique command and target", () => {
-    const commandIds = DECK_ACTION_DEFINITIONS.map((definition) =>
+    const commandIds = SLIPBOX_ACTION_DEFINITIONS.map((definition) =>
       definition.commandId
     );
     assert.equal(new Set(commandIds).size, commandIds.length);
     assert.equal(
-      DECK_ACTION_DEFINITIONS.find((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
         definition.id === "toggle-desk"
       )?.commandId,
-      "toggle-tray",
+      "toggle-desk",
     );
     assert.equal(
-      DECK_ACTION_DEFINITIONS.find((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
         definition.id === "toggle-desk-without-focus"
       )?.commandId,
-      "toggle-tray-without-focus",
+      "toggle-desk-without-focus",
     );
     assert.equal(
-      DECK_ACTION_DEFINITIONS.find((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
         definition.id === "return-all-filed-cards"
       )?.commandId,
-      "clear-tray",
+      "return-all-filed-cards",
     );
     assert.equal(
-      DECK_ACTION_DEFINITIONS.every((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.every((definition) =>
         definition.commandName !== "" && definition.target !== undefined
       ),
       true,
     );
     for (const action of ["next-pile", "previous-pile", "swap-deck-pile"] as const) {
-      const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
+      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
         candidate.id === action
       );
       assert.equal(definition?.scope, "active-view");
@@ -416,7 +365,7 @@ describe("Slipbox settings", () => {
       "previous-card-in-pile",
       "next-card-in-pile",
     ] as const) {
-      const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
+      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
         candidate.id === action
       );
       assert.equal(definition?.scope, "active-view");
@@ -433,7 +382,7 @@ describe("Slipbox settings", () => {
     for (const action of Object.keys(inferredDefaults) as Array<
       keyof typeof inferredDefaults
     >) {
-      const definition = DECK_ACTION_DEFINITIONS.find((candidate) =>
+      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
         candidate.id === action
       );
       assert.equal(definition?.scope, "active-view");
@@ -441,7 +390,7 @@ describe("Slipbox settings", () => {
       assert.deepEqual(definition?.defaultBindings, inferredDefaults[action]);
     }
     assert.equal(
-      DECK_ACTION_DEFINITIONS.find((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
         definition.id === "jump-inferred-parent"
       )?.repeatable,
       false,
@@ -451,7 +400,7 @@ describe("Slipbox settings", () => {
       "cycle-backward-inferred-siblings",
     ] as const) {
       assert.equal(
-        DECK_ACTION_DEFINITIONS.find((definition) => definition.id === action)
+        SLIPBOX_ACTION_DEFINITIONS.find((definition) => definition.id === action)
           ?.repeatable,
         true,
       );
@@ -460,7 +409,9 @@ describe("Slipbox settings", () => {
 
   test("preserves customized and deliberately empty copy-link settings", () => {
     const customized = normalizeSettings({
-      deckHeaderButtons: { "copy-link": false },
+      cardHeaderButtons: {
+        deck: { "copy-link": false },
+      },
       deckKeybindings: {
         "copy-link": [{ key: "L", modifiers: ["Mod"] }],
       },
@@ -561,53 +512,20 @@ describe("Slipbox settings", () => {
     }]);
   });
 
-  test("upgrades the complete previously shipped default map as one unit", () => {
-    const previous = {
-      "previous-card": [
-        { key: "ArrowLeft", modifiers: [] },
-        { key: "k", modifiers: [] },
-      ],
-      "next-card": [
-        { key: "ArrowRight", modifiers: [] },
-        { key: "j", modifiers: [] },
-      ],
-      "centre-card": [{ key: "c", modifiers: [] }],
-      "first-card": [{ key: "g", modifiers: [] }],
-      "last-card": [{ key: "g", modifiers: ["Shift"] }],
-      "open-note": [{ key: "o", modifiers: [] }],
-      "toggle-desk": [{ key: "p", modifiers: [] }],
-      "toggle-bookmark": [{ key: "b", modifiers: [] }],
-      back: [],
-      forward: [],
-      bookmarks: [],
-      problems: [],
-      "confirm-filing": [],
-      "cancel-filing": [],
-      "copy-link": [{ key: "y", modifiers: [] }],
-    };
-    assert.deepEqual(normalizeDeckKeybindings(previous), DEFAULT_SETTINGS.deckKeybindings);
-    const withNewCustomization = normalizeDeckKeybindings({
-      ...previous,
-      "toggle-toolbar": [],
-    });
-    assert.deepEqual(withNewCustomization["first-card"], [
-      { key: "0", modifiers: [] },
-    ]);
-    assert.equal("toggle-toolbar" in withNewCustomization, false);
-
+  test("preserves explicitly unbound current actions", () => {
     const unboundInferenceDefaults = {
       ...DEFAULT_SETTINGS.deckKeybindings,
       "jump-inferred-parent": [],
       "cycle-forward-inferred-siblings": [],
       "cycle-backward-inferred-siblings": [],
     };
-    assert.deepEqual(
-      normalizeDeckKeybindings(unboundInferenceDefaults),
-      DEFAULT_SETTINGS.deckKeybindings,
-    );
+    const normalized = normalizeDeckKeybindings(unboundInferenceDefaults);
+    assert.deepEqual(normalized["jump-inferred-parent"], []);
+    assert.deepEqual(normalized["cycle-forward-inferred-siblings"], []);
+    assert.deepEqual(normalized["cycle-backward-inferred-siblings"], []);
   });
 
-  test("preserves every non-default legacy array and protects legacy g", () => {
+  test("keeps current custom bindings and ignores unknown actions", () => {
     const normalized = normalizeDeckKeybindings({
       "first-card": [{ key: "g", modifiers: [] }],
       "last-card": [{ key: "g", modifiers: ["Shift"] }],
@@ -691,33 +609,8 @@ describe("Slipbox settings", () => {
     }, true), { key: "$", modifiers: ["Shift"] });
   });
 
-  test("persists revised bindings and preserves opaque legacy actions", () => {
-    const raw = {
-      showDeckToolbar: false,
-      deckKeybindings: {
-        "removed-action": [{ key: "q", modifiers: [] }],
-        back: [{ key: "h", modifiers: ["Shift"] }],
-        forward: [{ key: "r", modifiers: ["Alt"] }],
-        "toggle-toolbar": [],
-        "find-address-forward": [{ key: "f", modifiers: [] }],
-        "find-address-backward": [{ key: "f", modifiers: ["Shift"] }],
-      },
-    };
-    const persisted = settingsForPersistence(raw, DEFAULT_SETTINGS);
-    const bindings = persisted.deckKeybindings as Record<string, unknown>;
-    assert.deepEqual(bindings["removed-action"], [{ key: "q", modifiers: [] }]);
-    assert.equal("back" in bindings, false);
-    assert.equal("forward" in bindings, false);
-    assert.equal("toggle-toolbar" in bindings, false);
-    assert.equal("find-address-forward" in bindings, false);
-    assert.equal("find-address-backward" in bindings, false);
-    assert.equal("showDeckToolbar" in persisted, false);
-    assert.deepEqual(bindings["last-card"], [{ key: "$", modifiers: ["Shift"] }]);
-    assert.deepEqual(bindings["forward-ten-cards"], [{ key: "d", modifiers: ["Ctrl"] }]);
-  });
-
   test("all action resets point at their revised definition defaults", () => {
-    for (const definition of DECK_ACTION_DEFINITIONS) {
+    for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
       assert.deepEqual(
         DEFAULT_SETTINGS.deckKeybindings[definition.id],
         definition.defaultBindings,
@@ -730,33 +623,21 @@ describe("Slipbox settings", () => {
     assert.equal(normalizeSettings({ showDeckMap: "no" }).showDeckMap, true);
     const disabled = normalizeSettings({ showDeckMap: false });
     assert.equal(disabled.showDeckMap, false);
-    assert.equal(
-      settingsForPersistence({}, disabled).showDeckMap,
-      false,
-    );
     assert.equal(normalizeSettings({}).cardSpread, DEFAULT_CARD_SPREAD);
     assert.equal(normalizeSettings({ cardSpread: 0.42 }).cardSpread, 0.42);
     assert.equal(normalizeSettings({ cardSpread: 0 }).cardSpread, MIN_CARD_SPREAD);
     assert.equal(normalizeSettings({ cardSpread: 99 }).cardSpread, MAX_CARD_SPREAD);
   });
 
-  test("migrates the card-tooltip preference to the view-wide setting", () => {
-    assert.equal(normalizeSettings({ showCardTooltips: true }).showTooltips, true);
-    assert.equal(normalizeSettings({
-      showCardTooltips: true,
-      showTooltips: false,
-    }).showTooltips, false);
-
-    const persisted = settingsForPersistence(
-      { showCardTooltips: true, unknownFutureKey: "kept" },
-      normalizeSettings({ showCardTooltips: true }),
+  test("uses only the current tooltip setting", () => {
+    assert.equal(
+      normalizeSettings({ showCardTooltips: true }).showTooltips,
+      DEFAULT_SETTINGS.showTooltips,
     );
-    assert.equal(persisted.showTooltips, true);
-    assert.equal("showCardTooltips" in persisted, false);
-    assert.equal(persisted.unknownFutureKey, "kept");
+    assert.equal(normalizeSettings({ showTooltips: true }).showTooltips, true);
   });
 
-  test("normalizes and persists paper-workflow settings", () => {
+  test("normalizes paper-workflow settings", () => {
     const permissive = normalizeSettings({
       restrictViewedCardPaste: false,
       previewLinksOnHover: true,
@@ -771,21 +652,16 @@ describe("Slipbox settings", () => {
     assert.equal(permissive.protectFiledCardText, false);
     assert.equal(permissive.showAutomaticBacklinks, false);
     assert.equal(permissive.allowCardScrolling, false);
-
-    const persisted = settingsForPersistence({}, permissive);
-    assert.equal(persisted.restrictViewedCardPaste, false);
-    assert.equal(persisted.previewLinksOnHover, true);
-    assert.equal(persisted.followLinksFromCards, true);
-    assert.equal(persisted.protectFiledCardText, false);
-    assert.equal(persisted.showAutomaticBacklinks, false);
-    assert.equal(persisted.allowCardScrolling, false);
   });
 
-  test("purges entry-point shortcuts while preserving other removed settings", () => {
+  test("ignores unknown settings, actions, and obsolete shortcuts", () => {
     const raw = {
       addressProperty: "slipbox-id",
-      unknownFutureKey: { retained: true },
+      unknownSetting: { ignored: true },
       deckHeaderButtons: { "add-card": false, bookmark: false },
+      useTemplatesForNewNotes: true,
+      newNoteTemplatePath: "Templates/Zettel.md",
+      newCardFolder: "Cards",
       deckKeybindings: {
         "add-card": [{ key: "a", modifiers: [] }],
         "new-section": [{ key: "n", modifiers: [] }],
@@ -800,54 +676,16 @@ describe("Slipbox settings", () => {
     assert.equal("add-card" in settings.deckKeybindings, false);
     assert.equal("new-section" in settings.deckKeybindings, false);
     assert.equal("entry-points" in settings.deckKeybindings, false);
+    assert.equal("unknownSetting" in settings, false);
+    assert.equal("useTemplatesForNewNotes" in settings, false);
+    assert.equal("newNoteTemplatePath" in settings, false);
+    assert.equal(settings.newCardFolder, "Cards");
     assert.equal(
       Object.values(settings.deckKeybindings).flat().some(
         (binding) => binding.key === "a",
       ),
       false,
     );
-
-    const persisted = settingsForPersistence(raw, settings);
-    assert.deepEqual(persisted.unknownFutureKey, { retained: true });
-    assert.equal("deckHeaderButtons" in persisted, false);
-    assert.equal(
-      "add-card" in (
-        (persisted.cardHeaderButtons as Record<string, unknown>).deck as Record<string, unknown>
-      ),
-      false,
-    );
-    assert.deepEqual(
-      (persisted.deckKeybindings as Record<string, unknown>)["add-card"],
-      [{ key: "a", modifiers: [] }],
-    );
-    assert.equal(
-      "entry-points" in (persisted.deckKeybindings as Record<string, unknown>),
-      false,
-    );
-    assert.equal("back" in (persisted.deckKeybindings as Record<string, unknown>), false);
-    assert.equal("forward" in (persisted.deckKeybindings as Record<string, unknown>), false);
-    assert.equal(
-      "toggle-toolbar" in (persisted.deckKeybindings as Record<string, unknown>),
-      false,
-    );
-  });
-
-  test("purges the retired template settings without touching other keys", () => {
-    const raw = {
-      useTemplatesForNewNotes: true,
-      newNoteTemplatePath: "Templates/Zettel.md",
-      newCardFolder: "Cards",
-      unknownFutureKey: { retained: true },
-    };
-    const settings = normalizeSettings(raw);
-    assert.equal("useTemplatesForNewNotes" in settings, false);
-    assert.equal("newNoteTemplatePath" in settings, false);
-
-    const persisted = settingsForPersistence(raw, settings);
-    assert.equal("useTemplatesForNewNotes" in persisted, false);
-    assert.equal("newNoteTemplatePath" in persisted, false);
-    assert.equal(persisted.newCardFolder, "Cards");
-    assert.deepEqual(persisted.unknownFutureKey, { retained: true });
   });
 
   test("falls back from invalid property settings", () => {

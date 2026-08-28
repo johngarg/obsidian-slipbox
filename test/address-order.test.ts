@@ -9,7 +9,7 @@ import {
   compareAddressesNatural,
   normalizeAddressInput,
   validateAddress,
-} from "../src/index.js";
+} from "../src/address-order.js";
 
 const sign = (value: number): number => (value < 0 ? -1 : value > 0 ? 1 : 0);
 

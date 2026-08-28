@@ -7,7 +7,7 @@ import {
   deskToggleLabel,
   type DeckActionContext,
 } from "../src/deck-actions.js";
-import { DECK_ACTION_DEFINITIONS } from "../src/settings.js";
+import { SLIPBOX_ACTION_DEFINITIONS } from "../src/settings.js";
 
 const READY: DeckActionContext = {
   hasActiveCard: true,
@@ -156,7 +156,7 @@ describe("Deck action availability", () => {
   });
 
   test("does not expose removed creation or directional address-search actions", () => {
-    const definitions = DECK_ACTION_DEFINITIONS as readonly {
+    const definitions = SLIPBOX_ACTION_DEFINITIONS as readonly {
       readonly id: string;
       readonly defaultBindings: readonly { readonly key: string }[];
     }[];
@@ -201,7 +201,7 @@ describe("Deck action availability", () => {
       },
     ];
     for (const expectedAction of expected) {
-      const definition = DECK_ACTION_DEFINITIONS.find(
+      const definition = SLIPBOX_ACTION_DEFINITIONS.find(
         (candidate) => candidate.id === expectedAction.id,
       );
       assert.equal(definition?.label, expectedAction.label);
@@ -219,7 +219,7 @@ describe("Deck action availability", () => {
       "jump-first-inferred-child",
     ]) {
       assert.equal(
-        DECK_ACTION_DEFINITIONS.some((definition) => definition.id === removed),
+        SLIPBOX_ACTION_DEFINITIONS.some((definition) => definition.id === removed),
         false,
       );
     }
@@ -233,16 +233,16 @@ describe("Deck action availability", () => {
       "toggle-toolbar-visibility",
     ]);
     assert.equal(
-      DECK_ACTION_DEFINITIONS.some((definition) => retiredIds.has(definition.id)),
+      SLIPBOX_ACTION_DEFINITIONS.some((definition) => retiredIds.has(definition.id)),
       false,
     );
     assert.equal(
-      DECK_ACTION_DEFINITIONS.some((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.some((definition) =>
         retiredCommands.has(definition.commandId)),
       false,
     );
     assert.equal(
-      DECK_ACTION_DEFINITIONS.some((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.some((definition) =>
         definition.defaultBindings.some((binding) =>
           (binding.key === "h" && binding.modifiers.includes("Shift")) ||
           (binding.key === "l" && binding.modifiers.includes("Shift")) ||
@@ -253,14 +253,14 @@ describe("Deck action availability", () => {
   });
 
   test("uses y as the Deck-scoped copy-link shortcut", () => {
-    const copy = DECK_ACTION_DEFINITIONS.find(
+    const copy = SLIPBOX_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "copy-link",
     );
     assert.deepEqual(copy?.defaultBindings, [{ key: "y", modifiers: [] }]);
   });
 
   test("leaves the Deck-only background toggle unbound by default", () => {
-    const backgroundToggle = DECK_ACTION_DEFINITIONS.find(
+    const backgroundToggle = SLIPBOX_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "toggle-desk-without-focus",
     );
     assert.deepEqual(backgroundToggle?.defaultBindings, []);
@@ -290,10 +290,10 @@ describe("Deck action availability", () => {
   });
 
   test("registers Enter only for Show in Deck and e only for focused editing", () => {
-    const show = DECK_ACTION_DEFINITIONS.find(
+    const show = SLIPBOX_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "show-card-in-deck",
     );
-    const edit = DECK_ACTION_DEFINITIONS.find(
+    const edit = SLIPBOX_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "edit-card",
     );
     assert.deepEqual(show?.defaultBindings, [{ key: "Enter", modifiers: [] }]);
@@ -302,7 +302,7 @@ describe("Deck action availability", () => {
     assert.equal(show?.target, "focused-card");
     assert.equal(show?.scope, "active-view");
     assert.equal(
-      DECK_ACTION_DEFINITIONS.filter((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.filter((definition) =>
         definition.defaultBindings.some((binding) => binding.key === "Enter")
       ).length,
       1,
@@ -363,12 +363,12 @@ describe("Deck action availability", () => {
 
   test("marks held ten-card motion repeatable and prefixes discrete", () => {
     assert.equal(
-      DECK_ACTION_DEFINITIONS.find((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
         definition.id === "forward-ten-cards")?.repeatable,
       true,
     );
     assert.equal(
-      DECK_ACTION_DEFINITIONS.find((definition) =>
+      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
         definition.id === "backward-ten-cards")?.repeatable,
       true,
     );
@@ -377,7 +377,7 @@ describe("Deck action availability", () => {
       "pull-into-pile",
     ]) {
       assert.equal(
-        DECK_ACTION_DEFINITIONS.find((definition) =>
+        SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
           definition.id === action)?.repeatable,
         false,
       );

@@ -15,10 +15,8 @@
 .view-content.slipbox-deck-view {
   --slipbox-card-radius: 10px;
   --slipbox-main-card-width: min(58%, 840px);
-  --slipbox-tray-card-width: min(360px, 36cqw);
-  --slipbox-tray-pile-height: min(258px, calc(24cqw + 18px));
-  --slipbox-desk-card-width: var(--slipbox-tray-card-width);
-  --slipbox-desk-pile-height: var(--slipbox-tray-pile-height);
+  --slipbox-desk-card-width: min(360px, 36cqw);
+  --slipbox-desk-pile-height: min(258px, calc(24cqw + 18px));
   container-type: inline-size;
   height: 100%;
   padding: 0;
@@ -34,13 +32,13 @@
 }
 
 .slipbox-deck-view[data-desk-card-size="small"] {
-  --slipbox-tray-card-width: min(280px, 30cqw);
-  --slipbox-tray-pile-height: min(205px, calc(20cqw + 18px));
+  --slipbox-desk-card-width: min(280px, 30cqw);
+  --slipbox-desk-pile-height: min(205px, calc(20cqw + 18px));
 }
 
 .slipbox-deck-view[data-desk-card-size="large"] {
-  --slipbox-tray-card-width: min(440px, 42cqw);
-  --slipbox-tray-pile-height: min(312px, calc(28cqw + 18px));
+  --slipbox-desk-card-width: min(440px, 42cqw);
+  --slipbox-desk-pile-height: min(312px, calc(28cqw + 18px));
 }
 
 .slipbox-deck-shell {

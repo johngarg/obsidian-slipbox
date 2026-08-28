@@ -5,7 +5,7 @@ import {
   buildFiledCardLookups,
   cardMetadataRecord,
   indexCardMetadata,
-} from "../src/index.js";
+} from "../src/card-metadata.js";
 
 describe("indexCardMetadata", () => {
   test("switches participation with the configured address property", () => {

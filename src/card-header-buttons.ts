@@ -73,17 +73,11 @@ export class CardHeaderButtonController {
   private renderButton(
     presentation: CardHeaderActionPresentation,
   ): HTMLButtonElement {
-    const deskToggleClasses = presentation.action === "toggle-desk"
-      ? `slipbox-card-desk-toggle ${
-          presentation.pressed === true ? "is-on-desk" : ""
-        }`
-      : "";
     const button = this.options.container.createEl("button", {
       cls: [
         "clickable-icon slipbox-card-header-action",
         this.options.buttonClass,
-        deskToggleClasses,
-      ].filter((value) => value !== "").join(" "),
+      ].join(" "),
       attr: {
         type: "button",
         "data-slipbox-action": presentation.action,

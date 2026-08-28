@@ -1305,11 +1305,6 @@ button.slipbox-inferred-navigation-item:focus-visible {
   height: 14px;
 }
 
-.slipbox-card-desk-toggle.is-on-desk {
-  color: var(--text-normal);
-  background: var(--background-modifier-hover);
-}
-
 .slipbox-card-scroll {
   flex: 1;
   min-height: 0;

@@ -40,6 +40,8 @@ initial public beta.
 
 ### Fixed
 
+- Kept “Return from Desk” visually consistent with the other card actions
+  instead of giving it a disabled-looking grey background.
 - Disabled filing confirmation while the duplicate-address policy blocks the
   entered address.
 - Made the tooltip preference apply to inferred navigation, branch annotations,

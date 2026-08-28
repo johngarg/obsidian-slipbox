@@ -54,7 +54,7 @@ describe("community scanner CSS compatibility", () => {
     const baseRule = styles.match(
       /a\.slipbox-explicit-branch-link\s*\{(?<body>[^}]*)\}/u,
     )?.groups?.body ?? "";
-    assert.match(baseRule, /font-weight:\s*var\(--font-semibold\)/u);
+    assert.doesNotMatch(baseRule, /font-weight\s*:/u);
     assert.doesNotMatch(baseRule, /(?:^|;)\s*color\s*:/u);
   });
 

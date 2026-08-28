@@ -119,7 +119,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.deskCardSize, "medium");
     assert.equal(DEFAULT_SETTINGS.deckOrdering, "natural");
     assert.equal(DEFAULT_SETTINGS.explicitBranchLinks, false);
-    assert.equal(DEFAULT_SETTINGS.outlineBranchLinks, true);
+    assert.equal(DEFAULT_SETTINGS.emphasiseBranchLinks, true);
     assert.equal(DEFAULT_SETTINGS.hideBranchLinkMarkers, true);
     assert.equal(DEFAULT_SETTINGS.showBranchLabels, true);
     assert.equal(DEFAULT_SETTINGS.inferAddressBranches, false);
@@ -250,7 +250,7 @@ describe("Slipbox settings", () => {
     const settings = normalizeSettings({
       explicitBranchLinks: true,
       branchLinkMarker: "  →→  ",
-      outlineBranchLinks: false,
+      emphasiseBranchLinks: false,
       hideBranchLinkMarkers: false,
       showBranchLabels: false,
       inferAddressBranches: true,
@@ -258,7 +258,7 @@ describe("Slipbox settings", () => {
     });
     assert.equal(settings.explicitBranchLinks, true);
     assert.equal(Object.hasOwn(settings, "branchLinkMarker"), false);
-    assert.equal(settings.outlineBranchLinks, false);
+    assert.equal(settings.emphasiseBranchLinks, false);
     assert.equal(settings.hideBranchLinkMarkers, false);
     assert.equal(settings.showBranchLabels, false);
     assert.equal(settings.inferAddressBranches, true);
@@ -270,8 +270,8 @@ describe("Slipbox settings", () => {
       true,
     );
     assert.equal(
-      normalizeSettings({ outlineBranchLinks: "invalid" }).outlineBranchLinks,
-      DEFAULT_SETTINGS.outlineBranchLinks,
+      normalizeSettings({ emphasiseBranchLinks: "invalid" }).emphasiseBranchLinks,
+      DEFAULT_SETTINGS.emphasiseBranchLinks,
     );
     assert.equal(
       normalizeSettings({ hideBranchLinkMarkers: "invalid" })

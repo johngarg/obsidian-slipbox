@@ -75,7 +75,7 @@ describe("card index configuration", () => {
     }), "branch-presentation");
     assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
       ...DEFAULT_SETTINGS,
-      outlineBranchLinks: !DEFAULT_SETTINGS.outlineBranchLinks,
+      emphasiseBranchLinks: !DEFAULT_SETTINGS.emphasiseBranchLinks,
     }), "branch-presentation");
     assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
       ...DEFAULT_SETTINGS,

@@ -97,7 +97,7 @@ export function settingsRefreshImpact(
     return indexChange;
   }
   const branchPresentationChanged =
-    previous.outlineBranchLinks !== next.outlineBranchLinks ||
+    previous.emphasiseBranchLinks !== next.emphasiseBranchLinks ||
     previous.hideBranchLinkMarkers !== next.hideBranchLinkMarkers ||
     previous.showBranchLabels !== next.showBranchLabels ||
     previous.showInferredBranchNavigation !== next.showInferredBranchNavigation;

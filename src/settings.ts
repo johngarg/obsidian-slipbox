@@ -431,7 +431,7 @@ export interface SlipboxSettings {
   readonly deckOrdering: DeckOrdering;
   readonly duplicateAddresses: DuplicateAddressPolicy;
   readonly explicitBranchLinks: boolean;
-  readonly outlineBranchLinks: boolean;
+  readonly emphasiseBranchLinks: boolean;
   readonly hideBranchLinkMarkers: boolean;
   readonly showBranchLabels: boolean;
   readonly inferAddressBranches: boolean;
@@ -498,7 +498,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   deckOrdering: "natural",
   duplicateAddresses: "allowed",
   explicitBranchLinks: false,
-  outlineBranchLinks: true,
+  emphasiseBranchLinks: true,
   hideBranchLinkMarkers: true,
   showBranchLabels: true,
   inferAddressBranches: false,
@@ -738,10 +738,10 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.explicitBranchLinks === "boolean"
         ? source.explicitBranchLinks
         : DEFAULT_SETTINGS.explicitBranchLinks,
-    outlineBranchLinks:
-      typeof source.outlineBranchLinks === "boolean"
-        ? source.outlineBranchLinks
-        : DEFAULT_SETTINGS.outlineBranchLinks,
+    emphasiseBranchLinks:
+      typeof source.emphasiseBranchLinks === "boolean"
+        ? source.emphasiseBranchLinks
+        : DEFAULT_SETTINGS.emphasiseBranchLinks,
     hideBranchLinkMarkers:
       typeof source.hideBranchLinkMarkers === "boolean"
         ? source.hideBranchLinkMarkers

@@ -986,7 +986,7 @@ export class DeskRenderer {
   private applyBranchLinkOutlines(target: HTMLElement, file: TFile): void {
     applyRenderedBranchLinkOutlines(target, {
       enabled: this.plugin.settings.explicitBranchLinks,
-      outline: this.plugin.settings.outlineBranchLinks,
+      outline: this.plugin.settings.emphasiseBranchLinks,
       hideMarker: this.plugin.settings.hideBranchLinkMarkers,
       links: this.app.metadataCache.getFileCache(file)?.links ?? [],
       targetAddressForLink: (link) =>

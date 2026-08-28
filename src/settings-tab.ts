@@ -108,9 +108,9 @@ export class SlipboxSettingTab extends PluginSettingTab {
             (setting) => this.renderExplicitBranchLinks(setting),
           ),
           this.definition(
-            "Outline branch links in cards",
-            "Draw a quiet outline around marked aliases in rendered Slipbox cards. This indicates branch syntax; ordinary Markdown views are unaffected.",
-            (setting) => this.renderOutlineBranchLinks(setting),
+            "Emphasise branch links in cards",
+            "Give marked aliases a quiet outline in rendered Slipbox cards. This indicates branch syntax; ordinary Markdown views are unaffected.",
+            (setting) => this.renderEmphasiseBranchLinks(setting),
           ),
           this.definition(
             "Hide branch-link markers in cards",
@@ -303,16 +303,16 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
   }
 
-  private renderOutlineBranchLinks(setting: Setting): void {
+  private renderEmphasiseBranchLinks(setting: Setting): void {
     const disabled = !this.slipbox.settings.explicitBranchLinks;
     setting.setDisabled(disabled);
     setting.addToggle((toggle) => {
       toggle
-        .setValue(this.slipbox.settings.outlineBranchLinks)
+        .setValue(this.slipbox.settings.emphasiseBranchLinks)
         .setDisabled(disabled)
-        .onChange((outlineBranchLinks) => void this.save({
+        .onChange((emphasiseBranchLinks) => void this.save({
           ...this.slipbox.settings,
-          outlineBranchLinks,
+          emphasiseBranchLinks,
         }));
     });
   }

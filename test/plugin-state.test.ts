@@ -60,7 +60,7 @@ describe("loadPluginData", () => {
     assert.equal(loaded.data.settings.addressProperty, "signature");
     assert.equal(loaded.data.settings.deskCardSize, "large");
     assert.equal(loaded.data.settings.showTooltips, true);
-    assert.equal(loaded.data.settings.outlineBranchLinks, true);
+    assert.equal(loaded.data.settings.emphasiseBranchLinks, true);
     assert.equal(loaded.data.settings.hideBranchLinkMarkers, true);
     assert.equal(Object.hasOwn(loaded.data.settings, "branchLinkMarker"), false);
     assert.deepEqual(loaded.data.state, {
@@ -128,8 +128,8 @@ describe("loadPluginData", () => {
     assert.equal(loaded.data.settings.deskCardSize, DEFAULT_SETTINGS.deskCardSize);
     assert.equal(loaded.data.settings.showTooltips, DEFAULT_SETTINGS.showTooltips);
     assert.equal(
-      loaded.data.settings.outlineBranchLinks,
-      DEFAULT_SETTINGS.outlineBranchLinks,
+      loaded.data.settings.emphasiseBranchLinks,
+      DEFAULT_SETTINGS.emphasiseBranchLinks,
     );
     assert.equal(
       loaded.data.settings.hideBranchLinkMarkers,

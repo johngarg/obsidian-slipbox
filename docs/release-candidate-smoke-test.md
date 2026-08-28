@@ -54,13 +54,14 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] File a card at `+12`. Confirm a normal link displayed as `+12` remains
   ordinary, while an explicit alias `++12` is indexed and presented as a branch
   with label `+12`.
-- [ ] With **Outline branch links in cards** enabled, confirm marked aliases
+- [ ] With **Emphasise branch links in cards** enabled, confirm marked aliases
   receive a quiet outline in Deck, Desk, and viewed-card bodies but not in
   ordinary Reading view, Live Preview, source mode, or Slipbox inline editing.
+  Confirm an alias inside authored bold Markdown remains bold.
   Confirm unresolved, unfiled-target, and self-link aliases are outlined while
   `[[+a]]`, embeds, external links, and unmarked aliases remain ordinary.
-- [ ] Disable ordinary card-link following and confirm outlined aliases remain
-  visible but do not acquire a clickable hover treatment. Toggle outlining and
+- [ ] Disable ordinary card-link following and confirm emphasised aliases remain
+  visible but do not acquire a clickable hover treatment. Toggle emphasis and
   confirm existing cards update without moving focus, scroll, or card layout.
 - [ ] With **Hide branch-link markers in cards** enabled, confirm `+` disappears
   from marked aliases in Deck, Desk, and viewed card bodies while their labels

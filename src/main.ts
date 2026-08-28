@@ -20,12 +20,9 @@ import {
 } from "obsidian";
 
 import {
-  createBookmark,
-  deleteBookmark,
-  removeBookmarkPaths,
-  renameBookmarkPaths,
   type DeckBookmark,
 } from "./bookmarks.js";
+import { BookmarkService } from "./bookmark-service.js";
 import {
   DECK_VIEW_TYPE,
   DeckView,
@@ -82,49 +79,28 @@ import {
   cardIndexConfig,
   settingsRefreshImpact,
 } from "./card-index-config.js";
-import {
-  EMPTY_DESK,
-  clearFiledCardsFromPile,
-  clearFiledCardsFromDesk,
-  placeUnfiledCardAtPosition,
-  reconcileDesk,
-  removeDeskPath,
-  renameDeskPath,
-  setPileExpanded,
-  toggleFiledCard,
-  deskContains,
-  type DeskCardCandidate,
-  type DeskPilePosition,
-  type DeskState,
-} from "./desk-state.js";
+import type { DeskPilePosition, DeskState } from "./desk-state.js";
+import { DeskService } from "./desk-service.js";
 import { formatCurrentTimestamp } from "./timestamp.js";
-import { CanvasBridge, type CanvasWriteResult } from "./canvas-bridge.js";
-import { normalizeCanvasPath } from "./canvas-layout.js";
+import { CanvasBridge } from "./canvas-bridge.js";
+import { DeskCanvasService } from "./desk-canvas-service.js";
 import { generateFiledCardLink } from "./card-links.js";
-import { pathIsAtOrBelow, renamePathReference } from "./path-reference.js";
 import {
   createFilingPreview,
   duplicateFilingMessage,
   filingPlacementMatches,
   type FilingPreview,
 } from "./filing-preview.js";
-import {
-  InlineEditPathLock,
-  type InlineEditCommitRequest,
-  type InlineEditCommitResult,
-  type InlineEditSessionSnapshot,
+import type {
+  InlineEditCommitRequest,
+  InlineEditCommitResult,
+  InlineEditSessionSnapshot,
 } from "./inline-edit-session.js";
-import type { ViewedCardReturnTarget } from "./viewed-card.js";
 import {
   deckPositionModeForPileCount,
   type DeckPositionMode,
 } from "./workspace-layout.js";
-import {
-  NoteBodyConflictError,
-  replaceNoteBodyIfUnchanged,
-  splitNoteBody,
-} from "./note-body.js";
-import { preservesProtectedText } from "./paper-workflow.js";
+import { splitNoteBody } from "./note-body.js";
 import { CardIndexRuntime } from "./card-index-runtime.js";
 import type {
   AfterIndexReconcile,
@@ -135,6 +111,12 @@ import {
   type PluginDataWriteResult,
 } from "./plugin-data-writer.js";
 import type { SlipboxPluginData } from "./plugin-state.js";
+import {
+  InlineEditRegistry,
+  type DetachedInlineEditDraft,
+  type DetachedInlineEditPresentation,
+  type InlineEditStartData,
+} from "./inline-edit-registry.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
@@ -148,52 +130,20 @@ type NewCardPlacement =
   | { readonly kind: "open" }
   | { readonly kind: "desk"; readonly position?: DeskPilePosition };
 
-export interface InlineEditStartData {
-  readonly file: TFile;
-  readonly body: string;
-}
-
-export interface DetachedInlineEditDraft {
-  readonly path: string;
-  readonly file: TFile;
-  readonly returnTarget: ViewedCardReturnTarget;
-  readonly baseBody: string;
-  readonly protectedBody: string | null;
-  readonly draft: string;
-  readonly conflictMessage: string | null;
-  readonly conflictRetryable: boolean;
-  readonly selectionStart: number;
-  readonly selectionEnd: number;
-  readonly textareaScrollTop: number;
-  readonly renderedScrollTop: number;
-}
-
-interface DetachedInlineEditPresentation {
-  readonly returnTarget: ViewedCardReturnTarget;
-  readonly selectionStart: number;
-  readonly selectionEnd: number;
-  readonly textareaScrollTop: number;
-  readonly renderedScrollTop: number;
-}
-
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
   override settings: SlipboxSettings = DEFAULT_SETTINGS;
-  desk: DeskState = EMPTY_DESK;
   index!: CardIndex;
-  canvas!: CanvasBridge;
 
   private problemStatusBarItem: HTMLElement | null = null;
   private cardSpreadSaveTimer: number | null = null;
-  private deskPileSequence = 0;
   private startupDeckMode: DeckPositionMode | null = null;
   private indexRuntime!: CardIndexRuntime;
   private dataWriter!: SerializedPluginDataWriter<SlipboxPluginData>;
-  private readonly inlineEditOwners = new InlineEditPathLock<DeckView>();
-  private readonly detachedInlineEditDrafts = new Map<
-    string,
-    DetachedInlineEditDraft
-  >();
+  private inlineEdits!: InlineEditRegistry<DeckView>;
+  private bookmarks!: BookmarkService;
+  private deskService!: DeskService;
+  private deskCanvas!: DeskCanvasService;
 
   override async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
@@ -204,7 +154,7 @@ export default class SlipboxPlugin extends Plugin {
     this.indexRuntime = new CardIndexRuntime(this.index, {
       schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
       cancelScheduled: (handle) => window.clearTimeout(handle as number),
-      reconcile: (snapshot) => this.reconcileSessionDesk(snapshot),
+      reconcile: (snapshot) => this.deskService.reconcile(snapshot),
       publish: (reason) => this.refreshDeckViews(reason),
       reportBackgroundError: (error) => {
         new Notice(`Could not refresh the card index: ${errorMessage(error)}`);
@@ -216,7 +166,49 @@ export default class SlipboxPlugin extends Plugin {
         new Notice(`Could not save Slipbox Desk state: ${errorMessage(error)}`);
       },
     });
-    this.canvas = new CanvasBridge(this.app);
+    this.deskService = new DeskService({
+      indexRuntime: this.indexRuntime,
+      refreshViews: () => this.refreshDeckViews(),
+      notify: (message) => { new Notice(message); },
+    });
+    this.bookmarks = new BookmarkService(this.state.bookmarks, {
+      isAvailable: (path) => this.index.filedByPath(path) !== undefined,
+      label: (path) => this.filedCardLabel(path),
+      changed: (bookmarks) => {
+        this.state = { bookmarks };
+        this.refreshBookmarkUi();
+      },
+      persist: () => this.persistState(),
+      notify: (message) => { new Notice(message); },
+    });
+    this.inlineEdits = new InlineEditRegistry({
+      fileAtPath: (path) => this.app.vault.getFileByPath(path),
+      read: (file) => this.app.vault.read(file),
+      process: async (file, update) => {
+        await this.app.vault.process(file, update);
+      },
+      contentStart: (source) => getFrontMatterInfo(source).contentStart,
+      body: (source, contentStart) => splitNoteBody(source, contentStart).body,
+      flushOpenViews: (path) => this.flushObsidianTextViews(path),
+      revealOwner: (owner) => this.app.workspace.revealLeaf(owner.leaf),
+      notify: (message) => { new Notice(message); },
+    });
+    const canvas = new CanvasBridge(this.app);
+    this.deskCanvas = new DeskCanvasService({
+      pathsInPile: (pileId) => this.deskService.pathsInPile(pileId),
+      hasActiveCanvas: () => canvas.hasActiveCanvas(),
+      canvasFiles: () => canvas.canvasFiles(),
+      chooseCanvas: (files) => promptForCanvas(this.app, files),
+      promptPath: () => promptForText(
+        this.app,
+        "Create Canvas from pile",
+        "Canvas filename or vault path",
+      ),
+      layoutActive: (paths) => canvas.layoutFilesOnActiveCanvas(paths),
+      layout: (file, paths) => canvas.layoutFilesOnCanvas(file, paths),
+      create: (path, paths) => canvas.createCanvas(path, paths),
+      notify: (message) => { new Notice(message); },
+    });
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
     this.registerView(
@@ -324,26 +316,11 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   acquireInlineEdit(path: string, owner: DeckView): boolean {
-    const existing = this.inlineEditOwners.ownerAt(path);
-    if (existing === owner) {
-      return true;
-    }
-    if (existing !== undefined) {
-      new Notice("This card is already being edited in another Slipbox Desk view.");
-      void this.app.workspace.revealLeaf(existing.leaf);
-      return false;
-    }
-    if (this.detachedInlineEditDrafts.has(path)) {
-      new Notice(
-        "This card has an inline draft waiting to be restored in Slipbox Desk.",
-      );
-      return false;
-    }
-    return this.inlineEditOwners.acquire(path, owner);
+    return this.inlineEdits.acquire(path, owner);
   }
 
   releaseInlineEdit(path: string, owner: DeckView): void {
-    this.inlineEditOwners.release(path, owner);
+    this.inlineEdits.release(path, owner);
   }
 
   renameInlineEdit(
@@ -351,62 +328,24 @@ export default class SlipboxPlugin extends Plugin {
     newPath: string,
     owner: DeckView,
   ): boolean {
-    return this.inlineEditOwners.rename(oldPath, newPath, owner);
+    return this.inlineEdits.rename(oldPath, newPath, owner);
   }
 
   async prepareInlineEdit(file: TFile): Promise<InlineEditStartData> {
-    await this.flushOpenTextViews(file.path);
-    const latest = this.app.vault.getFileByPath(file.path);
-    if (latest === null) {
-      throw new Error("The card no longer exists.");
-    }
-    const source = await this.app.vault.read(latest);
-    const body = splitNoteBody(
-      source,
-      getFrontMatterInfo(source).contentStart,
-    ).body;
-    return { file: latest, body };
+    return this.inlineEdits.prepare(file);
   }
 
   async commitInlineEdit(
     request: InlineEditCommitRequest,
   ): Promise<InlineEditCommitResult> {
-    const file = this.app.vault.getFileByPath(request.path);
-    if (file === null) {
-      return {
-        status: "conflict",
-        message: "The card was deleted while it was being edited.",
-      };
-    }
-    if (!preservesProtectedText(request.protectedBody, request.draft)) {
-      return {
-        status: "policy-violation",
-        message: "Text present when editing began is protected.",
-      };
-    }
-    try {
-      await this.app.vault.process(file, (latest) => {
-        const contentStart = getFrontMatterInfo(latest).contentStart;
-        return replaceNoteBodyIfUnchanged(
-          latest,
-          contentStart,
-          request.baseBody,
-          request.draft,
-        );
-      });
-    } catch (error) {
-      if (error instanceof NoteBodyConflictError) {
-        return {
-          status: "conflict",
-          message: "The note body changed elsewhere. Your inline draft was kept.",
-        };
-      }
-      throw error;
-    }
-    return { status: "saved" };
+    return this.inlineEdits.commit(request);
   }
 
   async flushOpenTextViews(path: string): Promise<void> {
+    await this.inlineEdits.flushOpenViews(path);
+  }
+
+  private async flushObsidianTextViews(path: string): Promise<void> {
     const saves: Promise<void>[] = [];
     this.app.workspace.iterateAllLeaves((leaf) => {
       const view = leaf.view;
@@ -422,42 +361,19 @@ export default class SlipboxPlugin extends Plugin {
     file: TFile,
     presentation: DetachedInlineEditPresentation,
   ): void {
-    this.detachedInlineEditDrafts.set(snapshot.path, {
-      path: snapshot.path,
-      file,
-      baseBody: snapshot.baseBody,
-      protectedBody: snapshot.protectedBody,
-      draft: snapshot.draft,
-      conflictMessage: snapshot.failure?.kind === "conflict"
-        ? snapshot.failure.message
-        : null,
-      conflictRetryable: snapshot.conflictRetryable,
-      ...presentation,
-    });
+    this.inlineEdits.retainDetached(snapshot, file, presentation);
   }
 
   takeDetachedInlineEdit(): DetachedInlineEditDraft | null {
-    for (const [path, draft] of this.detachedInlineEditDrafts) {
-      if (this.inlineEditOwners.ownerAt(path) !== undefined) {
-        continue;
-      }
-      this.detachedInlineEditDrafts.delete(path);
-      return draft;
-    }
-    return null;
+    return this.inlineEdits.takeDetached();
   }
 
   returnDetachedInlineEdit(draft: DetachedInlineEditDraft): void {
-    this.detachedInlineEditDrafts.set(draft.path, draft);
+    this.inlineEdits.returnDetached(draft);
   }
 
   private async finishInlineEdits(reason: string): Promise<void> {
-    const owners = this.inlineEditOwners.ownerSet();
-    await Promise.all(
-      [...owners].map(async (owner) => {
-        await owner.finishInlineEditing(reason);
-      }),
-    );
+    await this.inlineEdits.finishAll(reason);
   }
 
   cardTitle(file: TFile): string {
@@ -524,7 +440,7 @@ export default class SlipboxPlugin extends Plugin {
 
     const isBookmarked =
       address !== null && this.bookmarkAtPath(file.path) !== undefined;
-    const isOnDesk = deskContains(this.desk, file.path);
+    const isOnDesk = this.deskService.contains(file.path);
     const title = this.cardTitle(file);
     const menu = Menu.forEvent(event);
     const runViewAction = (action: Parameters<DeckView["runAction"]>[0]): void => {
@@ -636,7 +552,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   showBookmarks(view: DeckView): void {
-    new BookmarksModal(this.app, this.state.bookmarks, {
+    new BookmarksModal(this.app, this.bookmarks.items, {
       currentPath: view.focusedDeckCardPath,
       isAvailable: (path) => this.index.filedByPath(path) !== undefined,
       label: (path) => this.filedCardLabel(path),
@@ -647,170 +563,67 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   bookmarkAtPath(path: string): DeckBookmark | undefined {
-    return this.state.bookmarks.find((bookmark) => bookmark.path === path);
+    return this.bookmarks.at(path);
   }
 
   async addBookmark(path: string): Promise<void> {
-    if (this.index.filedByPath(path) === undefined) {
-      new Notice("Only an available filed card can be bookmarked.");
-      return;
-    }
-    const label = this.filedCardLabel(path);
-    if (this.bookmarkAtPath(path) !== undefined) {
-      new Notice(`${label} already has a bookmark.`);
-      return;
-    }
-    try {
-      this.state = {
-        ...this.state,
-        bookmarks: createBookmark(this.state.bookmarks, path),
-      };
-      this.refreshBookmarkUi();
-      const saved = await this.persistState();
-      if (saved === "saved") {
-        new Notice(`Bookmarked ${label}.`);
-      }
-    } catch (error) {
-      new Notice(`Could not add bookmark: ${errorMessage(error)}`);
-    }
+    await this.bookmarks.add(path);
   }
 
   async toggleBookmark(path: string): Promise<void> {
-    if (this.bookmarkAtPath(path) === undefined) {
-      await this.addBookmark(path);
-    } else {
-      await this.removeBookmark(path);
-    }
+    await this.bookmarks.toggle(path);
   }
 
   createDeskPileId(): string {
-    this.deskPileSequence += 1;
-    return `desk-pile-${this.deskPileSequence}`;
+    return this.deskService.createPileId();
+  }
+
+  get desk(): DeskState {
+    return this.deskService.snapshot;
   }
 
   async updateDesk(next: DeskState): Promise<void> {
-    this.desk = next;
-    await this.refreshDeckViews();
+    await this.deskService.replace(next);
   }
 
   async toggleFileOnDesk(file: TFile): Promise<void> {
-    let available = false;
-    await this.refreshIndex("index", () => {
-      available = this.index.filedByFile(file) !== undefined;
-      if (available) {
-        this.desk = toggleFiledCard(
-          this.desk,
-          { cardRef: file.path, kind: "filed" },
-          this.createDeskPileId(),
-        );
-      }
-    });
-    if (!available) {
-      new Notice("Only an available filed card can be pulled out.");
-    }
+    await this.deskService.toggleFile(file);
   }
 
   async putFileOnDesk(file: TFile): Promise<boolean> {
-    if (deskContains(this.desk, file.path)) {
-      return true;
-    }
-    let available = false;
-    await this.refreshIndex("index", () => {
-      available = this.index.filedByFile(file) !== undefined;
-      if (available) {
-        this.desk = toggleFiledCard(
-          this.desk,
-          { cardRef: file.path, kind: "filed" },
-          this.createDeskPileId(),
-        );
-      }
-    });
-    if (!available) {
-      new Notice("Only an available filed card can be put on the Desk.");
-      return false;
-    }
-    return deskContains(this.desk, file.path);
+    return this.deskService.putFile(file);
   }
 
   isFileOnDesk(file: TFile): boolean {
-    return deskContains(this.desk, file.path);
+    return this.deskService.contains(file.path);
   }
 
   async setDeskPileExpanded(pileId: string, expanded: boolean): Promise<void> {
-    this.desk = setPileExpanded(this.desk, pileId, expanded);
-    await this.refreshDeckViews();
+    await this.deskService.setPileExpanded(pileId, expanded);
   }
 
   async clearDeskPile(pileId: string): Promise<void> {
-    this.desk = clearFiledCardsFromPile(this.desk, pileId);
-    await this.refreshDeckViews();
+    await this.deskService.clearPile(pileId);
   }
 
   async clearDesk(): Promise<void> {
-    this.desk = clearFiledCardsFromDesk(this.desk);
-    await this.refreshDeckViews();
+    await this.deskService.clearFiledCards();
   }
 
   hasActiveCanvas(): boolean {
-    return this.canvas.hasActiveCanvas();
+    return this.deskCanvas.hasActiveCanvas();
   }
 
   async layOutDeskPileOnActiveCanvas(pileId: string): Promise<void> {
-    const paths = this.deskPilePaths(pileId);
-    if (paths.length === 0) {
-      return;
-    }
-    try {
-      this.reportCanvasWrite(await this.canvas.layoutFilesOnActiveCanvas(paths));
-    } catch (error) {
-      new Notice(`Could not lay out the pile: ${errorMessage(error)}`);
-    }
+    await this.deskCanvas.layoutPileOnActiveCanvas(pileId);
   }
 
   async layOutDeskPileOnCanvas(pileId: string): Promise<void> {
-    const paths = this.deskPilePaths(pileId);
-    if (paths.length === 0) {
-      return;
-    }
-    const canvases = this.canvas.canvasFiles();
-    if (canvases.length === 0) {
-      new Notice("There are no Canvas files in this vault. Create one from the pile instead.");
-      return;
-    }
-    const file = await promptForCanvas(this.app, canvases);
-    if (file === null) {
-      return;
-    }
-    try {
-      this.reportCanvasWrite(await this.canvas.layoutFilesOnCanvas(file, paths));
-    } catch (error) {
-      new Notice(`Could not lay out the pile: ${errorMessage(error)}`);
-    }
+    await this.deskCanvas.layoutPileOnCanvas(pileId);
   }
 
   async createCanvasFromDeskPile(pileId: string): Promise<void> {
-    const paths = this.deskPilePaths(pileId);
-    if (paths.length === 0) {
-      return;
-    }
-    const entered = await promptForText(
-      this.app,
-      "Create Canvas from pile",
-      "Canvas filename or vault path",
-    );
-    if (entered === null) {
-      return;
-    }
-    const path = normalizeCanvasPath(entered);
-    if (path === null) {
-      new Notice("Enter a valid Canvas filename or vault-relative path.");
-      return;
-    }
-    try {
-      this.reportCanvasWrite(await this.canvas.createCanvas(path, paths));
-    } catch (error) {
-      new Notice(`Could not create the Canvas: ${errorMessage(error)}`);
-    }
+    await this.deskCanvas.createCanvasFromPile(pileId);
   }
 
   async beginFiling(file: TFile): Promise<void> {
@@ -889,7 +702,7 @@ export default class SlipboxPlugin extends Plugin {
       );
 
       const cacheReady = await this.waitForCachedAddress(file, preview.address);
-      this.desk = removeDeskPath(this.desk, file.path);
+      this.deskService.removePath(file.path);
       new Notice(
         cacheReady
           ? `Filed ${this.cardTitle(file)} as ${preview.address}.`
@@ -1116,12 +929,7 @@ export default class SlipboxPlugin extends Plugin {
         await this.refreshIndex("index", position === undefined
           ? undefined
           : () => {
-            this.desk = placeUnfiledCardAtPosition(
-              this.desk,
-              file.path,
-              this.createDeskPileId(),
-              position,
-            );
+            this.deskService.placeUnfiledAtPosition(file.path, position);
           });
         this.focusDeskCardInViews(file.path);
       } else {
@@ -1322,19 +1130,7 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async removeBookmark(path: string): Promise<void> {
-    if (this.bookmarkAtPath(path) === undefined) {
-      return;
-    }
-    const label = this.filedCardLabel(path);
-    this.state = {
-      ...this.state,
-      bookmarks: deleteBookmark(this.state.bookmarks, path),
-    };
-    this.refreshBookmarkUi();
-    const saved = await this.persistState();
-    if (saved === "saved") {
-      new Notice(`Deleted bookmark at ${label}.`);
-    }
+    await this.bookmarks.remove(path);
   }
 
   private queueIndexRefresh(): void {
@@ -1458,84 +1254,27 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   private handleDeletedFile(file: TAbstractFile): void {
-    for (const [path, draft] of this.detachedInlineEditDrafts) {
-      if (pathIsAtOrBelow(path, file.path)) {
-        this.detachedInlineEditDrafts.set(path, {
-          ...draft,
-          conflictMessage:
-            "The card was deleted while it was being edited. Your draft was kept.",
-          conflictRetryable: true,
-        });
-      }
-    }
-    this.desk = removeDeskPath(this.desk, file.path);
+    this.inlineEdits.handlePathDeletion(file.path);
+    this.deskService.removePath(file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
         leaf.view.handlePathDeletion(file.path);
       }
     }
-    const nextBookmarks = removeBookmarkPaths(this.state.bookmarks, file.path);
-    if (nextBookmarks.length !== this.state.bookmarks.length) {
-      this.state = {
-        ...this.state,
-        bookmarks: nextBookmarks,
-      };
-      void this.persistState();
-    }
+    void this.bookmarks.handlePathDeletion(file.path);
     this.queueIndexRefresh();
   }
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
-    for (const [path, draft] of [...this.detachedInlineEditDrafts]) {
-      const renamedPath = renamePathReference(path, oldPath, file.path);
-      if (renamedPath === path) {
-        continue;
-      }
-      this.detachedInlineEditDrafts.delete(path);
-      const collision = this.detachedInlineEditDrafts.has(renamedPath) ||
-        this.inlineEditOwners.ownerAt(renamedPath) !== undefined;
-      this.detachedInlineEditDrafts.set(renamedPath, {
-        ...draft,
-        path: renamedPath,
-        conflictMessage: collision
-          ? "The renamed path is already held by another inline-edit session."
-          : draft.conflictMessage,
-        conflictRetryable: collision ? false : draft.conflictRetryable,
-      });
-    }
-    this.desk = renameDeskPath(this.desk, oldPath, file.path);
+    this.inlineEdits.handlePathRename(oldPath, file.path);
+    this.deskService.renamePath(oldPath, file.path);
     for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
       if (leaf.view instanceof DeckView) {
         leaf.view.handlePathRename(oldPath, file.path);
       }
     }
-    const renamesBookmark = this.state.bookmarks.some(
-      (bookmark) => pathIsAtOrBelow(bookmark.path, oldPath),
-    );
-    if (renamesBookmark) {
-      this.state = {
-        ...this.state,
-        bookmarks: renameBookmarkPaths(this.state.bookmarks, oldPath, file.path),
-      };
-      void this.persistState();
-    }
+    void this.bookmarks.handlePathRename(oldPath, file.path);
     this.queueIndexRefresh();
-  }
-
-  private reconcileSessionDesk(snapshot = this.index.snapshot): void {
-    const candidates: DeskCardCandidate[] = [
-      ...snapshot.unfiled.map((file) => ({
-        cardRef: file.path,
-        kind: "unfiled" as const,
-        modifiedTime: file.stat.mtime,
-      })),
-      ...snapshot.filed.map((card) => ({
-        cardRef: card.path,
-        kind: "filed" as const,
-        modifiedTime: card.file.stat.mtime,
-      })),
-    ];
-    this.desk = reconcileDesk(this.desk, candidates, this.createDeskPileId());
   }
 
   private freshCardIndex(): CardIndex {
@@ -1544,23 +1283,6 @@ export default class SlipboxPlugin extends Plugin {
     return index;
   }
 
-  private deskPilePaths(pileId: string): string[] {
-    return this.desk.piles
-      .find((pile) => pile.id === pileId)
-      ?.cards.map((card) => card.cardRef) ?? [];
-  }
-
-  private reportCanvasWrite(result: CanvasWriteResult): void {
-    const added = result.addedPaths.length;
-    const skipped = result.skippedPaths.length;
-    const summary = added === 0
-      ? `No cards added to ${result.file.basename}.`
-      : `Added ${added} card${added === 1 ? "" : "s"} to ${result.file.basename}.`;
-    const existing = skipped === 0
-      ? ""
-      : ` Skipped ${skipped} existing node${skipped === 1 ? "" : "s"}.`;
-    new Notice(`${summary}${existing}`);
-  }
 }
 
 function errorMessage(error: unknown): string {

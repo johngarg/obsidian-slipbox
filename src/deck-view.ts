@@ -1380,7 +1380,7 @@ export class DeckView extends ItemView {
         this.plugin.showBookmarks(this);
         break;
       case "problems":
-        this.plugin.showIssues();
+        void this.plugin.showIssues();
         break;
       case "confirm-filing":
         void this.confirmFiling();
@@ -3660,12 +3660,10 @@ export class DeckView extends ItemView {
         this.viewedFilingEditor = null;
         this.unloadViewedCardComponent();
       }
-      this.deckViewport.navigate(
-        request.file.path,
-        this.plugin.index.snapshot.filed,
-      );
-      this.assignCardFocus(deckCardFocus(request.file.path));
-      await this.plugin.refreshDeckViews();
+      await this.plugin.refreshIndex("index", (snapshot) => {
+        this.deckViewport.navigate(request.file.path, snapshot.filed);
+        this.assignCardFocus(deckCardFocus(request.file.path));
+      });
     } finally {
       this.filingSession.finishConfirmation();
       const filing = this.filingSession.snapshot;

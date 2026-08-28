@@ -80,7 +80,7 @@ import { SlipboxSettingTab } from "./settings-tab.js";
 import { CardIndex, type FiledCard } from "./card-index.js";
 import {
   cardIndexConfig,
-  cardIndexConfigChange,
+  settingsRefreshImpact,
 } from "./card-index-config.js";
 import {
   EMPTY_DESK,
@@ -125,17 +125,21 @@ import {
   splitNoteBody,
 } from "./note-body.js";
 import { preservesProtectedText } from "./paper-workflow.js";
-import {
-  IndexRefreshCoordinator,
-  type AfterIndexReconcile,
-  type IndexRefreshBatch,
-  type IndexRefreshReason,
+import { CardIndexRuntime } from "./card-index-runtime.js";
+import type {
+  AfterIndexReconcile,
+  IndexRefreshReason,
 } from "./index-refresh-coordinator.js";
+import {
+  SerializedPluginDataWriter,
+  type PluginDataWriteResult,
+} from "./plugin-data-writer.js";
+import type { SlipboxPluginData } from "./plugin-state.js";
 
 type CardMetadataState = "ordinary" | "unfiled" | "filed" | "invalid";
 
 export type FileCardResult =
-  | { readonly status: "filed"; readonly address: string; readonly index: number }
+  | { readonly status: "filed" }
   | { readonly status: "preview-changed" }
   | { readonly status: "failed" };
 
@@ -181,19 +185,10 @@ export default class SlipboxPlugin extends Plugin {
 
   private problemStatusBarItem: HTMLElement | null = null;
   private cardSpreadSaveTimer: number | null = null;
-  private filingWriteInProgress = false;
-  private persistQueue: Promise<void> = Promise.resolve();
   private deskPileSequence = 0;
   private startupDeckMode: DeckPositionMode | null = null;
-  private readonly indexRefreshCoordinator = new IndexRefreshCoordinator({
-    delayMs: 80,
-    schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
-    cancelScheduled: (handle) => window.clearTimeout(handle as number),
-    run: (batch) => this.performIndexRefresh(batch),
-    reportBackgroundError: (error) => {
-      new Notice(`Could not refresh the card index: ${errorMessage(error)}`);
-    },
-  });
+  private indexRuntime!: CardIndexRuntime;
+  private dataWriter!: SerializedPluginDataWriter<SlipboxPluginData>;
   private readonly inlineEditOwners = new InlineEditPathLock<DeckView>();
   private readonly detachedInlineEditDrafts = new Map<
     string,
@@ -206,6 +201,21 @@ export default class SlipboxPlugin extends Plugin {
     this.settings = data.settings;
     this.state = data.state;
     this.index = new CardIndex(this.app, cardIndexConfig(this.settings));
+    this.indexRuntime = new CardIndexRuntime(this.index, {
+      schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      cancelScheduled: (handle) => window.clearTimeout(handle as number),
+      reconcile: (snapshot) => this.reconcileSessionDesk(snapshot),
+      publish: (reason) => this.refreshDeckViews(reason),
+      reportBackgroundError: (error) => {
+        new Notice(`Could not refresh the card index: ${errorMessage(error)}`);
+      },
+    });
+    this.dataWriter = new SerializedPluginDataWriter({
+      write: (pluginData) => this.saveData(pluginData),
+      reportError: (error) => {
+        new Notice(`Could not save Slipbox Desk state: ${errorMessage(error)}`);
+      },
+    });
     this.canvas = new CanvasBridge(this.app);
     this.addSettingTab(new SlipboxSettingTab(this.app, this));
 
@@ -229,8 +239,8 @@ export default class SlipboxPlugin extends Plugin {
 
     this.problemStatusBarItem = this.addStatusBarItem();
     this.problemStatusBarItem.addClass("mod-clickable");
-    this.problemStatusBarItem.addEventListener("click", () => {
-      this.showIssues();
+    this.registerDomEvent(this.problemStatusBarItem, "click", () => {
+      void this.showIssues();
     });
     this.updateProblemStatusBarItem();
 
@@ -243,13 +253,13 @@ export default class SlipboxPlugin extends Plugin {
     }
     this.app.workspace.onLayoutReady(() => {
       this.registerIndexEvents();
-      void this.initializeAfterLayoutReady();
+      void this.refreshIndex();
     });
   }
 
   override onunload(): void {
     void this.finishInlineEdits("plugin-unload");
-    this.indexRefreshCoordinator.dispose();
+    this.indexRuntime.dispose();
     if (this.cardSpreadSaveTimer !== null) {
       window.clearTimeout(this.cardSpreadSaveTimer);
       this.cardSpreadSaveTimer = null;
@@ -475,29 +485,28 @@ export default class SlipboxPlugin extends Plugin {
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
     const previousSettings = this.settings;
-    const previousIndexConfig = cardIndexConfig(previousSettings);
     this.settings = normalizeSettings(value);
     const nextIndexConfig = cardIndexConfig(this.settings);
-    const indexConfigChange = cardIndexConfigChange(
-      previousIndexConfig,
-      nextIndexConfig,
-    );
+    const impact = settingsRefreshImpact(previousSettings, this.settings);
     // Keep settings and index config aligned before persistence yields to events.
-    this.index.configure(nextIndexConfig);
+    this.indexRuntime.configure(nextIndexConfig);
     await this.persistState();
-    if (indexConfigChange !== "unchanged") {
-      await this.refreshIndex(indexConfigChange);
-    } else if (settingsEqualExceptBranchingPresentation(
-      previousSettings,
-      this.settings,
-    )) {
-      for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-        if (leaf.view instanceof DeckView) {
-          leaf.view.refreshBranchPresentation();
+    switch (impact) {
+      case "none":
+        return;
+      case "index":
+      case "ordering":
+        await this.refreshIndex(impact);
+        return;
+      case "branch-presentation":
+        for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
+          if (leaf.view instanceof DeckView) {
+            leaf.view.refreshBranchPresentation();
+          }
         }
-      }
-    } else {
-      await this.refreshDeckViews();
+        return;
+      case "full":
+        await this.refreshDeckViews();
     }
   }
 
@@ -566,16 +575,18 @@ export default class SlipboxPlugin extends Plugin {
    * Cards already filed at `address` when duplicates are not allowed. Always
    * empty under the permissive policy, so callers need no policy branch.
    */
-  duplicateOccupants(address: string): readonly string[] {
+  duplicateOccupants(
+    address: string,
+    index: CardIndex = this.index,
+  ): readonly string[] {
     if (this.settings.duplicateAddresses !== "problem") {
       return [];
     }
-    return this.index.filedAtAddress(address).map((card) => card.path);
+    return index.filedAtAddress(address).map((card) => card.path);
   }
 
-  showIssues(): void {
-    this.index.refresh();
-    this.updateProblemStatusBarItem();
+  async showIssues(): Promise<void> {
+    await this.refreshIndex();
     new IssuesModal(
       this.app,
       this.index.snapshot,
@@ -655,8 +666,10 @@ export default class SlipboxPlugin extends Plugin {
         bookmarks: createBookmark(this.state.bookmarks, path),
       };
       this.refreshBookmarkUi();
-      await this.persistState();
-      new Notice(`Bookmarked ${label}.`);
+      const saved = await this.persistState();
+      if (saved === "saved") {
+        new Notice(`Bookmarked ${label}.`);
+      }
     } catch (error) {
       new Notice(`Could not add bookmark: ${errorMessage(error)}`);
     }
@@ -681,36 +694,41 @@ export default class SlipboxPlugin extends Plugin {
   }
 
   async toggleFileOnDesk(file: TFile): Promise<void> {
-    this.index.refresh();
-    const filed = this.index.filedByFile(file);
-    if (filed === undefined) {
+    let available = false;
+    await this.refreshIndex("index", () => {
+      available = this.index.filedByFile(file) !== undefined;
+      if (available) {
+        this.desk = toggleFiledCard(
+          this.desk,
+          { cardRef: file.path, kind: "filed" },
+          this.createDeskPileId(),
+        );
+      }
+    });
+    if (!available) {
       new Notice("Only an available filed card can be pulled out.");
-      return;
     }
-    this.desk = toggleFiledCard(
-      this.desk,
-      { cardRef: file.path, kind: "filed" },
-      this.createDeskPileId(),
-    );
-    await this.refreshDeckViews();
   }
 
   async putFileOnDesk(file: TFile): Promise<boolean> {
     if (deskContains(this.desk, file.path)) {
       return true;
     }
-    this.index.refresh();
-    const filed = this.index.filedByFile(file);
-    if (filed === undefined) {
+    let available = false;
+    await this.refreshIndex("index", () => {
+      available = this.index.filedByFile(file) !== undefined;
+      if (available) {
+        this.desk = toggleFiledCard(
+          this.desk,
+          { cardRef: file.path, kind: "filed" },
+          this.createDeskPileId(),
+        );
+      }
+    });
+    if (!available) {
       new Notice("Only an available filed card can be put on the Desk.");
       return false;
     }
-    this.desk = toggleFiledCard(
-      this.desk,
-      { cardRef: file.path, kind: "filed" },
-      this.createDeskPileId(),
-    );
-    await this.refreshDeckViews();
     return deskContains(this.desk, file.path);
   }
 
@@ -821,21 +839,23 @@ export default class SlipboxPlugin extends Plugin {
     file: TFile,
     preview: FilingPreview,
   ): Promise<FileCardResult> {
-    let refreshAfterFiling = false;
-    let placementChanged = false;
-    this.filingWriteInProgress = true;
-    try {
-      this.index.refresh();
+    return this.indexRuntime.suppressQueuedRefresh(async () => {
+      let placementChanged = false;
+      let transactionIndex = this.freshCardIndex();
+      try {
       this.assertFilingSource(file, preview.sourcePath);
       if (this.cardMetadataState(file) !== "unfiled") {
         throw new Error("The source card is no longer unfiled");
       }
-      if (!this.filingPreviewMatches(file, preview)) {
+      if (!this.filingPreviewMatches(file, preview, transactionIndex)) {
         return { status: "preview-changed" };
       }
       // Duplicates can also appear between preview and write, so the policy is
       // enforced here rather than only in the inline editor.
-      const occupants = this.duplicateOccupants(preview.address);
+      const occupants = this.duplicateOccupants(
+        preview.address,
+        transactionIndex,
+      );
       if (occupants.length > 0) {
         new Notice(duplicateFilingMessage(preview.address, occupants.length));
         return { status: "failed" };
@@ -858,9 +878,9 @@ export default class SlipboxPlugin extends Plugin {
               `The card is no longer unfiled; its ${property} was not changed`,
             );
           }
-          this.index.refresh();
+          transactionIndex = this.freshCardIndex();
           this.assertFilingSource(file, preview.sourcePath);
-          if (!this.filingPreviewMatches(file, preview)) {
+          if (!this.filingPreviewMatches(file, preview, transactionIndex)) {
             placementChanged = true;
             throw new Error("The previewed filing position changed");
           }
@@ -869,32 +889,21 @@ export default class SlipboxPlugin extends Plugin {
       );
 
       const cacheReady = await this.waitForCachedAddress(file, preview.address);
-      refreshAfterFiling = !cacheReady;
-      this.index.refresh();
       this.desk = removeDeskPath(this.desk, file.path);
-      const filedIndex = this.index.filedIndexForPath(file.path);
       new Notice(
         cacheReady
           ? `Filed ${this.cardTitle(file)} as ${preview.address}.`
           : `Filed ${this.cardTitle(file)} as ${preview.address}. Slipbox Desk will refresh when Obsidian finishes indexing it.`,
       );
-      return {
-        status: "filed",
-        address: preview.address,
-        index: filedIndex < 0 ? preview.insertionIndex : filedIndex,
-      };
+      return { status: "filed" };
     } catch (error) {
       if (placementChanged) {
         return { status: "preview-changed" };
       }
       new Notice(`Could not file the card: ${errorMessage(error)}`);
       return { status: "failed" };
-    } finally {
-      this.filingWriteInProgress = false;
-      if (refreshAfterFiling) {
-        this.queueIndexRefresh();
       }
-    }
+    });
   }
 
   private assertFilingSource(file: TFile, expectedPath: string): void {
@@ -906,7 +915,11 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  private filingPreviewMatches(file: TFile, preview: FilingPreview): boolean {
+  private filingPreviewMatches(
+    file: TFile,
+    preview: FilingPreview,
+    index: CardIndex = this.index,
+  ): boolean {
     if (
       preview.ordering !== this.settings.deckOrdering ||
       !validateAddress(preview.address).valid
@@ -914,7 +927,7 @@ export default class SlipboxPlugin extends Plugin {
       return false;
     }
     return filingPlacementMatches(
-      this.index.snapshot.filed,
+      index.snapshot.filed,
       { path: file.path, address: preview.address },
       this.settings.deckOrdering,
       preview,
@@ -1031,7 +1044,7 @@ export default class SlipboxPlugin extends Plugin {
         checkCallback: (checking) => {
           const available = this.index.snapshot.issues.length > 0;
           if (!checking && available) {
-            this.showIssues();
+            void this.showIssues();
           }
           return available;
         },
@@ -1318,15 +1331,14 @@ export default class SlipboxPlugin extends Plugin {
       bookmarks: deleteBookmark(this.state.bookmarks, path),
     };
     this.refreshBookmarkUi();
-    await this.persistState();
-    new Notice(`Deleted bookmark at ${label}.`);
+    const saved = await this.persistState();
+    if (saved === "saved") {
+      new Notice(`Deleted bookmark at ${label}.`);
+    }
   }
 
   private queueIndexRefresh(): void {
-    if (this.filingWriteInProgress) {
-      return;
-    }
-    this.indexRefreshCoordinator.queue();
+    this.indexRuntime.queue();
   }
 
   private registerIndexEvents(): void {
@@ -1351,27 +1363,14 @@ export default class SlipboxPlugin extends Plugin {
     );
   }
 
-  private async initializeAfterLayoutReady(): Promise<void> {
-    await this.refreshIndex();
-  }
-
-  private refreshIndex(
+  refreshIndex(
     reason: IndexRefreshReason = "index",
     afterReconcile?: AfterIndexReconcile,
   ): Promise<void> {
-    return this.indexRefreshCoordinator.refresh({
+    return this.indexRuntime.refresh({
       reason,
       ...(afterReconcile === undefined ? {} : { afterReconcile }),
     });
-  }
-
-  private async performIndexRefresh(batch: IndexRefreshBatch): Promise<void> {
-    this.index.refresh();
-    this.reconcileSessionDesk();
-    for (const afterReconcile of batch.afterReconcile) {
-      afterReconcile();
-    }
-    await this.refreshDeckViews(batch.reason);
   }
 
   async refreshDeckViews(reason: DeckRefreshReason = "full"): Promise<void> {
@@ -1400,18 +1399,12 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  private async persistState(): Promise<void> {
-    const write = this.persistQueue.then(() => this.saveData({
+  private persistState(): Promise<PluginDataWriteResult> {
+    return this.dataWriter.save({
       schemaVersion: SLIPBOX_DATA_SCHEMA_VERSION,
       settings: this.settings,
       state: this.state,
-    }));
-    this.persistQueue = write.catch(() => undefined);
-    try {
-      await write;
-    } catch (error) {
-      new Notice(`Could not save Slipbox Desk state: ${errorMessage(error)}`);
-    }
+    });
   }
 
   private async waitForCachedAddress(
@@ -1529,20 +1522,26 @@ export default class SlipboxPlugin extends Plugin {
     this.queueIndexRefresh();
   }
 
-  private reconcileSessionDesk(): void {
+  private reconcileSessionDesk(snapshot = this.index.snapshot): void {
     const candidates: DeskCardCandidate[] = [
-      ...this.index.snapshot.unfiled.map((file) => ({
+      ...snapshot.unfiled.map((file) => ({
         cardRef: file.path,
         kind: "unfiled" as const,
         modifiedTime: file.stat.mtime,
       })),
-      ...this.index.snapshot.filed.map((card) => ({
+      ...snapshot.filed.map((card) => ({
         cardRef: card.path,
         kind: "filed" as const,
         modifiedTime: card.file.stat.mtime,
       })),
     ];
     this.desk = reconcileDesk(this.desk, candidates, this.createDeskPileId());
+  }
+
+  private freshCardIndex(): CardIndex {
+    const index = new CardIndex(this.app, cardIndexConfig(this.settings));
+    index.publish(index.buildSnapshot());
+    return index;
   }
 
   private deskPilePaths(pileId: string): string[] {
@@ -1562,29 +1561,6 @@ export default class SlipboxPlugin extends Plugin {
       : ` Skipped ${skipped} existing node${skipped === 1 ? "" : "s"}.`;
     new Notice(`${summary}${existing}`);
   }
-}
-
-function settingsEqualExceptBranchingPresentation(
-  left: SlipboxSettings,
-  right: SlipboxSettings,
-): boolean {
-  if (
-    left.showBranchLabels === right.showBranchLabels &&
-    left.showInferredBranchNavigation === right.showInferredBranchNavigation
-  ) {
-    return false;
-  }
-  const {
-    showBranchLabels: _leftLabels,
-    showInferredBranchNavigation: _leftNavigation,
-    ...leftComparable
-  } = left;
-  const {
-    showBranchLabels: _rightLabels,
-    showInferredBranchNavigation: _rightNavigation,
-    ...rightComparable
-  } = right;
-  return JSON.stringify(leftComparable) === JSON.stringify(rightComparable);
 }
 
 function errorMessage(error: unknown): string {

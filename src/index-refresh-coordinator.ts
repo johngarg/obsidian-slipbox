@@ -1,6 +1,8 @@
+import type { VaultCardIndex } from "./card-index.js";
+
 export type IndexRefreshReason = "index" | "ordering";
 
-export type AfterIndexReconcile = () => void;
+export type AfterIndexReconcile = (snapshot: VaultCardIndex) => void;
 
 export interface IndexRefreshRequest {
   readonly reason?: IndexRefreshReason;

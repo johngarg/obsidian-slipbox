@@ -5,6 +5,9 @@ import {
   IndexRefreshCoordinator,
   type IndexRefreshBatch,
 } from "../src/index-refresh-coordinator.js";
+import type { VaultCardIndex } from "../src/card-index.js";
+
+const SNAPSHOT = {} as VaultCardIndex;
 
 interface Deferred {
   readonly promise: Promise<void>;
@@ -133,7 +136,7 @@ describe("index refresh coordination", () => {
       cancelScheduled: (handle) => timers.cancel(handle),
       run: (batch) => {
         for (const mutate of batch.afterReconcile) {
-          mutate();
+          mutate(SNAPSHOT);
         }
         return Promise.resolve();
       },

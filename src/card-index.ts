@@ -95,7 +95,8 @@ export class CardIndex {
     this.config = config;
   }
 
-  refresh(): VaultCardIndex {
+  /** Build a complete snapshot without changing the shared published index. */
+  buildSnapshot(): VaultCardIndex {
     const config = this.config;
     const markdownFiles = this.app.vault.getMarkdownFiles();
     const records = markdownFiles.map((file) => cardMetadataRecord(
@@ -129,9 +130,8 @@ export class CardIndex {
     );
 
     const lookups = buildFiledCardLookups(filed);
-    this.filedByPathMap = new Map(lookups.byPath);
-    this.filedIndexByPathMap = new Map(lookups.indexByPath);
-    this.filedByAddressMap = new Map(lookups.byAddress);
+    const filedByPath = new Map(lookups.byPath);
+    const filedByAddress = new Map(lookups.byAddress);
     const explicitBranches = config.explicitBranchLinks
       ? indexExplicitBranches(
         filed.map((card, deckIndex) => ({
@@ -148,9 +148,9 @@ export class CardIndex {
             {
               resolveFile: (linkPath, path) =>
                 this.app.metadataCache.getFirstLinkpathDest(linkPath, path),
-              filedPathForFile: (file) => this.filedByPathMap.get(file.path)?.path,
+              filedPathForFile: (file) => filedByPath.get(file.path)?.path,
               firstFiledPathAtAddress: (address) =>
-                this.filedByAddressMap.get(address)?.[0]?.path,
+                filedByAddress.get(address)?.[0]?.path,
             },
           )?.path,
         },
@@ -159,7 +159,7 @@ export class CardIndex {
     const inferredStructure = config.inferAddressBranches
       ? buildInferredStructure(filed, config.ordering)
       : EMPTY_INFERRED_STRUCTURE;
-    this.current = {
+    return {
       ...indexed,
       filed,
       unfiled,
@@ -167,7 +167,15 @@ export class CardIndex {
       explicitBranches,
       inferredStructure,
     };
-    return this.current;
+  }
+
+  /** Replace the shared query snapshot as one atomic publication step. */
+  publish(snapshot: VaultCardIndex): void {
+    const lookups = buildFiledCardLookups(snapshot.filed);
+    this.filedByPathMap = new Map(lookups.byPath);
+    this.filedIndexByPathMap = new Map(lookups.indexByPath);
+    this.filedByAddressMap = new Map(lookups.byAddress);
+    this.current = snapshot;
   }
 
   filedByPath(path: string): FiledCard | undefined {

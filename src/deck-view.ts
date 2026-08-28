@@ -10,7 +10,9 @@ import {
   getLinkpath,
 } from "obsidian";
 
-import type SlipboxPlugin from "./main.js";
+import type { CardIndexRuntime } from "./card-index-runtime.js";
+import type { FilingService } from "./filing-service.js";
+import type { InlineEditRegistry } from "./inline-edit-registry.js";
 import {
   adjacentBookmarkIndex,
   bookmarkEdgeTargets,
@@ -56,12 +58,16 @@ import {
 import {
   type SlipboxAction,
   type CardButtonSurface,
+  type SlipboxSettings,
 } from "./settings.js";
 import {
   DeckShortcutController,
   type PendingDeckCommandCompletionResult,
 } from "./deck-shortcut-controller.js";
-import { DeskRenderer } from "./desk-view.js";
+import {
+  DeskRenderer,
+  type DeskViewHost,
+} from "./desk-view.js";
 import {
   collapseAllPiles,
   cardPosition,
@@ -169,9 +175,25 @@ import {
 import {
   deckPositionModeForPileCount,
   deckTopForPileAnchor,
+  type DeckPositionMode,
 } from "./workspace-layout.js";
+import { BookmarksModal } from "./modals.js";
+import {
+  showCardContextMenu,
+  type CardContextMenuOptions,
+} from "./card-context-menu.js";
 
 export const DECK_VIEW_TYPE = "slipbox-deck";
+
+export interface DeckViewHost extends DeskViewHost {
+  readonly settings: SlipboxSettings;
+  readonly filingService: FilingService;
+  readonly inlineEdits: InlineEditRegistry<DeckView>;
+  readonly indexRuntime: CardIndexRuntime;
+  readonly startupDeckPositionMode: DeckPositionMode;
+  setCardSpread(value: number): void;
+  showIssues(): Promise<void>;
+}
 
 const LAYOUT_MEASUREMENT_RETRIES = 2;
 const SPACE_RECENTER_DURATION_MS = 180;
@@ -279,7 +301,7 @@ export class DeckView extends ItemView {
 
   constructor(
     leaf: WorkspaceLeaf,
-    private readonly plugin: SlipboxPlugin,
+    private readonly plugin: DeckViewHost,
   ) {
     super(leaf);
     this.filingSession = new FilingSession({
@@ -308,7 +330,7 @@ export class DeckView extends ItemView {
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       followLinksFromCards: () => this.plugin.settings.followLinksFromCards,
       showTooltips: () => this.plugin.settings.showTooltips,
-      isOnDesk: (file) => this.plugin.isFileOnDesk(file),
+      isOnDesk: (file) => this.plugin.deskService.contains(file.path),
       runAction: (action, target) => this.runAction(action, target),
       runAfterEditing: (reason, action) => {
         void this.runAfterInlineEditing(reason, action);
@@ -517,7 +539,7 @@ export class DeckView extends ItemView {
     if (!saved && this.inlineEdit !== null) {
       const editing = this.inlineEdit;
       editing.controller.cancelDebounce();
-      this.plugin.retainDetachedInlineEdit(
+      this.plugin.inlineEdits.retainDetached(
         editing.controller.snapshot,
         editing.file,
         {
@@ -528,7 +550,7 @@ export class DeckView extends ItemView {
           renderedScrollTop: editing.renderedScrollTop,
         },
       );
-      this.plugin.releaseInlineEdit(editing.controller.snapshot.path, this);
+      this.plugin.inlineEdits.release(editing.controller.snapshot.path, this);
       this.clearInlineEditPolicyMessage();
       this.inlineEdit = null;
       this.shortcutController.setSuspended(false);
@@ -622,7 +644,7 @@ export class DeckView extends ItemView {
     const viewedPath = this.viewedCard?.path ?? null;
     const viewedPosition = viewedPath === null
       ? null
-      : cardPosition(this.plugin.desk, viewedPath);
+      : cardPosition(this.plugin.deskService.snapshot, viewedPath);
     const redirectedFromDeckNavigation =
       focus?.surface === "deck" && focus.path === viewedPath;
     const resolved = redirectViewedCardGhostFocus(
@@ -664,7 +686,7 @@ export class DeckView extends ItemView {
    * land on a mounted card. Returns false when the path is not on the Desk.
    */
   focusDeskCardAtPath(path: string): boolean {
-    const position = cardPosition(this.plugin.desk, path);
+    const position = cardPosition(this.plugin.deskService.snapshot, path);
     if (position === null) {
       return false;
     }
@@ -676,7 +698,7 @@ export class DeckView extends ItemView {
     card: FiledCard,
     focusPulledCard: boolean,
   ): Promise<void> {
-    const wasOnDesk = this.plugin.isFileOnDesk(card.file);
+    const wasOnDesk = this.plugin.deskService.contains(card.file.path);
     const focusTarget = deskToggleFocusTarget(
       this.cardFocus?.surface ?? null,
       wasOnDesk,
@@ -696,9 +718,9 @@ export class DeckView extends ItemView {
     // toggleFileOnDesk updates the shared Desk synchronously before refreshing
     // views. Assigning logical Desk focus immediately makes a quick p, e chord
     // reliable even while the refreshed card presentation is mounting.
-    const refresh = this.plugin.toggleFileOnDesk(card.file);
+    const refresh = this.plugin.deskService.toggleFile(card.file);
     if (focusTarget === "desk") {
-      const position = cardPosition(this.plugin.desk, card.path);
+      const position = cardPosition(this.plugin.deskService.snapshot, card.path);
       if (position !== null) {
         this.assignCardFocus(deskCardFocus(card.path, position.pileId));
       }
@@ -769,7 +791,7 @@ export class DeckView extends ItemView {
       }
       return;
     }
-    const pile = this.plugin.desk.piles.find((candidate) =>
+    const pile = this.plugin.deskService.snapshot.piles.find((candidate) =>
       candidate.id === target.pileId
     );
     const preferred = preferredPath === undefined
@@ -783,7 +805,7 @@ export class DeckView extends ItemView {
 
   private cyclePileFocus(direction: PileNavigationDirection): void {
     const target = cyclePileFocusTarget(
-      this.plugin.desk.piles.map((pile) => pile.id),
+      this.plugin.deskService.snapshot.piles.map((pile) => pile.id),
       this.pileFocusLocation(),
       this.deckViewport.anchorPath !== null,
       direction,
@@ -804,7 +826,7 @@ export class DeckView extends ItemView {
       return;
     }
     const target = swapPileFocusTarget(
-      this.plugin.desk.piles.map((pile) => pile.id),
+      this.plugin.deskService.snapshot.piles.map((pile) => pile.id),
       current,
       this.lastFocusedPileId,
       this.deckViewport.anchorPath !== null,
@@ -828,11 +850,11 @@ export class DeckView extends ItemView {
       return;
     }
     const pileId = this.cardFocus.pileId;
-    if (!this.plugin.desk.piles.some((pile) => pile.id === pileId)) {
+    if (!this.plugin.deskService.snapshot.piles.some((pile) => pile.id === pileId)) {
       return;
     }
-    const expanded = this.plugin.desk.expandedPileIds.includes(pileId);
-    void this.plugin.setDeskPileExpanded(pileId, !expanded);
+    const expanded = this.plugin.deskService.snapshot.expandedPileIds.includes(pileId);
+    void this.plugin.deskService.setPileExpanded(pileId, !expanded);
   }
 
   private moveFocusWithinPile(direction: PileNavigationDirection): void {
@@ -842,16 +864,20 @@ export class DeckView extends ItemView {
     ) {
       return;
     }
-    const pile = this.plugin.desk.piles.find((candidate) =>
+    const pile = this.plugin.deskService.snapshot.piles.find((candidate) =>
       candidate.id === this.cardFocus?.pileId
     );
     if (pile === undefined) {
       return;
     }
-    if (!this.plugin.desk.expandedPileIds.includes(pile.id)) {
-      const next = cyclePileTopCard(this.plugin.desk, pile.id, direction);
-      if (next !== this.plugin.desk) {
-        void this.plugin.updateDesk(next);
+    if (!this.plugin.deskService.snapshot.expandedPileIds.includes(pile.id)) {
+      const next = cyclePileTopCard(
+        this.plugin.deskService.snapshot,
+        pile.id,
+        direction,
+      );
+      if (next !== this.plugin.deskService.snapshot) {
+        void this.plugin.deskService.replace(next);
       }
       return;
     }
@@ -922,17 +948,20 @@ export class DeckView extends ItemView {
       this.viewedCard?.path === focus.path &&
       this.plugin.index.fileAtPath(focus.path) !== undefined
     ) {
-      const position = cardPosition(this.plugin.desk, focus.path);
+      const position = cardPosition(this.plugin.deskService.snapshot, focus.path);
       this.assignCardFocus(viewedCardFocus(focus.path, position?.pileId));
       return;
     }
     if (focus?.surface === "desk") {
-      const pile = this.plugin.desk.piles.find((candidate) =>
+      const pile = this.plugin.deskService.snapshot.piles.find((candidate) =>
         candidate.id === focus.pileId
       );
       const index = pile?.cards.findIndex((card) => card.cardRef === focus.path) ?? -1;
       if (pile !== undefined && index >= 0) {
-        if (this.plugin.desk.expandedPileIds.includes(pile.id) || index === 0) {
+        if (
+          this.plugin.deskService.snapshot.expandedPileIds.includes(pile.id) ||
+          index === 0
+        ) {
           return;
         }
         const top = pile.cards[0];
@@ -946,7 +975,7 @@ export class DeckView extends ItemView {
       this.assignCardFocus(deckCardFocus(anchorPath));
       return;
     }
-    const firstPile = this.plugin.desk.piles[0];
+    const firstPile = this.plugin.deskService.snapshot.piles[0];
     const firstCard = firstPile?.cards[0];
     this.assignCardFocus(firstPile !== undefined && firstCard !== undefined
       ? deskCardFocus(firstCard.cardRef, firstPile.id)
@@ -1010,16 +1039,17 @@ export class DeckView extends ItemView {
     ) {
       return { kind: "missing" };
     }
-    if (!this.plugin.isUnfiledCard(file)) {
+    if (!this.plugin.cards.isUnfiled(file)) {
       return { kind: "not-unfiled" };
     }
     return {
       kind: "ready",
-      preview: this.plugin.filingPreviewFor(file, address),
+      preview: this.plugin.filingService.preview(file, address),
       duplicatePaths: this.plugin.index.filedAtAddress(address).map(
         (card) => card.path,
       ),
-      duplicatesBlocked: this.plugin.duplicateOccupants(address).length > 0,
+      duplicatesBlocked:
+        this.plugin.filingService.duplicateOccupants(address).length > 0,
     };
   }
 
@@ -1035,7 +1065,11 @@ export class DeckView extends ItemView {
       renamedEditingPath !== null &&
       renamedEditingPath !== editingPath
     ) {
-      if (!this.plugin.renameInlineEdit(editingPath, renamedEditingPath, this)) {
+      if (!this.plugin.inlineEdits.rename(
+        editingPath,
+        renamedEditingPath,
+        this,
+      )) {
         editing.controller.markConflict(
           "The renamed path is already being edited in another Slipbox Desk view.",
         );
@@ -1175,7 +1209,7 @@ export class DeckView extends ItemView {
     const focusedSurface = target?.surface ?? this.cardFocus?.surface ?? null;
     const focusedPosition = focusedFile === null
       ? null
-      : cardPosition(this.plugin.desk, focusedFile.path);
+      : cardPosition(this.plugin.deskService.snapshot, focusedFile.path);
     const focusedDeskPosition = focusedSurface === "desk"
       ? focusedPosition
       : null;
@@ -1216,9 +1250,10 @@ export class DeckView extends ItemView {
       canMoveDeskCardRight:
         focusedDeskPosition !== null &&
         focusedDeskPosition.cardIndex < focusedDeskPosition.pileSize - 1,
-      hasDeskPiles: this.plugin.desk.piles.length > 0,
-      hasExpandedPiles: this.plugin.desk.expandedPileIds.length > 0,
-      hasFiledDeskCards: deskHasFiledCards(this.plugin.desk),
+      hasDeskPiles: this.plugin.deskService.snapshot.piles.length > 0,
+      hasExpandedPiles:
+        this.plugin.deskService.snapshot.expandedPileIds.length > 0,
+      hasFiledDeskCards: deskHasFiledCards(this.plugin.deskService.snapshot),
     });
   }
 
@@ -1322,12 +1357,12 @@ export class DeckView extends ItemView {
         break;
       case "open-note":
         if (file !== null) {
-          void this.plugin.openMarkdownFile(file);
+          void this.plugin.cards.open(file);
         }
         break;
       case "copy-link":
         if (card !== null) {
-          void this.plugin.copyCardLink(card);
+          void this.plugin.cards.copyLink(card);
         }
         break;
       case "toggle-desk":
@@ -1377,7 +1412,7 @@ export class DeckView extends ItemView {
         this.applyDeckMapVisibility();
         break;
       case "bookmarks":
-        this.plugin.showBookmarks(this);
+        this.showBookmarks();
         break;
       case "problems":
         void this.plugin.showIssues();
@@ -1410,7 +1445,7 @@ export class DeckView extends ItemView {
           let returnTarget: ViewedCardReturnTarget | null;
           if (target?.surface === "desk") {
             const pileId = target.pileId ??
-              cardPosition(this.plugin.desk, file.path)?.pileId;
+              cardPosition(this.plugin.deskService.snapshot, file.path)?.pileId;
             returnTarget = pileId === undefined
               ? null
               : { surface: "desk", pileId };
@@ -1456,13 +1491,15 @@ export class DeckView extends ItemView {
         }
         break;
       case "collapse-all-piles":
-        void this.plugin.updateDesk(collapseAllPiles(this.plugin.desk));
+        void this.plugin.deskService.replace(
+          collapseAllPiles(this.plugin.deskService.snapshot),
+        );
         break;
       case "return-all-filed-cards":
         if (
           card !== null &&
           this.cardFocus?.surface === "desk" &&
-          this.plugin.isFileOnDesk(card.file)
+          this.plugin.deskService.contains(card.file.path)
         ) {
           this.deckViewport.navigate(
             card.path,
@@ -1470,7 +1507,7 @@ export class DeckView extends ItemView {
           );
           this.assignCardFocus(deckCardFocus(card.path));
         }
-        void this.plugin.clearDesk();
+        void this.plugin.deskService.clearFiledCards();
         break;
     }
   }
@@ -1537,7 +1574,7 @@ export class DeckView extends ItemView {
     file: TFile,
     sourceSurface: FilingSourceSurface = "desk",
   ): Promise<void> {
-    const deskPosition = cardPosition(this.plugin.desk, file.path);
+    const deskPosition = cardPosition(this.plugin.deskService.snapshot, file.path);
     if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
       this.assignCardFocus(viewedCardFocus(file.path, deskPosition?.pileId));
     } else if (deskPosition !== null) {
@@ -1547,9 +1584,11 @@ export class DeckView extends ItemView {
       sourceSurface === "desk" &&
       deskPosition !== null &&
       deskPosition.cardIndex > 0 &&
-      !this.plugin.desk.expandedPileIds.includes(deskPosition.pileId)
+      !this.plugin.deskService.snapshot.expandedPileIds.includes(
+        deskPosition.pileId,
+      )
     ) {
-      await this.plugin.setDeskPileExpanded(deskPosition.pileId, true);
+      await this.plugin.deskService.setPileExpanded(deskPosition.pileId, true);
     }
     const initialAddress = initialFilingAddress(this.activeCard);
     this.filingSession.start(file, sourceSurface, initialAddress);
@@ -1618,14 +1657,49 @@ export class DeckView extends ItemView {
     const bookmarkedPaths = this.bookmarkedPaths();
     bookmarkedPaths.add(path);
     this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.addBookmark(path);
+    await this.plugin.bookmarks.add(path);
   }
 
   async removeBookmark(path: string): Promise<void> {
     const bookmarkedPaths = this.bookmarkedPaths();
     bookmarkedPaths.delete(path);
     this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.removeBookmark(path);
+    await this.plugin.bookmarks.remove(path);
+  }
+
+  private showBookmarks(): void {
+    new BookmarksModal(this.app, this.plugin.bookmarks.items, {
+      currentPath: this.focusedDeckCardPath,
+      isAvailable: (path) => this.plugin.index.filedByPath(path) !== undefined,
+      label: (path) => this.plugin.cards.filedLabel(path),
+      visit: (path) => void this.jumpToPath(path),
+      addCurrent: () => this.addBookmarkToCurrent(),
+      remove: (path) => this.removeBookmark(path),
+    }).open();
+  }
+
+  private showCardMenu(
+    event: MouseEvent,
+    file: TFile,
+    address: string | null,
+    surface: CardContextMenuOptions["surface"],
+    viewedReturnSurface: CardContextMenuOptions["viewedReturnSurface"] = null,
+  ): void {
+    showCardContextMenu({
+      app: this.app,
+      event,
+      file,
+      address,
+      surface,
+      viewedReturnSurface,
+      source: DECK_VIEW_TYPE,
+      leaf: this.leaf,
+      title: this.plugin.cards.title(file),
+      bookmarked: address !== null &&
+        this.plugin.bookmarks.at(file.path) !== undefined,
+      onDesk: this.plugin.deskService.contains(file.path),
+      run: (action) => this.runAction(action),
+    });
   }
 
   handleBookmarksChanged(): void {
@@ -1668,7 +1742,7 @@ export class DeckView extends ItemView {
     this.inlineIndexRefreshDeferred = false;
     this.clearInlineEditPolicyMessage();
     this.inlineEdit = null;
-    this.plugin.releaseInlineEdit(path, this);
+    this.plugin.inlineEdits.release(path, this);
     this.shortcutController.setSuspended(false);
     editing.cardEl.removeClass("is-inline-editing");
     editing.bodyEl.removeClasses([
@@ -1722,7 +1796,7 @@ export class DeckView extends ItemView {
     returnTarget: ViewedCardReturnTarget,
     editImmediately: boolean,
   ): Promise<void> {
-    if (!this.plugin.isFileOnDesk(file)) {
+    if (!this.plugin.deskService.contains(file.path)) {
       new Notice("Put the card on the Desk before viewing it.");
       return;
     }
@@ -1750,7 +1824,7 @@ export class DeckView extends ItemView {
   }
 
   private async editCardOnDesk(file: TFile): Promise<void> {
-    if (!this.plugin.isFileOnDesk(file)) {
+    if (!this.plugin.deskService.contains(file.path)) {
       new Notice("Put the card on the Desk before editing it.");
       return;
     }
@@ -1758,17 +1832,17 @@ export class DeckView extends ItemView {
       new Notice("Finish filing before editing a card body.");
       return;
     }
-    let position = cardPosition(this.plugin.desk, file.path);
+    let position = cardPosition(this.plugin.deskService.snapshot, file.path);
     if (position === null) {
       new Notice("Could not find the card on the Desk.");
       return;
     }
     if (
       position.cardIndex > 0 &&
-      !this.plugin.desk.expandedPileIds.includes(position.pileId)
+      !this.plugin.deskService.snapshot.expandedPileIds.includes(position.pileId)
     ) {
-      await this.plugin.setDeskPileExpanded(position.pileId, true);
-      position = cardPosition(this.plugin.desk, file.path);
+      await this.plugin.deskService.setPileExpanded(position.pileId, true);
+      position = cardPosition(this.plugin.deskService.snapshot, file.path);
       if (position === null) {
         new Notice("Could not find the card on the Desk.");
         return;
@@ -1809,7 +1883,7 @@ export class DeckView extends ItemView {
       this.viewedCard = null;
       this.viewedCardEl = null;
       this.viewedCardBodyEl = null;
-      const position = cardPosition(this.plugin.desk, viewed.path);
+      const position = cardPosition(this.plugin.deskService.snapshot, viewed.path);
       const returnTarget = resolveViewedCardReturnTarget(
         viewed,
         this.plugin.index.filedByPath(viewed.path) !== undefined,
@@ -1868,14 +1942,14 @@ export class DeckView extends ItemView {
         return;
       }
     }
-    if (!this.plugin.acquireInlineEdit(file.path, this)) {
+    if (!this.plugin.inlineEdits.acquire(file.path, this)) {
       return;
     }
 
     this.inlineEditStarting = true;
     try {
       const prepared = restored === undefined
-        ? await this.plugin.prepareInlineEdit(file)
+        ? await this.plugin.inlineEdits.prepare(file)
         : { file, body: restored.baseBody };
       const protectedBody = restored === undefined
         ? this.plugin.settings.protectFiledCardText &&
@@ -1919,7 +1993,7 @@ export class DeckView extends ItemView {
         }
       });
     } catch (error) {
-      this.plugin.releaseInlineEdit(file.path, this);
+      this.plugin.inlineEdits.release(file.path, this);
       new Notice(`Could not start inline editing: ${errorMessage(error)}`);
     } finally {
       this.inlineEditStarting = false;
@@ -1956,7 +2030,7 @@ export class DeckView extends ItemView {
     });
     setCardTooltip(
       textarea,
-      `Edit raw Markdown for ${this.plugin.cardTitle(file)}`,
+      `Edit raw Markdown for ${this.plugin.cards.title(file)}`,
       this.plugin.settings.showTooltips,
       { placement: "bottom", delay: 250 },
     );
@@ -1978,14 +2052,14 @@ export class DeckView extends ItemView {
       baseBody,
       {
         commit: async (request) => {
-          const result = await this.plugin.commitInlineEdit(request);
+          const result = await this.plugin.inlineEdits.commit(request);
           if (result.status === "saved" && !request.final) {
             const latestFile = this.plugin.index.fileAtPath(request.path) ?? file;
             await this.deskRenderer.rerenderPath(latestFile);
           }
           return result;
         },
-        flushOpenViews: (path) => this.plugin.flushOpenTextViews(path),
+        flushOpenViews: (path) => this.plugin.inlineEdits.flushOpenViews(path),
         schedule: (callback, delayMs) => textarea.win.setTimeout(callback, delayMs),
         cancelScheduled: (handle) => textarea.win.clearTimeout(handle as number),
         reportFailure: (failure) => this.reportInlineEditFailure(failure),
@@ -2052,20 +2126,20 @@ export class DeckView extends ItemView {
           presentation: [
             "filed",
             card.address,
-            this.plugin.cardTitle(card.file),
+            this.plugin.cards.title(card.file),
           ],
         })),
         ...snapshot.unfiled.map((file) => ({
           path: file.path,
           modified: file.stat.mtime,
-          presentation: ["unfiled", this.plugin.cardTitle(file)],
+          presentation: ["unfiled", this.plugin.cards.title(file)],
         })),
       ],
       context: {
         issues: snapshot.issues,
-        desk: this.plugin.desk,
+        desk: this.plugin.deskService.snapshot,
         settings: this.plugin.settings,
-        bookmarks: this.plugin.state.bookmarks,
+        bookmarks: this.plugin.bookmarks.items,
       },
     });
   }
@@ -2097,7 +2171,7 @@ export class DeckView extends ItemView {
         label: branch.label,
         sourcePath: source.path,
         sourceAddress: source.address,
-        sourceTitle: this.plugin.cardTitle(source.file),
+        sourceTitle: this.plugin.cards.title(source.file),
         linktext: this.app.metadataCache.fileToLinktext(source.file, path),
       }];
     });
@@ -2212,13 +2286,13 @@ export class DeckView extends ItemView {
   }
 
   private async restoreDetachedInlineEdit(): Promise<void> {
-    const draft = this.plugin.takeDetachedInlineEdit();
+    const draft = this.plugin.inlineEdits.takeDetached();
     if (draft === null) {
       return;
     }
     const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
     this.viewedCard = createViewedCardState(draft.path, draft.returnTarget);
-    const position = cardPosition(this.plugin.desk, draft.path);
+    const position = cardPosition(this.plugin.deskService.snapshot, draft.path);
     this.assignCardFocus(viewedCardFocus(draft.path, position?.pileId));
     await this.renderDeck(false);
     await this.beginInlineEditing(file, this.viewedCardBodyEl, {
@@ -2233,7 +2307,7 @@ export class DeckView extends ItemView {
       renderedScrollTop: draft.renderedScrollTop,
     });
     if (this.inlineEdit?.controller.snapshot.path !== draft.path) {
-      this.plugin.returnDetachedInlineEdit(draft);
+      this.plugin.inlineEdits.returnDetached(draft);
     }
   }
 
@@ -2276,17 +2350,17 @@ export class DeckView extends ItemView {
     const nextDeckPath = deckIndex < 0
       ? this.deckViewport.anchorPath
       : filed[deckIndex + 1]?.path ?? filed[deckIndex - 1]?.path ?? null;
-    const position = cardPosition(this.plugin.desk, file.path);
+    const position = cardPosition(this.plugin.deskService.snapshot, file.path);
     const pile = position === null
       ? undefined
-      : this.plugin.desk.piles[position.pileIndex];
+      : this.plugin.deskService.snapshot.piles[position.pileIndex];
     const nextDeskPath = position === null || pile === undefined
       ? null
       : pile.cards[position.cardIndex + 1]?.cardRef ??
         pile.cards[position.cardIndex - 1]?.cardRef ??
         null;
 
-    if (!(await this.plugin.deleteCard(file))) {
+    if (!(await this.plugin.cards.delete(file))) {
       return;
     }
     if (focus?.path !== file.path) {
@@ -2505,7 +2579,7 @@ export class DeckView extends ItemView {
       const card = filed[index];
       marker.toggleClass(
         "is-on-desk",
-        card !== undefined && this.plugin.isFileOnDesk(card.file),
+        card !== undefined && this.plugin.deskService.contains(card.file.path),
       );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
@@ -2600,7 +2674,7 @@ export class DeckView extends ItemView {
     digits: string,
   ): PendingDeckCommandCompletionResult {
     const ordinal = Number(digits);
-    const pileCount = this.plugin.desk.piles.length;
+    const pileCount = this.plugin.deskService.snapshot.piles.length;
     if (
       digits === "" ||
       !Number.isSafeInteger(ordinal) ||
@@ -2624,23 +2698,23 @@ export class DeckView extends ItemView {
         feedback: "There is no focused filed card.",
       };
     }
-    const source = cardPosition(this.plugin.desk, card.path);
+    const source = cardPosition(this.plugin.deskService.snapshot, card.path);
     const next = placeFiledCardInPileOrdinal(
-      this.plugin.desk,
+      this.plugin.deskService.snapshot,
       card.path,
       ordinal,
     );
-    if (next === this.plugin.desk) {
+    if (next === this.plugin.deskService.snapshot) {
       return {
         kind: "complete",
         feedback: `The focused card is already in pile ${ordinal}.`,
       };
     }
-    const targetPile = this.plugin.desk.piles[ordinal - 1];
+    const targetPile = this.plugin.deskService.snapshot.piles[ordinal - 1];
     if (targetPile !== undefined) {
       this.assignCardFocus(deskCardFocus(card.path, targetPile.id));
     }
-    void this.plugin.updateDesk(next);
+    void this.plugin.deskService.replace(next);
     return {
       kind: "complete",
       feedback: source === null
@@ -2672,7 +2746,7 @@ export class DeckView extends ItemView {
       const card = this.plugin.index.filedByPath(path);
       marker.toggleClass(
         "is-on-desk",
-        card !== undefined && this.plugin.isFileOnDesk(card.file),
+        card !== undefined && this.plugin.deskService.contains(card.file.path),
       );
       marker.style.setProperty(
         "--slipbox-deck-map-position",
@@ -2791,12 +2865,12 @@ export class DeckView extends ItemView {
       cardEl.addEventListener("focusin", () => this.focusDeckCard(card.path));
       const isViewed = this.viewedCard?.path === card.path;
       cardEl.toggleClass("is-viewed-ghost", isViewed);
-      const isBookmarked = this.plugin.bookmarkAtPath(card.path) !== undefined;
+      const isBookmarked = this.plugin.bookmarks.at(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
-      const isOnDesk = this.plugin.isFileOnDesk(card.file);
+      const isOnDesk = this.plugin.deskService.contains(card.file.path);
       cardEl.toggleClass("is-on-desk", isOnDesk);
       cardEl.toggleClass("can-drag-to-desk", !isOnDesk);
-      const displayTitle = this.plugin.cardDisplayTitle(card.file);
+      const displayTitle = this.plugin.cards.displayTitle(card.file);
       const title = displayTitle ?? card.file.basename;
       const cardLabel = `${card.address} · ${title}${
         isOnDesk ? "; pulled out into a working pile" : ""
@@ -2827,13 +2901,11 @@ export class DeckView extends ItemView {
         });
         cardEl.addEventListener("contextmenu", (event) => {
           this.focusViewedCard();
-          this.plugin.showCardContextMenu(
+          this.showCardMenu(
             event,
             card.file,
             card.address,
             "viewed",
-            DECK_VIEW_TYPE,
-            this.leaf,
             this.viewedCard?.returnTarget.surface ?? null,
           );
         });
@@ -2912,13 +2984,11 @@ export class DeckView extends ItemView {
           return;
         }
         this.focusDeckCard(card.path);
-        this.plugin.showCardContextMenu(
+        this.showCardMenu(
           event,
           card.file,
           card.address,
           "deck",
-          DECK_VIEW_TYPE,
-          this.leaf,
         );
       });
 
@@ -3029,7 +3099,7 @@ export class DeckView extends ItemView {
     y: number,
     dragged: HTMLElement,
   ): ResolvedDeckCardDrop | null {
-    const state = this.plugin.desk;
+    const state = this.plugin.deskService.snapshot;
     if (
       this.plugin.index.filedByPath(card.path) === undefined ||
       cardPosition(state, card.path) !== null
@@ -3054,7 +3124,7 @@ export class DeckView extends ItemView {
     if (position === null) {
       return null;
     }
-    const pileId = this.plugin.createDeskPileId();
+    const pileId = this.plugin.deskService.createPileId();
     return resolveDeckCardDrop(state, card.path, {
       kind: "workspace",
       pileId,
@@ -3118,7 +3188,7 @@ export class DeckView extends ItemView {
   }
 
   private async applyDeckCardDrop(result: ResolvedDeckCardDrop): Promise<void> {
-    await this.plugin.updateDesk(result.state);
+    await this.plugin.deskService.replace(result.state);
     this.contentEl.win.requestAnimationFrame(() => {
       this.stageEl?.querySelector<HTMLElement>(
         `.slipbox-desk-card[data-card-ref="${CSS.escape(result.focusPath)}"]`,
@@ -3150,7 +3220,7 @@ export class DeckView extends ItemView {
         file.path,
         "viewed",
       );
-    const displayTitle = this.plugin.cardDisplayTitle(file);
+    const displayTitle = this.plugin.cards.displayTitle(file);
     const title = displayTitle ?? file.basename;
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
@@ -3172,12 +3242,12 @@ export class DeckView extends ItemView {
     );
     card.toggleClass("is-filing-source", isFilingSource);
     card.addEventListener("focusin", () => {
-      const position = cardPosition(this.plugin.desk, file.path);
+      const position = cardPosition(this.plugin.deskService.snapshot, file.path);
       this.setCardFocus(viewedCardFocus(file.path, position?.pileId));
     });
     card.dataset.path = file.path;
     card.toggleClass("is-bookmarked", filed !== undefined &&
-      this.plugin.bookmarkAtPath(filed.path) !== undefined);
+      this.plugin.bookmarks.at(filed.path) !== undefined);
     this.viewedCardEl = card;
     this.applyViewedCardPosition();
 
@@ -3240,7 +3310,7 @@ export class DeckView extends ItemView {
     if (headerTitle !== null) {
       identity.createSpan({ cls: "slipbox-card-header-title", text: headerTitle });
     }
-    const viewedPosition = cardPosition(this.plugin.desk, file.path);
+    const viewedPosition = cardPosition(this.plugin.deskService.snapshot, file.path);
     if (!isFilingSource) {
       const actions = addressRow.createDiv({ cls: "slipbox-card-actions" });
       this.viewedCardHeaderButtonController = renderCardHeaderButtons({
@@ -3251,7 +3321,7 @@ export class DeckView extends ItemView {
           filed: filed !== undefined,
           onDesk: viewedPosition !== null,
           bookmarked: filed !== undefined &&
-            this.plugin.bookmarkAtPath(filed.path) !== undefined,
+            this.plugin.bookmarks.at(filed.path) !== undefined,
           canMoveLeft: false,
           canMoveRight: false,
         },
@@ -3310,13 +3380,11 @@ export class DeckView extends ItemView {
         return;
       }
       this.focusViewedCard();
-      this.plugin.showCardContextMenu(
+      this.showCardMenu(
         event,
         file,
         filed?.address ?? null,
         "viewed",
-        DECK_VIEW_TYPE,
-        this.leaf,
         state.returnTarget.surface,
       );
     });
@@ -3459,7 +3527,7 @@ export class DeckView extends ItemView {
     if (viewed === null) {
       return;
     }
-    const position = cardPosition(this.plugin.desk, viewed.path);
+    const position = cardPosition(this.plugin.deskService.snapshot, viewed.path);
     this.setCardFocus(viewedCardFocus(viewed.path, position?.pileId));
     this.viewedCardEl?.focus({ preventScroll: true });
   }
@@ -3528,7 +3596,7 @@ export class DeckView extends ItemView {
       bookmarkedPaths.add(path);
     }
     this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.toggleBookmark(path);
+    await this.plugin.bookmarks.toggle(path);
   }
 
   private attachInternalLinkInteractions(
@@ -3611,7 +3679,7 @@ export class DeckView extends ItemView {
       return;
     }
     const path = filing.sourcePath;
-    const position = cardPosition(this.plugin.desk, path);
+    const position = cardPosition(this.plugin.deskService.snapshot, path);
     if (
       filing.sourceSurface === "viewed" &&
       this.viewedCard?.path === path
@@ -3637,7 +3705,10 @@ export class DeckView extends ItemView {
       this.updateRenderedFilingState(pending);
     }
     try {
-      const result = await this.plugin.fileCard(request.file, request.preview);
+      const result = await this.plugin.filingService.file(
+        request.file,
+        request.preview,
+      );
       if (result.status === "preview-changed") {
         this.filingSession.finishConfirmation();
         await this.renderDeck(restoreFilingInputFocus);
@@ -3660,9 +3731,17 @@ export class DeckView extends ItemView {
         this.viewedFilingEditor = null;
         this.unloadViewedCardComponent();
       }
-      await this.plugin.refreshIndex("index", (snapshot) => {
-        this.deckViewport.navigate(request.file.path, snapshot.filed);
-        this.assignCardFocus(deckCardFocus(request.file.path));
+      await this.plugin.indexRuntime.refresh({
+        reason: "index",
+        afterReconcile: (snapshot) => {
+          const filed = snapshot.filed.find(
+            (card) => card.path === request.file.path,
+          );
+          if (filed !== undefined) {
+            this.deckViewport.navigate(filed.path, snapshot.filed);
+            this.assignCardFocus(deckCardFocus(filed.path));
+          }
+        },
       });
     } finally {
       this.filingSession.finishConfirmation();
@@ -3879,7 +3958,7 @@ export class DeckView extends ItemView {
 
   private centerActiveCard(): void {
     this.deckViewport.setPositionMode(deckPositionModeForPileCount(
-      this.plugin.desk.piles.length,
+      this.plugin.deskService.snapshot.piles.length,
     ));
     this.applyDeckPositionMode();
     this.recenterSpace();
@@ -3979,7 +4058,7 @@ export class DeckView extends ItemView {
     cardRef: string,
     delta: -1 | 1,
   ): Promise<void> {
-    const position = cardPosition(this.plugin.desk, cardRef);
+    const position = cardPosition(this.plugin.deskService.snapshot, cardRef);
     if (position === null) {
       return;
     }
@@ -3990,8 +4069,8 @@ export class DeckView extends ItemView {
     if (target === position.cardIndex) {
       return;
     }
-    await this.plugin.updateDesk(moveCardWithinPile(
-      this.plugin.desk,
+    await this.plugin.deskService.replace(moveCardWithinPile(
+      this.plugin.deskService.snapshot,
       position.pileId,
       position.cardIndex,
       target,
@@ -4175,7 +4254,7 @@ export class DeckView extends ItemView {
 
   private bookmarkedPaths(): Set<string> {
     return new Set(
-      this.plugin.state.bookmarks.flatMap((bookmark) =>
+      this.plugin.bookmarks.items.flatMap((bookmark) =>
         "path" in bookmark ? [bookmark.path] : []
       ),
     );

@@ -7,9 +7,9 @@ import {
   TFolder,
   type SettingDefinition,
   type SettingDefinitionItem,
+  type Plugin,
 } from "obsidian";
 
-import type SlipboxPlugin from "./main.js";
 import { cardHeaderButtonDefinitionsForSurface } from "./card-header-actions.js";
 import { setTextSettingValidity } from "./setting-validation.js";
 import {
@@ -31,12 +31,19 @@ import {
   type SlipboxSettings,
 } from "./settings.js";
 
+export interface SettingsHost {
+  readonly settings: SlipboxSettings;
+  setCardSpread(value: number): void;
+  updateSettings(settings: SlipboxSettings): Promise<void>;
+}
+
 export class SlipboxSettingTab extends PluginSettingTab {
   constructor(
     app: App,
-    private readonly slipbox: SlipboxPlugin,
+    plugin: Plugin,
+    private readonly slipbox: SettingsHost,
   ) {
-    super(app, slipbox);
+    super(app, plugin);
   }
 
   override getSettingDefinitions(): SettingDefinitionItem[] {

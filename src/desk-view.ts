@@ -8,8 +8,12 @@ import {
   type App,
 } from "obsidian";
 
-import type SlipboxPlugin from "./main.js";
-import { applicableCardHeaderActions } from "./card-header-actions.js";
+import { addCardContextMenuItems } from "./card-context-menu.js";
+import type { BookmarkService } from "./bookmark-service.js";
+import type { CardIndex } from "./card-index.js";
+import type { CardService } from "./card-service.js";
+import type { DeskCanvasService } from "./desk-canvas-service.js";
+import type { DeskService } from "./desk-service.js";
 import {
   renderCardHeaderButtons,
   type CardHeaderButtonController,
@@ -61,7 +65,7 @@ import {
   pileHeaderPositionAtWorkspacePoint,
   pilePositionAtWorkspacePoint,
 } from "./desk-drop.js";
-import type { SlipboxAction } from "./settings.js";
+import type { SlipboxAction, SlipboxSettings } from "./settings.js";
 import {
   applyRenderedLinkAccessibility,
   attachRenderedLinkInteractions,
@@ -70,6 +74,15 @@ import { defaultPilePosition } from "./workspace-layout.js";
 
 const DRAG_THRESHOLD_PX = 5;
 const DESK_SINGLE_CLICK_DELAY_MS = 320;
+
+export interface DeskViewHost {
+  readonly settings: SlipboxSettings;
+  readonly index: CardIndex;
+  readonly cards: CardService;
+  readonly deskService: DeskService;
+  readonly deskCanvas: DeskCanvasService;
+  readonly bookmarks: BookmarkService;
+}
 
 export interface DeskViewActions {
   jumpToFiledCard(path: string): Promise<void>;
@@ -116,7 +129,7 @@ export class DeskRenderer {
 
   constructor(
     private readonly app: App,
-    private readonly plugin: SlipboxPlugin,
+    private readonly plugin: DeskViewHost,
     private readonly actions: DeskViewActions,
   ) {
     this.cardSignatures = new CardSignatureManager({
@@ -288,7 +301,7 @@ export class DeskRenderer {
         label: branch.label,
         sourcePath: source.path,
         sourceAddress: source.address,
-        sourceTitle: this.plugin.cardTitle(source.file),
+        sourceTitle: this.plugin.cards.title(source.file),
         linktext: this.app.metadataCache.fileToLinktext(source.file, path),
       }];
     });
@@ -301,7 +314,7 @@ export class DeskRenderer {
     viewedPath: string | null,
     isCurrent: () => boolean,
   ): Promise<void> {
-    const state = this.plugin.desk;
+    const state = this.plugin.deskService.snapshot;
     const cardCount = state.piles.reduce(
       (total, pile) => total + pile.cards.length,
       0,
@@ -363,7 +376,7 @@ export class DeskRenderer {
             if (position !== null) {
               void this.actions.runAfterEditing(
                 "desk-new-card",
-                () => this.plugin.createNewCardAtDeskPosition(position),
+                () => this.plugin.cards.createAtDeskPosition(position),
               );
             }
           });
@@ -377,7 +390,7 @@ export class DeskRenderer {
             if (position !== null) {
               void this.actions.runAfterEditing(
                 "desk-new-card",
-                () => this.plugin.createNewCardAtDeskPosition(
+                () => this.plugin.cards.createAtDeskPosition(
                   position,
                   "prompt",
                 ),
@@ -490,7 +503,7 @@ export class DeskRenderer {
         }
         void this.actions.runAfterEditing(
           "desk-collapse-pile",
-          () => this.plugin.setDeskPileExpanded(pile.id, false),
+          () => this.plugin.deskService.setPileExpanded(pile.id, false),
         );
       });
       handle.addEventListener("contextmenu", (event) => {
@@ -539,7 +552,7 @@ export class DeskRenderer {
       event.stopPropagation();
       void this.actions.runAfterEditing(
         "desk-toggle-pile",
-        () => this.plugin.setDeskPileExpanded(pile.id, !expanded),
+        () => this.plugin.deskService.setPileExpanded(pile.id, !expanded),
       );
     });
     pileEl.addEventListener("contextmenu", (event) => {
@@ -586,8 +599,8 @@ export class DeskRenderer {
       void this.actions.runAfterEditing(
         `desk-cycle-pile-${previous ? "previous" : "next"}`,
         async () => {
-          await this.plugin.updateDesk(cyclePileTopCard(
-            this.plugin.desk,
+          await this.plugin.deskService.replace(cyclePileTopCard(
+            this.plugin.deskService.snapshot,
             pile.id,
             direction,
           ));
@@ -627,7 +640,7 @@ export class DeskRenderer {
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? null;
     const addressLabel = address ?? UNFILED_ADDRESS_LABEL;
-    const displayTitle = this.plugin.cardDisplayTitle(file);
+    const displayTitle = this.plugin.cards.displayTitle(file);
     const title = displayTitle ?? file.basename;
     const isViewed = viewedPath === card.cardRef;
     const isFocused = !isViewed &&
@@ -679,7 +692,7 @@ export class DeskRenderer {
     miniature.toggleClass("is-filing-source", isFilingSource);
     miniature.toggleClass(
       "is-bookmarked",
-      filed !== undefined && this.plugin.bookmarkAtPath(filed.path) !== undefined,
+      filed !== undefined && this.plugin.bookmarks.at(filed.path) !== undefined,
     );
 
     const identity = miniature.createDiv({
@@ -741,7 +754,7 @@ export class DeskRenderer {
           filed: filed !== undefined,
           onDesk: true,
           bookmarked: filed !== undefined &&
-            this.plugin.bookmarkAtPath(filed.path) !== undefined,
+            this.plugin.bookmarks.at(filed.path) !== undefined,
           canMoveLeft: cardIndex > 0,
           canMoveRight: cardIndex < pile.cards.length - 1,
         },
@@ -857,7 +870,7 @@ export class DeskRenderer {
           this.scheduleCardClick(() => {
             void this.actions.runAfterEditing(
               "desk-expand-pile",
-              () => this.plugin.setDeskPileExpanded(pile.id, true),
+              () => this.plugin.deskService.setPileExpanded(pile.id, true),
             );
           });
         }
@@ -868,7 +881,7 @@ export class DeskRenderer {
         event.stopPropagation();
         void this.actions.runAfterEditing(
           "desk-expand-pile",
-          () => this.plugin.setDeskPileExpanded(pile.id, true),
+          () => this.plugin.deskService.setPileExpanded(pile.id, true),
         );
       }
     });
@@ -970,10 +983,10 @@ export class DeskRenderer {
       item
         .setTitle("Lay out pile on active Canvas")
         .setIcon("layout-dashboard")
-        .setDisabled(!this.plugin.hasActiveCanvas())
+        .setDisabled(!this.plugin.deskCanvas.hasActiveCanvas())
         .onClick(() => this.actions.runAfterEditing(
           "desk-layout-active-canvas",
-          () => this.plugin.layOutDeskPileOnActiveCanvas(pile.id),
+          () => this.plugin.deskCanvas.layoutPileOnActiveCanvas(pile.id),
         ));
     });
     menu.addItem((item) => {
@@ -982,7 +995,7 @@ export class DeskRenderer {
         .setIcon("layout-template")
         .onClick(() => this.actions.runAfterEditing(
           "desk-layout-canvas",
-          () => this.plugin.layOutDeskPileOnCanvas(pile.id),
+          () => this.plugin.deskCanvas.layoutPileOnCanvas(pile.id),
         ));
     });
     menu.addItem((item) => {
@@ -991,7 +1004,7 @@ export class DeskRenderer {
         .setIcon("file-plus-2")
         .onClick(() => this.actions.runAfterEditing(
           "desk-create-canvas",
-          () => this.plugin.createCanvasFromDeskPile(pile.id),
+          () => this.plugin.deskCanvas.createCanvasFromPile(pile.id),
         ));
     });
     menu.addSeparator();
@@ -1002,14 +1015,14 @@ export class DeskRenderer {
         .setDisabled(!pile.cards.some((card) => card.kind === "filed"))
         .onClick(() => this.actions.runAfterEditing(
           "desk-return-pile",
-          () => this.plugin.clearDeskPile(pile.id),
+          () => this.plugin.deskService.clearPile(pile.id),
         ));
     });
     menu.showAtMouseEvent(event);
   }
 
   private showCardMenu(event: MouseEvent, pile: DeskPile, card: DeskCard): void {
-    const state = this.plugin.desk;
+    const state = this.plugin.deskService.snapshot;
     const position = cardPosition(state, card.cardRef);
     if (position === null) {
       return;
@@ -1060,7 +1073,7 @@ export class DeskRenderer {
         .setIcon("split")
         .setDisabled(pile.cards.length <= 1)
         .onClick(() => {
-          const newPileId = this.plugin.createDeskPileId();
+          const newPileId = this.plugin.deskService.createPileId();
           const split = splitCardIntoNewPile(state, card.cardRef, newPileId);
           this.moveAndFocus(
             setPilePosition(split, newPileId, {
@@ -1077,7 +1090,7 @@ export class DeskRenderer {
   }
 
   private addPileOrderingMenuItems(menu: Menu, pile: DeskPile): void {
-    const state = this.plugin.desk;
+    const state = this.plugin.deskService.snapshot;
     const pileIndex = state.piles.findIndex((candidate) =>
       candidate.id === pile.id
     );
@@ -1089,8 +1102,8 @@ export class DeskRenderer {
         .setDisabled(pileIndex < 0 || pileIndex === lastPileIndex)
         .onClick(() => this.actions.runAfterEditing(
           "desk-bring-pile-to-front",
-          () => this.plugin.updateDesk(movePileToOrdinalBoundary(
-            this.plugin.desk,
+          () => this.plugin.deskService.replace(movePileToOrdinalBoundary(
+            this.plugin.deskService.snapshot,
             pile.id,
             "front",
           )),
@@ -1103,8 +1116,8 @@ export class DeskRenderer {
         .setDisabled(pileIndex <= 0)
         .onClick(() => this.actions.runAfterEditing(
           "desk-send-pile-to-back",
-          () => this.plugin.updateDesk(movePileToOrdinalBoundary(
-            this.plugin.desk,
+          () => this.plugin.deskService.replace(movePileToOrdinalBoundary(
+            this.plugin.deskService.snapshot,
             pile.id,
             "back",
           )),
@@ -1122,32 +1135,25 @@ export class DeskRenderer {
       return false;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const position = cardPosition(this.plugin.desk, card.cardRef);
+    const position = cardPosition(this.plugin.deskService.snapshot, card.cardRef);
     const run = (action: SlipboxAction): void => {
       this.actions.focusDeskCard(card.cardRef, pileId);
       this.actions.runAction(action);
     };
-    for (const presentation of applicableCardHeaderActions({
+    addCardContextMenuItems({
+      menu,
+      title: this.plugin.cards.title(file),
       surface: "desk",
       viewedReturnSurface: null,
       filed: filed !== undefined,
       onDesk: true,
       bookmarked: filed !== undefined &&
-        this.plugin.bookmarkAtPath(filed.path) !== undefined,
+        this.plugin.bookmarks.at(filed.path) !== undefined,
       canMoveLeft: position !== null && position.cardIndex > 0,
       canMoveRight: position !== null &&
         position.cardIndex < position.pileSize - 1,
-    })) {
-      menu.addItem((item) => {
-        item
-          .setTitle(presentation.action === "delete-card"
-            ? `Delete ${this.plugin.cardTitle(file)}`
-            : presentation.label)
-          .setIcon(presentation.icon)
-          .setWarning(presentation.warning === true)
-          .onClick(() => run(presentation.action));
-      });
-    }
+      run,
+    });
     return true;
   }
 
@@ -1205,7 +1211,7 @@ export class DeskRenderer {
                 this.actions.focusDeskCard(card.cardRef, nextPosition.pileId);
               }
               this.clearDropCues();
-              void this.plugin.updateDesk(next);
+              void this.plugin.deskService.replace(next);
             },
             onCancel: () => this.clearDropCues(),
           });
@@ -1265,7 +1271,7 @@ export class DeskRenderer {
                 },
               );
               this.clearDropCues();
-              void this.plugin.updateDesk(next);
+              void this.plugin.deskService.replace(next);
             },
             onCancel: () => {
               element.setCssProps({ translate: "" });
@@ -1284,7 +1290,7 @@ export class DeskRenderer {
     y: number,
     dragged: HTMLElement,
   ) {
-    const state = this.plugin.desk;
+    const state = this.plugin.deskService.snapshot;
     const targetPileEl = cardDropTargetPile(
       this.elementsBelowPoint(x, y, dragged),
       sourcePileId,
@@ -1305,7 +1311,7 @@ export class DeskRenderer {
     }
     const newPosition = this.positionAtPoint(x, y);
     if (newPosition !== null) {
-      const newPileId = this.plugin.createDeskPileId();
+      const newPileId = this.plugin.deskService.createPileId();
       const split = splitCardIntoNewPile(state, cardRef, newPileId);
       return setPilePosition(split, newPileId, newPosition);
     }
@@ -1319,7 +1325,7 @@ export class DeskRenderer {
     dragged: HTMLElement,
     newPosition: DeskPilePosition,
   ) {
-    const state = this.plugin.desk;
+    const state = this.plugin.deskService.snapshot;
     const target = this.elementsBelowPoint(x, y, dragged)
       .find((element) =>
         element.matches(".slipbox-desk-pile") &&
@@ -1463,7 +1469,7 @@ export class DeskRenderer {
 
   private moveAndFocus(nextState: DeskState, cardRef: string): void {
     void this.actions.runAfterEditing("desk-menu-move-card", async () => {
-      await this.plugin.updateDesk(nextState);
+      await this.plugin.deskService.replace(nextState);
       const ownerWindow = this.rootEl?.win;
       ownerWindow?.requestAnimationFrame(() => {
         const escaped = CSS.escape(cardRef);

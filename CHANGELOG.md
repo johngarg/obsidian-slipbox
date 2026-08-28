@@ -40,6 +40,8 @@ initial public beta.
 
 ### Fixed
 
+- Coordinated index, Desk, and view updates after filing, and stopped reporting
+  bookmark saves as successful when persistence fails.
 - Kept the inline Desk filing field evenly highlighted, within the normal
   header height, and adjacent to the card title.
 - Stopped blank or missing frontmatter title properties from displaying the

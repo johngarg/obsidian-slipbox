@@ -1,5 +1,4 @@
 import {
-  Menu,
   Notice,
   Plugin,
   TAbstractFile,
@@ -14,29 +13,20 @@ import {
   type WorkspaceLeaf,
 } from "obsidian";
 
-import {
-  type DeckBookmark,
-} from "./bookmarks.js";
 import { BookmarkService } from "./bookmark-service.js";
 import {
   DECK_VIEW_TYPE,
   DeckView,
   type DeckRefreshReason,
 } from "./deck-view.js";
-import {
-  applicableCardHeaderActions,
-  type CardHeaderActionContext,
-} from "./card-header-actions.js";
 import { issueStatusSummary } from "./card-metadata.js";
 import {
-  BookmarksModal,
   IssuesModal,
   promptForCanvas,
   promptForCardLink,
   promptForNewCardTitle,
   promptForText,
 } from "./modals.js";
-import type { NewCardTitleMode } from "./new-note.js";
 import {
   DEFAULT_STATE,
   loadPluginData,
@@ -52,48 +42,29 @@ import {
   type SlipboxSettings,
 } from "./settings.js";
 import { SlipboxSettingTab } from "./settings-tab.js";
-import { CardIndex, type FiledCard } from "./card-index.js";
+import { CardIndex } from "./card-index.js";
 import {
   cardIndexConfig,
   settingsRefreshImpact,
 } from "./card-index-config.js";
-import type { DeskPilePosition, DeskState } from "./desk-state.js";
 import { DeskService } from "./desk-service.js";
 import { formatCurrentTimestamp } from "./timestamp.js";
 import { CanvasBridge } from "./canvas-bridge.js";
 import { DeskCanvasService } from "./desk-canvas-service.js";
-import type { FilingPreview } from "./filing-preview.js";
-import type {
-  InlineEditCommitRequest,
-  InlineEditCommitResult,
-  InlineEditSessionSnapshot,
-} from "./inline-edit-session.js";
 import {
   deckPositionModeForPileCount,
   type DeckPositionMode,
 } from "./workspace-layout.js";
 import { splitNoteBody } from "./note-body.js";
 import { CardIndexRuntime } from "./card-index-runtime.js";
-import type {
-  AfterIndexReconcile,
-  IndexRefreshReason,
-} from "./index-refresh-coordinator.js";
 import {
   SerializedPluginDataWriter,
   type PluginDataWriteResult,
 } from "./plugin-data-writer.js";
 import type { SlipboxPluginData } from "./plugin-state.js";
-import {
-  InlineEditRegistry,
-  type DetachedInlineEditDraft,
-  type DetachedInlineEditPresentation,
-  type InlineEditStartData,
-} from "./inline-edit-registry.js";
+import { InlineEditRegistry } from "./inline-edit-registry.js";
 import { CardService } from "./card-service.js";
-import {
-  FilingService,
-  type FileCardResult,
-} from "./filing-service.js";
+import { FilingService } from "./filing-service.js";
 import { MetadataCacheWaiter } from "./metadata-cache-waiter.js";
 
 export default class SlipboxPlugin extends Plugin {
@@ -104,14 +75,14 @@ export default class SlipboxPlugin extends Plugin {
   private problemStatusBarItem: HTMLElement | null = null;
   private cardSpreadSaveTimer: number | null = null;
   private startupDeckMode: DeckPositionMode | null = null;
-  private indexRuntime!: CardIndexRuntime;
+  indexRuntime!: CardIndexRuntime;
   private dataWriter!: SerializedPluginDataWriter<SlipboxPluginData>;
-  private inlineEdits!: InlineEditRegistry<DeckView>;
-  private bookmarks!: BookmarkService;
-  private deskService!: DeskService;
-  private deskCanvas!: DeskCanvasService;
-  private cardService!: CardService;
-  private filingService!: FilingService;
+  inlineEdits!: InlineEditRegistry<DeckView>;
+  bookmarks!: BookmarkService;
+  deskService!: DeskService;
+  deskCanvas!: DeskCanvasService;
+  cards!: CardService;
+  filingService!: FilingService;
 
   override async onload(): Promise<void> {
     const loadedData: unknown = await this.loadData();
@@ -152,7 +123,7 @@ export default class SlipboxPlugin extends Plugin {
       schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
       cancelScheduled: (handle) => window.clearTimeout(handle as number),
     });
-    this.cardService = new CardService({
+    this.cards = new CardService({
       app: this.app,
       index: this.index,
       indexRuntime: this.indexRuntime,
@@ -172,7 +143,7 @@ export default class SlipboxPlugin extends Plugin {
         promptForCardLink(this.app, suggestions),
       normalizePath,
       serializeProperties: stringifyYaml,
-      openFile: (file) => this.openMarkdownFile(file),
+      openFile: (file) => this.app.workspace.getLeaf(false).openFile(file),
       openDesk: async () => { await this.openDeck(); },
       focusDeskCard: (path) => this.focusDeskCardInViews(path),
       notify: (message) => { new Notice(message); },
@@ -183,14 +154,14 @@ export default class SlipboxPlugin extends Plugin {
       index: this.index,
       indexRuntime: this.indexRuntime,
       desk: this.deskService,
-      cards: this.cardService,
+      cards: this.cards,
       cacheWaiter,
       settings: () => this.settings,
       notify: (message) => { new Notice(message); },
     });
     this.bookmarks = new BookmarkService(this.state.bookmarks, {
       isAvailable: (path) => this.index.filedByPath(path) !== undefined,
-      label: (path) => this.cardService.filedLabel(path),
+      label: (path) => this.cards.filedLabel(path),
       changed: (bookmarks) => {
         this.state = { bookmarks };
         this.refreshBookmarkUi();
@@ -226,7 +197,7 @@ export default class SlipboxPlugin extends Plugin {
       create: (path, paths) => canvas.createCanvas(path, paths),
       notify: (message) => { new Notice(message); },
     });
-    this.addSettingTab(new SlipboxSettingTab(this.app, this));
+    this.addSettingTab(new SlipboxSettingTab(this.app, this, this));
 
     this.registerView(
       DECK_VIEW_TYPE,
@@ -238,7 +209,7 @@ export default class SlipboxPlugin extends Plugin {
     });
     this.registerEvent(
       this.app.workspace.on("quit", (tasks) => {
-        tasks.addPromise(this.finishInlineEdits("quit"));
+        tasks.addPromise(this.inlineEdits.finishAll("quit"));
       }),
     );
 
@@ -262,12 +233,12 @@ export default class SlipboxPlugin extends Plugin {
     }
     this.app.workspace.onLayoutReady(() => {
       this.registerIndexEvents();
-      void this.refreshIndex();
+      void this.indexRuntime.refresh();
     });
   }
 
   override onunload(): void {
-    void this.finishInlineEdits("plugin-unload");
+    void this.inlineEdits.finishAll("plugin-unload");
     this.indexRuntime.dispose();
     if (this.cardSpreadSaveTimer !== null) {
       window.clearTimeout(this.cardSpreadSaveTimer);
@@ -276,12 +247,12 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async openDeck(filingFile?: TFile): Promise<DeckView> {
-    await this.refreshIndex();
-    return this.revealDeck(filingFile);
+  async openDeck(): Promise<DeckView> {
+    await this.indexRuntime.refresh();
+    return this.revealDeck();
   }
 
-  private async revealDeck(filingFile?: TFile): Promise<DeckView> {
+  private async revealDeck(): Promise<DeckView> {
     let leaf: WorkspaceLeaf;
     const existing = this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)[0];
     if (existing === undefined) {
@@ -294,9 +265,6 @@ export default class SlipboxPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
     if (!(leaf.view instanceof DeckView)) {
       throw new Error("Obsidian did not create the Slipbox Desk view");
-    }
-    if (filingFile !== undefined) {
-      await leaf.view.startFiling(filingFile);
     }
     return leaf.view;
   }
@@ -321,47 +289,6 @@ export default class SlipboxPlugin extends Plugin {
     }, 160);
   }
 
-  /**
-   * Open a card's note the way Obsidian itself opens a file.
-   *
-   * `getLeaf(false)` reuses a navigable leaf and honours pinning, so opening a
-   * card matches the core New note and link-following behaviour rather than
-   * always spawning a tab.
-   */
-  openMarkdownFile(file: TFile): Promise<void> {
-    return this.app.workspace.getLeaf(false).openFile(file);
-  }
-
-  acquireInlineEdit(path: string, owner: DeckView): boolean {
-    return this.inlineEdits.acquire(path, owner);
-  }
-
-  releaseInlineEdit(path: string, owner: DeckView): void {
-    this.inlineEdits.release(path, owner);
-  }
-
-  renameInlineEdit(
-    oldPath: string,
-    newPath: string,
-    owner: DeckView,
-  ): boolean {
-    return this.inlineEdits.rename(oldPath, newPath, owner);
-  }
-
-  async prepareInlineEdit(file: TFile): Promise<InlineEditStartData> {
-    return this.inlineEdits.prepare(file);
-  }
-
-  async commitInlineEdit(
-    request: InlineEditCommitRequest,
-  ): Promise<InlineEditCommitResult> {
-    return this.inlineEdits.commit(request);
-  }
-
-  async flushOpenTextViews(path: string): Promise<void> {
-    await this.inlineEdits.flushOpenViews(path);
-  }
-
   private async flushObsidianTextViews(path: string): Promise<void> {
     const saves: Promise<void>[] = [];
     this.app.workspace.iterateAllLeaves((leaf) => {
@@ -371,34 +298,6 @@ export default class SlipboxPlugin extends Plugin {
       }
     });
     await Promise.all(saves);
-  }
-
-  retainDetachedInlineEdit(
-    snapshot: InlineEditSessionSnapshot,
-    file: TFile,
-    presentation: DetachedInlineEditPresentation,
-  ): void {
-    this.inlineEdits.retainDetached(snapshot, file, presentation);
-  }
-
-  takeDetachedInlineEdit(): DetachedInlineEditDraft | null {
-    return this.inlineEdits.takeDetached();
-  }
-
-  returnDetachedInlineEdit(draft: DetachedInlineEditDraft): void {
-    this.inlineEdits.returnDetached(draft);
-  }
-
-  private async finishInlineEdits(reason: string): Promise<void> {
-    await this.inlineEdits.finishAll(reason);
-  }
-
-  cardTitle(file: TFile): string {
-    return this.cardService.title(file);
-  }
-
-  cardDisplayTitle(file: TFile): string | null {
-    return this.cardService.displayTitle(file);
   }
 
   async updateSettings(value: SlipboxSettings): Promise<void> {
@@ -414,7 +313,7 @@ export default class SlipboxPlugin extends Plugin {
         return;
       case "index":
       case "ordering":
-        await this.refreshIndex(impact);
+        await this.indexRuntime.refresh({ reason: impact });
         return;
       case "branch-presentation":
         for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
@@ -428,74 +327,8 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  showCardContextMenu(
-    event: MouseEvent,
-    file: TFile,
-    address: string | null,
-    surface: CardHeaderActionContext["surface"],
-    source: string,
-    leaf: WorkspaceLeaf,
-    viewedReturnSurface: CardHeaderActionContext["viewedReturnSurface"] = null,
-  ): void {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const isBookmarked =
-      address !== null && this.bookmarkAtPath(file.path) !== undefined;
-    const isOnDesk = this.deskService.contains(file.path);
-    const title = this.cardTitle(file);
-    const menu = Menu.forEvent(event);
-    const runViewAction = (action: Parameters<DeckView["runAction"]>[0]): void => {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.runAction(action);
-      }
-    };
-
-    for (const presentation of applicableCardHeaderActions({
-      surface,
-      viewedReturnSurface,
-      filed: address !== null,
-      onDesk: isOnDesk,
-      bookmarked: isBookmarked,
-      canMoveLeft: false,
-      canMoveRight: false,
-    })) {
-      menu.addItem((item) => {
-        item
-          .setTitle(presentation.action === "delete-card"
-            ? `Delete ${title}`
-            : presentation.label)
-          .setIcon(presentation.icon)
-          .setWarning(presentation.warning === true)
-          .setSection(presentation.warning === true
-            ? "slipbox-card-danger"
-            : "slipbox-card")
-          .onClick(() => runViewAction(presentation.action));
-      });
-    }
-
-    // Obsidian supplies its canonical Reveal file in navigation action along
-    // with the remaining ordinary file actions and third-party contributions.
-    this.app.workspace.trigger("file-menu", menu, file, source, leaf);
-    menu.showAtMouseEvent(event);
-  }
-
-  async deleteCard(file: TFile): Promise<boolean> {
-    return this.cardService.delete(file);
-  }
-
-  /**
-   * Cards already filed at `address` when duplicates are not allowed. Always
-   * empty under the permissive policy, so callers need no policy branch.
-   */
-  duplicateOccupants(
-    address: string,
-  ): readonly string[] {
-    return this.filingService.duplicateOccupants(address);
-  }
-
   async showIssues(): Promise<void> {
-    await this.refreshIndex();
+    await this.indexRuntime.refresh();
     new IssuesModal(
       this.app,
       this.index.snapshot,
@@ -506,7 +339,7 @@ export default class SlipboxPlugin extends Plugin {
           if (file === undefined) {
             new Notice(`Could not find ${path}.`);
           } else {
-            void this.openMarkdownFile(file);
+            void this.cards.open(file);
           }
         },
       },
@@ -544,103 +377,14 @@ export default class SlipboxPlugin extends Plugin {
     setTooltip(item, summary.description, { placement: "top" });
   }
 
-  showBookmarks(view: DeckView): void {
-    new BookmarksModal(this.app, this.bookmarks.items, {
-      currentPath: view.focusedDeckCardPath,
-      isAvailable: (path) => this.index.filedByPath(path) !== undefined,
-      label: (path) => this.cardService.filedLabel(path),
-      visit: (path) => void view.jumpToPath(path),
-      addCurrent: () => view.addBookmarkToCurrent(),
-      remove: (path) => view.removeBookmark(path),
-    }).open();
-  }
-
-  bookmarkAtPath(path: string): DeckBookmark | undefined {
-    return this.bookmarks.at(path);
-  }
-
-  async addBookmark(path: string): Promise<void> {
-    await this.bookmarks.add(path);
-  }
-
-  async toggleBookmark(path: string): Promise<void> {
-    await this.bookmarks.toggle(path);
-  }
-
-  createDeskPileId(): string {
-    return this.deskService.createPileId();
-  }
-
-  get desk(): DeskState {
-    return this.deskService.snapshot;
-  }
-
-  async updateDesk(next: DeskState): Promise<void> {
-    await this.deskService.replace(next);
-  }
-
-  async toggleFileOnDesk(file: TFile): Promise<void> {
-    await this.deskService.toggleFile(file);
-  }
-
-  async putFileOnDesk(file: TFile): Promise<boolean> {
-    return this.deskService.putFile(file);
-  }
-
-  isFileOnDesk(file: TFile): boolean {
-    return this.deskService.contains(file.path);
-  }
-
-  async setDeskPileExpanded(pileId: string, expanded: boolean): Promise<void> {
-    await this.deskService.setPileExpanded(pileId, expanded);
-  }
-
-  async clearDeskPile(pileId: string): Promise<void> {
-    await this.deskService.clearPile(pileId);
-  }
-
-  async clearDesk(): Promise<void> {
-    await this.deskService.clearFiledCards();
-  }
-
-  hasActiveCanvas(): boolean {
-    return this.deskCanvas.hasActiveCanvas();
-  }
-
-  async layOutDeskPileOnActiveCanvas(pileId: string): Promise<void> {
-    await this.deskCanvas.layoutPileOnActiveCanvas(pileId);
-  }
-
-  async layOutDeskPileOnCanvas(pileId: string): Promise<void> {
-    await this.deskCanvas.layoutPileOnCanvas(pileId);
-  }
-
-  async createCanvasFromDeskPile(pileId: string): Promise<void> {
-    await this.deskCanvas.createCanvasFromPile(pileId);
-  }
-
-  async beginFiling(file: TFile): Promise<void> {
-    await this.refreshIndex();
-    if (!this.cardService.isUnfiled(file)) {
+  private async beginFiling(file: TFile): Promise<void> {
+    await this.indexRuntime.refresh();
+    if (!this.cards.isUnfiled(file)) {
       new Notice("Only an unfiled card can enter filing mode.");
       return;
     }
-    await this.revealDeck(file);
-  }
-
-  isUnfiledCard(file: TFile): boolean {
-    return this.cardService.isUnfiled(file);
-  }
-
-  filingPreviewFor(file: TFile, address: string): FilingPreview {
-    return this.filingService.preview(file, address);
-  }
-
-  async fileCard(
-    file: TFile,
-    preview: FilingPreview,
-  ): Promise<FileCardResult> {
-    return this.filingService.file(file, preview);
+    const view = await this.revealDeck();
+    await view.startFiling(file);
   }
 
   private registerCommands(): void {
@@ -653,25 +397,25 @@ export default class SlipboxPlugin extends Plugin {
     this.addCommand({
       id: "new-card",
       name: "New card",
-      callback: () => void this.cardService.createAndOpen("default"),
+      callback: () => void this.cards.createAndOpen("default"),
     });
 
     this.addCommand({
       id: "new-card-with-title",
       name: "New card with title",
-      callback: () => void this.cardService.createAndOpen("prompt"),
+      callback: () => void this.cards.createAndOpen("prompt"),
     });
 
     this.addCommand({
       id: "new-card-on-desk",
       name: "New card on Desk",
-      callback: () => void this.cardService.createOnDesk("default"),
+      callback: () => void this.cards.createOnDesk("default"),
     });
 
     this.addCommand({
       id: "new-card-with-title-on-desk",
       name: "New card with title on Desk",
-      callback: () => void this.cardService.createOnDesk("prompt"),
+      callback: () => void this.cards.createOnDesk("prompt"),
     });
 
     this.addCommand({
@@ -682,12 +426,12 @@ export default class SlipboxPlugin extends Plugin {
         const available =
           file !== null &&
           file.extension === "md" &&
-          this.cardService.metadataState(file) === "ordinary";
+          this.cards.metadataState(file) === "ordinary";
         if (checking) {
           return available;
         }
         if (available && file !== null) {
-          void this.cardService.makeOrdinaryNoteCard(file);
+          void this.cards.makeOrdinaryNoteCard(file);
         }
         return available;
       },
@@ -699,7 +443,7 @@ export default class SlipboxPlugin extends Plugin {
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const available =
-          file !== null && this.cardService.isUnfiled(file);
+          file !== null && this.cards.isUnfiled(file);
         if (checking) {
           return available;
         }
@@ -719,7 +463,7 @@ export default class SlipboxPlugin extends Plugin {
           return available;
         }
         if (available) {
-          void this.cardService.insertLink(editor, ctx);
+          void this.cards.insertLink(editor, ctx);
         }
         return available;
       },
@@ -776,13 +520,6 @@ export default class SlipboxPlugin extends Plugin {
     });
   }
 
-  async createNewCardAtDeskPosition(
-    position: DeskPilePosition,
-    titleMode: NewCardTitleMode = "default",
-  ): Promise<void> {
-    await this.cardService.createAtDeskPosition(position, titleMode);
-  }
-
   /**
    * Focus a newly placed Desk card in every Slipbox view.
    *
@@ -799,30 +536,18 @@ export default class SlipboxPlugin extends Plugin {
     }
   }
 
-  async copyCardLink(card: FiledCard): Promise<void> {
-    await this.cardService.copyLink(card);
-  }
-
-  async removeBookmark(path: string): Promise<void> {
-    await this.bookmarks.remove(path);
-  }
-
-  private queueIndexRefresh(): void {
-    this.indexRuntime.queue();
-  }
-
   private registerIndexEvents(): void {
     this.registerEvent(
-      this.app.metadataCache.on("changed", () => this.queueIndexRefresh()),
+      this.app.metadataCache.on("changed", () => this.indexRuntime.queue()),
     );
     this.registerEvent(
-      this.app.metadataCache.on("deleted", () => this.queueIndexRefresh()),
+      this.app.metadataCache.on("deleted", () => this.indexRuntime.queue()),
     );
     this.registerEvent(
-      this.app.metadataCache.on("resolve", () => this.queueIndexRefresh()),
+      this.app.metadataCache.on("resolve", () => this.indexRuntime.queue()),
     );
     this.registerEvent(
-      this.app.vault.on("create", () => this.queueIndexRefresh()),
+      this.app.vault.on("create", () => this.indexRuntime.queue()),
     );
     this.registerEvent(
       this.app.vault.on("delete", (file) => this.handleDeletedFile(file)),
@@ -833,19 +558,11 @@ export default class SlipboxPlugin extends Plugin {
     );
   }
 
-  refreshIndex(
-    reason: IndexRefreshReason = "index",
-    afterReconcile?: AfterIndexReconcile,
+  private async refreshDeckViews(
+    reason: DeckRefreshReason = "full",
   ): Promise<void> {
-    return this.indexRuntime.refresh({
-      reason,
-      ...(afterReconcile === undefined ? {} : { afterReconcile }),
-    });
-  }
-
-  async refreshDeckViews(reason: DeckRefreshReason = "full"): Promise<void> {
     this.startupDeckMode ??= deckPositionModeForPileCount(
-      this.desk.piles.length,
+      this.deskService.snapshot.piles.length,
     );
     this.updateProblemStatusBarItem();
     await Promise.all(
@@ -886,7 +603,7 @@ export default class SlipboxPlugin extends Plugin {
       }
     }
     void this.bookmarks.handlePathDeletion(file.path);
-    this.queueIndexRefresh();
+    this.indexRuntime.queue();
   }
 
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
@@ -898,7 +615,7 @@ export default class SlipboxPlugin extends Plugin {
       }
     }
     void this.bookmarks.handlePathRename(oldPath, file.path);
-    this.queueIndexRefresh();
+    this.indexRuntime.queue();
   }
 
 }

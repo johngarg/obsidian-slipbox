@@ -40,6 +40,8 @@ initial public beta.
 
 ### Fixed
 
+- Kept the inline Desk filing field evenly highlighted, within the normal
+  header height, and adjacent to the card title.
 - Stopped blank or missing frontmatter title properties from displaying the
   card filename as a Deck, Desk, or viewed-card header title.
 - Kept “Return from Desk” visually consistent with the other card actions

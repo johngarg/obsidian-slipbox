@@ -2796,7 +2796,8 @@ export class DeckView extends ItemView {
       const isOnDesk = this.plugin.isFileOnDesk(card.file);
       cardEl.toggleClass("is-on-desk", isOnDesk);
       cardEl.toggleClass("can-drag-to-desk", !isOnDesk);
-      const title = this.plugin.cardTitle(card.file);
+      const displayTitle = this.plugin.cardDisplayTitle(card.file);
+      const title = displayTitle ?? card.file.basename;
       const cardLabel = `${card.address} · ${title}${
         isOnDesk ? "; pulled out into a working pile" : ""
       }`;
@@ -2852,7 +2853,7 @@ export class DeckView extends ItemView {
         interactive: filedIndex === activeIndex,
       });
       const headerTitle = cardHeaderTitle(
-        title,
+        displayTitle,
         this.plugin.settings.showTitleInDeck,
       );
       if (headerTitle !== null) {
@@ -3149,7 +3150,8 @@ export class DeckView extends ItemView {
         file.path,
         "viewed",
       );
-    const title = this.plugin.cardTitle(file);
+    const displayTitle = this.plugin.cardDisplayTitle(file);
+    const title = displayTitle ?? file.basename;
     const layer = stage.createDiv({ cls: "slipbox-viewed-card-layer" });
     const card = layer.createDiv({
       cls: "slipbox-card slipbox-viewed-card",
@@ -3232,7 +3234,7 @@ export class DeckView extends ItemView {
       });
     }
     const headerTitle = cardHeaderTitle(
-      title,
+      displayTitle,
       this.plugin.settings.showTitleInDeck,
     );
     if (headerTitle !== null) {

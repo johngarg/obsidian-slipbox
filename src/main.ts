@@ -63,7 +63,10 @@ import {
   loadPluginData,
   type SlipboxPluginState,
 } from "./plugin-state.js";
-import { resolveCardTitle } from "./card-title.js";
+import {
+  resolveCardDisplayTitle,
+  resolveCardTitle,
+} from "./card-title.js";
 import {
   DEFAULT_SETTINGS,
   normalizeCardSpread,
@@ -449,6 +452,14 @@ export default class SlipboxPlugin extends Plugin {
 
   cardTitle(file: TFile): string {
     return resolveCardTitle(
+      file.basename,
+      this.app.metadataCache.getFileCache(file)?.frontmatter,
+      this.settings,
+    );
+  }
+
+  cardDisplayTitle(file: TFile): string | null {
+    return resolveCardDisplayTitle(
       file.basename,
       this.app.metadataCache.getFileCache(file)?.frontmatter,
       this.settings,

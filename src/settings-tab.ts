@@ -62,12 +62,12 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Title source",
-            "Choose the filename or a top-level frontmatter property for note titles. New card with title uses the entered title in the selected location; New card uses the default timestamp title.",
+            "Choose the filename or a top-level frontmatter property for card titles. New card with title writes the entered title to the selected location; New card uses a timestamp filename and leaves a frontmatter title empty.",
             (setting) => this.renderTitleSource(setting),
           ),
           this.definition(
             "Title property",
-            "Exact top-level YAML key. It must differ from the address property. Missing, blank, or non-text values fall back to the filename.",
+            "Exact top-level YAML key. It must differ from the address property. Missing, blank, or non-text values leave the card title empty.",
             (setting) => this.renderTitleProperty(setting),
           ),
           this.definition(

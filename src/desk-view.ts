@@ -627,7 +627,8 @@ export class DeskRenderer {
     const filed = this.plugin.index.filedByFile(file);
     const address = filed?.address ?? null;
     const addressLabel = address ?? UNFILED_ADDRESS_LABEL;
-    const title = this.plugin.cardTitle(file);
+    const displayTitle = this.plugin.cardDisplayTitle(file);
+    const title = displayTitle ?? file.basename;
     const isViewed = viewedPath === card.cardRef;
     const isFocused = !isViewed &&
       this.actions.isDeskCardFocused(card.cardRef, pile.id);
@@ -719,7 +720,7 @@ export class DeskRenderer {
       });
     }
     const headerTitle = cardHeaderTitle(
-      title,
+      displayTitle,
       this.plugin.settings.showTitleInDeck,
     );
     if (headerTitle !== null) {

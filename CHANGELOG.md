@@ -40,6 +40,8 @@ initial public beta.
 
 ### Fixed
 
+- Stopped blank or missing frontmatter title properties from displaying the
+  card filename as a Deck, Desk, or viewed-card header title.
 - Kept “Return from Desk” visually consistent with the other card actions
   instead of giving it a disabled-looking grey background.
 - Disabled filing confirmation while the duplicate-address policy blocks the

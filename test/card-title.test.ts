@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { cardHeaderTitle, resolveCardTitle } from "../src/card-title.js";
+import {
+  cardHeaderTitle,
+  resolveCardDisplayTitle,
+  resolveCardTitle,
+} from "../src/card-title.js";
 
 describe("resolveCardTitle", () => {
   test("uses the same title-visibility setting for every card header", () => {
     assert.equal(cardHeaderTitle("Systems", true), "Systems");
     assert.equal(cardHeaderTitle("Systems", false), null);
+    assert.equal(cardHeaderTitle(null, true), null);
   });
 
   test("uses the filename by default", () => {
@@ -21,6 +26,13 @@ describe("resolveCardTitle", () => {
 
   test("uses a configured non-empty frontmatter string", () => {
     assert.equal(
+      resolveCardDisplayTitle("fallback", { name: "  Systems  " }, {
+        titleSource: "frontmatter",
+        titleProperty: "name",
+      }),
+      "Systems",
+    );
+    assert.equal(
       resolveCardTitle("fallback", { name: "  Systems  " }, {
         titleSource: "frontmatter",
         titleProperty: "name",
@@ -29,11 +41,28 @@ describe("resolveCardTitle", () => {
     );
   });
 
-  test("falls back for missing, empty, and non-string values", () => {
+  test("omits unavailable display titles but retains fallback labels", () => {
     const settings = {
       titleSource: "frontmatter" as const,
       titleProperty: "slipbox-title",
     };
+    assert.equal(resolveCardDisplayTitle("fallback", {}, settings), null);
+    assert.equal(
+      resolveCardDisplayTitle(
+        "fallback",
+        { "slipbox-title": "  " },
+        settings,
+      ),
+      null,
+    );
+    assert.equal(
+      resolveCardDisplayTitle(
+        "fallback",
+        { "slipbox-title": ["Systems"] },
+        settings,
+      ),
+      null,
+    );
     assert.equal(resolveCardTitle("fallback", {}, settings), "fallback");
     assert.equal(
       resolveCardTitle("fallback", { "slipbox-title": "  " }, settings),

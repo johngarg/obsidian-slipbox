@@ -145,14 +145,8 @@ import {
 import { attachPaperWorkflowTextarea } from "./paper-workflow-dom.js";
 import { attachRenderedLinkInteractions } from "./rendered-link-interactions.js";
 import {
-  createViewedCardState,
-  moveViewedCardState,
-  renameViewedCardState,
-  resolveViewedCardReturnTarget,
-  retargetViewedCardState,
-  scrollViewedCardState,
+  ViewedCardSession,
   type ViewedCardReturnTarget,
-  type ViewedCardState,
 } from "./viewed-card.js";
 import {
   cardFocusDeleted,
@@ -244,6 +238,7 @@ export class DeckView extends ItemView {
   private lastFocusedPileId: string | null = null;
   private lastPileFocusWasViewed = false;
   private readonly filingSession: FilingSession;
+  private readonly viewedCardSession = new ViewedCardSession();
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
   private deckCardsEl: HTMLElement | null = null;
@@ -292,7 +287,6 @@ export class DeckView extends ItemView {
   private recentInlineEditRefresh: {
     readonly path: string;
   } & InlineEditRefreshGuard | null = null;
-  private viewedCard: ViewedCardState | null = null;
   private viewedCardEl: HTMLElement | null = null;
   private viewedCardBodyEl: HTMLElement | null = null;
   private viewedCardComponent: Component | null = null;
@@ -565,7 +559,6 @@ export class DeckView extends ItemView {
     this.viewedInferredNavigation.clear();
     this.deskRenderer.clear();
     this.clearCardHeaderButtonControllers();
-    this.clearViewedCardHeaderButtonController();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.positioningFrame !== null) {
@@ -575,16 +568,13 @@ export class DeckView extends ItemView {
     this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
-    this.unloadViewedCardComponent();
     this.filingSession.reset();
     this.deckViewport.reset();
+    this.viewedCardSession.reset();
+    this.clearViewedCardDom();
     this.stageEl = null;
     this.spaceEl = null;
     this.deckCardsEl = null;
-    this.viewedCard = null;
-    this.viewedCardEl = null;
-    this.viewedCardBodyEl = null;
-    this.viewedFilingEditor = null;
     this.cardFocus = null;
     this.viewedFocusFromDeckNavigation = false;
     this.lastFocusedPileId = null;
@@ -641,7 +631,7 @@ export class DeckView extends ItemView {
   }
 
   private assignCardFocus(focus: CardFocus | null): void {
-    const viewedPath = this.viewedCard?.path ?? null;
+    const viewedPath = this.viewedCardSession.snapshot?.path ?? null;
     const viewedPosition = viewedPath === null
       ? null
       : cardPosition(this.plugin.deskService.snapshot, viewedPath);
@@ -672,7 +662,7 @@ export class DeckView extends ItemView {
   }
 
   private focusDeskCard(path: string, pileId: string): void {
-    if (this.viewedCard?.path === path) {
+    if (this.viewedCardSession.isViewing(path)) {
       this.focusViewedCard();
       return;
     }
@@ -707,9 +697,9 @@ export class DeckView extends ItemView {
 
     if (focusTarget === "deck") {
       if (this.cardFocus?.surface === "viewed") {
-        this.viewedCard = null;
-        this.viewedCardEl = null;
-        this.viewedCardBodyEl = null;
+        if (this.viewedCardSession.remove(card.path) !== null) {
+          this.clearViewedCardDom();
+        }
       }
       this.deckViewport.navigate(card.path, this.plugin.index.snapshot.filed);
       this.assignCardFocus(deckCardFocus(card.path));
@@ -742,7 +732,7 @@ export class DeckView extends ItemView {
     if (path !== this.deckViewport.anchorPath) {
       this.selectCardWithoutMoving(path);
     }
-    if (this.viewedCard?.path === path) {
+    if (this.viewedCardSession.isViewing(path)) {
       this.focusViewedCard();
       return;
     }
@@ -783,7 +773,7 @@ export class DeckView extends ItemView {
     if (target.surface === "deck") {
       const anchorPath = this.deckViewport.anchorPath;
       if (anchorPath !== null) {
-        if (this.viewedCard?.path === anchorPath) {
+        if (this.viewedCardSession.isViewing(anchorPath)) {
           this.focusViewedCard();
         } else {
           this.setCardFocus(deckCardFocus(anchorPath));
@@ -819,7 +809,7 @@ export class DeckView extends ItemView {
     const current = pileFocusLocationForSwap(
       this.cardFocus,
       this.cardFocus?.surface === "viewed"
-        ? this.viewedCard?.returnTarget.surface ?? null
+        ? this.viewedCardSession.snapshot?.returnTarget.surface ?? null
         : null,
     );
     if (current === null) {
@@ -835,8 +825,8 @@ export class DeckView extends ItemView {
       const viewedPath = target.surface === "desk" &&
           this.lastPileFocusWasViewed &&
           this.lastFocusedPileId === target.pileId &&
-          this.viewedCard !== null
-        ? this.viewedCard.path
+          this.viewedCardSession.snapshot !== null
+        ? this.viewedCardSession.snapshot.path
         : undefined;
       this.focusPileNavigationTarget(target, viewedPath);
     }
@@ -927,11 +917,12 @@ export class DeckView extends ItemView {
       });
     this.deskRenderer.refreshFocusedInferredNavigation();
     if (this.viewedCardEl !== null) {
+      const viewed = this.viewedCardSession.snapshot;
       this.viewedCardEl.toggleClass(
         "is-card-focused",
-        this.viewedCard !== null &&
+        viewed !== null &&
         this.cardFocus?.surface === "viewed" &&
-        this.cardFocus.path === this.viewedCard.path,
+        this.cardFocus.path === viewed.path,
       );
     }
   }
@@ -945,7 +936,7 @@ export class DeckView extends ItemView {
     }
     if (
       focus?.surface === "viewed" &&
-      this.viewedCard?.path === focus.path &&
+      this.viewedCardSession.isViewing(focus.path) &&
       this.plugin.index.fileAtPath(focus.path) !== undefined
     ) {
       const position = cardPosition(this.plugin.deskService.snapshot, focus.path);
@@ -1097,15 +1088,12 @@ export class DeckView extends ItemView {
       ]),
     );
     this.filingSession.renamePath(oldPath, newPath);
-    const viewed = this.viewedCard;
-    if (viewed !== null) {
-      const renamedPath = renamePathReference(viewed.path, oldPath, newPath);
-      if (renamedPath !== viewed.path) {
-        this.viewedCard = renameViewedCardState(viewed, renamedPath);
-        if (this.viewedCardEl !== null) {
-          this.viewedCardEl.dataset.path = renamedPath;
-        }
-      }
+    const renamedViewedPath = this.viewedCardSession.renamePath(
+      oldPath,
+      newPath,
+    );
+    if (renamedViewedPath !== null && this.viewedCardEl !== null) {
+      this.viewedCardEl.dataset.path = renamedViewedPath;
     }
   }
 
@@ -1130,14 +1118,8 @@ export class DeckView extends ItemView {
       }
     }
     this.filingSession.deletePath(deletedPath);
-    if (
-      this.viewedCard !== null &&
-      pathIsAtOrBelow(this.viewedCard.path, deletedPath) &&
-      this.viewedCard.path !== editingPath
-    ) {
-      this.viewedCard = null;
-      this.viewedCardEl = null;
-      this.viewedCardBodyEl = null;
+    if (this.viewedCardSession.deletePath(deletedPath, editingPath) !== null) {
+      this.clearViewedCardDom();
     }
   }
 
@@ -1242,7 +1224,7 @@ export class DeckView extends ItemView {
         focusedSurface !== "deck",
       focusedSurface,
       viewedReturnSurface: focusedSurface === "viewed"
-        ? this.viewedCard?.returnTarget.surface ?? null
+        ? this.viewedCardSession.snapshot?.returnTarget.surface ?? null
         : null,
       focusedCardOnDesk: focusedPosition !== null,
       canMoveDeskCardLeft:
@@ -1436,7 +1418,7 @@ export class DeckView extends ItemView {
       case "toggle-viewed-card":
         if (
           target?.surface === "viewed" &&
-          this.viewedCard?.path === target.file.path
+          this.viewedCardSession.isViewing(target.file.path)
         ) {
           void this.closeViewedCard();
         } else if (target === null && this.cardFocus?.surface === "viewed") {
@@ -1575,7 +1557,7 @@ export class DeckView extends ItemView {
     sourceSurface: FilingSourceSurface = "desk",
   ): Promise<void> {
     const deskPosition = cardPosition(this.plugin.deskService.snapshot, file.path);
-    if (sourceSurface === "viewed" && this.viewedCard?.path === file.path) {
+    if (sourceSurface === "viewed" && this.viewedCardSession.isViewing(file.path)) {
       this.assignCardFocus(viewedCardFocus(file.path, deskPosition?.pileId));
     } else if (deskPosition !== null) {
       this.assignCardFocus(deskCardFocus(file.path, deskPosition.pileId));
@@ -1604,7 +1586,7 @@ export class DeckView extends ItemView {
     await this.renderDeck(false);
     if (
       cancellation.sourceSurface === "viewed" &&
-      this.viewedCard?.path === cancellation.sourcePath
+      this.viewedCardSession.isViewing(cancellation.sourcePath)
     ) {
       this.focusViewedCard();
     }
@@ -1772,7 +1754,7 @@ export class DeckView extends ItemView {
       }
     }
     if (reasons.has("escape")) {
-      if (this.viewedCard?.path === path && this.viewedCardEl !== null) {
+      if (this.viewedCardSession.isViewing(path) && this.viewedCardEl !== null) {
         this.viewedCardEl.focus({ preventScroll: true });
       } else {
         this.contentEl.focus({ preventScroll: true });
@@ -1804,12 +1786,12 @@ export class DeckView extends ItemView {
       new Notice("Finish filing before viewing another card.");
       return;
     }
-    if (this.viewedCard?.path !== file.path) {
+    if (!this.viewedCardSession.isViewing(file.path)) {
       const viewed = await this.runAfterInlineEditing(
         "view-card",
         async () => {
           this.rememberViewedCardScroll();
-          this.viewedCard = createViewedCardState(file.path, returnTarget);
+          this.viewedCardSession.open(file.path, returnTarget);
           await this.renderDeck(false);
         },
       );
@@ -1852,14 +1834,12 @@ export class DeckView extends ItemView {
       surface: "desk",
       pileId: position.pileId,
     };
-    if (this.viewedCard?.path !== file.path) {
+    if (!this.viewedCardSession.isViewing(file.path)) {
       await this.viewCard(file, returnTarget, true);
       return;
     }
 
-    const retargeted = retargetViewedCardState(this.viewedCard, returnTarget);
-    if (retargeted !== this.viewedCard) {
-      this.viewedCard = retargeted;
+    if (this.viewedCardSession.retarget(returnTarget)) {
       await this.renderDeck(false);
     }
     this.focusViewedCard();
@@ -1867,7 +1847,7 @@ export class DeckView extends ItemView {
   }
 
   private async closeViewedCard(): Promise<void> {
-    const viewed = this.viewedCard;
+    const viewed = this.viewedCardSession.snapshot;
     if (viewed === null) {
       return;
     }
@@ -1880,23 +1860,27 @@ export class DeckView extends ItemView {
       return;
     }
     await this.runAfterInlineEditing("close-viewed-card", async () => {
-      this.viewedCard = null;
-      this.viewedCardEl = null;
-      this.viewedCardBodyEl = null;
+      if (!this.viewedCardSession.isViewing(viewed.path)) {
+        return;
+      }
       const position = cardPosition(this.plugin.deskService.snapshot, viewed.path);
-      const returnTarget = resolveViewedCardReturnTarget(
-        viewed,
-        this.plugin.index.filedByPath(viewed.path) !== undefined,
-        position?.pileId,
-      );
+      const closure = this.viewedCardSession.close({
+        deckAvailable: this.plugin.index.filedByPath(viewed.path) !== undefined,
+        ...(position === null ? {} : { deskPileId: position.pileId }),
+      });
+      if (closure === null) {
+        return;
+      }
+      this.clearViewedCardDom();
+      const returnTarget = closure.returnTarget;
       if (returnTarget?.surface === "deck") {
         this.deckViewport.navigate(
-          viewed.path,
+          closure.path,
           this.plugin.index.snapshot.filed,
         );
-        this.assignCardFocus(deckCardFocus(viewed.path));
+        this.assignCardFocus(deckCardFocus(closure.path));
       } else if (returnTarget?.surface === "desk") {
-        this.assignCardFocus(deskCardFocus(viewed.path, returnTarget.pileId));
+        this.assignCardFocus(deskCardFocus(closure.path, returnTarget.pileId));
       } else {
         this.assignCardFocus(null);
         this.reconcileCardFocus();
@@ -1904,7 +1888,7 @@ export class DeckView extends ItemView {
       await this.renderDeck(false);
       const deskCard = returnTarget?.surface === "desk"
         ? this.stageEl?.querySelector<HTMLElement>(
-            `.slipbox-desk-card[data-card-ref="${CSS.escape(viewed.path)}"]`,
+            `.slipbox-desk-card[data-card-ref="${CSS.escape(closure.path)}"]`,
           ) ?? null
         : null;
       (deskCard ?? this.contentEl).focus({ preventScroll: true });
@@ -2007,8 +1991,9 @@ export class DeckView extends ItemView {
     requestedBodySurface: HTMLElement | null,
     restoredRenderedScrollTop?: number,
   ): MountedInlineEdit {
-    const returnTarget = this.viewedCard?.path === file.path
-      ? this.viewedCard.returnTarget
+    const viewed = this.viewedCardSession.snapshot;
+    const returnTarget = viewed?.path === file.path
+      ? viewed.returnTarget
       : null;
     const bodyEl = requestedBodySurface;
     const cardEl = bodyEl?.closest<HTMLElement>(".slipbox-card") ?? null;
@@ -2263,13 +2248,10 @@ export class DeckView extends ItemView {
       scrollTop,
     );
     if (
-      this.viewedCard?.path === file.path &&
+      this.viewedCardSession.isViewing(file.path) &&
       target.closest(".slipbox-viewed-card") !== null
     ) {
-      this.viewedCard = scrollViewedCardState(
-        this.viewedCard,
-        effectiveScrollTop,
-      );
+      this.viewedCardSession.setScrollTop(file.path, effectiveScrollTop);
       await this.renderViewedMarkdownCard(file, target);
       return;
     }
@@ -2291,7 +2273,7 @@ export class DeckView extends ItemView {
       return;
     }
     const file = this.plugin.index.fileAtPath(draft.path) ?? draft.file;
-    this.viewedCard = createViewedCardState(draft.path, draft.returnTarget);
+    this.viewedCardSession.open(draft.path, draft.returnTarget);
     const position = cardPosition(this.plugin.deskService.snapshot, draft.path);
     this.assignCardFocus(viewedCardFocus(draft.path, position?.pileId));
     await this.renderDeck(false);
@@ -2335,7 +2317,7 @@ export class DeckView extends ItemView {
   private async showFocusedCardInDeck(path: string): Promise<void> {
     this.assignCardFocus(deckCardFocus(path));
     await this.jumpToPath(path);
-    if (this.viewedCard?.path === path) {
+    if (this.viewedCardSession.isViewing(path)) {
       this.focusViewedCard();
     } else {
       this.contentEl.focus({ preventScroll: true });
@@ -2396,15 +2378,19 @@ export class DeckView extends ItemView {
       this.rememberViewedCardScroll();
     } else {
       this.cardScrollPositions.clear();
-      if (this.viewedCard !== null) {
-        this.viewedCard = scrollViewedCardState(this.viewedCard, 0);
+      const viewed = this.viewedCardSession.snapshot;
+      if (viewed !== null) {
+        this.viewedCardSession.setScrollTop(viewed.path, 0);
       }
     }
+    const viewed = this.viewedCardSession.snapshot;
     if (
-      this.viewedCard !== null &&
-      this.plugin.index.fileAtPath(this.viewedCard.path) === undefined
+      viewed !== null &&
+      this.viewedCardSession.reconcileAvailability(
+        this.plugin.index.fileAtPath(viewed.path) !== undefined,
+      ) !== null
     ) {
-      this.viewedCard = null;
+      this.clearViewedCardDom();
     }
     this.unloadRenderComponents();
     this.cardFooters.clear();
@@ -2452,7 +2438,7 @@ export class DeckView extends ItemView {
       stage,
       space,
       this.filingSession.snapshot,
-      this.viewedCard?.path ?? null,
+      this.viewedCardSession.snapshot?.path ?? null,
       () => version === this.renderVersion,
     );
     const filed = this.plugin.index.snapshot.filed;
@@ -2863,7 +2849,7 @@ export class DeckView extends ItemView {
         this.cardFocus?.surface === "deck" && this.cardFocus.path === card.path,
       );
       cardEl.addEventListener("focusin", () => this.focusDeckCard(card.path));
-      const isViewed = this.viewedCard?.path === card.path;
+      const isViewed = this.viewedCardSession.isViewing(card.path);
       cardEl.toggleClass("is-viewed-ghost", isViewed);
       const isBookmarked = this.plugin.bookmarks.at(card.path) !== undefined;
       cardEl.toggleClass("is-bookmarked", isBookmarked);
@@ -2906,7 +2892,7 @@ export class DeckView extends ItemView {
             card.file,
             card.address,
             "viewed",
-            this.viewedCard?.returnTarget.surface ?? null,
+            this.viewedCardSession.snapshot?.returnTarget.surface ?? null,
           );
         });
         continue;
@@ -3200,13 +3186,15 @@ export class DeckView extends ItemView {
     stage: HTMLElement,
     version: number,
   ): Promise<void> {
-    const state = this.viewedCard;
+    const state = this.viewedCardSession.snapshot;
     if (state === null) {
       return;
     }
     const file = this.plugin.index.fileAtPath(state.path);
     if (file === undefined) {
-      this.viewedCard = null;
+      if (this.viewedCardSession.remove(state.path) !== null) {
+        this.clearViewedCardDom();
+      }
       return;
     }
     const filed = this.plugin.index.filedByFile(file);
@@ -3340,9 +3328,7 @@ export class DeckView extends ItemView {
       state.scrollTop,
     );
     body.addEventListener("scroll", () => {
-      if (this.viewedCard?.path === file.path) {
-        this.viewedCard = scrollViewedCardState(this.viewedCard, body.scrollTop);
-      }
+      this.viewedCardSession.setScrollTop(file.path, body.scrollTop);
     }, { passive: true });
     body.addEventListener("dblclick", (event) => {
       if (!isInlineEditBodyTarget(event.target, body)) {
@@ -3411,7 +3397,7 @@ export class DeckView extends ItemView {
     try {
       const body = await this.plugin.index.readBody(file);
       if (
-        this.viewedCard?.path !== file.path ||
+        !this.viewedCardSession.isViewing(file.path) ||
         this.viewedCardComponent !== component
       ) {
         return;
@@ -3427,7 +3413,7 @@ export class DeckView extends ItemView {
       configureRenderedCardBody(
         target,
         this.plugin.settings.allowCardScrolling,
-        this.viewedCard.scrollTop,
+        this.viewedCardSession.snapshot?.scrollTop ?? 0,
       );
     } catch (error) {
       target.createEl("p", {
@@ -3451,8 +3437,8 @@ export class DeckView extends ItemView {
       ) {
         return;
       }
-      const startState = this.viewedCard;
-      if (startState === null) {
+      const origin = this.viewedCardSession.capturePosition();
+      if (origin === null) {
         return;
       }
       card.focus({ preventScroll: true });
@@ -3464,22 +3450,19 @@ export class DeckView extends ItemView {
         threshold: VIEWED_CARD_DRAG_THRESHOLD_PX,
         onDragStart: () => card.addClass("is-dragging"),
         onDragMove: (_moveEvent, dx, dy) => {
-          if (this.viewedCard?.path !== startState.path) {
-            return;
-          }
-          this.viewedCard = moveViewedCardState(
-            this.viewedCard,
-            startState.x + dx,
-            startState.y + dy,
+          if (this.viewedCardSession.moveFrom(
+            origin,
+            dx,
+            dy,
             this.viewedCardBounds(card),
-          );
-          this.applyViewedCardPosition();
+          )) {
+            this.applyViewedCardPosition();
+          }
         },
         onDrop: () => card.removeClass("is-dragging"),
         onCancel: () => {
           card.removeClass("is-dragging");
-          if (this.viewedCard?.path === startState.path) {
-            this.viewedCard = startState;
+          if (this.viewedCardSession.restorePosition(origin)) {
             this.applyViewedCardPosition();
           }
         },
@@ -3498,7 +3481,7 @@ export class DeckView extends ItemView {
   }
 
   private applyViewedCardPosition(): void {
-    const state = this.viewedCard;
+    const state = this.viewedCardSession.snapshot;
     const card = this.viewedCardEl;
     if (state === null || card === null) {
       return;
@@ -3508,22 +3491,17 @@ export class DeckView extends ItemView {
   }
 
   private constrainViewedCard(): void {
-    const state = this.viewedCard;
     const card = this.viewedCardEl;
-    if (state === null || card === null) {
+    if (card === null) {
       return;
     }
-    this.viewedCard = moveViewedCardState(
-      state,
-      state.x,
-      state.y,
-      this.viewedCardBounds(card),
-    );
-    this.applyViewedCardPosition();
+    if (this.viewedCardSession.constrain(this.viewedCardBounds(card))) {
+      this.applyViewedCardPosition();
+    }
   }
 
   private focusViewedCard(): void {
-    const viewed = this.viewedCard;
+    const viewed = this.viewedCardSession.snapshot;
     if (viewed === null) {
       return;
     }
@@ -3548,6 +3526,14 @@ export class DeckView extends ItemView {
   private clearViewedCardHeaderButtonController(): void {
     this.viewedCardHeaderButtonController?.disconnect();
     this.viewedCardHeaderButtonController = null;
+  }
+
+  private clearViewedCardDom(): void {
+    this.viewedCardEl = null;
+    this.viewedCardBodyEl = null;
+    this.viewedFilingEditor = null;
+    this.clearViewedCardHeaderButtonController();
+    this.unloadViewedCardComponent();
   }
 
   private async renderMarkdownCard(
@@ -3682,7 +3668,7 @@ export class DeckView extends ItemView {
     const position = cardPosition(this.plugin.deskService.snapshot, path);
     if (
       filing.sourceSurface === "viewed" &&
-      this.viewedCard?.path === path
+      this.viewedCardSession.isViewing(path)
     ) {
       this.setCardFocus(viewedCardFocus(path, position?.pileId));
     } else if (position !== null) {
@@ -3723,13 +3709,9 @@ export class DeckView extends ItemView {
       this.filingSession.complete();
       if (
         request.sourceSurface === "viewed" &&
-        this.viewedCard?.path === request.file.path
+        this.viewedCardSession.remove(request.file.path) !== null
       ) {
-        this.viewedCard = null;
-        this.viewedCardEl = null;
-        this.viewedCardBodyEl = null;
-        this.viewedFilingEditor = null;
-        this.unloadViewedCardComponent();
+        this.clearViewedCardDom();
       }
       await this.plugin.indexRuntime.refresh({
         reason: "index",
@@ -4355,9 +4337,10 @@ export class DeckView extends ItemView {
   }
 
   private rememberViewedCardScroll(): void {
-    if (this.viewedCard !== null && this.viewedCardBodyEl !== null) {
-      this.viewedCard = scrollViewedCardState(
-        this.viewedCard,
+    const viewed = this.viewedCardSession.snapshot;
+    if (viewed !== null && this.viewedCardBodyEl !== null) {
+      this.viewedCardSession.setScrollTop(
+        viewed.path,
         this.viewedCardBodyEl.scrollTop,
       );
     }

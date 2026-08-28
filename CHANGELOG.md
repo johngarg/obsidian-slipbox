@@ -29,11 +29,11 @@ initial public beta.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.
 - Standardised the current implementation, commands, and styling hooks on
-  “Desk” and the schema-13 data model.
+  “Desk” and the schema-14 data model.
 
 ### Removed
 
-- Removed pre-schema-13 settings migrations, the legacy persistent Desk and
+- Removed pre-schema-14 settings migrations, the legacy persistent Desk and
   Canvas export, Tray-named settings and styling aliases, and deprecated source
   exports. Upgrading now resets settings while retaining path bookmarks; Desk
   command hotkeys and Tray-based CSS customisations must be configured again.

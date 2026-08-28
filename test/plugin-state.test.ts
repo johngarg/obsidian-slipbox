@@ -40,9 +40,9 @@ describe("loadPluginData", () => {
     });
   });
 
-  test("loads and normalizes only canonical schema-13 fields", () => {
+  test("loads and normalizes only canonical schema-14 fields", () => {
     const loaded = loadPluginData({
-      schemaVersion: 13,
+      schemaVersion: 14,
       settings: {
         ...DEFAULT_SETTINGS,
         addressProperty: " signature ",
@@ -65,13 +65,17 @@ describe("loadPluginData", () => {
   });
 
   test("resets released beta schemas but salvages nested path bookmarks", () => {
-    for (const schemaVersion of [11, 12]) {
+    for (const schemaVersion of [11, 12, 13]) {
       const loaded = loadPluginData({
         schemaVersion,
         settings: {
           addressProperty: "signature",
           trayCardSize: "large",
           showCardTooltips: true,
+          deckKeybindings: {
+            "toggle-tray": [{ key: "q", modifiers: ["Alt"] }],
+            "toggle-tray-without-focus": [{ key: "w", modifiers: ["Alt"] }],
+          },
         },
         state: {
           bookmarks: [
@@ -88,7 +92,7 @@ describe("loadPluginData", () => {
       assert.deepEqual(loaded.data.state, {
         bookmarks: [{ path: "Cards/here.md" }],
       });
-      assert.equal(loaded.data.schemaVersion, 13);
+      assert.equal(loaded.data.schemaVersion, 14);
     }
   });
 
@@ -106,7 +110,7 @@ describe("loadPluginData", () => {
 
   test("normalizes malformed current values instead of invoking a migration", () => {
     const loaded = loadPluginData({
-      schemaVersion: 13,
+      schemaVersion: 14,
       settings: {
         addressProperty: "",
         deskCardSize: "huge",

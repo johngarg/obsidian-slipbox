@@ -1,7 +1,7 @@
 import type { DeckOrdering } from "./address-order.js";
 import type { DuplicateAddressPolicy } from "./card-metadata.js";
 
-export const SLIPBOX_DATA_SCHEMA_VERSION = 13;
+export const SLIPBOX_DATA_SCHEMA_VERSION = 14;
 
 export const DEFAULT_CARD_SPREAD = 0.58;
 export const MIN_CARD_SPREAD = 0.18;

@@ -56,6 +56,9 @@ initial public beta.
   entered address.
 - Made the tooltip preference apply to inferred navigation, branch annotations,
   and links rendered inside Deck and Desk cards.
+- Made **Follow links from cards** govern explicit branch-label navigation as
+  well as ordinary links and backlinks, while preserving independent previews
+  and removing underlines from inert rendered card links.
 - Kept annotated Desk-card headers stable while labels, titles, and action
   overflow are fitted, reserved only the signature’s measured content width,
   and omitted the address separator when no annotation is present.

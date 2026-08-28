@@ -78,7 +78,7 @@ Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicogra
 
 ## Branching and structural navigation
 
-The optional **Recognise explicit branch links** setting treats a link alias beginning with the canonical `+` syntax, such as `[[Child card|+a]]`, as an asserted branch. Its remaining alias, `a` in this example, appears beside the child card's address and returns the Deck anchor to the source card. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
+The optional **Recognise explicit branch links** setting treats a link alias beginning with the canonical `+` syntax, such as `[[Child card|+a]]`, as an asserted branch. Its remaining alias, `a` in this example, appears beside the child card's address. When **Follow links from cards** is enabled, activating the label returns the Deck anchor to the source card; hover previews remain independently controlled by **Preview links on hover**. Wiki links require an explicit alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
 
 Card addresses may themselves begin with `+`. An alias exactly matching the resolved target card's address remains an ordinary link, so `[[Plus card|+12]]` is ordinary when the target is addressed `+12`. Add the branch marker separately to assert a branch: `[[Plus card|++12]]` has the branch label `+12`.
 

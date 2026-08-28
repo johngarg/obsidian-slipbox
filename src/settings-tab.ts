@@ -172,7 +172,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Follow links from cards",
-            "Allow links and backlinks inside Slipbox Desk cards to navigate. Explicit Open note actions remain available.",
+            "Allow links, backlinks, and explicit branch labels inside Slipbox Desk cards to navigate. Explicit Open note actions remain available.",
             (setting) => this.renderFollowLinksFromCards(setting),
           ),
           this.definition(

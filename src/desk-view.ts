@@ -137,6 +137,7 @@ export class DeskRenderer {
       showBranchLabels: () => this.plugin.settings.showBranchLabels,
       showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      followLinksFromCards: () => this.plugin.settings.followLinksFromCards,
       branchesForPath: (path) => this.cardSignatureBranches(path),
       preview: (event, target, branch, targetPath) => {
         this.actions.previewLink(event, target, branch.linktext, targetPath);

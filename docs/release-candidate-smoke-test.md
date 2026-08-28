@@ -68,8 +68,11 @@ test. Record unexpected warnings or errors under Findings.
   ordinary Markdown views and inline editing remain unchanged.
 - [ ] Use a long label and several incoming branches; confirm the header keeps
   clear of the title and a `+N` menu exposes every hidden annotation.
-- [ ] Turn off ordinary card-link following and confirm a branch-label button
-  still recentres its source card without closing or flashing the viewed card.
+- [ ] Turn off ordinary card-link following and confirm visible branch-label
+  buttons and overflow-menu items no longer recenter their source cards or
+  receive keyboard focus. With hover previews enabled, confirm the visible
+  labels can still preview their sources. Confirm ordinary rendered card links
+  lose their underlines while enabled links retain the active theme's styling.
 - [ ] Edit a branch alias inline, leave with `Escape`, and confirm its label
   updates without flashing or remounting the card.
 - [ ] Put a labelled card on the Desk and hover/focus it repeatedly; confirm
@@ -78,7 +81,7 @@ test. Record unexpected warnings or errors under Findings.
   its content width so the title can use the remaining header space.
 - [ ] Disable labels or inspect a card without incoming branch annotations and
   confirm no separator dot follows its canonical address.
-- [ ] Change the marker and branching toggles; confirm the UI refreshes and no
+- [ ] Change the branching toggles; confirm the UI refreshes and no
   Markdown or frontmatter changes.
 - [ ] Enable address-derived inference for roots `7`, `8`, and `17`; confirm forward
   cycling produces `8 → 17 → 7 → 8` and backward cycling reverses it.

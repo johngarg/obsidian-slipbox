@@ -54,6 +54,14 @@ describe("community scanner CSS compatibility", () => {
     const baseRule = styles.match(
       /a\.slipbox-explicit-branch-link\s*\{(?<body>[^}]*)\}/u,
     )?.groups?.body ?? "";
+    assert.match(baseRule, /font-weight:\s*var\(--font-semibold\)/u);
     assert.doesNotMatch(baseRule, /(?:^|;)\s*color\s*:/u);
+  });
+
+  test("removes underlines from inert rendered card links", () => {
+    assert.match(
+      styles,
+      /\.slipbox-card-scroll\.markdown-rendered\s+a\[data-slipbox-link-disabled="true"\],[^{]+\{[^}]*text-decoration:\s*none;/su,
+    );
   });
 });

@@ -1015,7 +1015,8 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   cursor: pointer;
 }
 
-.slipbox-card-signature .slipbox-card-branch-label:disabled {
+.slipbox-card-signature .slipbox-card-branch-label:disabled,
+.slipbox-card-signature .slipbox-card-branch-label[aria-disabled="true"] {
   background: transparent;
   box-shadow: none;
   color: var(--text-accent);
@@ -1513,6 +1514,7 @@ a.slipbox-explicit-branch-link {
   background: transparent;
   box-shadow: none;
   text-decoration: none;
+  font-weight: var(--font-semibold);
 }
 
 .slipbox-explicit-branch-marker {
@@ -1613,6 +1615,11 @@ a.slipbox-card-backlink {
 a.slipbox-card-backlink[aria-disabled="true"],
 .slipbox-card a[data-slipbox-link-disabled="true"] {
   cursor: text;
+}
+
+.slipbox-card-scroll.markdown-rendered a[data-slipbox-link-disabled="true"],
+.slipbox-card-scroll.markdown-rendered a[data-slipbox-link-disabled="true"]:hover {
+  text-decoration: none;
 }
 
 button.slipbox-card-backlink-overflow,

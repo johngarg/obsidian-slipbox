@@ -15,6 +15,7 @@ export interface CardSignatureBranch {
 
 export interface CardSignatureOverflowItem {
   readonly title: DocumentFragment;
+  readonly enabled: boolean;
   readonly activate: (event: MouseEvent | KeyboardEvent) => void;
 }
 
@@ -22,6 +23,7 @@ export interface CardSignatureEnvironment {
   readonly showBranchLabels: () => boolean;
   readonly showTooltips: () => boolean;
   readonly previewLinksOnHover: () => boolean;
+  readonly followLinksFromCards: () => boolean;
   readonly branchesForPath: (path: string) => readonly CardSignatureBranch[];
   readonly preview: (
     event: MouseEvent,
@@ -470,6 +472,7 @@ export class CardSignatureManager {
       title.append(label);
       return {
         title,
+        enabled: this.canActivate(entry),
         activate: (event: MouseEvent | KeyboardEvent) => {
           this.closeOverflowMenu();
           this.activate(entry, branch, event);
@@ -487,7 +490,7 @@ export class CardSignatureManager {
   ): void {
     event.preventDefault();
     event.stopPropagation();
-    if (!entry.interactive) {
+    if (!this.canActivate(entry)) {
       return;
     }
     this.environment.runAfterEditing("branch-link", () =>
@@ -496,12 +499,19 @@ export class CardSignatureManager {
   }
 
   private applyInteractiveState(entry: RenderedCardSignature): void {
+    const canActivate = this.canActivate(entry);
     entry.signature.classList.toggle("is-interactive", entry.interactive);
+    entry.signature.classList.toggle("can-follow-links", canActivate);
     entry.content
       .querySelectorAll<HTMLButtonElement>(".slipbox-card-branch-label")
       .forEach((button) => {
         button.disabled = !entry.interactive;
-        button.tabIndex = entry.interactive ? 0 : -1;
+        button.tabIndex = canActivate ? 0 : -1;
+        if (entry.interactive && !canActivate) {
+          button.setAttribute("aria-disabled", "true");
+        } else {
+          button.removeAttribute("aria-disabled");
+        }
       });
     entry.content
       .querySelectorAll<HTMLButtonElement>(".slipbox-card-branch-overflow")
@@ -509,6 +519,10 @@ export class CardSignatureManager {
         button.disabled = !entry.interactive;
         button.tabIndex = entry.interactive ? 0 : -1;
       });
+  }
+
+  private canActivate(entry: RenderedCardSignature): boolean {
+    return entry.interactive && this.environment.followLinksFromCards();
   }
 
   private closeOverflowMenu(): void {

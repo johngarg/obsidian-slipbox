@@ -32,6 +32,7 @@ function fixture(
   let branches = initial;
   let show = true;
   let previewEnabled = false;
+  let followEnabled = true;
   const previews: string[] = [];
   const activations: string[] = [];
   let overflowItems: readonly CardSignatureOverflowItem[] = [];
@@ -40,6 +41,7 @@ function fixture(
     showBranchLabels: () => show,
     showTooltips: () => showTooltips,
     previewLinksOnHover: () => previewEnabled,
+    followLinksFromCards: () => followEnabled,
     branchesForPath: () => branches,
     preview: (_event, _target, candidate) => previews.push(candidate.label),
     activate: (candidate) => { activations.push(candidate.sourcePath); },
@@ -67,6 +69,7 @@ function fixture(
     setBranches: (value: readonly CardSignatureBranch[]) => { branches = value; },
     setShow: (value: boolean) => { show = value; },
     setPreview: (value: boolean) => { previewEnabled = value; },
+    setFollow: (value: boolean) => { followEnabled = value; },
   };
 }
 
@@ -193,7 +196,7 @@ describe("card branch signatures", () => {
     );
   });
 
-  test("gates hover by preview policy but always structurally activates", () => {
+  test("previews independently but gates activation by link-following policy", () => {
     const subject = fixture([branch("a")]);
     const button = subject.parent.querySelector<HTMLButtonElement>("button");
     assert.notEqual(button, null);
@@ -202,6 +205,11 @@ describe("card branch signatures", () => {
     }) as unknown as Event);
     assert.deepEqual(subject.previews, []);
     subject.setPreview(true);
+    subject.setFollow(false);
+    subject.manager.refreshBranches();
+    assert.equal(button?.disabled, false);
+    assert.equal(button?.getAttribute("aria-disabled"), "true");
+    assert.equal(button?.tabIndex, -1);
     button?.dispatchEvent(new subject.window.MouseEvent("mouseover", {
       bubbles: true,
     }) as unknown as Event);
@@ -214,6 +222,17 @@ describe("card branch signatures", () => {
       button: 1,
     }) as unknown as Event);
     assert.deepEqual(subject.previews, ["a"]);
+    assert.deepEqual(subject.activations, []);
+
+    subject.setFollow(true);
+    subject.manager.refreshBranches();
+    assert.equal(button?.getAttribute("aria-disabled"), null);
+    assert.equal(button?.tabIndex, 0);
+    button?.click();
+    button?.dispatchEvent(new subject.window.MouseEvent("auxclick", {
+      bubbles: true,
+      button: 1,
+    }) as unknown as Event);
     assert.deepEqual(subject.activations, ["Parent.md", "Parent.md"]);
   });
 
@@ -282,8 +301,20 @@ describe("card branch signatures", () => {
       subject.overflowItems().map((item) => item.title.textContent),
       ["A long branch annotation", "b"],
     );
+    assert.deepEqual(
+      subject.overflowItems().map((item) => item.enabled),
+      [true, true],
+    );
     subject.overflowItems()[0]?.activate(new subject.window.MouseEvent("click") as unknown as MouseEvent);
     assert.deepEqual(subject.activations, ["Long.md"]);
     assert.equal(subject.overflowCloseCount(), 1);
+
+    subject.setFollow(false);
+    subject.manager.refreshBranches();
+    overflow?.click();
+    assert.deepEqual(
+      subject.overflowItems().map((item) => item.enabled),
+      [false, false],
+    );
   });
 });

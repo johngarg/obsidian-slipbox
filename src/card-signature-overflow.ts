@@ -9,7 +9,10 @@ export function showCardSignatureOverflowMenu(
   let menu: Menu | null = new Menu().setUseNativeMenu(false);
   for (const candidate of items) {
     menu.addItem((item) => {
-      item.setTitle(candidate.title).onClick(candidate.activate);
+      item
+        .setTitle(candidate.title)
+        .setDisabled(!candidate.enabled)
+        .onClick(candidate.activate);
     });
   }
   menu.onHide(() => {

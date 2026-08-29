@@ -100,7 +100,7 @@ export function settingsRefreshImpact(
     previous.outlineBranchLinks !== next.outlineBranchLinks ||
     previous.hideBranchLinkMarkers !== next.hideBranchLinkMarkers ||
     previous.showBranchLabels !== next.showBranchLabels ||
-    previous.showInferredBranchNavigation !== next.showInferredBranchNavigation;
+    previous.showLocalBranchView !== next.showLocalBranchView;
   if (branchPresentationChanged && nonPresentationSettingsEqual(previous, next)) {
     return "branch-presentation";
   }

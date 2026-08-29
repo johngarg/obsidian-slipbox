@@ -123,7 +123,7 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.hideBranchLinkMarkers, true);
     assert.equal(DEFAULT_SETTINGS.showBranchLabels, true);
     assert.equal(DEFAULT_SETTINGS.inferAddressBranches, false);
-    assert.equal(DEFAULT_SETTINGS.showInferredBranchNavigation, true);
+    assert.equal(DEFAULT_SETTINGS.showLocalBranchView, true);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["jump-inferred-parent"], [
       { key: "-", modifiers: [] },
     ]);
@@ -262,11 +262,18 @@ describe("Slipbox settings", () => {
     assert.equal(settings.hideBranchLinkMarkers, false);
     assert.equal(settings.showBranchLabels, false);
     assert.equal(settings.inferAddressBranches, true);
-    assert.equal(settings.showInferredBranchNavigation, false);
+    assert.equal(settings.showLocalBranchView, false);
 
     assert.equal(
       normalizeSettings({ showInferredBranchNavigation: "invalid" })
-        .showInferredBranchNavigation,
+        .showLocalBranchView,
+      true,
+    );
+    assert.equal(
+      normalizeSettings({
+        showInferredBranchNavigation: false,
+        showLocalBranchView: true,
+      }).showLocalBranchView,
       true,
     );
     assert.equal(

@@ -83,6 +83,10 @@ describe("card index configuration", () => {
     }), "branch-presentation");
     assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
       ...DEFAULT_SETTINGS,
+      showLocalBranchView: !DEFAULT_SETTINGS.showLocalBranchView,
+    }), "branch-presentation");
+    assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {
+      ...DEFAULT_SETTINGS,
       explicitBranchLinks: !DEFAULT_SETTINGS.explicitBranchLinks,
     }), "index");
     assert.equal(settingsRefreshImpact(DEFAULT_SETTINGS, {

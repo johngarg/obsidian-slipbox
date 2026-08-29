@@ -7,6 +7,7 @@ export interface DeckActionContext {
   readonly hasInferredParent: boolean;
   readonly hasForwardInferredSiblingCycle: boolean;
   readonly hasBackwardInferredSiblingCycle: boolean;
+  readonly hasLocalBranchTarget: boolean;
   readonly hasPreviousBookmark: boolean;
   readonly hasNextBookmark: boolean;
   readonly hasProblems: boolean;
@@ -70,6 +71,13 @@ export function canRunDeckAction(
       return context.hasForwardInferredSiblingCycle;
     case "cycle-backward-inferred-siblings":
       return context.hasBackwardInferredSiblingCycle;
+    case "move-backward-local-strand":
+    case "move-forward-local-strand":
+    case "move-to-local-strand-beginning":
+    case "enter-address-inferred-strand":
+    case "enter-explicit-supplementary-strand":
+    case "move-to-higher-strand":
+      return context.hasLocalBranchTarget;
     case "previous-bookmark":
       return context.hasPreviousBookmark;
     case "next-bookmark":

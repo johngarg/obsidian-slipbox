@@ -41,7 +41,14 @@ import {
   type CardSignatureEnvironment,
 } from "./card-signature.js";
 import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
-import { InferredNavigationManager } from "./inferred-navigation.js";
+import {
+  buildLocalBranchModel,
+  localBranchTargets,
+  type LocalBranchModel,
+  type LocalBranchMovement,
+  type LocalBranchTarget,
+} from "./local-branch-model.js";
+import { LocalBranchViewController } from "./local-branch-view.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import {
@@ -178,7 +185,11 @@ import {
   deckTopForPileAnchor,
   type DeckPositionMode,
 } from "./workspace-layout.js";
-import { BookmarksModal } from "./modals.js";
+import {
+  BookmarksModal,
+  promptForLocalBranchDeparture,
+  promptForLocalBranchTarget,
+} from "./modals.js";
 import {
   showCardContextMenu,
   type CardContextMenuOptions,
@@ -280,8 +291,7 @@ export class DeckView extends ItemView {
   private readonly viewedCardFooter: CardFooterManager;
   private readonly cardSignatures: CardSignatureManager;
   private readonly viewedCardSignature: CardSignatureManager;
-  private readonly inferredNavigation: InferredNavigationManager;
-  private readonly viewedInferredNavigation: InferredNavigationManager;
+  private readonly localBranchView: LocalBranchViewController;
   private readonly deskRenderer: DeskRenderer;
   private readonly shortcutController: DeckShortcutController;
   private deckMapVisibility: DeckMapVisibility = DEFAULT_DECK_MAP_VISIBILITY;
@@ -362,18 +372,24 @@ export class DeckView extends ItemView {
     };
     this.cardSignatures = new CardSignatureManager(signatureEnvironment);
     this.viewedCardSignature = new CardSignatureManager(signatureEnvironment);
-    const inferredNavigationEnvironment = {
-      showNavigation: () =>
-        this.plugin.settings.inferAddressBranches &&
-        this.plugin.settings.showInferredBranchNavigation,
+    this.localBranchView = new LocalBranchViewController({
+      activeDocument: this.contentEl.ownerDocument,
+      showView: () =>
+        this.plugin.settings.showLocalBranchView &&
+        (
+          this.plugin.settings.inferAddressBranches ||
+          this.plugin.settings.explicitBranchLinks
+        ),
       showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
-      relationsForPath: (path: string) =>
-        this.plugin.index.inferredNavigationForPath(path),
+      modelForPath: (path, expandedDepartureIds) =>
+        this.localBranchModel(path, expandedDepartureIds),
+      chooseDeparture: (departures) =>
+        promptForLocalBranchDeparture(this.app, departures),
       preview: (
         event: MouseEvent,
-        target: HTMLElement,
-        destination: { readonly path: string },
+        target: HTMLElement | SVGElement,
+        destination: LocalBranchTarget,
         sourcePath: string,
       ) => {
         const file = this.plugin.index.fileAtPath(destination.path);
@@ -381,25 +397,18 @@ export class DeckView extends ItemView {
           event,
           source: DECK_VIEW_TYPE,
           hoverParent: this.leaf,
-          targetEl: target,
+          targetEl: target as HTMLElement,
           linktext: file === undefined
             ? destination.path
             : this.app.metadataCache.fileToLinktext(file, sourcePath),
           sourcePath,
         });
       },
-      activate: (destination: { readonly path: string }) =>
-        this.jumpToPath(destination.path),
+      activate: (targets) => this.activateLocalBranchTargets(targets),
       runAfterEditing: (reason: string, action: () => void | Promise<void>) => {
         void this.runAfterInlineEditing(reason, action);
       },
-    };
-    this.inferredNavigation = new InferredNavigationManager(
-      inferredNavigationEnvironment,
-    );
-    this.viewedInferredNavigation = new InferredNavigationManager(
-      inferredNavigationEnvironment,
-    );
+    });
     this.deskRenderer = new DeskRenderer(this.app, this.plugin, {
       jumpToFiledCard: (path) => this.jumpToPath(path),
       updateFilingInput: (value) => this.updateFilingInput(value),
@@ -561,9 +570,8 @@ export class DeckView extends ItemView {
     this.cardFooters.clear();
     this.viewedCardFooter.clear();
     this.cardSignatures.clear();
-    this.inferredNavigation.clear();
+    this.localBranchView.disconnect();
     this.viewedCardSignature.clear();
-    this.viewedInferredNavigation.clear();
     this.deskRenderer.clear();
     this.clearCardHeaderButtonControllers();
     this.resizeObserver?.disconnect();
@@ -921,7 +929,6 @@ export class DeckView extends ItemView {
           this.cardFocus.pileId === pileId,
         );
       });
-    this.deskRenderer.refreshFocusedInferredNavigation();
     if (this.viewedCardEl !== null) {
       const viewed = this.viewedCardSession.snapshot;
       this.viewedCardEl.toggleClass(
@@ -1201,6 +1208,7 @@ export class DeckView extends ItemView {
     const focusedDeskPosition = focusedSurface === "desk"
       ? focusedPosition
       : null;
+    const localBranchMovement = localBranchMovementForAction(action);
     return canRunDeckAction(action, {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
@@ -1214,6 +1222,9 @@ export class DeckView extends ItemView {
       hasBackwardInferredSiblingCycle:
         active !== null &&
         this.plugin.index.cycleBackwardInferredSiblingForPath(active.path) !== undefined,
+      hasLocalBranchTarget:
+        localBranchMovement !== null &&
+        this.localBranchTargetsForMovement(localBranchMovement).length > 0,
       hasPreviousBookmark:
         action === "previous-bookmark" &&
         adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
@@ -1321,6 +1332,24 @@ export class DeckView extends ItemView {
         this.jumpToInferredCard((path) =>
           this.plugin.index.cycleBackwardInferredSiblingForPath(path)
         );
+        break;
+      case "move-backward-local-strand":
+        this.navigateLocalBranch("backward");
+        break;
+      case "move-forward-local-strand":
+        this.navigateLocalBranch("forward");
+        break;
+      case "move-to-local-strand-beginning":
+        this.navigateLocalBranch("beginning");
+        break;
+      case "enter-address-inferred-strand":
+        this.navigateLocalBranch("inferred");
+        break;
+      case "enter-explicit-supplementary-strand":
+        this.navigateLocalBranch("explicit");
+        break;
+      case "move-to-higher-strand":
+        this.navigateLocalBranch("higher");
         break;
       case "previous-bookmark":
         this.jumpToAdjacentBookmark(-1);
@@ -2149,9 +2178,7 @@ export class DeckView extends ItemView {
     this.deskRenderer.refreshBranchMetadata();
     this.refreshBranchLinkOutlines();
     this.deskRenderer.refreshBranchLinkOutlines();
-    this.inferredNavigation.refresh();
-    this.viewedInferredNavigation.refresh();
-    this.deskRenderer.refreshInferredNavigation();
+    this.localBranchView.refresh();
   }
 
   private cardSignatureBranches(path: string): readonly CardSignatureBranch[] {
@@ -2168,6 +2195,54 @@ export class DeckView extends ItemView {
         linktext: this.app.metadataCache.fileToLinktext(source.file, path),
       }];
     });
+  }
+
+  private localBranchModel(
+    path: string,
+    expandedDepartureIds: ReadonlySet<string> = new Set(),
+  ): LocalBranchModel | null {
+    const snapshot = this.plugin.index.snapshot;
+    return buildLocalBranchModel({
+      activePath: path,
+      cards: snapshot.filed.map((card) => ({
+        path: card.path,
+        address: card.address,
+        title: this.plugin.cards.title(card.file),
+      })),
+      inferred: snapshot.inferredStructure,
+      explicit: snapshot.explicitBranches,
+      expandedDepartureIds,
+    });
+  }
+
+  private localBranchTargetsForMovement(
+    movement: LocalBranchMovement,
+  ): readonly LocalBranchTarget[] {
+    const active = this.activeCard;
+    return active === null
+      ? []
+      : localBranchTargets(this.localBranchModel(active.path), movement);
+  }
+
+  private navigateLocalBranch(movement: LocalBranchMovement): void {
+    void this.activateLocalBranchTargets(
+      this.localBranchTargetsForMovement(movement),
+    );
+  }
+
+  private async activateLocalBranchTargets(
+    targets: readonly LocalBranchTarget[],
+  ): Promise<void> {
+    const unique = [...new Map(targets.map((target) => [target.path, target])).values()];
+    if (unique.length === 0) {
+      return;
+    }
+    const target = unique.length === 1
+      ? unique[0] ?? null
+      : await promptForLocalBranchTarget(this.app, unique);
+    if (target !== null) {
+      await this.jumpToPath(target.path);
+    }
   }
 
   private reportInlineEditFailure(failure: InlineEditFailure): void {
@@ -2403,12 +2478,10 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.cardFooters.clear();
     this.cardSignatures.clear();
-    this.inferredNavigation.clear();
     this.deskRenderer.clear();
     this.clearCardHeaderButtonControllers();
     this.viewedCardFooter.clear();
     this.viewedCardSignature.clear();
-    this.viewedInferredNavigation.clear();
     this.clearViewedCardHeaderButtonController();
     this.unloadViewedCardComponent();
     this.contentEl.empty();
@@ -2498,7 +2571,6 @@ export class DeckView extends ItemView {
     this.unloadRenderComponents();
     this.cardFooters.clear();
     this.cardSignatures.clear();
-    this.inferredNavigation.clear();
     this.clearCardHeaderButtonControllers();
     this.deckCardsEl?.remove();
     this.renderedCards = [];
@@ -2795,6 +2867,7 @@ export class DeckView extends ItemView {
   }
 
   private renderEmptyDeck(stage: HTMLElement): void {
+    this.localBranchView.detach();
     const empty = stage.createDiv({ cls: "slipbox-deck-empty" });
     empty.createEl("h2", { text: "The filing box is empty" });
     empty.createEl("p", {
@@ -2944,10 +3017,6 @@ export class DeckView extends ItemView {
           activate: (backlink) => this.jumpToPath(backlink.path),
         });
       }
-      this.inferredNavigation.render(cardEl, {
-        path: card.path,
-        interactive: filedIndex === activeIndex,
-      });
       jobs.push(this.renderMarkdownCard(card, scroll, deckVersion));
       cardEl.addEventListener("contextmenu", (event) => {
         const target = event.targetNode;
@@ -2989,6 +3058,7 @@ export class DeckView extends ItemView {
       });
     }
 
+    this.syncLocalBranchViewOwner();
     this.positionCards();
 
     await Promise.all(jobs);
@@ -3338,12 +3408,6 @@ export class DeckView extends ItemView {
         backlinks: this.plugin.index.backlinksForPath(filed.path),
         interactive: true,
         activate: (backlink) => this.jumpToPath(backlink.path),
-      });
-    }
-    if (filed !== undefined) {
-      this.viewedInferredNavigation.render(card, {
-        path: filed.path,
-        interactive: true,
       });
     }
     card.addEventListener("contextmenu", (event) => {
@@ -4250,8 +4314,10 @@ export class DeckView extends ItemView {
       this.deckViewport.anchorPath,
     );
     if (activeIndex < 0) {
+      this.localBranchView.detach();
       return;
     }
+    this.syncLocalBranchViewOwner();
 
     for (const card of this.renderedCards) {
       const filedIndex = Number(card.dataset.filedIndex ?? "-1");
@@ -4264,13 +4330,26 @@ export class DeckView extends ItemView {
       setCardStackOrder(card, cardStackOrder(filedIndex, activeIndex));
       this.cardFooters.setInteractive(card, filedIndex === activeIndex);
       this.cardSignatures.setInteractive(card, filedIndex === activeIndex);
-      this.inferredNavigation.setInteractive(card, filedIndex === activeIndex);
     }
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
     this.updateDeckMapActiveUi();
     this.applyCardFocusClasses();
+  }
+
+  private syncLocalBranchViewOwner(): void {
+    const activePath = this.deckViewport.anchorPath;
+    const owner = activePath === null
+      ? undefined
+      : this.renderedCards.find((card) =>
+        card.dataset.path === activePath && !card.hasClass("is-viewed-ghost")
+      );
+    if (activePath === null || owner === undefined) {
+      this.localBranchView.detach();
+      return;
+    }
+    this.localBranchView.attach(owner, activePath);
   }
 
   private bookmarkedPaths(): Set<string> {
@@ -4408,6 +4487,27 @@ export class DeckView extends ItemView {
     }
   }
 
+}
+
+function localBranchMovementForAction(
+  action: SlipboxAction,
+): LocalBranchMovement | null {
+  switch (action) {
+    case "move-backward-local-strand":
+      return "backward";
+    case "move-forward-local-strand":
+      return "forward";
+    case "move-to-local-strand-beginning":
+      return "beginning";
+    case "enter-address-inferred-strand":
+      return "inferred";
+    case "enter-explicit-supplementary-strand":
+      return "explicit";
+    case "move-to-higher-strand":
+      return "higher";
+    default:
+      return null;
+  }
 }
 
 function errorMessage(error: unknown): string {

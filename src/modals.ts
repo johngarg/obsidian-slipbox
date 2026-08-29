@@ -19,6 +19,10 @@ import {
   type CardLinkSuggestion,
 } from "./card-link-suggestions.js";
 import { modalChoice, type ModalChoice } from "./modal-choice.js";
+import type {
+  LocalBranchDeparture,
+  LocalBranchTarget,
+} from "./local-branch-model.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -182,6 +186,118 @@ export function promptForCardLink(
 ): Promise<CardLinkSuggestion | null> {
   return new Promise((resolve) => {
     new CardLinkSuggestModal(app, suggestions, resolve).open();
+  });
+}
+
+class LocalBranchTargetModal extends SuggestModal<LocalBranchTarget> {
+  private readonly choice: ModalChoice<LocalBranchTarget>;
+
+  constructor(
+    app: App,
+    private readonly targets: readonly LocalBranchTarget[],
+    resolveTarget: (target: LocalBranchTarget | null) => void,
+  ) {
+    super(app);
+    this.choice = modalChoice(resolveTarget, (task) => {
+      this.contentEl.win.setTimeout(task);
+    });
+    this.setPlaceholder("Choose a branch destination (Esc to cancel)");
+    this.emptyStateText = "No branch destination matches.";
+  }
+
+  getSuggestions(query: string): LocalBranchTarget[] {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized === ""
+      ? [...this.targets]
+      : this.targets.filter((target) =>
+        `${target.address}\n${target.title}\n${target.path}`
+          .toLocaleLowerCase()
+          .includes(normalized)
+      );
+  }
+
+  renderSuggestion(target: LocalBranchTarget, el: HTMLElement): void {
+    el.addClass("slipbox-card-link-suggestion");
+    el.createDiv({ cls: "slipbox-card-link-address", text: target.address });
+    el.createDiv({ cls: "slipbox-card-link-title", text: target.title });
+    el.createDiv({ cls: "slipbox-card-link-path", text: target.path });
+  }
+
+  onChooseSuggestion(target: LocalBranchTarget): void {
+    this.choice.choose(target);
+  }
+
+  override onClose(): void {
+    super.onClose();
+    this.choice.cancel();
+  }
+}
+
+export function promptForLocalBranchTarget(
+  app: App,
+  targets: readonly LocalBranchTarget[],
+): Promise<LocalBranchTarget | null> {
+  return new Promise((resolve) => {
+    new LocalBranchTargetModal(app, targets, resolve).open();
+  });
+}
+
+class LocalBranchDepartureModal extends SuggestModal<LocalBranchDeparture> {
+  private readonly choice: ModalChoice<LocalBranchDeparture>;
+
+  constructor(
+    app: App,
+    private readonly departures: readonly LocalBranchDeparture[],
+    resolveDeparture: (departure: LocalBranchDeparture | null) => void,
+  ) {
+    super(app);
+    this.choice = modalChoice(resolveDeparture, (task) => {
+      this.contentEl.win.setTimeout(task);
+    });
+    this.setPlaceholder("Choose a branch to expand (Esc to cancel)");
+    this.emptyStateText = "No hidden branch matches.";
+  }
+
+  getSuggestions(query: string): LocalBranchDeparture[] {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized === ""
+      ? [...this.departures]
+      : this.departures.filter((departure) =>
+        `${departure.label}\n${departure.target.address}\n${departure.target.title}\n${departure.target.path}`
+          .toLocaleLowerCase()
+          .includes(normalized)
+      );
+  }
+
+  renderSuggestion(departure: LocalBranchDeparture, el: HTMLElement): void {
+    el.addClass("slipbox-card-link-suggestion");
+    el.createDiv({ cls: "slipbox-card-link-address", text: departure.label });
+    el.createDiv({
+      cls: "slipbox-card-link-title",
+      text: `${departure.target.address} · ${departure.target.title}`,
+    });
+    el.createDiv({
+      cls: "slipbox-card-link-path",
+      text: departure.target.path,
+    });
+  }
+
+  onChooseSuggestion(departure: LocalBranchDeparture): void {
+    this.choice.choose(departure);
+  }
+
+  override onClose(): void {
+    super.onClose();
+    this.choice.cancel();
+  }
+}
+
+export function promptForLocalBranchDeparture(
+  app: App,
+  departures: readonly LocalBranchDeparture[],
+): Promise<LocalBranchDeparture | null> {
+  return new Promise((resolve) => {
+    new LocalBranchDepartureModal(app, departures, resolve).open();
   });
 }
 

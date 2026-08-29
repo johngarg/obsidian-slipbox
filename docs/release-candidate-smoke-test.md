@@ -87,18 +87,31 @@ test. Record unexpected warnings or errors under Findings.
   cycling produces `8 → 17 → 7 → 8` and backward cycling reverses it.
 - [ ] With `8a`, `8b`, `8a1`, `8a2`, and an unrelated equal-depth branch,
   confirm sibling cycling wraps locally and never crosses between parents.
-- [ ] On `8`, confirm the left menu shows `7`; the right menu shows `17`, a
-  gap, then immediate children `8a` and `8b`, with no visible headings or
-  current-card row. Add more roots on either side and confirm each menu still
-  shows only the nearest sibling in its direction.
-- [ ] Confirm inferred-navigation arrows appear only on the active Deck card,
-  the focused card in an expanded Desk pile, and the viewed card; moving Desk
-  focus transfers the arrows without remounting either card. Disabled sides
-  remain subtly visible, and the presentation toggle hides both arrows without
-  rebuilding the index.
-- [ ] Verify click, hover, keyboard opening, `Escape`, child counts, preview
-  policy, structural activation with body-link following off, and long-list
-  scrolling in both light and dark themes.
+- [ ] Confirm the local Branch View appears expanded only beneath the active
+  ordinary Deck card. Move the Deck anchor, open a viewed card, focus expanded
+  Desk piles, and move cards without seeing a second view or remounting card
+  bodies. Collapse it, move the anchor, and confirm the per-view collapsed
+  state is retained.
+- [ ] On `8b` in a strand `8a`, `8b`, `8c`, confirm the toolbar moves backward
+  to `8a`, forward to `8c`, and to the known beginning `8a` without wrapping.
+  At root level, confirm the beginning control remains disabled. Verify the
+  existing `n`, `N`, and `-` commands retain their previous wrapping/parent
+  behavior.
+- [ ] Add inferred children and several outgoing `+` branches to the active
+  card. Confirm all departures appear below it, explicit labels omit the `+`,
+  repeated supplementary controls navigate directly, and a duplicate-address
+  destination opens an exact-path chooser. Add several incoming explicit
+  parents and confirm the view quietly uses one stable higher context.
+- [ ] Create long higher, current, and departure strands. Narrow the pane and
+  confirm the active node, branch attachment points, and known ends survive;
+  omitted runs become counted gaps while hidden departures remain short stubs.
+  Activate a gap to reveal only that run with horizontal scrolling, then
+  activate a stub and confirm its sole departure expands or its several
+  departures open a chooser from which only one is expanded.
+- [ ] Verify mouse and keyboard node activation, visible focus, disabled
+  controls, full address/path tooltips, hover-preview policy, structural
+  activation with body-link following off, long labels, light/dark/community
+  themes, forced colours, and narrow/tall-card clipping.
 - [ ] Switch between natural and lexicographic Deck ordering and confirm numeric
   prefix ancestry changes immediately.
 

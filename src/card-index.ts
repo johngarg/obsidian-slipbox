@@ -17,10 +17,7 @@ import {
 } from "./branch-links.js";
 import {
   EMPTY_INFERRED_STRUCTURE,
-  inferredChildAddresses,
-  inferredNextSiblingAddresses,
   inferredParentAddress,
-  inferredPreviousSiblingAddresses,
   buildInferredStructure,
   cycleBackwardInferredSiblingAddress,
   cycleForwardInferredSiblingAddress,
@@ -54,25 +51,6 @@ const EMPTY_INDEX: VaultCardIndex = {
 const NO_BACKLINKS: readonly FiledCard[] = [];
 const NO_FILED_CARDS: readonly FiledCard[] = [];
 const NO_BRANCHES: readonly ExplicitBranch[] = [];
-
-export interface InferredNavigationTarget {
-  readonly path: string;
-  readonly address: string;
-  readonly childCount: number;
-}
-
-export interface InferredNavigationRelations {
-  readonly parent?: InferredNavigationTarget;
-  readonly previousSiblings: readonly InferredNavigationTarget[];
-  readonly nextSiblings: readonly InferredNavigationTarget[];
-  readonly children: readonly InferredNavigationTarget[];
-}
-
-export const EMPTY_INFERRED_NAVIGATION_RELATIONS: InferredNavigationRelations = {
-  previousSiblings: [],
-  nextSiblings: [],
-  children: [],
-};
 
 /** A lightweight, cache-backed index over all Markdown files in the vault. */
 export class CardIndex {
@@ -218,29 +196,6 @@ export class CardIndex {
     return this.inferredCardForAddressResult(path, inferredParentAddress);
   }
 
-  inferredChildrenForPath(path: string): readonly FiledCard[] {
-    const card = this.filedByPath(path);
-    if (card === undefined) {
-      return NO_FILED_CARDS;
-    }
-    return inferredChildAddresses(this.current.inferredStructure, card.address)
-      .flatMap((address) => {
-        const child = this.firstFiledAtAddress(address);
-        return child === undefined ? [] : [child];
-      });
-  }
-
-  inferredPreviousSiblingsForPath(path: string): readonly FiledCard[] {
-    return this.inferredCardsForAddressResults(
-      path,
-      inferredPreviousSiblingAddresses,
-    );
-  }
-
-  inferredNextSiblingsForPath(path: string): readonly FiledCard[] {
-    return this.inferredCardsForAddressResults(path, inferredNextSiblingAddresses);
-  }
-
   cycleForwardInferredSiblingForPath(path: string): FiledCard | undefined {
     return this.inferredCardForAddressResult(
       path,
@@ -255,45 +210,6 @@ export class CardIndex {
     );
   }
 
-  inferredNavigationForPath(path: string): InferredNavigationRelations {
-    const card = this.filedByPath(path);
-    const node = card === undefined
-      ? undefined
-      : this.current.inferredStructure.nodesByAddress.get(card.address);
-    if (card === undefined || node === undefined) {
-      return EMPTY_INFERRED_NAVIGATION_RELATIONS;
-    }
-    const target = (address: string): InferredNavigationTarget | undefined => {
-      const destination = this.firstFiledAtAddress(address);
-      const destinationNode = this.current.inferredStructure.nodesByAddress.get(address);
-      return destination === undefined || destinationNode === undefined
-        ? undefined
-        : {
-          path: destination.path,
-          address,
-          childCount: destinationNode.childAddresses.length,
-        };
-    };
-    const targets = (addresses: readonly string[]) =>
-      addresses.flatMap((address) => {
-        const destination = target(address);
-        return destination === undefined ? [] : [destination];
-      });
-    const parent = node.parentAddress === null
-      ? undefined
-      : target(node.parentAddress);
-    return {
-      ...(parent === undefined ? {} : { parent }),
-      previousSiblings: targets(
-        inferredPreviousSiblingAddresses(this.current.inferredStructure, card.address),
-      ),
-      nextSiblings: targets(
-        inferredNextSiblingAddresses(this.current.inferredStructure, card.address),
-      ),
-      children: targets(node.childAddresses),
-    };
-  }
-
   private inferredCardForAddressResult(
     path: string,
     query: (index: InferredStructureIndex, address: string) => string | null,
@@ -304,23 +220,6 @@ export class CardIndex {
     }
     const address = query(this.current.inferredStructure, card.address);
     return address === null ? undefined : this.firstFiledAtAddress(address);
-  }
-
-  private inferredCardsForAddressResults(
-    path: string,
-    query: (
-      index: InferredStructureIndex,
-      address: string,
-    ) => readonly string[],
-  ): readonly FiledCard[] {
-    const card = this.filedByPath(path);
-    if (card === undefined) {
-      return NO_FILED_CARDS;
-    }
-    return query(this.current.inferredStructure, card.address).flatMap((address) => {
-      const destination = this.firstFiledAtAddress(address);
-      return destination === undefined ? [] : [destination];
-    });
   }
 
   /** Read only the note body, excluding the YAML frontmatter block. */

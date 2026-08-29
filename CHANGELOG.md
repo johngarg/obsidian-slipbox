@@ -22,9 +22,11 @@ initial public beta.
   whose label is `+address`.
 - Added optional hierarchy inference from address extension, with
   commands for parent movement and wrapped forward/backward sibling cycling.
-- Added low-clutter parent, sibling, and child menus beneath interactive cards
-  when branches are inferred. Each direction shows only the nearest
-  sibling; the commands continue to cycle through the full sibling axis.
+- Added an expanded-by-default local Branch View beneath the active Deck card.
+  Its six-control toolbar and deterministic SVG show the current strand, one
+  higher context, active departures, hidden-branch stubs, responsive omission
+  counts, exact duplicate cards, and labelled explicit edges. Matching command
+  palette actions are available without default shortcuts.
 - Added a Branching settings group. Both branch models are derived in memory
   and never rewrite notes or addresses.
 
@@ -35,6 +37,8 @@ initial public beta.
 - Standardised address-derived hierarchy terminology on “inferred” throughout
   the interface, commands, settings, and documentation.
 - Divided the Branching settings into explicit and inferred subsections.
+- Replaced inferred-navigation arrows on Deck, Desk, and viewed cards with one
+  transferable Branch View belonging only to the active ordinary Deck card.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.
 - Standardised the current implementation, commands, and styling hooks on
@@ -69,8 +73,6 @@ initial public beta.
 - Kept annotated Desk-card headers stable while labels, titles, and action
   overflow are fitted, reserved only the signature’s measured content width,
   and omitted the address separator when no annotation is present.
-- Restricted inferred-navigation arrows in expanded Desk piles to the focused
-  card and transferred them in place when Desk focus changes.
 - Kept available Deck commands runnable from the command palette while its
   search field is focused.
 - Kept text-setting validation messages on their own row beneath the input.

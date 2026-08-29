@@ -133,10 +133,16 @@ export class SlipboxSettingTab extends PluginSettingTab {
             "Derive an inferred hierarchy from address extension and make structural navigation commands available.",
             (setting) => this.renderInferAddressBranches(setting),
           ),
+        ],
+      },
+      {
+        type: "group",
+        heading: "Branch View",
+        items: [
           this.definition(
-            "Show inferred branch navigation",
-            "Show parent, sibling and child navigation menus beneath interactive cards when branches are inferred from addresses.",
-            (setting) => this.renderShowInferredBranchNavigation(setting),
+            "Show local Branch View",
+            "Show archive-style local branch navigation beneath the active Deck card using whichever inferred and explicit relationships are enabled.",
+            (setting) => this.renderShowLocalBranchView(setting),
           ),
         ],
       },
@@ -342,16 +348,18 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
   }
 
-  private renderShowInferredBranchNavigation(setting: Setting): void {
-    const disabled = !this.slipbox.settings.inferAddressBranches;
+  private renderShowLocalBranchView(setting: Setting): void {
+    const disabled =
+      !this.slipbox.settings.inferAddressBranches &&
+      !this.slipbox.settings.explicitBranchLinks;
     setting.setDisabled(disabled);
     setting.addToggle((toggle) => {
       toggle
-        .setValue(this.slipbox.settings.showInferredBranchNavigation)
+        .setValue(this.slipbox.settings.showLocalBranchView)
         .setDisabled(disabled)
-        .onChange((showInferredBranchNavigation) => void this.save({
+        .onChange((showLocalBranchView) => void this.save({
           ...this.slipbox.settings,
-          showInferredBranchNavigation,
+          showLocalBranchView,
         }));
     });
   }

@@ -63,6 +63,12 @@ export type SlipboxAction =
   | "jump-inferred-parent"
   | "cycle-forward-inferred-siblings"
   | "cycle-backward-inferred-siblings"
+  | "move-backward-local-strand"
+  | "move-forward-local-strand"
+  | "move-to-local-strand-beginning"
+  | "enter-address-inferred-strand"
+  | "enter-explicit-supplementary-strand"
+  | "move-to-higher-strand"
   | "previous-bookmark"
   | "next-bookmark"
   | "forward-ten-cards"
@@ -158,6 +164,42 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     label: "Cycle Deck anchor backward through inferred siblings",
     repeatable: true,
     defaultBindings: [binding("n", ["Shift"])],
+  },
+  {
+    id: "move-backward-local-strand",
+    label: "Move backward on local branch strand",
+    repeatable: true,
+    defaultBindings: [],
+  },
+  {
+    id: "move-forward-local-strand",
+    label: "Move forward on local branch strand",
+    repeatable: true,
+    defaultBindings: [],
+  },
+  {
+    id: "move-to-local-strand-beginning",
+    label: "Move to beginning of local branch strand",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "enter-address-inferred-strand",
+    label: "Enter address-inferred strand",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "enter-explicit-supplementary-strand",
+    label: "Enter explicit supplementary strand",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "move-to-higher-strand",
+    label: "Move to higher local branch strand",
+    repeatable: false,
+    defaultBindings: [],
   },
   {
     id: "previous-bookmark",
@@ -435,7 +477,7 @@ export interface SlipboxSettings {
   readonly hideBranchLinkMarkers: boolean;
   readonly showBranchLabels: boolean;
   readonly inferAddressBranches: boolean;
-  readonly showInferredBranchNavigation: boolean;
+  readonly showLocalBranchView: boolean;
   readonly titleSource: TitleSource;
   readonly titleProperty: string;
   readonly mainCardSize: CardSize;
@@ -502,7 +544,7 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   hideBranchLinkMarkers: true,
   showBranchLabels: true,
   inferAddressBranches: false,
-  showInferredBranchNavigation: true,
+  showLocalBranchView: true,
   titleSource: "filename",
   titleProperty: "slipbox-title",
   mainCardSize: "medium",
@@ -754,10 +796,12 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.inferAddressBranches === "boolean"
         ? source.inferAddressBranches
         : DEFAULT_SETTINGS.inferAddressBranches,
-    showInferredBranchNavigation:
-      typeof source.showInferredBranchNavigation === "boolean"
-        ? source.showInferredBranchNavigation
-        : DEFAULT_SETTINGS.showInferredBranchNavigation,
+    showLocalBranchView:
+      typeof source.showLocalBranchView === "boolean"
+        ? source.showLocalBranchView
+        : typeof source.showInferredBranchNavigation === "boolean"
+          ? source.showInferredBranchNavigation
+          : DEFAULT_SETTINGS.showLocalBranchView,
     titleSource:
       requestedTitleSource === "frontmatter" && titleProperty === addressProperty
         ? "filename"

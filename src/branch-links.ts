@@ -23,6 +23,7 @@ export interface ExplicitBranch {
 export interface ExplicitBranchIndex {
   readonly outgoingBySourcePath: ReadonlyMap<string, readonly ExplicitBranch[]>;
   readonly incomingByTargetPath: ReadonlyMap<string, readonly ExplicitBranch[]>;
+  readonly parentByTargetPath: ReadonlyMap<string, ExplicitBranch>;
 }
 
 export interface ExplicitBranchIndexOptions {
@@ -36,6 +37,7 @@ export interface ExplicitBranchIndexOptions {
 export const EMPTY_EXPLICIT_BRANCH_INDEX: ExplicitBranchIndex = {
   outgoingBySourcePath: new Map(),
   incomingByTargetPath: new Map(),
+  parentByTargetPath: new Map(),
 };
 
 /**
@@ -104,7 +106,9 @@ export function indexExplicitBranches(
       if (label === null) {
         return;
       }
-      const key = JSON.stringify([source.path, targetPath, label]);
+      // A source-to-target assertion is one relationship. Repeating it with a
+      // second alias must not manufacture a second branch or parent.
+      const key = JSON.stringify([source.path, targetPath]);
       if (seen.has(key)) {
         return;
       }
@@ -127,9 +131,22 @@ export function indexExplicitBranches(
     compareText(left.targetPath, right.targetPath)
   );
 
+  const incomingByTargetPath = groupBranches(
+    branches,
+    (branch) => branch.targetPath,
+  );
   return {
-    outgoingBySourcePath: groupBranches(branches, (branch) => branch.sourcePath),
-    incomingByTargetPath: groupBranches(branches, (branch) => branch.targetPath),
+    outgoingBySourcePath: groupBranches(
+      branches,
+      (branch) => branch.sourcePath,
+    ),
+    incomingByTargetPath,
+    parentByTargetPath: new Map(
+      [...incomingByTargetPath].flatMap(([targetPath, incoming]) => {
+        const parent = incoming[0];
+        return parent === undefined ? [] : [[targetPath, parent] as const];
+      }),
+    ),
   };
 }
 

@@ -16,6 +16,7 @@ const READY: DeckActionContext = {
   hasInferredParent: true,
   hasForwardInferredSiblingCycle: true,
   hasBackwardInferredSiblingCycle: true,
+  hasLocalBranchTarget: true,
   hasPreviousBookmark: true,
   hasNextBookmark: true,
   hasProblems: true,
@@ -58,6 +59,7 @@ describe("Deck action availability", () => {
       hasInferredParent: false,
       hasForwardInferredSiblingCycle: false,
       hasBackwardInferredSiblingCycle: false,
+      hasLocalBranchTarget: false,
       hasPreviousBookmark: false,
       hasNextBookmark: false,
       hasProblems: false,
@@ -199,7 +201,7 @@ describe("Deck action availability", () => {
         repeatable: true,
         defaultBindings: [{ key: "n", modifiers: ["Shift"] }],
       },
-    ];
+    ] as const;
     for (const expectedAction of expected) {
       const definition = SLIPBOX_ACTION_DEFINITIONS.find(
         (candidate) => candidate.id === expectedAction.id,
@@ -222,6 +224,30 @@ describe("Deck action availability", () => {
         SLIPBOX_ACTION_DEFINITIONS.some((definition) => definition.id === removed),
         false,
       );
+    }
+  });
+
+  test("registers six non-wrapping local Branch View actions unbound", () => {
+    const expected = [
+      "move-backward-local-strand",
+      "move-forward-local-strand",
+      "move-to-local-strand-beginning",
+      "enter-address-inferred-strand",
+      "enter-explicit-supplementary-strand",
+      "move-to-higher-strand",
+    ] as const;
+    for (const id of expected) {
+      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
+        candidate.id === id
+      );
+      assert.notEqual(definition, undefined);
+      assert.deepEqual(definition?.defaultBindings, []);
+      assert.equal(definition?.target, "deck-anchor");
+      assert.equal(canRunDeckAction(id, READY), true);
+      assert.equal(canRunDeckAction(id, {
+        ...READY,
+        hasLocalBranchTarget: false,
+      }), false);
     }
   });
 

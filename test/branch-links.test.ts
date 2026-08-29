@@ -82,7 +82,7 @@ describe("explicit branch links", () => {
   test("indexes filed non-self relations with stable deduplication and ordering", () => {
     const targets = new Map([
       ["A.md::Target", "T.md"],
-      ["B.md::Target", "T.md"],
+      ["B.md::Target", "V.md"],
       ["A.md::Unfiled", "U.md"],
       ["A.md::A", "A.md"],
     ]);
@@ -106,6 +106,7 @@ describe("explicit branch links", () => {
         ],
       },
       { path: "T.md", address: "3", deckIndex: 2, links: [] },
+      { path: "V.md", address: "4", deckIndex: 3, links: [] },
     ], {
       enabled: true,
       resolveTargetPath: (link, sourcePath) => targets.get(`${sourcePath}::${link}`),
@@ -113,14 +114,43 @@ describe("explicit branch links", () => {
 
     assert.deepEqual(indexed.outgoingBySourcePath.get("A.md"), [
       { sourcePath: "A.md", targetPath: "T.md", label: "b", sourceOrder: 0 },
-      { sourcePath: "A.md", targetPath: "T.md", label: "a", sourceOrder: 1 },
     ]);
     assert.deepEqual(indexed.incomingByTargetPath.get("T.md"), [
       { sourcePath: "A.md", targetPath: "T.md", label: "b", sourceOrder: 0 },
-      { sourcePath: "A.md", targetPath: "T.md", label: "a", sourceOrder: 1 },
-      { sourcePath: "B.md", targetPath: "T.md", label: "z", sourceOrder: 0 },
     ]);
+    assert.equal(indexed.parentByTargetPath.get("T.md")?.sourcePath, "A.md");
     assert.equal(indexed.incomingByTargetPath.has("U.md"), false);
+  });
+
+  test("retains several parents while selecting one stable Branch View context", () => {
+    const indexed = indexExplicitBranches([
+      {
+        path: "A.md",
+        address: "1",
+        deckIndex: 0,
+        links: [reference("[[Target|+a]]", "Target", "+a")],
+      },
+      {
+        path: "B.md",
+        address: "2",
+        deckIndex: 1,
+        links: [reference("[[Target|+b]]", "Target", "+b")],
+      },
+      { path: "Target.md", address: "3", deckIndex: 2, links: [] },
+    ], {
+      enabled: true,
+      resolveTargetPath: () => "Target.md",
+    });
+
+    assert.equal(indexed.parentByTargetPath.get("Target.md")?.sourcePath, "A.md");
+    assert.deepEqual(
+      indexed.incomingByTargetPath.get("Target.md")?.map((branch) =>
+        branch.sourcePath
+      ),
+      ["A.md", "B.md"],
+    );
+    assert.equal(indexed.outgoingBySourcePath.get("A.md")?.length, 1);
+    assert.equal(indexed.outgoingBySourcePath.get("B.md")?.length, 1);
   });
 
   test("indexes ++address but not an ordinary +address card link", () => {

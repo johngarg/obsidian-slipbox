@@ -29,7 +29,6 @@ import {
   type CardSignatureBranch,
 } from "./card-signature.js";
 import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
-import { InferredNavigationManager } from "./inferred-navigation.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
@@ -127,7 +126,6 @@ export class DeskRenderer {
   private pendingCardClickTimer: number | null = null;
   private pendingCardClickWindow: Window | null = null;
   private readonly cardSignatures: CardSignatureManager;
-  private readonly inferredNavigation: InferredNavigationManager;
 
   constructor(
     private readonly app: App,
@@ -149,29 +147,6 @@ export class DeskRenderer {
         void this.actions.runAfterEditing(reason, action);
       },
     });
-    this.inferredNavigation = new InferredNavigationManager({
-      showNavigation: () =>
-        this.plugin.settings.inferAddressBranches &&
-        this.plugin.settings.showInferredBranchNavigation,
-      showTooltips: () => this.plugin.settings.showTooltips,
-      previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
-      relationsForPath: (path) => this.plugin.index.inferredNavigationForPath(path),
-      preview: (event, target, destination, sourcePath) => {
-        const file = this.plugin.index.fileAtPath(destination.path);
-        this.actions.previewLink(
-          event,
-          target,
-          file === undefined
-            ? destination.path
-            : this.app.metadataCache.fileToLinktext(file, sourcePath),
-          sourcePath,
-        );
-      },
-      activate: (destination) => this.actions.jumpToFiledCard(destination.path),
-      runAfterEditing: (reason, action) => {
-        void this.actions.runAfterEditing(reason, action);
-      },
-    });
   }
 
   clear(): void {
@@ -180,7 +155,6 @@ export class DeskRenderer {
     }
     this.cardHeaderButtonControllers.clear();
     this.cardSignatures.clear();
-    this.inferredNavigation.clear();
     this.cancelPendingCardClick();
     if (this.filingEditor !== null) {
       this.actions.filingInputFocusChanged(false);
@@ -281,28 +255,6 @@ export class DeskRenderer {
         });
       }
     }
-  }
-
-  refreshInferredNavigation(): void {
-    this.inferredNavigation.refresh();
-  }
-
-  refreshFocusedInferredNavigation(): void {
-    if (this.rootEl === null) {
-      return;
-    }
-    this.rootEl.querySelectorAll<HTMLElement>(".slipbox-desk-card")
-      .forEach((card) => {
-        const path = card.dataset.cardRef;
-        const pileId = card.dataset.pileId;
-        this.inferredNavigation.setInteractive(
-          card,
-          !card.hasClass("is-viewed-ghost") &&
-            path !== undefined &&
-            pileId !== undefined &&
-            this.actions.isDeskCardFocused(path, pileId),
-        );
-      });
   }
 
   scheduleBranchLayout(): void {
@@ -820,13 +772,6 @@ export class DeskRenderer {
       cls: "slipbox-desk-card-preview markdown-rendered",
     });
     this.previews.set(file.path, preview);
-    if (filed !== undefined && expanded) {
-      this.inferredNavigation.render(miniature, {
-        path: filed.path,
-        interactive: isFocused,
-        mount: shell,
-      });
-    }
     preview.addEventListener("dblclick", (event) => {
       if (
         event.targetNode?.instanceOf(Element) === true &&

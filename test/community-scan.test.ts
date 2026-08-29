@@ -18,11 +18,11 @@ describe("community scanner CSS compatibility", () => {
     assert.doesNotMatch(styles, /text-decoration-thickness\s*:/);
   });
 
-  test("avoids broad relational selectors while hiding dragged-card navigation", () => {
+  test("avoids broad relational selectors while hiding a dragged card's Branch View", () => {
     assert.doesNotMatch(styles, /:has\(/);
     assert.match(
       styles,
-      /\.slipbox-desk-card\.is-dragging\s*\+\s*\.slipbox-inferred-navigation/,
+      /\.slipbox-card\.is-dragging-to-desk\s*>\s*\.slipbox-local-branch-view/,
     );
   });
 

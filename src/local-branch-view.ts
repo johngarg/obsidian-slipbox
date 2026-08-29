@@ -201,9 +201,11 @@ export class LocalBranchViewController {
         this.render(this.model);
       }
     });
-    this.resizeObserver.observe(
-      owner.closest<HTMLElement>(".slipbox-deck-stage") ?? owner,
-    );
+    this.resizeObserver.observe(owner);
+    const viewport = owner.closest<HTMLElement>(".slipbox-deck-stage");
+    if (viewport !== null && viewport !== owner) {
+      this.resizeObserver.observe(viewport);
+    }
   }
 
   private render(model: LocalBranchModel): void {
@@ -339,11 +341,7 @@ export class LocalBranchViewController {
     if (owner === null) {
       return DEFAULT_WIDTH;
     }
-    const viewport = owner.closest<HTMLElement>(".slipbox-deck-stage");
-    return Math.max(
-      240,
-      Math.min(900, viewport?.clientWidth || owner.clientWidth || DEFAULT_WIDTH),
-    );
+    return owner.offsetWidth || owner.clientWidth || DEFAULT_WIDTH;
   }
 
   private availableHeight(): number {

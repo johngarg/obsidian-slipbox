@@ -53,6 +53,8 @@ initial public beta.
 
 ### Fixed
 
+- Kept the local Branch View tray the same width as its owning card while
+  retaining horizontal scrolling for wider diagrams.
 - Elided long local Branch View addresses from the beginning and reserved more
   clearance between node labels and their circles.
 - Partitioned local Branch View departures at later explicit branch starts so

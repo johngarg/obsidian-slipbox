@@ -58,7 +58,7 @@ const MODEL: LocalBranchModel = {
   },
 };
 
-function fixture(model: LocalBranchModel = MODEL) {
+function fixture(model: LocalBranchModel = MODEL, ownerWidth = 520) {
   const htmlNamespace = "http://www.w3.org/1999/xhtml";
   const window = new Window();
   const document = window.document as unknown as Document;
@@ -73,6 +73,8 @@ function fixture(model: LocalBranchModel = MODEL) {
   const obsidianWindow = localBranchDomWindow(document);
   const first = obsidianWindow.createEl("article");
   const second = obsidianWindow.createEl("article");
+  Object.defineProperty(first, "offsetWidth", { value: ownerWidth });
+  Object.defineProperty(second, "offsetWidth", { value: ownerWidth });
   document.body.append(first, second);
   const activations: readonly string[][] = [];
   const previews: string[] = [];
@@ -114,6 +116,16 @@ function fixture(model: LocalBranchModel = MODEL) {
 }
 
 describe("local Branch View controller", () => {
+  test("matches the owning card width", () => {
+    const ownerWidth = 548;
+    const subject = fixture(MODEL, ownerWidth);
+    const root = subject.first.querySelector<HTMLElement>(
+      ".slipbox-local-branch-view",
+    );
+
+    assert.equal(root?.style.width, `${ownerWidth}px`);
+  });
+
   test("renders six stable movement slots with unavailable controls disabled", () => {
     const subject = fixture();
     const root = subject.first.querySelector(".slipbox-local-branch-view");

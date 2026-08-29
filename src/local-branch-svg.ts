@@ -35,6 +35,8 @@ export interface LocalBranchSvgOptions {
 
 const EDGE_LABEL_MAX_CHARACTERS = 14;
 const NODE_LABEL_MAX_CHARACTERS = 4;
+const BRANCH_STUB_LENGTH = 12;
+const DIAGONAL_COMPONENT = Math.SQRT1_2;
 
 /** Render a complete SVG projection without owning Deck or controller state. */
 export function renderLocalBranchSvg(options: LocalBranchSvgOptions): void {
@@ -282,16 +284,21 @@ class LocalBranchSvgRenderer {
     } from ${item.node.address}: ${types}`;
     group.setAttribute("aria-label", label);
     const line = this.svg("line");
-    const direction = row.strand.role === "higher" ? -1 : 1;
-    const edge = item.y + direction * radius;
-    line.setAttribute("x1", String(item.x));
-    line.setAttribute("y1", String(edge));
-    line.setAttribute("x2", String(item.x));
-    line.setAttribute("y2", String(edge + direction * 12));
+    const verticalDirection = row.strand.role === "higher" ? -1 : 1;
+    const radiusOffset = radius * DIAGONAL_COMPONENT;
+    const stubOffset = BRANCH_STUB_LENGTH * DIAGONAL_COMPONENT;
+    const startX = item.x + radiusOffset;
+    const startY = item.y + verticalDirection * radiusOffset;
+    const endX = startX + stubOffset;
+    const endY = startY + verticalDirection * stubOffset;
+    line.setAttribute("x1", String(startX));
+    line.setAttribute("y1", String(startY));
+    line.setAttribute("x2", String(endX));
+    line.setAttribute("y2", String(endY));
     const hit = this.svg("circle");
     hit.classList.add("slipbox-local-branch-stub-hit");
-    hit.setAttribute("cx", String(item.x));
-    hit.setAttribute("cy", String(edge + direction * 8));
+    hit.setAttribute("cx", String((startX + endX) / 2));
+    hit.setAttribute("cy", String((startY + endY) / 2));
     hit.setAttribute("r", "13");
     group.append(line, hit);
     this.appendTitle(group, label);

@@ -214,6 +214,21 @@ describe("local Branch View controller", () => {
     );
   });
 
+  test("draws hidden branch markers down and right at 45 degrees", () => {
+    const subject = fixture();
+    const line = subject.first.querySelector<SVGLineElement>(
+      "[data-focus-id='stub:a.md'] line",
+    );
+    const deltaX = Number(line?.getAttribute("x2")) -
+      Number(line?.getAttribute("x1"));
+    const deltaY = Number(line?.getAttribute("y2")) -
+      Number(line?.getAttribute("y1"));
+
+    assert.equal(deltaX > 0, true);
+    assert.equal(deltaY > 0, true);
+    assert.equal(Math.abs(deltaX - deltaY) < 1e-9, true);
+  });
+
   test("elides long node addresses from the beginning with circle clearance", () => {
     const address = "25,2,2";
     const path = "long.md";

@@ -1244,7 +1244,7 @@ button.slipbox-local-branch-collapse svg {
 .slipbox-local-branch-gap text {
   fill: currentColor;
   font-family: var(--font-monospace);
-  font-size: 9px;
+  font-size: 8px;
   text-anchor: middle;
   user-select: none;
 }

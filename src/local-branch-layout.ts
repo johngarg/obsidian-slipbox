@@ -43,7 +43,7 @@ export interface LocalBranchLayoutOptions {
   readonly expandedGapIds?: ReadonlySet<string>;
 }
 
-const NODE_RADIUS = 17;
+const NODE_RADIUS = 19;
 const SLOT_WIDTH = 70;
 const ROW_HEIGHT = 74;
 const PADDING_X = 30;
@@ -68,20 +68,34 @@ export function layoutLocalBranchModel(
   ));
   const maxItems = Math.max(1, ...projected.map((items) => items.length));
   const expanded = projected.some((items) => items.length > budget);
-  const contentWidth = expanded
+  const baseContentWidth = expanded
     ? Math.max(viewportWidth, PADDING_X * 2 + maxItems * SLOT_WIDTH)
     : viewportWidth;
-  const strands = projected.map((items, rowIndex) => {
+  const strands: LocalBranchLayoutStrand[] = [];
+  projected.forEach((items, rowIndex) => {
     const strand = model.strands[rowIndex];
     if (strand === undefined) {
       throw new Error("Branch layout lost its source strand");
     }
     const y = PADDING_Y + NODE_RADIUS + rowIndex * ROW_HEIGHT;
     const rowWidth = Math.max(1, items.length) * SLOT_WIDTH;
-    const startX = expanded
+    let startX = expanded
       ? PADDING_X + SLOT_WIDTH / 2
-      : Math.max(PADDING_X + SLOT_WIDTH / 2, (contentWidth - rowWidth) / 2 + SLOT_WIDTH / 2);
-    return {
+      : Math.max(
+        PADDING_X + SLOT_WIDTH / 2,
+        (baseContentWidth - rowWidth) / 2 + SLOT_WIDTH / 2,
+      );
+    const connection = strand.connection;
+    if (strand.role === "departure" && connection !== undefined) {
+      const source = findPositionedNode(strands, connection.fromPath);
+      const targetIndex = items.findIndex((item) =>
+        item.kind === "node" && item.node.path === connection.toPath
+      );
+      if (source !== null && targetIndex >= 0) {
+        startX = source.x + SLOT_WIDTH - targetIndex * SLOT_WIDTH;
+      }
+    }
+    strands.push({
       strand,
       y,
       items: items.map((item, itemIndex): LocalBranchLayoutItem => ({
@@ -89,8 +103,16 @@ export function layoutLocalBranchModel(
         x: startX + itemIndex * SLOT_WIDTH,
         y,
       })),
-    };
+    });
   });
+  const rightmostItemX = Math.max(
+    0,
+    ...strands.flatMap((strand) => strand.items.map((item) => item.x)),
+  );
+  const contentWidth = Math.max(
+    baseContentWidth,
+    rightmostItemX + PADDING_X + SLOT_WIDTH / 2,
+  );
   return {
     viewportWidth,
     contentWidth,
@@ -99,6 +121,22 @@ export function layoutLocalBranchModel(
     nodeRadius: NODE_RADIUS,
     strands,
   };
+}
+
+function findPositionedNode(
+  strands: readonly LocalBranchLayoutStrand[],
+  path: string,
+): LocalBranchLayoutNode | null {
+  for (const strand of strands) {
+    const node = strand.items.find(
+      (item): item is LocalBranchLayoutNode =>
+        item.kind === "node" && item.node.path === path,
+    );
+    if (node !== undefined) {
+      return node;
+    }
+  }
+  return null;
 }
 
 type UnpositionedItem = Omit<LocalBranchLayoutNode, "x" | "y"> |

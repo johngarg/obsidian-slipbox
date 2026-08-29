@@ -244,7 +244,7 @@ class LocalBranchSvgRenderer {
       node.path !== this.options.model.activePath &&
       node.departures.length > 0
     ) {
-      this.renderStub(parent, row, item);
+      this.renderStub(parent, row, item, radius);
     }
   }
 
@@ -252,6 +252,7 @@ class LocalBranchSvgRenderer {
     parent: SVGElement,
     row: LocalBranchLayoutStrand,
     item: LocalBranchLayoutNode,
+    radius: number,
   ): void {
     const departures = item.node.departures;
     const group = this.svg("g");
@@ -282,14 +283,15 @@ class LocalBranchSvgRenderer {
     group.setAttribute("aria-label", label);
     const line = this.svg("line");
     const direction = row.strand.role === "higher" ? -1 : 1;
+    const edge = item.y + direction * radius;
     line.setAttribute("x1", String(item.x));
-    line.setAttribute("y1", String(item.y + direction * 17));
+    line.setAttribute("y1", String(edge));
     line.setAttribute("x2", String(item.x));
-    line.setAttribute("y2", String(item.y + direction * 29));
+    line.setAttribute("y2", String(edge + direction * 12));
     const hit = this.svg("circle");
     hit.classList.add("slipbox-local-branch-stub-hit");
     hit.setAttribute("cx", String(item.x));
-    hit.setAttribute("cy", String(item.y + direction * 25));
+    hit.setAttribute("cy", String(edge + direction * 8));
     hit.setAttribute("r", "13");
     group.append(line, hit);
     this.appendTitle(group, label);

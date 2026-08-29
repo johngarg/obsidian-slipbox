@@ -43,6 +43,52 @@ const model: LocalBranchModel = {
 };
 
 describe("local branch layout", () => {
+  test("places a departure beneath the next slot after its source", () => {
+    const currentNodes = Array.from({ length: 9 }, (_, index) => node(index));
+    const source = currentNodes[2];
+    assert.notEqual(source, undefined);
+    if (source === undefined) {
+      return;
+    }
+    const target = node(20);
+    const result = layoutLocalBranchModel({
+      ...model,
+      activePath: source.path,
+      activeAddress: source.address,
+      strands: [
+        {
+          ...model.strands[0]!,
+          nodes: currentNodes,
+          selectedPath: source.path,
+        },
+        {
+          id: "departure:explicit:2:20",
+          role: "departure",
+          nodes: [target],
+          selectedPath: target.path,
+          knownBeginning: true,
+          knownEnd: true,
+          connection: {
+            fromPath: source.path,
+            toPath: target.path,
+            kind: "explicit",
+          },
+        },
+      ],
+    }, { width: 840 });
+    const current = result.strands[0]?.items;
+    const departure = result.strands[1]?.items;
+    const nextNode = current?.find((item) =>
+      item.kind === "node" && item.node.path === currentNodes[3]?.path
+    );
+    const targetNode = departure?.find((item) =>
+      item.kind === "node" && item.node.path === target.path
+    );
+
+    assert.equal(targetNode?.x, nextNode?.x);
+    assert.equal(result.nodeRadius, 19);
+  });
+
   test("preserves active and known boundaries while creating omission runs", () => {
     const result = layoutLocalBranchModel(model, { width: 310 });
     const items = result.strands[0]?.items ?? [];

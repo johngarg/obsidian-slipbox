@@ -34,7 +34,9 @@ export interface LocalBranchSvgOptions {
 }
 
 const EDGE_LABEL_MAX_CHARACTERS = 14;
-const NODE_LABEL_MAX_CHARACTERS = 4;
+const NODE_LABEL_MAX_LINE_CHARACTERS = 5;
+const NODE_LABEL_MAX_LINES = 2;
+const NODE_LABEL_LINE_HEIGHT = 9;
 const BRANCH_STUB_LENGTH = 12;
 const DIAGONAL_COMPONENT = Math.SQRT1_2;
 
@@ -220,11 +222,19 @@ class LocalBranchSvgRenderer {
     circle.setAttribute("r", String(radius));
     const text = this.svg("text");
     text.setAttribute("x", String(item.x));
-    text.setAttribute("y", String(item.y + 4));
-    text.textContent = truncateBeginning(
-      node.address,
-      NODE_LABEL_MAX_CHARACTERS,
-    );
+    const lines = wrapNodeLabel(node.address);
+    const firstBaseline = item.y + 3 -
+      ((lines.length - 1) * NODE_LABEL_LINE_HEIGHT) / 2;
+    for (const [index, line] of lines.entries()) {
+      const span = this.svg("tspan");
+      span.setAttribute("x", String(item.x));
+      span.setAttribute(
+        "y",
+        String(firstBaseline + index * NODE_LABEL_LINE_HEIGHT),
+      );
+      span.textContent = line;
+      text.append(span);
+    }
     group.append(circle, text);
     this.appendTitle(group, label);
     this.activateOnClickOrKeyboard(group, () => {
@@ -415,4 +425,34 @@ function truncateBeginning(value: string, length: number): string {
   return characters.length <= length
     ? value
     : `…${characters.slice(-Math.max(1, length - 1)).join("")}`;
+}
+
+function wrapNodeLabel(value: string): readonly string[] {
+  const visible = truncateBeginning(
+    value,
+    NODE_LABEL_MAX_LINE_CHARACTERS * NODE_LABEL_MAX_LINES,
+  );
+  const characters = Array.from(visible);
+  if (characters.length <= NODE_LABEL_MAX_LINE_CHARACTERS) {
+    return [visible];
+  }
+
+  const minimumBreak = characters.length - NODE_LABEL_MAX_LINE_CHARACTERS;
+  const maximumBreak = NODE_LABEL_MAX_LINE_CHARACTERS;
+  const midpoint = characters.length / 2;
+  const naturalBreak = characters
+    .map((character, index) => ({ character, index: index + 1 }))
+    .filter(({ character, index }) =>
+      (character === "," || character === "/") &&
+      index >= minimumBreak && index <= maximumBreak
+    )
+    .sort((left, right) =>
+      Math.abs(left.index - midpoint) - Math.abs(right.index - midpoint)
+    )[0]?.index;
+  const breakAt = naturalBreak ?? Math.ceil(midpoint);
+
+  return [
+    characters.slice(0, breakAt).join(""),
+    characters.slice(breakAt).join(""),
+  ];
 }

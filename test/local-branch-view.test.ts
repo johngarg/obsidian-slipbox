@@ -271,8 +271,8 @@ describe("local Branch View controller", () => {
     assert.equal(Math.abs(deltaX - deltaY) < 1e-9, true);
   });
 
-  test("elides long node addresses from the beginning with circle clearance", () => {
-    const address = "25,2,2";
+  test("wraps node addresses onto two balanced lines", () => {
+    const address = "57,2,25";
     const path = "long.md";
     const subject = fixture({
       ...MODEL,
@@ -287,9 +287,39 @@ describe("local Branch View controller", () => {
     const node = subject.first.querySelector<SVGElement>(
       `[data-focus-id='node:${path}']`,
     );
+    const spans = node === null
+      ? []
+      : Array.from(node.querySelectorAll("tspan"));
 
-    assert.equal(node?.querySelector("text")?.textContent, "…2,2");
-    assert.match(node?.getAttribute("aria-label") ?? "", /25,2,2/);
+    assert.deepEqual(spans.map((span) => span.textContent), ["57,", "2,25"]);
+    assert.equal(spans[0]?.getAttribute("y"), "43.5");
+    assert.equal(spans[1]?.getAttribute("y"), "52.5");
+    assert.match(node?.getAttribute("aria-label") ?? "", /57,2,25/);
+  });
+
+  test("elides overlong wrapped addresses from the beginning", () => {
+    const address = "123456789012345";
+    const path = "very-long.md";
+    const subject = fixture({
+      ...MODEL,
+      activePath: path,
+      activeAddress: address,
+      strands: [{
+        ...MODEL.strands[0]!,
+        nodes: [branchNode(path, address)],
+        selectedPath: path,
+      }],
+    });
+    const node = subject.first.querySelector<SVGElement>(
+      `[data-focus-id='node:${path}']`,
+    );
+    const lines = node === null
+      ? []
+      : Array.from(node.querySelectorAll("tspan"))
+        .map((span) => span.textContent);
+
+    assert.deepEqual(lines, ["…7890", "12345"]);
+    assert.match(node?.getAttribute("aria-label") ?? "", /123456789012345/);
   });
 
   test("expands one hidden departure and chooses when several exist", async () => {

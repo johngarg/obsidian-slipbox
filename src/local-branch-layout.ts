@@ -44,7 +44,8 @@ export interface LocalBranchLayoutOptions {
 }
 
 const NODE_RADIUS = 19;
-const SLOT_WIDTH = 70;
+const HORIZONTAL_NODE_GAP = 19.2;
+const SLOT_WIDTH = NODE_RADIUS * 2 + HORIZONTAL_NODE_GAP;
 const ROW_HEIGHT = NODE_RADIUS * 2 + 12;
 const PADDING_X = 30;
 const PADDING_Y = 26;

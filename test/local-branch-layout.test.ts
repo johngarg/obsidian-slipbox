@@ -43,6 +43,16 @@ const model: LocalBranchModel = {
 };
 
 describe("local branch layout", () => {
+  test("leaves a 40-percent narrower gap between adjacent nodes", () => {
+    const result = layoutLocalBranchModel(model, { width: 840 });
+    const first = result.strands[0]?.items[0];
+    const second = result.strands[0]?.items[1];
+    const centreDistance = (second?.x ?? 0) - (first?.x ?? 0);
+    const visibleGap = centreDistance - result.nodeRadius * 2;
+
+    assert.equal(Math.abs(visibleGap - 19.2) < 1e-9, true);
+  });
+
   test("places a departure beneath the next slot after its source", () => {
     const currentNodes = Array.from({ length: 9 }, (_, index) => node(index));
     const source = currentNodes[2];

@@ -91,6 +91,11 @@ describe("local branch model", () => {
       localBranchTargets(result, "higher").map((target) => target.address),
       ["1"],
     );
+    assert.equal(
+      result?.strands.find((strand) => strand.role === "higher")?.connection
+        ?.toPath,
+      allCards[1]?.path,
+    );
   });
 
   test("inherits explicit context while retaining the inferred higher target", () => {

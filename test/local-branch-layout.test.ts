@@ -100,6 +100,61 @@ describe("local branch layout", () => {
     assert.equal(result.nodeRadius, 19);
   });
 
+  test("keeps a promoted current strand aligned with its higher source", () => {
+    const higherNodes = Array.from({ length: 9 }, (_, index) => node(index));
+    const source = higherNodes[2];
+    const next = higherNodes[3];
+    const currentNodes = [node(20), node(21), node(22)];
+    const beginning = currentNodes[0];
+    const active = currentNodes[1];
+    assert.notEqual(source, undefined);
+    assert.notEqual(next, undefined);
+    assert.notEqual(beginning, undefined);
+    assert.notEqual(active, undefined);
+    if (
+      source === undefined || next === undefined ||
+      beginning === undefined || active === undefined
+    ) {
+      return;
+    }
+    const result = layoutLocalBranchModel({
+      ...model,
+      activePath: active.path,
+      activeAddress: active.address,
+      strands: [
+        {
+          id: "higher:inferred:2",
+          role: "higher",
+          nodes: higherNodes,
+          selectedPath: source.path,
+          knownBeginning: true,
+          knownEnd: true,
+          connection: {
+            fromPath: source.path,
+            toPath: beginning.path,
+            kind: "inferred",
+          },
+        },
+        {
+          id: "current",
+          role: "current",
+          nodes: currentNodes,
+          selectedPath: active.path,
+          knownBeginning: true,
+          knownEnd: true,
+        },
+      ],
+    }, { width: 840 });
+    const higherNext = result.strands[0]?.items.find((item) =>
+      item.kind === "node" && item.node.path === next.path
+    );
+    const currentBeginning = result.strands[1]?.items.find((item) =>
+      item.kind === "node" && item.node.path === beginning.path
+    );
+
+    assert.equal(currentBeginning?.x, higherNext?.x);
+  });
+
   test("preserves active and known boundaries while creating omission runs", () => {
     const result = layoutLocalBranchModel(model, { width: 310 });
     const items = result.strands[0]?.items ?? [];

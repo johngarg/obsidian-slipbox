@@ -3,6 +3,7 @@ import type {
   LocalBranchNode,
   LocalBranchStrand,
 } from "./local-branch-model.js";
+import type { LocalBranchConnection } from "./local-branch-types.js";
 
 export interface LocalBranchLayoutNode {
   readonly kind: "node";
@@ -86,15 +87,12 @@ export function layoutLocalBranchModel(
         PADDING_X + SLOT_WIDTH / 2,
         (baseContentWidth - rowWidth) / 2 + SLOT_WIDTH / 2,
       );
-    const connection = strand.connection;
-    if (strand.role === "departure" && connection !== undefined) {
-      const source = findPositionedNode(strands, connection.fromPath);
-      const targetIndex = items.findIndex((item) =>
-        item.kind === "node" && item.node.path === connection.toPath
-      );
-      if (source !== null && targetIndex >= 0) {
-        startX = source.x + SLOT_WIDTH - targetIndex * SLOT_WIDTH;
-      }
+    const connection = positioningConnection(model, strand);
+    const alignedStart = connection === undefined
+      ? null
+      : alignedStrandStart(strands, items, connection);
+    if (alignedStart !== null) {
+      startX = alignedStart;
     }
     strands.push({
       strand,
@@ -122,6 +120,34 @@ export function layoutLocalBranchModel(
     nodeRadius: NODE_RADIUS,
     strands,
   };
+}
+
+function positioningConnection(
+  model: LocalBranchModel,
+  strand: LocalBranchStrand,
+): LocalBranchConnection | undefined {
+  if (strand.role === "departure") {
+    return strand.connection;
+  }
+  if (strand.role !== "current") {
+    return undefined;
+  }
+  return model.strands.find((candidate) => candidate.role === "higher")
+    ?.connection;
+}
+
+function alignedStrandStart(
+  strands: readonly LocalBranchLayoutStrand[],
+  items: readonly UnpositionedItem[],
+  connection: LocalBranchConnection,
+): number | null {
+  const source = findPositionedNode(strands, connection.fromPath);
+  const targetIndex = items.findIndex((item) =>
+    item.kind === "node" && item.node.path === connection.toPath
+  );
+  return source === null || targetIndex < 0
+    ? null
+    : source.x + SLOT_WIDTH - targetIndex * SLOT_WIDTH;
 }
 
 function findPositionedNode(

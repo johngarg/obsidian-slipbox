@@ -214,6 +214,48 @@ describe("local Branch View controller", () => {
     );
   });
 
+  test("draws higher-to-current inferred and explicit connections", () => {
+    for (const kind of ["inferred", "explicit"] as const) {
+      const parent = branchNode("parent.md", "1");
+      const current = branchNode("child.md", "1a");
+      const subject = fixture({
+        ...MODEL,
+        activePath: current.path,
+        activeAddress: current.address,
+        strands: [
+          {
+            id: `higher:${kind}:parent.md`,
+            role: "higher",
+            nodes: [parent],
+            selectedPath: parent.path,
+            knownBeginning: true,
+            knownEnd: true,
+            connection: {
+              fromPath: parent.path,
+              toPath: current.path,
+              kind,
+            },
+          },
+          {
+            id: "current",
+            role: "current",
+            nodes: [current],
+            selectedPath: current.path,
+            knownBeginning: true,
+            knownEnd: true,
+          },
+        ],
+      });
+
+      assert.notEqual(
+        subject.first.querySelector(
+          `line.slipbox-local-branch-edge.is-${kind}`,
+        ),
+        null,
+      );
+    }
+  });
+
   test("draws hidden branch markers down and right at 45 degrees", () => {
     const subject = fixture();
     const line = subject.first.querySelector<SVGLineElement>(

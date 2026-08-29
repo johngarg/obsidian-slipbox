@@ -179,6 +179,10 @@ function buildHigherStrand(
   }
   const parentNode = input.inferred.nodesByAddress.get(parentAddress);
   const root = parentNode?.parentAddress === null;
+  const currentAddresses = siblingsForAddress(input.inferred, active.address);
+  const currentBeginning = cardsByAddress.get(
+    currentAddresses[0] ?? active.address,
+  )?.[0] ?? active;
   const result = strand(
     `higher:inferred:${parentAddress}`,
     "higher",
@@ -194,7 +198,7 @@ function buildHigherStrand(
     ...result,
     connection: {
       fromPath: selected.path,
-      toPath: active.path,
+      toPath: currentBeginning.path,
       kind: "inferred",
     },
   };

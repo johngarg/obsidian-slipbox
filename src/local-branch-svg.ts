@@ -142,7 +142,7 @@ class LocalBranchSvgRenderer {
         layout,
         connection.toPath,
         toRole,
-        row.strand.id,
+        row.strand.role === "departure" ? row.strand.id : undefined,
       );
       if (from === null || to === null) {
         continue;

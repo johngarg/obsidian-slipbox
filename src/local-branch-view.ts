@@ -34,7 +34,6 @@ export interface LocalBranchViewEnvironment {
 }
 
 const DEFAULT_WIDTH = 720;
-const DEFAULT_HEIGHT = 430;
 
 const MOVEMENTS: readonly {
   readonly movement: LocalBranchMovement;
@@ -84,7 +83,6 @@ export class LocalBranchViewController {
   private expandedDepartureIds = new Set<string>();
   private resizeObserver: ResizeObserver | null = null;
   private lastWidth = 0;
-  private lastHeight = 0;
 
   constructor(private readonly environment: LocalBranchViewEnvironment) {
     this.root = localBranchDomWindow(environment.activeDocument)
@@ -187,31 +185,21 @@ export class LocalBranchViewController {
     }
     this.resizeObserver = new ownerWindow.ResizeObserver(() => {
       const width = this.availableWidth();
-      const height = this.availableHeight();
-      if (
-        Math.abs(width - this.lastWidth) < 1 &&
-        Math.abs(height - this.lastHeight) < 1
-      ) {
+      if (Math.abs(width - this.lastWidth) < 1) {
         return;
       }
       this.lastWidth = width;
-      this.lastHeight = height;
       this.expandedGapIds.clear();
       if (this.model !== null) {
         this.render(this.model);
       }
     });
     this.resizeObserver.observe(owner);
-    const viewport = owner.closest<HTMLElement>(".slipbox-deck-stage");
-    if (viewport !== null && viewport !== owner) {
-      this.resizeObserver.observe(viewport);
-    }
   }
 
   private render(model: LocalBranchModel): void {
     const focusedId = this.focusedControlId();
     this.root.style.width = `${this.availableWidth()}px`;
-    this.root.style.maxHeight = `${this.availableHeight()}px`;
     this.root.replaceChildren();
     const header = element(this.root, "div", "slipbox-local-branch-header");
     this.renderToolbar(header, model);
@@ -342,23 +330,6 @@ export class LocalBranchViewController {
       return DEFAULT_WIDTH;
     }
     return owner.offsetWidth || owner.clientWidth || DEFAULT_WIDTH;
-  }
-
-  private availableHeight(): number {
-    const owner = this.owner;
-    if (owner === null) {
-      return DEFAULT_HEIGHT;
-    }
-    const viewport = owner.closest<HTMLElement>(".slipbox-deck-stage");
-    if (viewport === null) {
-      return DEFAULT_HEIGHT;
-    }
-    const viewportRect = viewport.getBoundingClientRect();
-    const ownerRect = owner.getBoundingClientRect();
-    const below = viewportRect.bottom - ownerRect.bottom - 16;
-    return below > 0
-      ? Math.max(110, Math.min(DEFAULT_HEIGHT, below))
-      : DEFAULT_HEIGHT;
   }
 
   private labelControl(control: HTMLElement, label: string): void {

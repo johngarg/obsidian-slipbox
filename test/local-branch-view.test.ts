@@ -124,6 +124,7 @@ describe("local Branch View controller", () => {
     );
 
     assert.equal(root?.style.width, `${ownerWidth}px`);
+    assert.equal(root?.style.maxHeight, "");
   });
 
   test("renders six stable movement slots with unavailable controls disabled", () => {

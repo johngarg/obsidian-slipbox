@@ -32,6 +32,8 @@ initial public beta.
 
 ### Changed
 
+- Presented the local Branch View as an uncapped transparent diagram beneath
+  its card, with its provisional navigation controls visually hidden.
 - Assigned Vim-style defaults for inferred navigation: `-` for the parent and
   `n`/`N` for forward/backward sibling cycling.
 - Standardised address-derived hierarchy terminology on “inferred” throughout

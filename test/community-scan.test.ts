@@ -26,6 +26,21 @@ describe("community scanner CSS compatibility", () => {
     );
   });
 
+  test("presents the Branch View as an uncapped floating diagram", () => {
+    const viewRule = styles.match(
+      /\.slipbox-local-branch-view\s*\{(?<body>[^}]*)\}/u,
+    )?.groups?.body ?? "";
+    assert.match(viewRule, /max-height:\s*none;/u);
+    assert.match(viewRule, /overflow:\s*visible;/u);
+    assert.match(viewRule, /border:\s*0;/u);
+    assert.match(viewRule, /background:\s*transparent;/u);
+    assert.match(viewRule, /box-shadow:\s*none;/u);
+    assert.match(
+      styles,
+      /\.slipbox-local-branch-header\s*\{[^}]*display:\s*none;/su,
+    );
+  });
+
   test("gives annotated Desk signatures a stable inline allocation", () => {
     assert.match(
       styles,

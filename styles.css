@@ -1120,12 +1120,11 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   left: 50%;
   z-index: 32;
   width: 100%;
-  max-height: min(430px, calc(100vh - 24px));
-  overflow: hidden;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  background: color-mix(in srgb, var(--background-primary) 96%, transparent);
-  box-shadow: var(--shadow-s);
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-normal);
   pointer-events: auto;
   translate: -50% 8px;
@@ -1136,12 +1135,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 }
 
 .slipbox-local-branch-header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  border-bottom: 1px solid var(--background-modifier-border);
+  display: none;
 }
 
 .slipbox-local-branch-toolbar {

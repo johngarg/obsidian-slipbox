@@ -182,6 +182,38 @@ describe("local Branch View controller", () => {
     assert.match(node?.getAttribute("aria-label") ?? "", /a\.md/);
   });
 
+  test("draws inter-strand connections as straight lines", () => {
+    const target = branchNode("c.md", "1c");
+    const subject = fixture({
+      ...MODEL,
+      strands: [
+        MODEL.strands[0]!,
+        {
+          id: "departure:explicit:b.md:c.md",
+          role: "departure",
+          nodes: [target],
+          selectedPath: target.path,
+          knownBeginning: true,
+          knownEnd: true,
+          connection: {
+            fromPath: "b.md",
+            toPath: target.path,
+            kind: "explicit",
+          },
+        },
+      ],
+    });
+
+    assert.notEqual(
+      subject.first.querySelector("line.slipbox-local-branch-edge.is-explicit"),
+      null,
+    );
+    assert.equal(
+      subject.first.querySelector("path.slipbox-local-branch-edge.is-explicit"),
+      null,
+    );
+  });
+
   test("elides long node addresses from the beginning with circle clearance", () => {
     const address = "25,2,2";
     const path = "long.md";

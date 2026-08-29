@@ -86,6 +86,7 @@ describe("local branch layout", () => {
     );
 
     assert.equal(targetNode?.x, nextNode?.x);
+    assert.equal((targetNode?.y ?? 0) - (nextNode?.y ?? 0), 62);
     assert.equal(result.nodeRadius, 19);
   });
 

@@ -32,8 +32,9 @@ initial public beta.
 
 ### Changed
 
-- Enlarged local Branch View nodes, reduced their address type, and aligned
-  each departure one column to the right of its source.
+- Enlarged local Branch View nodes, reduced their address type, aligned each
+  departure one column to the right of its source, straightened branch
+  connections, and tightened the spacing between strands.
 - Presented the local Branch View as an uncapped transparent diagram beneath
   its card, with its provisional navigation controls visually hidden.
 - Assigned Vim-style defaults for inferred navigation: `-` for the parent and

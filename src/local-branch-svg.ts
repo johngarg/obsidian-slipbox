@@ -145,14 +145,14 @@ class LocalBranchSvgRenderer {
       if (from === null || to === null) {
         continue;
       }
-      const path = this.svg("path");
-      path.classList.add("slipbox-local-branch-edge", `is-${connection.kind}`);
+      const line = this.svg("line");
+      line.classList.add("slipbox-local-branch-edge", `is-${connection.kind}`);
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y));
       const middleY = (from.y + to.y) / 2;
-      path.setAttribute(
-        "d",
-        `M ${from.x} ${from.y} C ${from.x} ${middleY}, ${to.x} ${middleY}, ${to.x} ${to.y}`,
-      );
-      parent.append(path);
+      parent.append(line);
       if (connection.label !== undefined) {
         this.renderEdgeLabel(
           parent,

@@ -167,6 +167,111 @@ describe("local branch model", () => {
     );
   });
 
+  test("partitions sibling continuations at every explicit branch start", () => {
+    const allCards = cards([
+      "57,2,25",
+      "57,2,25a",
+      "57,2,25b",
+      "57,2,25c",
+      "57,2,25d",
+      "57,2,25e",
+      "57,2,25f",
+    ]);
+    const active = allCards[0];
+    assert.notEqual(active, undefined);
+    if (active === undefined) {
+      return;
+    }
+    const branches = [1, 2, 4, 6].flatMap((index, sourceOrder) => {
+      const target = allCards[index];
+      return target === undefined ? [] : [{
+        sourcePath: active.path,
+        targetPath: target.path,
+        label: String(sourceOrder + 1),
+        sourceOrder,
+      }];
+    });
+    const result = model(allCards, active.path, explicitIndex(branches));
+    const departures = result?.strands.filter((strand) =>
+      strand.role === "departure"
+    ) ?? [];
+
+    assert.deepEqual(
+      departures.map((strand) => strand.nodes.map((node) => node.address)),
+      [
+        ["57,2,25a"],
+        ["57,2,25b", "57,2,25c"],
+        ["57,2,25d", "57,2,25e"],
+        ["57,2,25f"],
+      ],
+    );
+    assert.deepEqual(
+      departures.map((strand) => strand.connection?.kind),
+      ["explicit", "explicit", "explicit", "explicit"],
+    );
+    assert.deepEqual(
+      result?.strands.find((strand) => strand.role === "current")?.nodes
+        .find((node) => node.path === active.path)?.departures
+        .map((departure) => departure.kind),
+      ["explicit", "explicit", "explicit", "explicit"],
+    );
+    const paths = departures.flatMap((strand) =>
+      strand.nodes.map((node) => node.path)
+    );
+    assert.equal(new Set(paths).size, paths.length);
+  });
+
+  test("keeps only the inferred prefix before the first explicit branch", () => {
+    const allCards = cards(["1", "1a", "1b", "1c", "1d", "1e", "1f"]);
+    const active = allCards[0];
+    const firstExplicit = allCards[2];
+    const secondExplicit = allCards[4];
+    assert.notEqual(active, undefined);
+    assert.notEqual(firstExplicit, undefined);
+    assert.notEqual(secondExplicit, undefined);
+    if (
+      active === undefined || firstExplicit === undefined ||
+      secondExplicit === undefined
+    ) {
+      return;
+    }
+    const result = model(allCards, active.path, explicitIndex([
+      {
+        sourcePath: active.path,
+        targetPath: firstExplicit.path,
+        label: "first",
+        sourceOrder: 0,
+      },
+      {
+        sourcePath: active.path,
+        targetPath: secondExplicit.path,
+        label: "second",
+        sourceOrder: 1,
+      },
+    ]));
+    const departures = result?.strands.filter((strand) =>
+      strand.role === "departure"
+    ) ?? [];
+
+    assert.deepEqual(
+      departures.map((strand) => ({
+        kind: strand.connection?.kind,
+        addresses: strand.nodes.map((node) => node.address),
+      })),
+      [
+        { kind: "inferred", addresses: ["1a"] },
+        { kind: "explicit", addresses: ["1b", "1c"] },
+        { kind: "explicit", addresses: ["1d", "1e", "1f"] },
+      ],
+    );
+    assert.deepEqual(
+      result?.strands.find((strand) => strand.role === "current")?.nodes
+        .find((node) => node.path === active.path)?.departures
+        .map((departure) => departure.kind),
+      ["inferred", "explicit", "explicit"],
+    );
+  });
+
   test("renders duplicate addresses as distinct exact nodes and chooser targets", () => {
     const allCards: LocalBranchCard[] = [
       { path: "1.md", address: "1", title: "Parent" },

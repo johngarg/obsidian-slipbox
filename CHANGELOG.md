@@ -53,6 +53,8 @@ initial public beta.
 
 ### Fixed
 
+- Partitioned local Branch View departures at later explicit branch starts so
+  one inferred sibling continuation is never repeated across several strands.
 - Prevented pointer navigation on the Deck map from retaining DOM focus and
   later acquiring a keyboard-focus outline during ordinary Deck navigation.
 - Coordinated index, Desk, and view updates after filing, and stopped reporting

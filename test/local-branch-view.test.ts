@@ -169,6 +169,27 @@ describe("local Branch View controller", () => {
     assert.match(node?.getAttribute("aria-label") ?? "", /a\.md/);
   });
 
+  test("elides long node addresses from the beginning with circle clearance", () => {
+    const address = "25,2,2";
+    const path = "long.md";
+    const subject = fixture({
+      ...MODEL,
+      activePath: path,
+      activeAddress: address,
+      strands: [{
+        ...MODEL.strands[0]!,
+        nodes: [branchNode(path, address)],
+        selectedPath: path,
+      }],
+    });
+    const node = subject.first.querySelector<SVGElement>(
+      `[data-focus-id='node:${path}']`,
+    );
+
+    assert.equal(node?.querySelector("text")?.textContent, "…2,2");
+    assert.match(node?.getAttribute("aria-label") ?? "", /25,2,2/);
+  });
+
   test("expands one hidden departure and chooses when several exist", async () => {
     const owner = branchNode("a.md", "1a");
     const first = {

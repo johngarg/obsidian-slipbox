@@ -33,6 +33,9 @@ export interface LocalBranchSvgOptions {
   ) => void | Promise<void>;
 }
 
+const EDGE_LABEL_MAX_CHARACTERS = 14;
+const NODE_LABEL_MAX_CHARACTERS = 4;
+
 /** Render a complete SVG projection without owning Deck or controller state. */
 export function renderLocalBranchSvg(options: LocalBranchSvgOptions): void {
   new LocalBranchSvgRenderer(options).render();
@@ -169,7 +172,7 @@ class LocalBranchSvgRenderer {
   ): void {
     const group = this.svg("g");
     group.classList.add("slipbox-local-branch-edge-label");
-    const visible = truncate(label, 14);
+    const visible = truncateEnd(label, EDGE_LABEL_MAX_CHARACTERS);
     const width = Math.max(18, visible.length * 7 + 8);
     const background = this.svg("rect");
     background.setAttribute("x", String(x - width / 2));
@@ -216,7 +219,10 @@ class LocalBranchSvgRenderer {
     const text = this.svg("text");
     text.setAttribute("x", String(item.x));
     text.setAttribute("y", String(item.y + 4));
-    text.textContent = truncate(node.address, 7);
+    text.textContent = truncateBeginning(
+      node.address,
+      NODE_LABEL_MAX_CHARACTERS,
+    );
     group.append(circle, text);
     this.appendTitle(group, label);
     this.activateOnClickOrKeyboard(group, () => {
@@ -388,9 +394,16 @@ class LocalBranchSvgRenderer {
   }
 }
 
-function truncate(value: string, length: number): string {
+function truncateEnd(value: string, length: number): string {
   const characters = Array.from(value);
   return characters.length <= length
     ? value
     : `${characters.slice(0, Math.max(1, length - 1)).join("")}…`;
+}
+
+function truncateBeginning(value: string, length: number): string {
+  const characters = Array.from(value);
+  return characters.length <= length
+    ? value
+    : `…${characters.slice(-Math.max(1, length - 1)).join("")}`;
 }

@@ -53,6 +53,8 @@ initial public beta.
 
 ### Fixed
 
+- Elided long local Branch View addresses from the beginning and reserved more
+  clearance between node labels and their circles.
 - Partitioned local Branch View departures at later explicit branch starts so
   one inferred sibling continuation is never repeated across several strands.
 - Prevented pointer navigation on the Deck map from retaining DOM focus and

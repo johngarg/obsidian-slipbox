@@ -7,11 +7,25 @@ import {
   deckMapCoordinate,
   deckMapIndexAtOffset,
   deckMapSectionLabel,
+  preventPrimaryDeckMapPointerFocus,
   sampleDeckMapIndices,
   visibleDeckMapSectionMarkers,
 } from "../src/deck-map.js";
 
 describe("Deck map", () => {
+  test("prevents only primary pointer focus", () => {
+    let prevented = 0;
+    preventPrimaryDeckMapPointerFocus({
+      button: 0,
+      preventDefault: () => { prevented += 1; },
+    });
+    preventPrimaryDeckMapPointerFocus({
+      button: 1,
+      preventDefault: () => { prevented += 1; },
+    });
+    assert.equal(prevented, 1);
+  });
+
   test("returns an empty model for an empty Deck", () => {
     assert.deepEqual(buildDeckMapModel([], null, []), {
       cardCount: 0,

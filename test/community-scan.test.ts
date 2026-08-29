@@ -64,4 +64,21 @@ describe("community scanner CSS compatibility", () => {
       /\.slipbox-card-scroll\.markdown-rendered\s+a\[data-slipbox-link-disabled="true"\],[^{]+\{[^}]*text-decoration:\s*none;/su,
     );
   });
+
+  test("separates adaptive card tints from bookmark map rings", () => {
+    assert.match(styles, /--slipbox-card-color-tint-strength:\s*5%/u);
+    assert.match(styles, /--slipbox-card-bookmark-tint-strength:\s*10%/u);
+    assert.match(
+      styles,
+      /\.theme-dark \.slipbox-card,[^{]+\{[^}]*--slipbox-card-color-tint-strength:\s*8%;[^}]*--slipbox-card-bookmark-tint-strength:\s*12%/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-bookmark-ring\s*\{[^}]*width:\s*8px;[^}]*height:\s*8px;[^}]*border:\s*1px solid var\(--interactive-accent\);[^}]*background:\s*none;/su,
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.slipbox-deck-map-marker\.is-bookmarked/u,
+    );
+  });
 });

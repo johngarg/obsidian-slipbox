@@ -80,9 +80,9 @@ Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicogra
 
 Run **Slipbox Desk: New card with options** or its Desk variant to choose an
 optional card colour while creating the note. The compact colour row offers
-**No colour**, selected by default, followed by red, orange, yellow, green,
-cyan, blue, purple, and pink. The quick **New card** commands remain immediate
-and create uncoloured cards.
+directly selectable circles for **No colour**, selected by default, followed by
+red, orange, yellow, green, cyan, blue, purple, and pink. The quick **New card**
+commands remain immediate and create uncoloured cards.
 
 The selected value is stored in the fixed `slipbox-card-color` property:
 
@@ -96,9 +96,12 @@ slipbox-card-color: yellow
 Slipbox Desk reads this property on Deck, Desk, and viewed cards but offers no
 way to change it after creation. As ordinary Markdown frontmatter, it remains
 directly editable in Obsidian. Missing and unsupported values simply display
-an uncoloured card. Card surfaces mix the selected colour with Obsidian's
-semantic background variables, so the tint follows light, dark, and community
-themes while normal text and interaction colours retain the theme's contrast.
+an uncoloured card. The card body remains unchanged; its header mixes a 5%
+hint of the selected colour with Obsidian's semantic background in light themes
+and 8% in dark themes. The Deck map uses the colour for that card's marker;
+bookmarks add an accent ring around the marker without hiding its card colour.
+The treatment therefore follows community themes while retaining the theme's
+normal contrast.
 
 ## Branching and structural navigation
 

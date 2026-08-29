@@ -29,16 +29,21 @@ function subject() {
 }
 
 describe("new card options form", () => {
-  test("starts with an accessible No colour choice and the fixed palette", () => {
+  test("starts with an accessible pressed button and the fixed palette", () => {
     const value = subject();
-    assert.equal(value.form.colorInputs.length, CARD_COLORS.length + 1);
-    assert.equal(value.form.colorInputs[0]?.checked, true);
+    assert.equal(value.form.colorButtons.length, CARD_COLORS.length + 1);
     assert.equal(
-      value.form.colorInputs[0]?.getAttribute("aria-label"),
+      value.form.colorButtons[0]?.getAttribute("aria-label"),
       "No colour",
     );
+    assert.equal(
+      value.form.colorButtons[0]?.getAttribute("aria-pressed"),
+      "true",
+    );
     assert.deepEqual(
-      value.form.colorInputs.slice(1).map((input) => input.value),
+      value.form.colorButtons.slice(1).map(
+        (button) => button.dataset.slipboxCardColor,
+      ),
       CARD_COLORS,
     );
     assert.equal(value.form.selectedColor.textContent, "No colour");
@@ -47,13 +52,17 @@ describe("new card options form", () => {
   test("submits a trimmed title and the selected colour", () => {
     const value = subject();
     value.form.titleInput.value = "  Chromodynamics  ";
-    const blue = value.form.colorInputs.find((input) => input.value === "blue");
+    const blue = value.form.colorButtons.find(
+      (button) => button.dataset.slipboxCardColor === "blue",
+    );
     assert.ok(blue);
-    blue.checked = true;
-    blue.dispatchEvent(new value.window.Event("change", {
-      bubbles: true,
-    }) as unknown as Event);
+    blue.click();
     assert.equal(value.form.selectedColor.textContent, "Blue");
+    assert.equal(blue.getAttribute("aria-pressed"), "true");
+    assert.equal(
+      value.form.colorButtons[0]?.getAttribute("aria-pressed"),
+      "false",
+    );
 
     value.form.form.dispatchEvent(new value.window.Event("submit", {
       bubbles: true,

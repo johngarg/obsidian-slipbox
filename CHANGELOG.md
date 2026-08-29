@@ -10,8 +10,9 @@ initial public beta.
 
 - Added optional theme-aware card colours selected through the combined new-card
   options dialog. Quick creation remains uncoloured, while the prompted commands
-  retain their IDs and now expose an accessible fixed colour row alongside the
-  optional title.
+  retain their IDs and now expose accessible circle buttons alongside the
+  optional title. Headers use an adaptive light/dark tint, Deck-map markers keep
+  the selected colour, and bookmarks surround those markers with an accent ring.
 - Added optional explicit branch links using the fixed canonical `+` alias
   syntax, such as `[[card|+a]]`, with interactive incoming labels on Deck,
   Desk, and viewed cards. Marked aliases can receive a quiet outline in
@@ -48,6 +49,8 @@ initial public beta.
 
 ### Fixed
 
+- Prevented pointer navigation on the Deck map from retaining DOM focus and
+  later acquiring a keyboard-focus outline during ordinary Deck navigation.
 - Coordinated index, Desk, and view updates after filing, and stopped reporting
   bookmark saves as successful when persistence fails.
 - Kept the inline Desk filing field evenly highlighted, within the normal

@@ -113,25 +113,37 @@
   pointer-events: none;
 }
 
-.slipbox-deck-map-marker {
+.slipbox-deck-map-marker,
+.slipbox-deck-map-bookmark-ring {
   position: absolute;
   top: 6px;
   left: calc(var(--slipbox-deck-map-position) * 100%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.slipbox-deck-map-marker {
   width: 3px;
   height: 3px;
-  border-radius: 50%;
   background: var(--text-faint);
-  transform: translate(-50%, -50%);
 }
 
 .slipbox-deck-map-marker.is-hidden {
   display: none;
 }
 
-.slipbox-deck-map-marker.is-bookmarked {
+.slipbox-deck-map-bookmark-ring {
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--interactive-accent);
+  background: none;
+}
+
+.slipbox-deck-map-marker.is-colored {
   width: 4px;
   height: 4px;
-  background: var(--interactive-accent);
+  background: var(--slipbox-card-tone);
 }
 
 .slipbox-deck-map-marker.is-active {
@@ -382,8 +394,15 @@ button.slipbox-desk-pile-cycle svg {
 
 .slipbox-card,
 .slipbox-desk-card {
-  --slipbox-card-body-background: var(--background-primary);
+  --slipbox-card-color-tint-strength: 5%;
+  --slipbox-card-bookmark-tint-strength: 10%;
   --slipbox-card-chrome-background: var(--background-primary-alt);
+}
+
+.theme-dark .slipbox-card,
+.theme-dark .slipbox-desk-card {
+  --slipbox-card-color-tint-strength: 8%;
+  --slipbox-card-bookmark-tint-strength: 12%;
 }
 
 [data-slipbox-card-color="red"] {
@@ -420,14 +439,9 @@ button.slipbox-desk-pile-cycle svg {
 
 .slipbox-card[data-slipbox-card-color],
 .slipbox-desk-card[data-slipbox-card-color] {
-  --slipbox-card-body-background: color-mix(
-    in oklch,
-    var(--slipbox-card-tone) 9%,
-    var(--background-primary)
-  );
   --slipbox-card-chrome-background: color-mix(
     in oklch,
-    var(--slipbox-card-tone) 14%,
+    var(--slipbox-card-tone) var(--slipbox-card-color-tint-strength),
     var(--background-primary-alt)
   );
 }
@@ -443,7 +457,7 @@ button.slipbox-desk-pile-cycle svg {
   border: 1px solid var(--background-modifier-border);
   border-radius: 7px;
   outline: none;
-  background: var(--slipbox-card-body-background);
+  background: var(--background-primary);
   box-shadow: 0 7px 20px rgb(0 0 0 / 0.16);
   transform: rotate(var(--slipbox-desk-card-tilt, -0.45deg));
   transform-origin: center;
@@ -549,8 +563,8 @@ button.slipbox-desk-pile-cycle svg {
 
 .slipbox-desk-card.is-bookmarked .slipbox-desk-card-identity {
   background: color-mix(
-    in srgb,
-    var(--interactive-accent) 10%,
+    in oklch,
+    var(--interactive-accent) var(--slipbox-card-bookmark-tint-strength),
     var(--slipbox-card-chrome-background)
   );
 }
@@ -840,7 +854,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.12),
     0 12px 36px rgb(0 0 0 / 0.12);
-  background: var(--slipbox-card-body-background);
+  background: var(--background-primary);
   cursor: pointer;
   pointer-events: auto;
   z-index: var(--slipbox-card-z-index, auto);
@@ -870,7 +884,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   flex-direction: column;
   overflow: hidden;
   border-radius: calc(var(--slipbox-card-radius) - 1px);
-  background: var(--slipbox-card-body-background);
+  background: var(--background-primary);
 }
 
 .slipbox-card.is-deck-anchor {
@@ -937,8 +951,8 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 
 .slipbox-card.is-bookmarked .slipbox-card-address-row {
   background: color-mix(
-    in srgb,
-    var(--interactive-accent) 10%,
+    in oklch,
+    var(--interactive-accent) var(--slipbox-card-bookmark-tint-strength),
     var(--slipbox-card-chrome-background)
   );
 }
@@ -1461,7 +1475,7 @@ button.slipbox-inferred-navigation-item:focus-visible {
   border-radius: 0;
   outline: none;
   color: var(--text-normal);
-  background: var(--slipbox-card-body-background);
+  background: var(--background-primary);
   box-shadow: none;
   font-family: inherit;
   font-size: inherit;
@@ -1600,7 +1614,7 @@ a.slipbox-explicit-branch-link:focus-visible {
   overflow: hidden;
   border-top: 1px solid var(--background-modifier-border);
   color: var(--text-muted);
-  background: var(--slipbox-card-chrome-background);
+  background: var(--background-primary-alt);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   font-variant-numeric: tabular-nums;
@@ -1816,20 +1830,17 @@ button.slipbox-card-backlink-overflow:disabled {
   padding: 4px;
 }
 
-.slipbox-card-color-choice {
+button.slipbox-card-color-choice {
   position: relative;
   display: inline-flex;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-}
-
-.slipbox-card-color-swatch {
-  position: relative;
-  display: block;
-  width: 22px;
-  height: 22px;
+  padding: 0;
   border: 1px solid color-mix(
     in oklch,
     var(--slipbox-card-tone, var(--text-muted)) 58%,
@@ -1837,25 +1848,28 @@ button.slipbox-card-backlink-overflow:disabled {
   );
   border-radius: 50%;
   background: var(--slipbox-card-tone, var(--background-primary));
+  box-shadow: none;
+  cursor: pointer;
   transition: box-shadow 100ms ease, transform 100ms ease;
 }
 
-.slipbox-card-color-choice:hover .slipbox-card-color-swatch {
+button.slipbox-card-color-choice:hover {
+  background: var(--slipbox-card-tone, var(--background-primary));
   transform: scale(1.08);
 }
 
-.slipbox-card-color-input:checked + .slipbox-card-color-swatch {
+button.slipbox-card-color-choice[aria-pressed="true"] {
   box-shadow:
     0 0 0 2px var(--background-primary),
     0 0 0 4px var(--interactive-accent);
 }
 
-.slipbox-card-color-input:focus-visible + .slipbox-card-color-swatch {
+button.slipbox-card-color-choice:focus-visible {
   outline: 2px solid var(--text-normal);
   outline-offset: 6px;
 }
 
-.slipbox-card-color-choice.is-no-color .slipbox-card-color-swatch::after {
+button.slipbox-card-color-choice.is-no-color::after {
   position: absolute;
   top: 2px;
   left: 9px;
@@ -2103,6 +2117,7 @@ button.slipbox-card-backlink-overflow:disabled {
   }
 
   .slipbox-deck-map-marker,
+  .slipbox-deck-map-bookmark-ring,
   .slipbox-deck-map-section {
     forced-color-adjust: none;
   }
@@ -2111,8 +2126,9 @@ button.slipbox-card-backlink-overflow:disabled {
     background: GrayText;
   }
 
-  .slipbox-deck-map-marker.is-bookmarked {
-    background: LinkText;
+  .slipbox-deck-map-bookmark-ring {
+    border-color: LinkText;
+    background: none;
   }
 
   .slipbox-deck-map-marker.is-active {

@@ -21,6 +21,24 @@ export interface DeckMapSectionMarker extends DeckMapMarker {
   readonly label: string;
 }
 
+interface DeckMapPointerActivation {
+  readonly button: number;
+  preventDefault(): void;
+}
+
+/**
+ * Keep pointer navigation from leaving the focusable map as the DOM focus
+ * owner. Keyboard users can still reach the slider with Tab and retain its
+ * focus-visible treatment.
+ */
+export function preventPrimaryDeckMapPointerFocus(
+  activation: DeckMapPointerActivation,
+): void {
+  if (activation.button === 0) {
+    activation.preventDefault();
+  }
+}
+
 export function deckMapCoordinate(
   index: number,
   cardCount: number,

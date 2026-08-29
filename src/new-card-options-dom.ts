@@ -1,6 +1,5 @@
 import {
   CARD_COLORS,
-  parseCardColor,
   type CardColor,
 } from "./card-color.js";
 import type { NewCardInput } from "./new-note.js";
@@ -23,7 +22,7 @@ export interface NewCardOptionsFormActions {
 export interface NewCardOptionsFormElements {
   readonly form: HTMLFormElement;
   readonly titleInput: HTMLInputElement;
-  readonly colorInputs: readonly HTMLInputElement[];
+  readonly colorButtons: readonly HTMLButtonElement[];
   readonly selectedColor: HTMLElement;
   readonly cancelButton: HTMLButtonElement;
   readonly createButton: HTMLButtonElement;
@@ -74,38 +73,32 @@ export function renderNewCardOptionsForm(
   fieldset.append(selectedColor);
   form.append(fieldset);
 
-  const colorInputs: HTMLInputElement[] = [];
+  let selectedColorValue: CardColor | null = null;
+  const colorButtons: HTMLButtonElement[] = [];
   const choices: readonly (CardColor | null)[] = [null, ...CARD_COLORS];
   for (const color of choices) {
     const label = color === null ? "No colour" : colorLabel(color);
-    const choice = createHtmlElement(document, "label");
+    const choice = createHtmlElement(document, "button");
+    choice.type = "button";
     choice.className = "slipbox-card-color-choice";
     choice.title = label;
+    choice.setAttribute("aria-label", label);
+    choice.setAttribute("aria-pressed", String(color === null));
     if (color === null) {
       choice.classList.add("is-no-color");
     } else {
       choice.dataset.slipboxCardColor = color;
     }
 
-    const input = createHtmlElement(document, "input");
-    input.className = "slipbox-visually-hidden slipbox-card-color-input";
-    input.type = "radio";
-    input.name = "slipbox-card-color";
-    input.value = color ?? "";
-    input.checked = color === null;
-    input.setAttribute("aria-label", label);
-    input.addEventListener("change", () => {
-      if (input.checked) {
-        selectedColor.textContent = label;
+    choice.addEventListener("click", () => {
+      selectedColorValue = color;
+      selectedColor.textContent = label;
+      for (const button of colorButtons) {
+        button.setAttribute("aria-pressed", String(button === choice));
       }
     });
-
-    const swatch = createHtmlElement(document, "span");
-    swatch.className = "slipbox-card-color-swatch";
-    swatch.setAttribute("aria-hidden", "true");
-    choice.append(input, swatch);
     colorRow.append(choice);
-    colorInputs.push(input);
+    colorButtons.push(choice);
   }
 
   const actionRow = createHtmlElement(document, "div");
@@ -137,17 +130,16 @@ export function renderNewCardOptionsForm(
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const checked = colorInputs.find((input) => input.checked);
     actions.create({
       title: titleInput.value.trim(),
-      color: parseCardColor(checked?.value),
+      color: selectedColorValue,
     });
   });
 
   return {
     form,
     titleInput,
-    colorInputs,
+    colorButtons,
     selectedColor,
     cancelButton,
     createButton,

@@ -23,10 +23,10 @@ initial public beta.
 - Added optional hierarchy inference from address extension, with
   commands for parent movement and wrapped forward/backward sibling cycling.
 - Added an expanded-by-default local Branch View beneath the active Deck card.
-  Its six-control toolbar and deterministic SVG show the current strand, one
-  higher context, active departures, hidden-branch stubs, responsive omission
-  counts, exact duplicate cards, and labelled explicit edges. Matching command
-  palette actions are available without default shortcuts.
+  Its deterministic SVG shows the current strand, one higher context, active
+  departures, hidden-branch stubs, responsive counted ellipses, exact duplicate
+  cards, and labelled explicit edges. Six matching command-palette actions are
+  available without default shortcuts; provisional visual controls are deferred.
 - Added a Branching settings group. Both branch models are derived in memory
   and never rewrite notes or addresses.
 
@@ -36,7 +36,8 @@ initial public beta.
   departure one column to the right of its source, straightened branch
   connections, and tightened the spacing between strands.
 - Presented the local Branch View as an uncapped transparent diagram beneath
-  its card, with its provisional navigation controls visually hidden.
+  its card, widened it within the Deck stage, enabled Deck panning from its
+  noninteractive space, and kept its provisional navigation controls hidden.
 - Assigned Vim-style defaults for inferred navigation: `-` for the parent and
   `n`/`N` for forward/backward sibling cycling.
 - Standardised address-derived hierarchy terminology on “inferred” throughout
@@ -58,8 +59,23 @@ initial public beta.
 
 ### Fixed
 
-- Kept the local Branch View tray the same width as its owning card while
-  retaining horizontal scrolling for wider diagrams.
+- Kept wheel gestures over the local Branch View scroller inside the tray
+  instead of moving the surrounding Deck.
+- Pointed every hidden-branch stub down and right with the same compact length,
+  including stubs on the higher-context row.
+- Kept hidden-branch stub hit targets outside their node circles, so clicking a
+  node consistently activates it and reveals all of its branches instead of
+  intermittently opening the single-branch expansion chooser.
+- Kept explicit Branch View continuations inside their address-extension family,
+  so comma-number strands such as `17,1,1` and `17,1,2` no longer absorb a
+  separate appended-letter strand such as `17,1A` and `17,1a`.
+- Bounded promoted explicit strands at the next explicit start so diagram and
+  command navigation cannot cross into a neighbouring supplementary strand.
+- Made every interactive hidden-branch stub reveal one bounded auxiliary row,
+  including stubs on departure rows, while suppressing stale, recursive, and
+  already-visible departures.
+- Reused one prepared local Branch View projection across command-availability
+  checks instead of rebuilding every filed card and title for each command.
 - Elided long local Branch View addresses from the beginning and reserved more
   clearance between node labels and their circles.
 - Partitioned local Branch View departures at later explicit branch starts so

@@ -68,6 +68,7 @@ export interface LocalBranchModel {
   readonly activePath: string;
   readonly activeAddress: string;
   readonly strands: readonly LocalBranchStrand[];
+  readonly expandedDepartureId: string | null;
   readonly navigation: Readonly<Record<
     LocalBranchMovement,
     readonly LocalBranchNavigationGroup[]
@@ -79,5 +80,10 @@ export interface LocalBranchModelInput {
   readonly cards: readonly LocalBranchCard[];
   readonly inferred: InferredStructureIndex;
   readonly explicit: ExplicitBranchIndex;
-  readonly expandedDepartureIds?: ReadonlySet<string>;
+  readonly expandedDepartureId?: string | null;
 }
+
+export type LocalBranchProjectionInput = Omit<
+  LocalBranchModelInput,
+  "activePath" | "expandedDepartureId"
+>;

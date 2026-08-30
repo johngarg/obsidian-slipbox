@@ -90,24 +90,31 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] Confirm the local Branch View appears expanded only beneath the active
   ordinary Deck card. Move the Deck anchor, open a viewed card, focus expanded
   Desk piles, and move cards without seeing a second view or remounting card
-  bodies. Collapse it, move the anchor, and confirm the per-view collapsed
-  state is retained.
-- [ ] On `8b` in a strand `8a`, `8b`, `8c`, confirm the toolbar moves backward
-  to `8a`, forward to `8c`, and to the known beginning `8a` without wrapping.
-  At root level, confirm the beginning control remains disabled. Verify the
-  existing `n`, `N`, and `-` commands retain their previous wrapping/parent
-  behavior.
+  bodies. Confirm its provisional toolbar and collapse control are not visible.
+- [ ] On `8b` in a strand `8a`, `8b`, `8c`, use the six Branch View commands
+  from the command palette and confirm they move backward to `8a`, forward to
+  `8c`, and to the known beginning `8a` without wrapping. At root level,
+  confirm the beginning command is unavailable. Verify the existing `n`, `N`,
+  and `-` commands retain their previous wrapping/parent behavior.
 - [ ] Add inferred children and several outgoing `+` branches to the active
   card. Confirm all departures appear below it, explicit labels omit the `+`,
   repeated supplementary controls navigate directly, and a duplicate-address
   destination opens an exact-path chooser. Add several incoming explicit
   parents and confirm the view quietly uses one stable higher context.
+- [ ] From `17,1`, add an explicit branch to `17,1,1` alongside `17,1,2`,
+  `17,1A`, and `17,1a`. Confirm the explicit row contains only
+  `17,1,1 → 17,1,2`, the appended-letter cards remain a separate inferred row,
+  and backward, forward, and beginning commands never cross between them.
+  Remove `17,1,2` and confirm the explicit row becomes a singleton. Verify the
+  older `n`/`N` sibling commands still cross the complete inferred child list.
 - [ ] Create long higher, current, and departure strands. Narrow the pane and
   confirm the active node, branch attachment points, and known ends survive;
-  omitted runs become counted gaps while hidden departures remain short stubs.
+  omitted runs become counted ellipses while hidden departures remain short stubs.
   Activate a gap to reveal only that run with horizontal scrolling, then
   activate a stub and confirm its sole departure expands or its several
-  departures open a chooser from which only one is expanded.
+  departures open a chooser from which only one is expanded. Confirm that
+  auxiliary row has no further stubs, then drag blank diagram space to pan the
+  Deck without breaking node, gap, stub, or scrollbar interaction.
 - [ ] Verify mouse and keyboard node activation, visible focus, disabled
   controls, full address/path tooltips, hover-preview policy, structural
   activation with body-link following off, long labels, light/dark/community

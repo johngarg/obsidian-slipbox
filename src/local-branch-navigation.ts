@@ -1,6 +1,7 @@
 import type { ExplicitBranch } from "./branch-links.js";
 import type {
   LocalBranchCard,
+  LocalBranchDeparture,
   LocalBranchModel,
   LocalBranchModelInput,
   LocalBranchMovement,
@@ -21,6 +22,7 @@ export interface LocalBranchNavigationInput {
   readonly active: LocalBranchCard;
   readonly currentAddresses: readonly string[];
   readonly explicitContext: LocalBranchExplicitContext | null;
+  readonly inferredDepartures: readonly LocalBranchDeparture[];
 }
 
 const EMPTY_GROUPS: readonly LocalBranchNavigationGroup[] = [];
@@ -35,6 +37,7 @@ export function buildLocalBranchNavigation(
     active,
     currentAddresses,
     explicitContext,
+    inferredDepartures,
   } = input;
   const currentIndex = currentAddresses.indexOf(active.address);
   const root = modelInput.inferred.nodesByAddress.get(active.address)
@@ -56,13 +59,12 @@ export function buildLocalBranchNavigation(
     }];
   };
 
-  const inferredChildren = modelInput.inferred.nodesByAddress.get(active.address)
-    ?.childAddresses ?? [];
-  const inferred = groupForAddress(
-    "inferred",
-    inferredChildren[0],
-    "Enter inserted strand",
-  );
+  const inferred = inferredDepartures.map((departure) => ({
+    id: `inferred:${departure.id}`,
+    movement: "inferred" as const,
+    label: "Enter inserted strand",
+    targets: [departure.target],
+  }));
   const explicit = (
     modelInput.explicit.outgoingBySourcePath.get(active.path) ?? []
   ).flatMap((branch) => {

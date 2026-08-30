@@ -74,6 +74,24 @@ describe("inferred address structure", () => {
     assert.equal(cycleForwardInferredSiblingAddress(index, "17"), "7");
   });
 
+  test("keeps global sibling cycling independent of Branch View families", () => {
+    const index = buildInferredStructure(
+      cards(["17,1", "17,1,1", "17,1,2", "17,1A", "17,1a"]),
+      "natural",
+    );
+
+    assert.deepEqual(inferredChildAddresses(index, "17,1"), [
+      "17,1,1",
+      "17,1,2",
+      "17,1A",
+      "17,1a",
+    ]);
+    assert.equal(
+      cycleForwardInferredSiblingAddress(index, "17,1,2"),
+      "17,1A",
+    );
+  });
+
   test("protects numeric tokens in natural mode and permits literal prefixes in lexical mode", () => {
     for (const [parent, candidate] of [
       ["1", "10"],

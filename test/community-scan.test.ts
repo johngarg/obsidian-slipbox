@@ -41,6 +41,17 @@ describe("community scanner CSS compatibility", () => {
     );
   });
 
+  test("keeps the Branch View stub hit target visually inert", () => {
+    assert.doesNotMatch(
+      styles,
+      /\.slipbox-local-branch-stub[^{,\n]*\sline\b/u,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-local-branch-stub-hit\s*\{[^}]*pointer-events:\s*stroke;/su,
+    );
+  });
+
   test("gives annotated Desk signatures a stable inline allocation", () => {
     assert.match(
       styles,

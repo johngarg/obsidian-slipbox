@@ -9,6 +9,7 @@ import {
   isInlineEditBodyTarget,
   matchesInlineEditRefreshGuard,
   resolveDeckEscapeAction,
+  shouldBeginDeckPan,
   shouldFinishInlineEditFromPointerDown,
   shouldNavigateDeckFromWheel,
 } from "../src/inline-edit-interactions.js";
@@ -18,6 +19,102 @@ import {
   startAddressCommand,
   type PendingDeckCommand,
 } from "../src/deck-commands.js";
+
+describe("Deck background panning", () => {
+  test("accepts empty Branch View surfaces and rejects interactive targets", () => {
+    const window = new Window();
+    const create = (tag: string) => window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      tag,
+    );
+    const stage = create("div");
+    const branch = create("section");
+    branch.classList.add("slipbox-local-branch-view");
+    const scroller = create("div");
+    scroller.classList.add("slipbox-local-branch-scroller");
+    const svg = create("div");
+    const edge = create("span");
+    const node = create("span");
+    node.classList.add("slipbox-local-branch-node");
+    const gap = create("span");
+    gap.classList.add("slipbox-local-branch-gap");
+    const button = create("button");
+    svg.append(edge, node, gap);
+    scroller.append(svg);
+    branch.append(scroller, button);
+    stage.append(branch);
+    window.document.body.append(stage);
+    const results: boolean[] = [];
+    stage.addEventListener("pointerdown", (event) => {
+      results.push(shouldBeginDeckPan(
+        event as unknown as PointerEvent,
+        stage as unknown as HTMLElement,
+      ));
+    });
+    const attempt = (target: unknown, buttonValue = 0): boolean => {
+      (target as typeof stage).dispatchEvent(new window.PointerEvent("pointerdown", {
+        bubbles: true,
+        button: buttonValue,
+        buttons: buttonValue === 0 ? 1 : 2,
+        clientX: 10,
+        clientY: 10,
+      }));
+      return results.pop() ?? false;
+    };
+
+    assert.equal(attempt(stage), true);
+    assert.equal(attempt(branch), true);
+    assert.equal(attempt(svg), true);
+    assert.equal(attempt(edge), true);
+    assert.equal(attempt(node), false);
+    assert.equal(attempt(gap), false);
+    assert.equal(attempt(button), false);
+    assert.equal(attempt(branch, 2), false);
+  });
+
+  test("leaves the Branch View scrollbar gutter native", () => {
+    const window = new Window();
+    const create = (tag: string) => window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      tag,
+    );
+    const stage = create("div");
+    const branch = create("section");
+    branch.className = "slipbox-local-branch-view";
+    const scroller = create("div");
+    scroller.className = "slipbox-local-branch-scroller";
+    Object.defineProperties(scroller, {
+      offsetWidth: { value: 120 },
+      clientWidth: { value: 120 },
+      offsetHeight: { value: 50 },
+      clientHeight: { value: 38 },
+    });
+    scroller.getBoundingClientRect = () => new window.DOMRect(0, 0, 120, 50);
+    branch.append(scroller);
+    stage.append(branch);
+    window.document.body.append(stage);
+    const results: boolean[] = [];
+    stage.addEventListener("pointerdown", (event) => {
+      results.push(shouldBeginDeckPan(
+        event as unknown as PointerEvent,
+        stage as unknown as HTMLElement,
+      ));
+    });
+    const attempt = (clientY: number): boolean => {
+      scroller.dispatchEvent(new window.PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        clientX: 10,
+        clientY,
+      }));
+      return results.pop() ?? false;
+    };
+
+    assert.equal(attempt(20), true);
+    assert.equal(attempt(44), false);
+  });
+});
 
 describe("inline edit entry interactions", () => {
   test("contains repeated Escape presses inside the active Slipbox view", () => {
@@ -128,7 +225,7 @@ describe("inline edit entry interactions", () => {
     assert.equal(isInlineEditBodyTarget(outside as unknown as EventTarget, htmlBody), false);
   });
 
-  test("keeps textarea wheel gestures native while retaining Deck navigation", () => {
+  test("keeps nested wheel gestures native while retaining Deck navigation", () => {
     const window = new Window();
     const stage = window.document.createElementNS(
       "http://www.w3.org/1999/xhtml",
@@ -138,7 +235,17 @@ describe("inline edit entry interactions", () => {
       "http://www.w3.org/1999/xhtml",
       "textarea",
     );
-    stage.append(textarea);
+    const branchScroller = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    branchScroller.classList.add("slipbox-local-branch-scroller");
+    const branchGraph = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "svg",
+    );
+    branchScroller.append(branchGraph);
+    stage.append(textarea, branchScroller);
     window.document.body.append(stage);
     let navigations = 0;
     stage.addEventListener("wheel", (event) => {
@@ -161,6 +268,16 @@ describe("inline edit entry interactions", () => {
     textarea.dispatchEvent(editorWheel);
     assert.equal(navigations, 0);
     assert.equal(editorWheel.defaultPrevented, false);
+
+    const branchWheel = new window.WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -80,
+      deltaY: 12,
+    });
+    branchGraph.dispatchEvent(branchWheel);
+    assert.equal(navigations, 0);
+    assert.equal(branchWheel.defaultPrevented, false);
 
     const deckWheel = new window.WheelEvent("wheel", {
       bubbles: true,

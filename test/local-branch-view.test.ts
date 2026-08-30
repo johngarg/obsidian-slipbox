@@ -7,7 +7,10 @@ import type {
   LocalBranchNode,
 } from "../src/local-branch-model.js";
 import { localBranchDomWindow } from "../src/local-branch-dom.js";
-import { LocalBranchViewController } from "../src/local-branch-view.js";
+import {
+  localBranchTrayWidth,
+  LocalBranchViewController,
+} from "../src/local-branch-view.js";
 
 const branchNode = (
   path: string,
@@ -30,6 +33,7 @@ const branchNode = (
 const MODEL: LocalBranchModel = {
   activePath: "b.md",
   activeAddress: "1b",
+  expandedDepartureId: null,
   strands: [{
     id: "current",
     role: "current",
@@ -58,7 +62,11 @@ const MODEL: LocalBranchModel = {
   },
 };
 
-function fixture(model: LocalBranchModel = MODEL, ownerWidth = 520) {
+function fixture(
+  model: LocalBranchModel = MODEL,
+  ownerWidth = 520,
+  stageWidth = 900,
+) {
   const htmlNamespace = "http://www.w3.org/1999/xhtml";
   const window = new Window();
   const document = window.document as unknown as Document;
@@ -73,9 +81,12 @@ function fixture(model: LocalBranchModel = MODEL, ownerWidth = 520) {
   const obsidianWindow = localBranchDomWindow(document);
   const first = obsidianWindow.createEl("article");
   const second = obsidianWindow.createEl("article");
+  const stage = obsidianWindow.createDiv();
   Object.defineProperty(first, "offsetWidth", { value: ownerWidth });
   Object.defineProperty(second, "offsetWidth", { value: ownerWidth });
-  document.body.append(first, second);
+  Object.defineProperty(stage, "clientWidth", { value: stageWidth });
+  stage.append(first, second);
+  document.body.append(stage);
   const activations: readonly string[][] = [];
   const previews: string[] = [];
   const departureChoices: readonly string[][] = [];
@@ -86,7 +97,10 @@ function fixture(model: LocalBranchModel = MODEL, ownerWidth = 520) {
     showView: () => visible,
     showTooltips: () => false,
     previewLinksOnHover: () => true,
-    modelForPath: () => model,
+    modelForPath: (_path, expandedDepartureId) =>
+      expandedDepartureId === null
+        ? model
+        : { ...model, expandedDepartureId },
     chooseDeparture: async (departures) => {
       (departureChoices as string[][]).push(
         departures.map((departure) => departure.id),
@@ -101,12 +115,13 @@ function fixture(model: LocalBranchModel = MODEL, ownerWidth = 520) {
     },
     runAfterEditing: (_reason, action) => void action(),
   });
-  controller.attach(first, "b.md");
+  controller.attach(first, "b.md", stage);
   return {
     window,
     document,
     first,
     second,
+    stage,
     controller,
     activations,
     previews,
@@ -116,15 +131,19 @@ function fixture(model: LocalBranchModel = MODEL, ownerWidth = 520) {
 }
 
 describe("local Branch View controller", () => {
-  test("matches the owning card width", () => {
+  test("widens within the Deck stage and caps at the layout maximum", () => {
     const ownerWidth = 548;
-    const subject = fixture(MODEL, ownerWidth);
+    const stageWidth = 900;
+    const subject = fixture(MODEL, ownerWidth, stageWidth);
     const root = subject.first.querySelector<HTMLElement>(
       ".slipbox-local-branch-view",
     );
 
-    assert.equal(root?.style.width, `${ownerWidth}px`);
+    assert.equal(root?.style.width, "852px");
     assert.equal(root?.style.maxHeight, "");
+    assert.equal(localBranchTrayWidth(ownerWidth, 500), ownerWidth);
+    assert.equal(localBranchTrayWidth(ownerWidth, 1_200), 900);
+    assert.equal(localBranchTrayWidth(ownerWidth, 0), ownerWidth);
   });
 
   test("renders six stable movement slots with unavailable controls disabled", () => {
@@ -144,7 +163,7 @@ describe("local Branch View controller", () => {
   test("transfers one stable root between Deck owners", () => {
     const subject = fixture();
     const root = subject.first.querySelector(".slipbox-local-branch-view");
-    subject.controller.attach(subject.second, "c.md");
+    subject.controller.attach(subject.second, "c.md", subject.stage);
     assert.equal(subject.first.querySelector(".slipbox-local-branch-view"), null);
     assert.equal(subject.second.querySelector(".slipbox-local-branch-view"), root);
     assert.equal(subject.document.querySelectorAll(".slipbox-local-branch-view").length, 1);
@@ -256,19 +275,59 @@ describe("local Branch View controller", () => {
     }
   });
 
-  test("draws hidden branch markers down and right at 45 degrees", () => {
-    const subject = fixture();
-    const line = subject.first.querySelector<SVGLineElement>(
-      "[data-focus-id='stub:a.md'] line",
-    );
-    const deltaX = Number(line?.getAttribute("x2")) -
-      Number(line?.getAttribute("x1"));
-    const deltaY = Number(line?.getAttribute("y2")) -
-      Number(line?.getAttribute("y1"));
+  test("points every hidden branch stub down and right", () => {
+    const subject = fixture({
+      ...MODEL,
+      strands: [{
+        id: "higher",
+        role: "higher",
+        nodes: [branchNode("higher.md", "1", 1)],
+        selectedPath: "higher.md",
+        knownBeginning: true,
+        knownEnd: true,
+      }, ...MODEL.strands],
+    });
 
-    assert.equal(deltaX > 0, true);
-    assert.equal(deltaY > 0, true);
-    assert.equal(Math.abs(deltaX - deltaY) < 1e-9, true);
+    for (const path of ["higher.md", "a.md"]) {
+      const line = subject.first.querySelector<SVGLineElement>(
+        `[data-focus-id='stub:${path}'] .slipbox-local-branch-stub-line`,
+      );
+      const deltaX = Number(line?.getAttribute("x2")) -
+        Number(line?.getAttribute("x1"));
+      const deltaY = Number(line?.getAttribute("y2")) -
+        Number(line?.getAttribute("y1"));
+
+      assert.equal(deltaX > 0, true);
+      assert.equal(deltaY > 0, true);
+      assert.equal(Math.abs(deltaX - Math.abs(deltaY)) < 1e-9, true);
+      assert.equal(Math.abs(Math.hypot(deltaX, deltaY) - 12) < 1e-9, true);
+    }
+  });
+
+  test("keeps the branch-stub hit target outside the node", () => {
+    const subject = fixture();
+    const node = subject.first.querySelector<SVGCircleElement>(
+      "[data-focus-id='node:a.md'] circle",
+    );
+    const visual = subject.first.querySelector<SVGLineElement>(
+      "[data-focus-id='stub:a.md'] .slipbox-local-branch-stub-line",
+    );
+    const hit = subject.first.querySelector<SVGLineElement>(
+      "[data-focus-id='stub:a.md'] .slipbox-local-branch-stub-hit",
+    );
+    const centerX = Number(node?.getAttribute("cx"));
+    const centerY = Number(node?.getAttribute("cy"));
+    const hitStartDistance = Math.hypot(
+      Number(hit?.getAttribute("x1")) - centerX,
+      Number(hit?.getAttribute("y1")) - centerY,
+    );
+
+    assert.equal(
+      hitStartDistance > Number(node?.getAttribute("r")),
+      true,
+    );
+    assert.equal(hit?.getAttribute("stroke-linecap"), "butt");
+    assert.equal(visual?.getAttribute("pointer-events"), "none");
   });
 
   test("wraps node addresses onto two balanced lines", () => {
@@ -322,6 +381,48 @@ describe("local Branch View controller", () => {
     assert.match(node?.getAttribute("aria-label") ?? "", /123456789012345/);
   });
 
+  test("renders omitted runs as a counted ellipsis slot", () => {
+    const nodes = Array.from({ length: 12 }, (_, index) =>
+      branchNode(`${index}.md`, String(index))
+    );
+    const subject = fixture({
+      ...MODEL,
+      activePath: "5.md",
+      activeAddress: "5",
+      strands: [{
+        ...MODEL.strands[0]!,
+        nodes,
+        selectedPath: "5.md",
+      }],
+    }, 240, 360);
+    const gap = subject.first.querySelector<SVGElement>(
+      ".slipbox-local-branch-gap",
+    );
+    const focusId = gap?.getAttribute("data-focus-id") ?? "";
+
+    assert.match(gap?.getAttribute("aria-label") ?? "", /Show \d+ omitted cards/);
+    assert.match(
+      gap?.querySelector(".slipbox-local-branch-gap-count")?.textContent ?? "",
+      /^\d+$/,
+    );
+    assert.equal(
+      gap?.querySelector(".slipbox-local-branch-gap-ellipsis")?.textContent,
+      "…",
+    );
+    gap?.dispatchEvent(new subject.window.KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "Enter",
+    }) as unknown as Event);
+    assert.equal(
+      subject.first.querySelector(`[data-focus-id='${focusId}']`),
+      null,
+    );
+    const graph = subject.first.querySelector<SVGElement>(
+      ".slipbox-local-branch-graph",
+    );
+    assert.equal(Number(graph?.getAttribute("width")) > 312, true);
+  });
+
   test("expands one hidden departure and chooses when several exist", async () => {
     const owner = branchNode("a.md", "1a");
     const first = {
@@ -366,7 +467,7 @@ describe("local Branch View controller", () => {
       ".slipbox-local-branch-collapse",
     )?.click();
     assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
-    subject.controller.attach(subject.second, "c.md");
+    subject.controller.attach(subject.second, "c.md", subject.stage);
     assert.equal(subject.second.querySelector(".slipbox-local-branch-graph"), null);
     assert.equal(
       subject.second.querySelector(".slipbox-local-branch-collapse")

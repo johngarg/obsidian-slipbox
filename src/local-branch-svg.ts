@@ -16,7 +16,7 @@ export interface LocalBranchSvgOptions {
   readonly model: LocalBranchModel;
   readonly width: number;
   readonly expandedGapIds: ReadonlySet<string>;
-  readonly expandedDepartureIds: ReadonlySet<string>;
+  readonly expandedDepartureId: string | null;
   readonly showTooltips: boolean;
   readonly previewLinksOnHover: boolean;
   readonly activate: (targets: readonly LocalBranchTarget[]) => void | Promise<void>;
@@ -38,6 +38,8 @@ const NODE_LABEL_MAX_LINE_CHARACTERS = 5;
 const NODE_LABEL_MAX_LINES = 2;
 const NODE_LABEL_LINE_HEIGHT = 9;
 const BRANCH_STUB_LENGTH = 12;
+const BRANCH_STUB_HIT_EXTENSION = 10;
+const BRANCH_STUB_HIT_CLEARANCE = 1;
 const DIAGONAL_COMPONENT = Math.SQRT1_2;
 
 /** Render a complete SVG projection without owning Deck or controller state. */
@@ -47,9 +49,18 @@ export function renderLocalBranchSvg(options: LocalBranchSvgOptions): void {
 
 class LocalBranchSvgRenderer {
   private readonly activeDocument: Document;
+  private readonly visibleDepartureIds: ReadonlySet<string>;
 
   constructor(private readonly options: LocalBranchSvgOptions) {
     this.activeDocument = options.parent.ownerDocument;
+    this.visibleDepartureIds = new Set(
+      options.model.strands
+        .filter((strand) =>
+          strand.role === "departure" &&
+          strand.id !== options.model.expandedDepartureId
+        )
+        .map((strand) => strand.id),
+    );
   }
 
   render(): void {
@@ -85,13 +96,11 @@ class LocalBranchSvgRenderer {
             items,
             item.id,
             item.count,
-            item.leading,
-            item.trailing,
             item.x,
             item.y,
           );
         } else {
-          this.renderNode(items, row, item, layout.nodeRadius);
+          this.renderNode(items, item, layout.nodeRadius);
         }
       }
     }
@@ -195,7 +204,6 @@ class LocalBranchSvgRenderer {
 
   private renderNode(
     parent: SVGElement,
-    row: LocalBranchLayoutStrand,
     item: LocalBranchLayoutNode,
     radius: number,
   ): void {
@@ -252,25 +260,27 @@ class LocalBranchSvgRenderer {
     });
     parent.append(group);
 
+    const hiddenDepartures = node.departures.filter((departure) =>
+      !this.visibleDepartureIds.has(departure.id)
+    );
     if (
       node.path !== this.options.model.activePath &&
-      node.departures.length > 0
+      hiddenDepartures.length > 0
     ) {
-      this.renderStub(parent, row, item, radius);
+      this.renderStub(parent, item, radius, hiddenDepartures);
     }
   }
 
   private renderStub(
     parent: SVGElement,
-    row: LocalBranchLayoutStrand,
     item: LocalBranchLayoutNode,
     radius: number,
+    departures: readonly LocalBranchDeparture[],
   ): void {
-    const departures = item.node.departures;
     const group = this.svg("g");
     group.classList.add("slipbox-local-branch-stub");
     if (departures.some((departure) =>
-      this.options.expandedDepartureIds.has(departure.id)
+      this.options.expandedDepartureId === departure.id
     )) {
       group.classList.add("is-expanded");
     }
@@ -294,7 +304,7 @@ class LocalBranchSvgRenderer {
     } from ${item.node.address}: ${types}`;
     group.setAttribute("aria-label", label);
     const line = this.svg("line");
-    const verticalDirection = row.strand.role === "higher" ? -1 : 1;
+    const verticalDirection = 1;
     const radiusOffset = radius * DIAGONAL_COMPONENT;
     const stubOffset = BRANCH_STUB_LENGTH * DIAGONAL_COMPONENT;
     const startX = item.x + radiusOffset;
@@ -305,11 +315,26 @@ class LocalBranchSvgRenderer {
     line.setAttribute("y1", String(startY));
     line.setAttribute("x2", String(endX));
     line.setAttribute("y2", String(endY));
-    const hit = this.svg("circle");
+    line.classList.add("slipbox-local-branch-stub-line");
+    line.setAttribute("pointer-events", "none");
+    const hit = this.svg("line");
     hit.classList.add("slipbox-local-branch-stub-hit");
-    hit.setAttribute("cx", String((startX + endX) / 2));
-    hit.setAttribute("cy", String((startY + endY) / 2));
-    hit.setAttribute("r", "13");
+    const hitStartOffset = (radius + BRANCH_STUB_HIT_CLEARANCE) *
+      DIAGONAL_COMPONENT;
+    const hitEndOffset = (
+      radius + BRANCH_STUB_LENGTH + BRANCH_STUB_HIT_EXTENSION
+    ) * DIAGONAL_COMPONENT;
+    hit.setAttribute("x1", String(item.x + hitStartOffset));
+    hit.setAttribute(
+      "y1",
+      String(item.y + verticalDirection * hitStartOffset),
+    );
+    hit.setAttribute("x2", String(item.x + hitEndOffset));
+    hit.setAttribute(
+      "y2",
+      String(item.y + verticalDirection * hitEndOffset),
+    );
+    hit.setAttribute("stroke-linecap", "butt");
     group.append(line, hit);
     this.appendTitle(group, label);
     this.activateOnClickOrKeyboard(group, () => {
@@ -322,8 +347,6 @@ class LocalBranchSvgRenderer {
     parent: SVGElement,
     id: string,
     count: number,
-    leading: boolean,
-    trailing: boolean,
     x: number,
     y: number,
   ): void {
@@ -339,15 +362,17 @@ class LocalBranchSvgRenderer {
     hit.setAttribute("width", "54");
     hit.setAttribute("height", "30");
     hit.setAttribute("rx", "8");
-    const text = this.svg("text");
-    text.setAttribute("x", String(x));
-    text.setAttribute("y", String(y + 4));
-    text.textContent = leading
-      ? `${count} …`
-      : trailing
-        ? `… ${count}`
-        : `… ${count} …`;
-    group.append(hit, text);
+    const countText = this.svg("text");
+    countText.classList.add("slipbox-local-branch-gap-count");
+    countText.setAttribute("x", String(x));
+    countText.setAttribute("y", String(y - 5));
+    countText.textContent = String(count);
+    const ellipsis = this.svg("text");
+    ellipsis.classList.add("slipbox-local-branch-gap-ellipsis");
+    ellipsis.setAttribute("x", String(x));
+    ellipsis.setAttribute("y", String(y + 12));
+    ellipsis.textContent = "…";
+    group.append(hit, countText, ellipsis);
     this.activateOnClickOrKeyboard(group, () => {
       this.options.expandGap(id);
     });

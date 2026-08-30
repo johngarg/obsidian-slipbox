@@ -24,6 +24,7 @@ const node = (index: number): LocalBranchNode => ({
 const model: LocalBranchModel = {
   activePath: "5.md",
   activeAddress: "5",
+  expandedDepartureId: null,
   strands: [{
     id: "current",
     role: "current",

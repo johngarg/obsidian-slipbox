@@ -3,13 +3,18 @@ import {
   buildLocalBranchNavigation,
   type LocalBranchExplicitContext,
 } from "./local-branch-navigation.js";
-import type { InferredStructureIndex } from "./inferred-structure.js";
+import {
+  buildLocalBranchStrandFamilyIndex,
+  type LocalBranchAddressStrand,
+  type LocalBranchStrandFamilyIndex,
+} from "./local-branch-strands.js";
 import type {
   LocalBranchCard,
   LocalBranchDeparture,
   LocalBranchModel,
   LocalBranchModelInput,
   LocalBranchNode,
+  LocalBranchProjectionInput,
   LocalBranchStrand,
   LocalBranchStrandRole,
 } from "./local-branch-types.js";
@@ -22,116 +27,263 @@ export type {
   LocalBranchMovement,
   LocalBranchNavigationGroup,
   LocalBranchNode,
+  LocalBranchProjectionInput,
   LocalBranchStrand,
   LocalBranchTarget,
 } from "./local-branch-types.js";
 export { localBranchTargets } from "./local-branch-navigation.js";
 
+interface PreparedLocalBranchModelInput extends LocalBranchModelInput {
+  readonly strandFamilies: LocalBranchStrandFamilyIndex;
+}
+
 /** Build the complete local semantic projection before responsive omission. */
 export function buildLocalBranchModel(
   input: LocalBranchModelInput,
 ): LocalBranchModel | null {
-  const cardsByPath = new Map(input.cards.map((card) => [card.path, card]));
-  const cardsByAddress = groupCardsByAddress(input.cards);
-  const active = cardsByPath.get(input.activePath);
+  const projector = new LocalBranchProjector({
+    cards: input.cards,
+    inferred: input.inferred,
+    explicit: input.explicit,
+  });
+  return projector.modelForPath(
+    input.activePath,
+    input.expandedDepartureId ?? null,
+  );
+}
+
+/** Reuses structural lookups and the most recent unexpanded local model. */
+export class LocalBranchProjector {
+  private readonly cardsByPath: ReadonlyMap<string, LocalBranchCard>;
+  private readonly cardsByAddress: ReadonlyMap<
+    string,
+    readonly LocalBranchCard[]
+  >;
+  private readonly strandFamilies: LocalBranchStrandFamilyIndex;
+  private cachedBasePath: string | null = null;
+  private cachedBaseModel: LocalBranchModel | null = null;
+
+  constructor(private readonly input: LocalBranchProjectionInput) {
+    this.cardsByPath = new Map(
+      input.cards.map((card) => [card.path, card]),
+    );
+    this.cardsByAddress = groupCardsByAddress(input.cards);
+    this.strandFamilies = buildLocalBranchStrandFamilyIndex(input.inferred);
+  }
+
+  modelForPath(
+    activePath: string,
+    expandedDepartureId: string | null = null,
+  ): LocalBranchModel | null {
+    const base = this.baseModelForPath(activePath);
+    if (base === null || expandedDepartureId === null) {
+      return base;
+    }
+    return expandDeparture(
+      this.input,
+      this.cardsByPath,
+      this.cardsByAddress,
+      this.strandFamilies,
+      base,
+      expandedDepartureId,
+    );
+  }
+
+  private baseModelForPath(activePath: string): LocalBranchModel | null {
+    if (activePath === this.cachedBasePath) {
+      return this.cachedBaseModel;
+    }
+    this.cachedBasePath = activePath;
+    this.cachedBaseModel = buildBaseModel(
+      this.input,
+      this.cardsByPath,
+      this.cardsByAddress,
+      this.strandFamilies,
+      activePath,
+    );
+    return this.cachedBaseModel;
+  }
+}
+
+export interface LocalBranchProjectorCacheInput {
+  readonly snapshot: object;
+  readonly titleSource: string;
+  readonly titleProperty: string;
+  readonly create: () => LocalBranchProjector;
+}
+
+/** Invalidates prepared card/title data only when its semantic source changes. */
+export class LocalBranchProjectorCache {
+  private snapshot: object | null = null;
+  private titleSource = "";
+  private titleProperty = "";
+  private projector: LocalBranchProjector | null = null;
+
+  projectorFor(input: LocalBranchProjectorCacheInput): LocalBranchProjector {
+    if (
+      this.projector === null ||
+      this.snapshot !== input.snapshot ||
+      this.titleSource !== input.titleSource ||
+      this.titleProperty !== input.titleProperty
+    ) {
+      this.snapshot = input.snapshot;
+      this.titleSource = input.titleSource;
+      this.titleProperty = input.titleProperty;
+      this.projector = input.create();
+    }
+    return this.projector;
+  }
+}
+
+function buildBaseModel(
+  input: LocalBranchProjectionInput,
+  cardsByPath: ReadonlyMap<string, LocalBranchCard>,
+  cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
+  strandFamilies: LocalBranchStrandFamilyIndex,
+  activePath: string,
+): LocalBranchModel | null {
+  const active = cardsByPath.get(activePath);
   if (active === undefined) {
     return null;
   }
 
   const inferredNode = input.inferred.nodesByAddress.get(active.address);
-  const siblingAddresses = inferredNode === undefined
-    ? [active.address]
-    : siblingsForAddress(input.inferred, active.address);
+  const siblingAddresses = addressesForStrand(strandFamilies, active.address);
   const activeAddressIndex = Math.max(0, siblingAddresses.indexOf(active.address));
+  const modelInput: PreparedLocalBranchModelInput = {
+    ...input,
+    activePath,
+    strandFamilies,
+  };
   const explicitContext = findExplicitContext(
-    input,
+    modelInput,
     cardsByPath,
     cardsByAddress,
     siblingAddresses,
     activeAddressIndex,
   );
+  const explicitInterval = explicitContext === null
+    ? null
+    : explicitContextInterval(modelInput, cardsByPath, explicitContext);
   const contextStartIndex = explicitContext === null
     ? 0
     : Math.max(0, siblingAddresses.indexOf(explicitContext.targetAddress));
   const currentAddresses = explicitContext === null
     ? siblingAddresses
-    : siblingAddresses.slice(contextStartIndex);
+    : explicitInterval?.addresses ?? siblingAddresses.slice(contextStartIndex);
   const rootContext = inferredNode?.parentAddress === null;
   const current = strand(
     "current",
     "current",
     currentAddresses,
-    input.activePath,
+    activePath,
     cardsByAddress,
     cardsByPath,
-    input,
+    modelInput,
     explicitContext !== null || !rootContext,
-    !rootContext,
+    explicitInterval?.knownEnd ?? !rootContext,
   );
 
   const higher = buildHigherStrand(
-    input,
+    modelInput,
     cardsByPath,
     cardsByAddress,
     active,
     explicitContext,
   );
   const departures = buildDepartures(
-    input,
+    modelInput,
     cardsByPath,
     cardsByAddress,
     active,
   );
-  const visiblePaths = new Set([
-    ...current.nodes.map((node) => node.path),
-    ...(higher?.nodes.map((node) => node.path) ?? []),
-  ]);
-  const expandedDepartures = [...input.expandedDepartureIds ?? []]
-    .flatMap((departureId) => {
-      for (const path of visiblePaths) {
-        if (path === active.path) {
-          continue;
-        }
-        const owner = cardsByPath.get(path);
-        if (owner === undefined) {
-          continue;
-        }
-        const departure = buildDepartures(
-          input,
-          cardsByPath,
-          cardsByAddress,
-          owner,
-        ).find((strand) => strand.id === departureId);
-        if (departure !== undefined) {
-          return [departure];
-        }
-      }
-      return [];
-    });
+  const inferredDepartures = departureDefinitions(
+    modelInput,
+    cardsByPath,
+    cardsByAddress,
+    active,
+  ).filter((departure) => departure.kind === "inferred");
   const strands = [
     ...(higher === null ? [] : [higher]),
     current,
     ...departures,
-    ...expandedDepartures,
   ];
 
   return {
     activePath: active.path,
     activeAddress: active.address,
     strands,
+    expandedDepartureId: null,
     navigation: buildLocalBranchNavigation({
-      modelInput: input,
+      modelInput,
       cardsByPath,
       cardsByAddress,
       active,
       currentAddresses,
       explicitContext,
+      inferredDepartures: inferredDepartures.map(departureForDefinition),
     }),
   };
 }
 
+function expandDeparture(
+  input: LocalBranchProjectionInput,
+  cardsByPath: ReadonlyMap<string, LocalBranchCard>,
+  cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
+  strandFamilies: LocalBranchStrandFamilyIndex,
+  base: LocalBranchModel,
+  departureId: string,
+): LocalBranchModel {
+  const visibleDepartureIds = new Set(
+    base.strands
+      .filter((strand) => strand.role === "departure")
+      .map((strand) => strand.id),
+  );
+  if (visibleDepartureIds.has(departureId)) {
+    return base;
+  }
+  const modelInput: PreparedLocalBranchModelInput = {
+    ...input,
+    activePath: base.activePath,
+    strandFamilies,
+  };
+  for (const row of base.strands) {
+    for (const node of row.nodes) {
+      if (node.path === base.activePath) {
+        continue;
+      }
+      const expandable = node.departures.some((departure) =>
+        departure.id === departureId && !visibleDepartureIds.has(departure.id)
+      );
+      if (!expandable) {
+        continue;
+      }
+      const owner = cardsByPath.get(node.path);
+      if (owner === undefined) {
+        return base;
+      }
+      const expanded = buildDepartures(
+        modelInput,
+        cardsByPath,
+        cardsByAddress,
+        owner,
+        false,
+      ).find((strand) => strand.id === departureId);
+      if (expanded === undefined) {
+        return base;
+      }
+      return {
+        ...base,
+        strands: [...base.strands, expanded],
+        expandedDepartureId: departureId,
+      };
+    }
+  }
+  return base;
+}
+
 function buildHigherStrand(
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   active: LocalBranchCard,
@@ -145,7 +297,7 @@ function buildHigherStrand(
     const sourceNode = input.inferred.nodesByAddress.get(source.address);
     const addresses = sourceNode === undefined
       ? [source.address]
-      : siblingsForAddress(input.inferred, source.address);
+      : addressesForStrand(input.strandFamilies, source.address);
     const root = sourceNode?.parentAddress === null;
     return {
       ...strand(
@@ -179,14 +331,17 @@ function buildHigherStrand(
   }
   const parentNode = input.inferred.nodesByAddress.get(parentAddress);
   const root = parentNode?.parentAddress === null;
-  const currentAddresses = siblingsForAddress(input.inferred, active.address);
+  const currentAddresses = addressesForStrand(
+    input.strandFamilies,
+    active.address,
+  );
   const currentBeginning = cardsByAddress.get(
     currentAddresses[0] ?? active.address,
   )?.[0] ?? active;
   const result = strand(
     `higher:inferred:${parentAddress}`,
     "higher",
-    siblingsForAddress(input.inferred, parentAddress),
+    addressesForStrand(input.strandFamilies, parentAddress),
     selected.path,
     cardsByAddress,
     cardsByPath,
@@ -205,10 +360,11 @@ function buildHigherStrand(
 }
 
 function buildDepartures(
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   active: LocalBranchCard,
+  includeDepartures = true,
 ): readonly LocalBranchStrand[] {
   return departureDefinitions(input, cardsByPath, cardsByAddress, active)
     .map((departure) => ({
@@ -222,6 +378,7 @@ function buildDepartures(
         input,
         true,
         departure.knownEnd,
+        includeDepartures,
       ),
       connection: {
         fromPath: active.path,
@@ -254,47 +411,73 @@ interface ExplicitDepartureStart {
 }
 
 function departureDefinitions(
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   source: LocalBranchCard,
 ): readonly DepartureDefinition[] {
   const explicitStarts = explicitDepartureStarts(input, cardsByPath, source);
-  const inferredAddresses = inferredDepartureAddresses(
+  const inferred = inferredDepartureDefinitions(
     input,
+    cardsByAddress,
     source,
     explicitStarts,
   );
-  const inferredTarget = inferredAddresses[0] === undefined
-    ? undefined
-    : cardsByAddress.get(inferredAddresses[0])?.[0];
-  const inferred: readonly DepartureDefinition[] = inferredTarget === undefined
-    ? []
-    : [{
-      id: `departure:inferred:${source.address}`,
-      kind: "inferred",
-      description: "Address-inferred inserted strand",
-      target: inferredTarget,
-      addresses: inferredAddresses,
-      knownEnd: true,
-    }];
   const explicit = explicitStarts.map((start): DepartureDefinition => {
-    const end = explicitDepartureEnd(start, explicitStarts);
+    const interval = explicitStrandInterval(start, explicitStarts);
     return {
       id: `departure:explicit:${source.path}:${start.target.path}`,
       kind: "explicit",
       description: `Supplementary strand ${start.branch.label}`,
       edgeLabel: start.branch.label,
       target: start.target,
-      addresses: start.siblings.slice(start.index, end),
-      knownEnd: end < start.siblings.length || start.hasKnownEnd,
+      addresses: interval.addresses,
+      knownEnd: interval.knownEnd,
     };
   });
   return [...inferred, ...explicit];
 }
 
+function inferredDepartureDefinitions(
+  input: PreparedLocalBranchModelInput,
+  cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
+  source: LocalBranchCard,
+  explicitStarts: readonly ExplicitDepartureStart[],
+): readonly DepartureDefinition[] {
+  const families = input.strandFamilies.childStrandsByParentAddress
+    .get(source.address) ?? [];
+  return families.flatMap((family) => {
+    const addresses = inferredPrefixForFamily(family, explicitStarts);
+    const firstAddress = addresses[0];
+    const target = firstAddress === undefined
+      ? undefined
+      : cardsByAddress.get(firstAddress)?.[0];
+    return target === undefined ? [] : [{
+      id: `departure:inferred:${source.address}:${family.id}`,
+      kind: "inferred" as const,
+      description: "Address-inferred inserted strand",
+      target,
+      addresses,
+      knownEnd: true,
+    }];
+  });
+}
+
+function inferredPrefixForFamily(
+  family: LocalBranchAddressStrand,
+  explicitStarts: readonly ExplicitDepartureStart[],
+): readonly string[] {
+  const firstExplicitIndex = explicitStarts.reduce(
+    (first, start) => start.axis === family.id
+      ? Math.min(first, start.index)
+      : first,
+    family.addresses.length,
+  );
+  return family.addresses.slice(0, firstExplicitIndex);
+}
+
 function explicitDepartureStarts(
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
   source: LocalBranchCard,
 ): readonly ExplicitDepartureStart[] {
@@ -305,35 +488,17 @@ function explicitDepartureStarts(
         return [];
       }
       const targetNode = input.inferred.nodesByAddress.get(target.address);
-      const siblings = targetNode === undefined
-        ? [target.address]
-        : siblingsForAddress(input.inferred, target.address);
+      const family = input.strandFamilies.strandsByAddress.get(target.address);
+      const siblings = family?.addresses ?? [target.address];
       return [{
         branch,
         target,
         siblings,
         index: Math.max(0, siblings.indexOf(target.address)),
-        axis: siblingAxis(input.inferred, target.address),
+        axis: family?.id ?? null,
         hasKnownEnd: targetNode !== undefined && targetNode.parentAddress !== null,
       }];
     });
-}
-
-function inferredDepartureAddresses(
-  input: LocalBranchModelInput,
-  source: LocalBranchCard,
-  explicitStarts: readonly ExplicitDepartureStart[],
-): readonly string[] {
-  const children = input.inferred.nodesByAddress.get(source.address)
-    ?.childAddresses ?? [];
-  const axis = `parent:${source.address}`;
-  const firstExplicitIndex = explicitStarts.reduce(
-    (first, start) => start.axis === axis
-      ? Math.min(first, start.index)
-      : first,
-    children.length,
-  );
-  return children.slice(0, firstExplicitIndex);
 }
 
 function explicitDepartureEnd(
@@ -352,8 +517,48 @@ function explicitDepartureEnd(
   );
 }
 
+function explicitContextInterval(
+  input: PreparedLocalBranchModelInput,
+  cardsByPath: ReadonlyMap<string, LocalBranchCard>,
+  context: LocalBranchExplicitContext,
+): ExplicitStrandInterval | null {
+  const source = cardsByPath.get(context.branch.sourcePath);
+  if (source !== undefined) {
+    const starts = explicitDepartureStarts(
+      { ...input, activePath: context.targetPath },
+      cardsByPath,
+      source,
+    );
+    const start = starts.find((candidate) =>
+      candidate.branch.sourcePath === context.branch.sourcePath &&
+      candidate.branch.targetPath === context.targetPath &&
+      candidate.branch.sourceOrder === context.branch.sourceOrder
+    );
+    if (start !== undefined) {
+      return explicitStrandInterval(start, starts);
+    }
+  }
+  return null;
+}
+
+interface ExplicitStrandInterval {
+  readonly addresses: readonly string[];
+  readonly knownEnd: boolean;
+}
+
+function explicitStrandInterval(
+  start: ExplicitDepartureStart,
+  starts: readonly ExplicitDepartureStart[],
+): ExplicitStrandInterval {
+  const end = explicitDepartureEnd(start, starts);
+  return {
+    addresses: start.siblings.slice(start.index, end),
+    knownEnd: end < start.siblings.length || start.hasKnownEnd,
+  };
+}
+
 function findExplicitContext(
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   siblingAddresses: readonly string[],
@@ -390,9 +595,10 @@ function strand(
   selectedPath: string,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
   knownBeginning: boolean,
   knownEnd: boolean,
+  includeDepartures = true,
 ): LocalBranchStrand {
   return {
     id,
@@ -403,6 +609,7 @@ function strand(
         cardsByAddress,
         cardsByPath,
         input,
+        includeDepartures,
       )
     ),
     selectedPath,
@@ -415,19 +622,22 @@ function localNodes(
   cards: readonly LocalBranchCard[],
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
+  includeDepartures: boolean,
 ): readonly LocalBranchNode[] {
   return cards.map((card, duplicateIndex) => ({
     ...card,
     duplicateIndex,
     duplicateCount: cards.length,
-    departures: departuresForCard(
-      card,
-      duplicateIndex,
-      cardsByAddress,
-      cardsByPath,
-      input,
-    ),
+    departures: includeDepartures
+      ? departuresForCard(
+        card,
+        duplicateIndex,
+        cardsByAddress,
+        cardsByPath,
+        input,
+      )
+      : [],
   }));
 }
 
@@ -436,18 +646,24 @@ function departuresForCard(
   duplicateIndex: number,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
-  input: LocalBranchModelInput,
+  input: PreparedLocalBranchModelInput,
 ): readonly LocalBranchDeparture[] {
   return departureDefinitions(input, cardsByPath, cardsByAddress, card)
     .filter((departure) =>
       departure.kind === "explicit" || duplicateIndex === 0
     )
-    .map((departure) => ({
-      id: departure.id,
-      kind: departure.kind,
-      label: departure.description,
-      target: targetForCard(departure.target),
-    }));
+    .map(departureForDefinition);
+}
+
+function departureForDefinition(
+  departure: DepartureDefinition,
+): LocalBranchDeparture {
+  return {
+    id: departure.id,
+    kind: departure.kind,
+    label: departure.description,
+    target: targetForCard(departure.target),
+  };
 }
 
 function targetForCard(
@@ -471,26 +687,9 @@ function groupCardsByAddress(
   return grouped;
 }
 
-function siblingsForAddress(
-  inferred: InferredStructureIndex,
+function addressesForStrand(
+  strandFamilies: LocalBranchStrandFamilyIndex,
   address: string,
 ): readonly string[] {
-  const node = inferred.nodesByAddress.get(address);
-  if (node === undefined) {
-    return [address];
-  }
-  return node.parentAddress === null
-    ? inferred.rootAddresses
-    : inferred.nodesByAddress.get(node.parentAddress)?.childAddresses ?? [address];
-}
-
-function siblingAxis(
-  inferred: InferredStructureIndex,
-  address: string,
-): string | null {
-  const node = inferred.nodesByAddress.get(address);
-  if (node === undefined) {
-    return null;
-  }
-  return node.parentAddress === null ? "root" : `parent:${node.parentAddress}`;
+  return strandFamilies.strandsByAddress.get(address)?.addresses ?? [address];
 }

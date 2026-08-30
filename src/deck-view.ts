@@ -42,7 +42,8 @@ import {
 } from "./card-signature.js";
 import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
 import {
-  buildLocalBranchModel,
+  LocalBranchProjector,
+  LocalBranchProjectorCache,
   localBranchTargets,
   type LocalBranchModel,
   type LocalBranchMovement,
@@ -142,6 +143,7 @@ import {
   matchesInlineEditRefreshGuard,
   resolveDeckEscapeAction,
   shouldFinishInlineEditFromPointerDown,
+  shouldBeginDeckPan,
   shouldNavigateDeckFromWheel,
   type InlineEditRefreshGuard,
 } from "./inline-edit-interactions.js";
@@ -292,6 +294,7 @@ export class DeckView extends ItemView {
   private readonly cardSignatures: CardSignatureManager;
   private readonly viewedCardSignature: CardSignatureManager;
   private readonly localBranchView: LocalBranchViewController;
+  private readonly localBranchProjectors = new LocalBranchProjectorCache();
   private readonly deskRenderer: DeskRenderer;
   private readonly shortcutController: DeckShortcutController;
   private deckMapVisibility: DeckMapVisibility = DEFAULT_DECK_MAP_VISIBILITY;
@@ -2199,20 +2202,25 @@ export class DeckView extends ItemView {
 
   private localBranchModel(
     path: string,
-    expandedDepartureIds: ReadonlySet<string> = new Set(),
+    expandedDepartureId: string | null = null,
   ): LocalBranchModel | null {
     const snapshot = this.plugin.index.snapshot;
-    return buildLocalBranchModel({
-      activePath: path,
-      cards: snapshot.filed.map((card) => ({
-        path: card.path,
-        address: card.address,
-        title: this.plugin.cards.title(card.file),
-      })),
-      inferred: snapshot.inferredStructure,
-      explicit: snapshot.explicitBranches,
-      expandedDepartureIds,
+    const settings = this.plugin.settings;
+    const projector = this.localBranchProjectors.projectorFor({
+      snapshot,
+      titleSource: settings.titleSource,
+      titleProperty: settings.titleProperty,
+      create: () => new LocalBranchProjector({
+        cards: snapshot.filed.map((card) => ({
+          path: card.path,
+          address: card.address,
+          title: this.plugin.cards.title(card.file),
+        })),
+        inferred: snapshot.inferredStructure,
+        explicit: snapshot.explicitBranches,
+      }),
     });
+    return projector.modelForPath(path, expandedDepartureId);
   }
 
   private localBranchTargetsForMovement(
@@ -3913,13 +3921,14 @@ export class DeckView extends ItemView {
     );
 
     stage.addEventListener("pointerdown", (event) => {
-      if (event.target !== stage || event.button !== 0) {
+      if (!shouldBeginDeckPan(event, stage)) {
         return;
       }
       const begin = (): void => {
         if ((event.buttons & 1) === 0) {
           return;
         }
+        event.preventDefault();
         this.cancelViewportCentering();
         this.cancelSpaceRecentering();
         this.pointerLastX = event.clientX;
@@ -4345,11 +4354,12 @@ export class DeckView extends ItemView {
       : this.renderedCards.find((card) =>
         card.dataset.path === activePath && !card.hasClass("is-viewed-ghost")
       );
-    if (activePath === null || owner === undefined) {
+    const stage = this.stageEl;
+    if (activePath === null || owner === undefined || stage === null) {
       this.localBranchView.detach();
       return;
     }
-    this.localBranchView.attach(owner, activePath);
+    this.localBranchView.attach(owner, activePath, stage);
   }
 
   private bookmarkedPaths(): Set<string> {

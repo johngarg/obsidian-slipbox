@@ -1127,7 +1127,12 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   box-shadow: none;
   color: var(--text-normal);
   pointer-events: auto;
+  cursor: grab;
   translate: -50% 8px;
+}
+
+.slipbox-deck-stage.is-dragging .slipbox-local-branch-view {
+  cursor: grabbing;
 }
 
 .slipbox-local-branch-view[hidden] {
@@ -1287,8 +1292,8 @@ button.slipbox-local-branch-collapse svg {
 .slipbox-local-branch-node:focus-visible circle,
 .slipbox-local-branch-gap:hover rect,
 .slipbox-local-branch-gap:focus-visible rect,
-.slipbox-local-branch-stub:hover line,
-.slipbox-local-branch-stub:focus-visible line {
+.slipbox-local-branch-stub:hover .slipbox-local-branch-stub-line,
+.slipbox-local-branch-stub:focus-visible .slipbox-local-branch-stub-line {
   stroke: var(--text-accent);
   stroke-width: 2;
 }
@@ -1299,19 +1304,32 @@ button.slipbox-local-branch-collapse svg {
   stroke: transparent;
 }
 
+.slipbox-local-branch-stub-hit {
+  stroke-width: 18px;
+  pointer-events: stroke;
+}
+
 .slipbox-local-branch-gap text {
   fill: var(--text-muted);
   font-family: var(--font-interface);
-  font-size: 10px;
 }
 
-.slipbox-local-branch-stub line {
+.slipbox-local-branch-gap .slipbox-local-branch-gap-count {
+  font-size: 8px;
+  font-weight: var(--font-semibold);
+}
+
+.slipbox-local-branch-gap .slipbox-local-branch-gap-ellipsis {
+  font-size: 24px;
+}
+
+.slipbox-local-branch-stub-line {
   stroke: var(--text-muted);
   stroke-linecap: round;
   stroke-width: 1.5;
 }
 
-.slipbox-local-branch-stub.is-expanded line {
+.slipbox-local-branch-stub.is-expanded .slipbox-local-branch-stub-line {
   stroke: var(--text-accent);
 }
 
@@ -2240,7 +2258,7 @@ button.slipbox-card-color-choice.is-no-color::after {
   .slipbox-local-branch-node.is-active circle,
   .slipbox-local-branch-edge.is-inferred,
   .slipbox-local-branch-edge.is-explicit,
-  .slipbox-local-branch-stub.is-expanded line {
+  .slipbox-local-branch-stub.is-expanded .slipbox-local-branch-stub-line {
     stroke: Highlight;
   }
 }

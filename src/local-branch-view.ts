@@ -15,7 +15,7 @@ export interface LocalBranchViewEnvironment {
   readonly previewLinksOnHover: () => boolean;
   readonly modelForPath: (
     path: string,
-    expandedDepartureIds: ReadonlySet<string>,
+    expandedDepartureId: string | null,
   ) => LocalBranchModel | null;
   readonly chooseDeparture: (
     departures: readonly LocalBranchDeparture[],
@@ -34,6 +34,18 @@ export interface LocalBranchViewEnvironment {
 }
 
 const DEFAULT_WIDTH = 720;
+const MAX_WIDTH = 900;
+const STAGE_INSET = 48;
+
+export function localBranchTrayWidth(
+  ownerWidth: number,
+  stageWidth: number,
+): number {
+  const cardWidth = ownerWidth > 0 ? ownerWidth : DEFAULT_WIDTH;
+  return stageWidth > 0
+    ? Math.max(cardWidth, Math.min(MAX_WIDTH, stageWidth - STAGE_INSET))
+    : cardWidth;
+}
 
 const MOVEMENTS: readonly {
   readonly movement: LocalBranchMovement;
@@ -76,11 +88,12 @@ const MOVEMENTS: readonly {
 export class LocalBranchViewController {
   private readonly root: HTMLElement;
   private owner: HTMLElement | null = null;
+  private stage: HTMLElement | null = null;
   private path: string | null = null;
   private model: LocalBranchModel | null = null;
   private collapsed = false;
   private expandedGapIds = new Set<string>();
-  private expandedDepartureIds = new Set<string>();
+  private expandedDepartureId: string | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private lastWidth = 0;
 
@@ -91,28 +104,31 @@ export class LocalBranchViewController {
     this.root.setAttribute("aria-label", "Local branch view");
   }
 
-  attach(owner: HTMLElement, path: string): void {
+  attach(owner: HTMLElement, path: string, stage: HTMLElement): void {
     const activeChanged = path !== this.path;
     const ownerChanged = owner !== this.owner;
+    const stageChanged = stage !== this.stage;
     if (activeChanged) {
       this.expandedGapIds.clear();
-      this.expandedDepartureIds.clear();
+      this.expandedDepartureId = null;
     }
-    if (ownerChanged) {
+    if (ownerChanged || stageChanged) {
       this.resizeObserver?.disconnect();
       this.resizeObserver = null;
     }
     this.owner = owner;
+    this.stage = stage;
     this.path = path;
     if (this.root.parentElement !== owner) {
       owner.append(this.root);
     }
-    this.observe(owner);
+    this.observe(owner, stage);
     this.refresh();
   }
 
   detach(): void {
     this.owner = null;
+    this.stage = null;
     this.path = null;
     this.model = null;
     this.resizeObserver?.disconnect();
@@ -123,7 +139,7 @@ export class LocalBranchViewController {
   disconnect(): void {
     this.detach();
     this.expandedGapIds.clear();
-    this.expandedDepartureIds.clear();
+    this.expandedDepartureId = null;
     this.root.replaceChildren();
   }
 
@@ -137,32 +153,17 @@ export class LocalBranchViewController {
     }
     let model = this.environment.modelForPath(
       path,
-      this.expandedDepartureIds,
+      this.expandedDepartureId,
     );
     if (model === null) {
       this.hide();
       return;
     }
-    const visiblePaths = new Set(
-      model.strands.flatMap((strand) =>
-        strand.nodes.map((node) => node.path)
-      ),
-    );
-    const visibleDepartureIds = new Set(
-      model.strands
-        .flatMap((strand) => strand.nodes)
-        .filter((node) => visiblePaths.has(node.path))
-        .flatMap((node) => node.departures.map((departure) => departure.id)),
-    );
-    if ([...this.expandedDepartureIds].some((expanded) =>
-      !visibleDepartureIds.has(expanded)
-    )) {
-      this.expandedDepartureIds.clear();
-      model = this.environment.modelForPath(path, this.expandedDepartureIds);
-      if (model === null) {
-        this.hide();
-        return;
-      }
+    if (
+      this.expandedDepartureId !== null &&
+      model.expandedDepartureId !== this.expandedDepartureId
+    ) {
+      this.expandedDepartureId = null;
     }
     this.model = model;
     this.root.hidden = false;
@@ -175,7 +176,7 @@ export class LocalBranchViewController {
     this.model = null;
   }
 
-  private observe(owner: HTMLElement): void {
+  private observe(owner: HTMLElement, stage: HTMLElement): void {
     if (this.resizeObserver !== null) {
       return;
     }
@@ -195,6 +196,7 @@ export class LocalBranchViewController {
       }
     });
     this.resizeObserver.observe(owner);
+    this.resizeObserver.observe(stage);
   }
 
   private render(model: LocalBranchModel): void {
@@ -278,7 +280,7 @@ export class LocalBranchViewController {
       model,
       width: this.availableWidth(),
       expandedGapIds: this.expandedGapIds,
-      expandedDepartureIds: this.expandedDepartureIds,
+      expandedDepartureId: this.expandedDepartureId,
       showTooltips: this.environment.showTooltips(),
       previewLinksOnHover: this.environment.previewLinksOnHover(),
       activate: (targets) => this.environment.activate(targets),
@@ -300,10 +302,10 @@ export class LocalBranchViewController {
     departures: readonly LocalBranchDeparture[],
   ): Promise<void> {
     const expanded = departures.find((departure) =>
-      this.expandedDepartureIds.has(departure.id)
+      this.expandedDepartureId === departure.id
     );
     if (expanded !== undefined) {
-      this.expandedDepartureIds.clear();
+      this.expandedDepartureId = null;
       this.refresh();
       return;
     }
@@ -314,7 +316,7 @@ export class LocalBranchViewController {
       return;
     }
     this.expandedGapIds.clear();
-    this.expandedDepartureIds = new Set([departure.id]);
+    this.expandedDepartureId = departure.id;
     this.refresh();
   }
 
@@ -329,7 +331,12 @@ export class LocalBranchViewController {
     if (owner === null) {
       return DEFAULT_WIDTH;
     }
-    return owner.offsetWidth || owner.clientWidth || DEFAULT_WIDTH;
+    const ownerWidth = owner.offsetWidth || owner.clientWidth;
+    const stage = this.stage;
+    const stageWidth = stage === null
+      ? 0
+      : stage.clientWidth || stage.offsetWidth;
+    return localBranchTrayWidth(ownerWidth, stageWidth);
   }
 
   private labelControl(control: HTMLElement, label: string): void {

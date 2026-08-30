@@ -7,6 +7,8 @@ import type {
 } from "../src/branch-links.js";
 import {
   buildLocalBranchModel,
+  LocalBranchProjector,
+  LocalBranchProjectorCache,
   localBranchTargets,
   type LocalBranchCard,
 } from "../src/local-branch-model.js";
@@ -226,6 +228,292 @@ describe("local branch model", () => {
     assert.equal(new Set(paths).size, paths.length);
   });
 
+  test("keeps explicit continuations inside their inferred family", () => {
+    const allCards = cards([
+      "17,1",
+      "17,1,1",
+      "17,1,2",
+      "17,1,3",
+      "17,1A",
+      "17,1a",
+      "17,1b",
+      "18",
+    ]);
+    const source = allCards[0];
+    const explicitTarget = allCards[1];
+    assert.notEqual(source, undefined);
+    assert.notEqual(explicitTarget, undefined);
+    if (source === undefined || explicitTarget === undefined) {
+      return;
+    }
+    const explicit = explicitIndex([{
+      sourcePath: source.path,
+      targetPath: explicitTarget.path,
+      label: "1",
+      sourceOrder: 0,
+    }]);
+    const atSource = model(allCards, source.path, explicit);
+    const departures = atSource?.strands.filter((strand) =>
+      strand.role === "departure"
+    ) ?? [];
+
+    assert.deepEqual(
+      departures.map((strand) => ({
+        kind: strand.connection?.kind,
+        addresses: strand.nodes.map((node) => node.address),
+      })),
+      [
+        {
+          kind: "inferred",
+          addresses: ["17,1A", "17,1a", "17,1b"],
+        },
+        {
+          kind: "explicit",
+          addresses: ["17,1,1", "17,1,2", "17,1,3"],
+        },
+      ],
+    );
+    assert.deepEqual(
+      localBranchTargets(atSource, "inferred").map((target) => target.address),
+      ["17,1A"],
+    );
+
+    const atExplicitContinuation = model(
+      allCards,
+      allCards[2]?.path ?? "",
+      explicit,
+    );
+    assert.deepEqual(
+      atExplicitContinuation?.strands.find((strand) =>
+        strand.role === "current"
+      )?.nodes.map((node) => node.address),
+      ["17,1,1", "17,1,2", "17,1,3"],
+    );
+    assert.deepEqual(
+      localBranchTargets(atExplicitContinuation, "backward").map((target) =>
+        target.address
+      ),
+      ["17,1,1"],
+    );
+    assert.deepEqual(
+      localBranchTargets(atExplicitContinuation, "forward").map((target) =>
+        target.address
+      ),
+      ["17,1,3"],
+    );
+    assert.deepEqual(
+      localBranchTargets(atExplicitContinuation, "beginning").map((target) =>
+        target.address
+      ),
+      ["17,1,1"],
+    );
+    assert.equal(
+      atExplicitContinuation?.strands.find((strand) =>
+        strand.role === "higher"
+      )?.connection?.kind,
+      "explicit",
+    );
+
+    const atInferredFamily = model(
+      allCards,
+      allCards[4]?.path ?? "",
+      explicit,
+    );
+    assert.deepEqual(
+      atInferredFamily?.strands.find((strand) => strand.role === "current")
+        ?.nodes.map((node) => node.address),
+      ["17,1A", "17,1a", "17,1b"],
+    );
+    assert.deepEqual(localBranchTargets(atInferredFamily, "backward"), []);
+    assert.deepEqual(
+      localBranchTargets(atInferredFamily, "forward").map((target) =>
+        target.address
+      ),
+      ["17,1a"],
+    );
+    assert.equal(
+      atInferredFamily?.strands.find((strand) => strand.role === "higher")
+        ?.connection?.kind,
+      "inferred",
+    );
+  });
+
+  test("uses a singleton explicit row without a same-family successor", () => {
+    const allCards = cards(["17,1", "17,1,1", "17,1A", "17,1a"]);
+    const source = allCards[0];
+    const explicitTarget = allCards[1];
+    assert.notEqual(source, undefined);
+    assert.notEqual(explicitTarget, undefined);
+    if (source === undefined || explicitTarget === undefined) {
+      return;
+    }
+    const result = model(allCards, source.path, explicitIndex([{
+      sourcePath: source.path,
+      targetPath: explicitTarget.path,
+      label: "1",
+      sourceOrder: 0,
+    }]));
+
+    assert.deepEqual(
+      result?.strands.filter((strand) => strand.role === "departure")
+        .map((strand) => ({
+          kind: strand.connection?.kind,
+          addresses: strand.nodes.map((node) => node.address),
+        })),
+      [
+        { kind: "inferred", addresses: ["17,1A", "17,1a"] },
+        { kind: "explicit", addresses: ["17,1,1"] },
+      ],
+    );
+  });
+
+  test("offers every unclaimed inferred family as a command target", () => {
+    const allCards = cards([
+      "17,1",
+      "17,1,1",
+      "17,1,2",
+      "17,1A",
+      "17,1a",
+    ]);
+    const result = model(allCards, allCards[0]?.path ?? "");
+
+    assert.deepEqual(
+      result?.strands.filter((strand) =>
+        strand.role === "departure" && strand.connection?.kind === "inferred"
+      ).map((strand) => strand.nodes.map((node) => node.address)),
+      [
+        ["17,1,1", "17,1,2"],
+        ["17,1A", "17,1a"],
+      ],
+    );
+    assert.deepEqual(
+      localBranchTargets(result, "inferred").map((target) => target.address),
+      ["17,1,1", "17,1A"],
+    );
+  });
+
+  test("partitions explicit starts independently in multiple families", () => {
+    const allCards = cards(["P", "P,1", "P,2", "PA", "Pa", "Pb"]);
+    const source = allCards[0];
+    const numericTarget = allCards[1];
+    const letterTarget = allCards[4];
+    assert.notEqual(source, undefined);
+    assert.notEqual(numericTarget, undefined);
+    assert.notEqual(letterTarget, undefined);
+    if (
+      source === undefined || numericTarget === undefined ||
+      letterTarget === undefined
+    ) {
+      return;
+    }
+    const result = model(allCards, source.path, explicitIndex([
+      {
+        sourcePath: source.path,
+        targetPath: letterTarget.path,
+        label: "letter",
+        sourceOrder: 0,
+      },
+      {
+        sourcePath: source.path,
+        targetPath: numericTarget.path,
+        label: "number",
+        sourceOrder: 1,
+      },
+    ]));
+
+    assert.deepEqual(
+      result?.strands.filter((strand) => strand.role === "departure")
+        .map((strand) => ({
+          kind: strand.connection?.kind,
+          label: strand.connection?.label,
+          addresses: strand.nodes.map((node) => node.address),
+        })),
+      [
+        { kind: "inferred", label: undefined, addresses: ["PA"] },
+        {
+          kind: "explicit",
+          label: "letter",
+          addresses: ["Pa", "Pb"],
+        },
+        {
+          kind: "explicit",
+          label: "number",
+          addresses: ["P,1", "P,2"],
+        },
+      ],
+    );
+  });
+
+  test("bounds promoted explicit strands at the next explicit start", () => {
+    const allCards = cards([
+      "57,2,25",
+      "57,2,25a",
+      "57,2,25b",
+      "57,2,25c",
+      "57,2,25d",
+      "57,2,25e",
+      "57,2,25f",
+    ]);
+    const source = allCards[0];
+    assert.notEqual(source, undefined);
+    if (source === undefined) {
+      return;
+    }
+    const branches = [1, 2, 4, 6].flatMap((index, sourceOrder) => {
+      const target = allCards[index];
+      return target === undefined ? [] : [{
+        sourcePath: source.path,
+        targetPath: target.path,
+        label: String(sourceOrder + 1),
+        sourceOrder,
+      }];
+    });
+    const explicit = explicitIndex(branches);
+    const cases = [
+      { activeIndex: 1, addresses: ["57,2,25a"] },
+      { activeIndex: 2, addresses: ["57,2,25b", "57,2,25c"] },
+      { activeIndex: 3, addresses: ["57,2,25b", "57,2,25c"] },
+      { activeIndex: 4, addresses: ["57,2,25d", "57,2,25e"] },
+      { activeIndex: 5, addresses: ["57,2,25d", "57,2,25e"] },
+      { activeIndex: 6, addresses: ["57,2,25f"] },
+    ];
+
+    for (const subject of cases) {
+      const active = allCards[subject.activeIndex];
+      assert.notEqual(active, undefined);
+      if (active === undefined) {
+        continue;
+      }
+      const result = model(allCards, active.path, explicit);
+      const current = result?.strands.find((strand) =>
+        strand.role === "current"
+      );
+      assert.deepEqual(
+        current?.nodes.map((node) => node.address),
+        subject.addresses,
+      );
+      assert.equal(
+        current?.knownEnd,
+        true,
+      );
+      const currentIndex = subject.addresses.indexOf(active.address);
+      assert.deepEqual(
+        localBranchTargets(result, "backward").map((target) => target.address),
+        currentIndex > 0 ? [subject.addresses[currentIndex - 1]] : [],
+      );
+      assert.deepEqual(
+        localBranchTargets(result, "forward").map((target) => target.address),
+        currentIndex < subject.addresses.length - 1
+          ? [subject.addresses[currentIndex + 1]]
+          : [],
+      );
+      assert.deepEqual(
+        localBranchTargets(result, "beginning").map((target) => target.address),
+        currentIndex > 0 ? [subject.addresses[0]] : [],
+      );
+    }
+  });
+
   test("keeps only the inferred prefix before the first explicit branch", () => {
     const allCards = cards(["1", "1a", "1b", "1c", "1d", "1e", "1f"]);
     const active = allCards[0];
@@ -358,9 +646,8 @@ describe("local branch model", () => {
       cards: allCards,
       inferred: buildInferredStructure(allCards, "natural"),
       explicit: explicitIndex([branch]),
-      expandedDepartureIds: new Set([
+      expandedDepartureId:
         `departure:explicit:${owner.path}:${explicitTarget.path}`,
-      ]),
     });
     const expanded = result?.strands.filter((strand) =>
       strand.role === "departure"
@@ -369,6 +656,171 @@ describe("local branch model", () => {
     assert.equal(expanded.length, 1);
     assert.equal(expanded[0]?.connection?.kind, "explicit");
     assert.equal(expanded[0]?.connection?.toPath, explicitTarget.path);
+  });
+
+  test("expands a stub from a base departure row without recursive stubs", () => {
+    const allCards = cards(["1", "1a", "9", "9a", "9a1"]);
+    const active = allCards[0];
+    const explicitTarget = allCards[2];
+    assert.notEqual(active, undefined);
+    assert.notEqual(explicitTarget, undefined);
+    if (active === undefined || explicitTarget === undefined) {
+      return;
+    }
+    const projector = new LocalBranchProjector({
+      cards: allCards,
+      inferred: buildInferredStructure(allCards, "natural"),
+      explicit: explicitIndex([{
+        sourcePath: active.path,
+        targetPath: explicitTarget.path,
+        label: "supplement",
+        sourceOrder: 0,
+      }]),
+    });
+    const base = projector.modelForPath(active.path);
+    const departureId = base?.strands.flatMap((strand) => strand.nodes)
+      .find((node) => node.path === explicitTarget.path)?.departures
+      .find((departure) => departure.kind === "inferred")?.id;
+    assert.notEqual(departureId, undefined);
+    if (departureId === undefined) {
+      return;
+    }
+    const expanded = projector.modelForPath(active.path, departureId);
+    const auxiliary = expanded?.strands.at(-1);
+
+    assert.equal(expanded?.expandedDepartureId, departureId);
+    assert.equal(auxiliary?.id, departureId);
+    assert.deepEqual(
+      auxiliary?.nodes.map((node) => node.address),
+      ["9a"],
+    );
+    assert.deepEqual(auxiliary?.nodes[0]?.departures, []);
+    assert.equal(projector.modelForPath(active.path, "stale"), base);
+    assert.equal(
+      projector.modelForPath(
+        active.path,
+        `departure:explicit:${active.path}:${explicitTarget.path}`,
+      ),
+      base,
+    );
+  });
+
+  test("expands a hidden departure owned by the higher row", () => {
+    const allCards = cards(["1", "1a", "1b", "2", "2a"]);
+    const active = allCards[2];
+    const higherOwner = allCards[3];
+    assert.notEqual(active, undefined);
+    assert.notEqual(higherOwner, undefined);
+    if (active === undefined || higherOwner === undefined) {
+      return;
+    }
+    const projector = new LocalBranchProjector({
+      cards: allCards,
+      inferred: buildInferredStructure(allCards, "natural"),
+      explicit: explicitIndex(),
+    });
+    const base = projector.modelForPath(active.path);
+    const departureId = base?.strands.flatMap((strand) => strand.nodes)
+      .find((node) => node.path === higherOwner.path)?.departures
+      .find((departure) => departure.kind === "inferred")?.id;
+    assert.notEqual(departureId, undefined);
+    if (departureId === undefined) {
+      return;
+    }
+    const result = projector.modelForPath(active.path, departureId);
+
+    assert.equal(result?.expandedDepartureId, departureId);
+    assert.deepEqual(
+      result?.strands.at(-1)?.nodes.map((node) => node.address),
+      ["2a"],
+    );
+  });
+
+  test("reuses prepared projectors until snapshot or title settings change", () => {
+    const cache = new LocalBranchProjectorCache();
+    const firstSnapshot = {};
+    const secondSnapshot = {};
+    let creations = 0;
+    const create = () => {
+      creations += 1;
+      return new LocalBranchProjector({
+        cards: cards(["1", "1a"]),
+        inferred: buildInferredStructure(cards(["1", "1a"]), "natural"),
+        explicit: explicitIndex(),
+      });
+    };
+    const first = cache.projectorFor({
+      snapshot: firstSnapshot,
+      titleSource: "basename",
+      titleProperty: "title",
+      create,
+    });
+    const repeated = cache.projectorFor({
+      snapshot: firstSnapshot,
+      titleSource: "basename",
+      titleProperty: "title",
+      create,
+    });
+    const titleChanged = cache.projectorFor({
+      snapshot: firstSnapshot,
+      titleSource: "frontmatter",
+      titleProperty: "title",
+      create,
+    });
+    const titlePropertyChanged = cache.projectorFor({
+      snapshot: firstSnapshot,
+      titleSource: "frontmatter",
+      titleProperty: "heading",
+      create,
+    });
+    const snapshotChanged = cache.projectorFor({
+      snapshot: secondSnapshot,
+      titleSource: "frontmatter",
+      titleProperty: "heading",
+      create,
+    });
+
+    assert.equal(first, repeated);
+    assert.notEqual(titleChanged, first);
+    assert.notEqual(titlePropertyChanged, titleChanged);
+    assert.notEqual(snapshotChanged, titlePropertyChanged);
+    assert.equal(creations, 4);
+    assert.equal(
+      snapshotChanged.modelForPath("00-1.md"),
+      snapshotChanged.modelForPath("00-1.md"),
+    );
+  });
+
+  test("prepares strand families once for repeated projector models", () => {
+    const allCards = cards([
+      "17,1",
+      "17,1,1",
+      "17,1,2",
+      "17,1A",
+      "17,1a",
+    ]);
+    const baseInferred = buildInferredStructure(allCards, "natural");
+    let orderedAddressReads = 0;
+    const inferred = {
+      nodesByAddress: baseInferred.nodesByAddress,
+      rootAddresses: baseInferred.rootAddresses,
+      addressesByDepth: baseInferred.addressesByDepth,
+      get orderedAddresses() {
+        orderedAddressReads += 1;
+        return baseInferred.orderedAddresses;
+      },
+    };
+    const projector = new LocalBranchProjector({
+      cards: allCards,
+      inferred,
+      explicit: explicitIndex(),
+    });
+
+    assert.equal(orderedAddressReads, 1);
+    projector.modelForPath(allCards[0]?.path ?? "");
+    projector.modelForPath(allCards[2]?.path ?? "");
+    projector.modelForPath(allCards[2]?.path ?? "");
+    assert.equal(orderedAddressReads, 1);
   });
 
   test("bounds explicit cycles and drops stale relations on rebuild", () => {

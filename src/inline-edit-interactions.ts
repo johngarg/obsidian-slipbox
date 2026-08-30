@@ -161,11 +161,84 @@ export function shouldNavigateDeckFromWheel(
   event: WheelEvent,
   inlineEditor: HTMLTextAreaElement | null,
 ): boolean {
+  const eventPath = event.composedPath();
   if (
     inlineEditor !== null &&
-    event.composedPath().includes(inlineEditor)
+    eventPath.includes(inlineEditor)
   ) {
     return false;
   }
+  if (eventPath.some((target) => {
+    const classList = (target as { classList?: DOMTokenList }).classList;
+    return classList?.contains("slipbox-local-branch-scroller") === true;
+  })) {
+    return false;
+  }
   return Math.abs(event.deltaX) > Math.abs(event.deltaY);
+}
+
+const LOCAL_BRANCH_INTERACTIVE_SELECTOR = [
+  ".slipbox-local-branch-node",
+  ".slipbox-local-branch-gap",
+  ".slipbox-local-branch-stub",
+  ".slipbox-local-branch-header",
+  "a",
+  "button",
+  "input",
+  "textarea",
+  "select",
+  "[contenteditable='true']",
+  "[role='button']",
+].join(", ");
+
+/** Treat transparent, noninteractive Branch View space as Deck background. */
+export function shouldBeginDeckPan(
+  event: PointerEvent,
+  stage: HTMLElement,
+): boolean {
+  if (event.button !== 0) {
+    return false;
+  }
+  if (event.target === stage) {
+    return true;
+  }
+  const ElementConstructor = stage.ownerDocument.defaultView?.Element;
+  if (
+    ElementConstructor === undefined ||
+    !(event.target instanceof ElementConstructor) ||
+    !stage.contains(event.target)
+  ) {
+    return false;
+  }
+  const target = event.target;
+  const branchView = target.closest(".slipbox-local-branch-view");
+  if (
+    branchView === null ||
+    !stage.contains(branchView) ||
+    target.closest(LOCAL_BRANCH_INTERACTIVE_SELECTOR) !== null
+  ) {
+    return false;
+  }
+  const scroller = target.closest<HTMLElement>(
+    ".slipbox-local-branch-scroller",
+  );
+  return scroller === null || !pointerIsInScrollbar(event, scroller);
+}
+
+function pointerIsInScrollbar(
+  event: PointerEvent,
+  element: HTMLElement,
+): boolean {
+  const horizontalHeight = element.offsetHeight - element.clientHeight;
+  const verticalWidth = element.offsetWidth - element.clientWidth;
+  if (horizontalHeight <= 0 && verticalWidth <= 0) {
+    return false;
+  }
+  const bounds = element.getBoundingClientRect();
+  const localX = event.clientX - bounds.left;
+  const localY = event.clientY - bounds.top;
+  return (
+    horizontalHeight > 0 && localY >= element.clientHeight ||
+    verticalWidth > 0 && localX >= element.clientWidth
+  );
 }

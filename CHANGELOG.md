@@ -68,6 +68,8 @@ initial public beta.
 
 ### Fixed
 
+- Removed whole-card identity tooltips from Deck, Desk, and viewed cards while
+  retaining their accessible names and all tooltips on their controls.
 - Removed duplicate native tooltips from Branch View controls and prevented its
   accessible region and toolbar names from appearing as tooltips when disabled.
 - Kept a Branch View tray's horizontal position when expanding an omission and

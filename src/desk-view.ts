@@ -632,8 +632,7 @@ export class DeskRenderer {
         : `${addressLabel}, ${title}; card ${cardIndex + 1} of ${
             pile.cards.length
           } in pile ${pileIndex + 1}`,
-      this.plugin.settings.showTooltips,
-      { placement: "bottom", delay: 350 },
+      false,
     );
     miniature.dataset.pileId = pile.id;
     applyCardColor(miniature, this.plugin.cards.color(file));

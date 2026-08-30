@@ -2939,12 +2939,7 @@ export class DeckView extends ItemView {
       const cardLabel = `${card.address} · ${title}${
         isOnDesk ? "; pulled out into a working pile" : ""
       }`;
-      setCardTooltip(
-        cardEl,
-        cardLabel,
-        this.plugin.settings.showTooltips,
-        { placement: "bottom", delay: 350 },
-      );
+      setCardTooltip(cardEl, cardLabel, false);
       setCardStackOrder(
         cardEl,
         cardStackOrder(filedIndex, focusDisplayIndex),
@@ -2955,8 +2950,7 @@ export class DeckView extends ItemView {
         setCardTooltip(
           cardEl,
           `${card.address} · ${title}; viewed card placeholder. Activate to focus the viewed card.`,
-          this.plugin.settings.showTooltips,
-          { placement: "bottom", delay: 350 },
+          false,
         );
         cardEl.addEventListener("click", (event) => {
           event.preventDefault();
@@ -3296,8 +3290,7 @@ export class DeckView extends ItemView {
     setCardTooltip(
       card,
       `Viewed card ${address ?? UNFILED_ADDRESS_LABEL} · ${title}`,
-      this.plugin.settings.showTooltips,
-      { placement: "bottom", delay: 350 },
+      false,
     );
     card.toggleClass(
       "is-card-focused",

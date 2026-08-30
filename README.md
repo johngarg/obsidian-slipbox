@@ -115,9 +115,7 @@ The separate **Derive inserted strands from addresses** setting derives ephemera
 
 **Show local Branch View** supplies the default visibility of an archive-inspired deterministic local diagram beneath the active Deck card. A floating `git-branch` control can override that default for the current Deck view; while the diagram is shown, six standard navigation icons extend to its left. The control rail and diagram never appear on Desk cards, viewed cards, or Deck placeholders. The transparent tray can grow wider than its card within the Deck stage, and dragging its noninteractive space pans the Deck. The current strand is horizontal, one higher context appears above, and the active card's inserted and supplementary departures appear below. Within one address-derived parent, child addresses with the same leading extension delimiter and token kind form a continuation family: for example, `17,1,1 → 17,1,2` is distinct from `17,1A → 17,1a`. A supplementary branch target inherits only later cards in its own family, bounded by the next supplementary start there; other families remain separate inserted departures. Other visible cards use short stubs for hidden departures; selecting a stub expands its sole departure or asks which one to show, with one auxiliary row visible at a time. Same-strand omissions of two or more cards use a counted ellipsis marker; a single omitted card remains visible. Selecting an ellipsis reveals that run with horizontal scrolling while retaining the tray's current position. Nodes show canonical addresses, retain exact-path identity for duplicate addresses, and preview targets according to **Preview links on hover**.
 
-The six Branch View movement actions move backward or forward without wrapping, move to a known strand beginning, enter an inserted or supplementary strand, and move to a higher inserted or supplementary strand. Each has one stable control: one destination is activated directly, while several destinations open a searchable exact-card chooser. A seventh command-palette action toggles Branch View visibility for the current Deck view; all seven actions are configurable and unbound by default. Repeated supplementary and higher destinations remain separate available relations. If a card has several incoming supplementary branches, the local view uses the first relationship in deterministic Deck order as its supplementary higher context without reporting an error; the other relationships remain indexed and available as outgoing branches from their sources.
-
-The existing inserted-strand commands remain unchanged: **Cycle Deck anchor forward through inserted strand** and **Cycle Deck anchor backward through inserted strand** wrap and use `n` and `N` by default, while `-` moves to the parent of the inserted strand. Change any binding under **Settings → Slipbox Desk → Keyboard shortcuts** or Obsidian's hotkey settings.
+The six Branch View movement actions move backward or forward without wrapping, move to a known strand beginning, enter an inserted or supplementary strand, and move to a higher inserted or supplementary strand. Their default keys are `N`, `n`, `^`, `>`, `+`, and `<`, respectively. Each action has one stable control: one destination is activated directly, while several destinations open a searchable exact-card chooser. A seventh command-palette action toggles Branch View visibility for the current Deck view with `b` by default. Repeated supplementary and higher destinations remain separate available relations. If a card has several incoming supplementary branches, the local view uses the first relationship in deterministic Deck order as its supplementary higher context without reporting an error; the other relationships remain indexed and available as outgoing branches from their sources.
 
 Both forms of branching are derived in memory. Enabling, disabling, or navigating them never writes Markdown, frontmatter, or addresses.
 
@@ -129,19 +127,27 @@ There are some actions that are very quick to do in the real world, but take tim
 | --- | --- |
 | `←` / `k` | Move to the previous Deck card |
 | `→` / `j` | Move to the next Deck card |
-| `-` | Move to the parent of the inserted strand |
-| `n` / `N` | Cycle forward/backward through the inserted strand |
+| `n` / `N` | Move forward/backward on the current branch strand |
+| `^` | Move to the current branch strand's beginning |
+| `>` / `<` | Enter an inserted strand or move to a higher strand |
+| `+` | Enter a supplementary strand |
+| `b` | Toggle the local Branch View |
 | `p` | Put the focused card on the Desk, or return it |
-| `e` | Edit the focused Desk or viewed card |
+| `i` | Edit the focused Desk or viewed card |
 | `v` | View a Desk card, or return a viewed card |
 | `{` / `}` | Cycle focus through the Deck and Desk piles |
 | `%` | Swap focus between the Deck and the last pile |
 | `Space` | Expand or collapse the focused pile |
-| `b` | Toggle the focused Deck card's bookmark |
+| `m` | Toggle the focused Deck card's bookmark |
+| `O` | Toggle the Deck map |
+| `zt` / `zz` / `zb` | Position the Deck near the top, centred, or near the bottom |
 | `y` | Copy a link to the focused card |
 | `o` | Open the focused card as a Markdown note |
 
 These shortcuts apply only while a Slipbox Desk view is active. You can change them under **Settings → Slipbox Desk**. Obsidian hotkeys take priority when bindings conflict.
+
+When a view first opens, the Deck starts at the `zb` position if the automatic
+unfiled-card pile is present; otherwise it starts at `zz`.
 
 ## Data and privacy
 

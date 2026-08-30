@@ -31,6 +31,11 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] Confirm the supplied filed cards appear in address order.
 - [ ] Confirm unfiled cards appear in a Desk pile and ordinary notes are absent.
 - [ ] Navigate the Deck with pointer, horizontal scrolling, and keyboard controls.
+- [ ] With and without Desk piles, confirm `zz` centres the Deck at 50%, `zb`
+  positions it near the bottom, and `zt` positions it near the top with space
+  visible below.
+- [ ] Reopen the view with an automatic unfiled-card pile and confirm it starts
+  at `zb`; remove that pile, reopen, and confirm it starts at `zz`.
 - [ ] Create an untitled card and a titled card.
 - [ ] File an unfiled card at a new address and confirm its Markdown frontmatter.
 - [ ] Put a filed card on the Desk, expand and collapse its pile, and drag it.
@@ -83,38 +88,35 @@ test. Record unexpected warnings or errors under Findings.
   confirm no separator dot follows its canonical address.
 - [ ] Change the branching toggles; confirm the UI refreshes and no
   Markdown or frontmatter changes.
-- [ ] Enable inserted strands from addresses for roots `7`, `8`, and `17`; confirm forward
-  cycling produces `8 → 17 → 7 → 8` and backward cycling reverses it.
-- [ ] With `8a`, `8b`, `8a1`, `8a2`, and an unrelated equal-depth branch,
-  confirm sibling cycling wraps locally and never crosses between parents.
 - [ ] Confirm the local Branch View and its floating `git-branch` control appear
   only beneath the active ordinary Deck card. Hide and show the diagram with
   the icon and with **Toggle local Branch View visibility** in the command
-  palette; confirm the per-view override can show it over a disabled default.
+  palette and its default `b` shortcut; confirm the per-view override can show
+  it over a disabled default.
   While shown, confirm six standard movement icons extend left from the toggle.
   Move the Deck anchor, open a viewed card, focus expanded Desk piles, and move
   cards without seeing a second control rail or remounting card bodies.
 - [ ] On `8b` in a strand `8a`, `8b`, `8c`, use the six Branch View commands
-  from the command palette and confirm they move backward to `8a`, forward to
-  `8c`, and to the known beginning `8a` without wrapping. At root level,
-  confirm the beginning command is unavailable. Verify the existing `n`, `N`,
-  and `-` commands retain their previous wrapping/parent behavior.
+  from the command palette and the default `N`, `n`, and `^` shortcuts. Confirm
+  they move backward to `8a`, forward to `8c`, and to the known beginning `8a`
+  without wrapping. At root level, confirm the beginning command is unavailable.
 - [ ] Add two cards at `8a` in normal Deck order before `8b`. Confirm the
   Branch View shows both exact cards consecutively; forward and backward move
   through each one in order, beginning selects the first, and entering a higher
   strand with duplicate cards selects its first card without opening a chooser.
 - [ ] Add inserted children and several outgoing `+` branches to the active
   card. Confirm all departures appear below it, supplementary labels omit the `+`,
-  each movement retains one icon, a sole supplementary destination navigates
-  directly, and several supplementary or duplicate-address destinations open a
-  searchable exact-path chooser. Add several incoming supplementary parents and
-  confirm the view quietly uses one stable higher context.
+  and the default `>`, `+`, and `<` shortcuts enter an inserted strand, enter a
+  supplementary strand, and move to a higher strand. Confirm each movement
+  retains one icon, a sole supplementary destination navigates directly, and
+  several supplementary or duplicate-address destinations open a searchable
+  exact-path chooser. Add several incoming supplementary parents and confirm
+  the view quietly uses one stable higher context.
 - [ ] From `17,1`, add a supplementary branch to `17,1,1` alongside `17,1,2`,
   `17,1A`, and `17,1a`. Confirm the supplementary row contains only
   `17,1,1 → 17,1,2`, the appended-letter cards remain a separate inserted row,
   and backward, forward, and beginning commands never cross between them.
-  Remove `17,1,2` and confirm the supplementary row becomes a singleton. Verify
-  the older `n`/`N` commands still cross the complete inserted child list.
+  Remove `17,1,2` and confirm the supplementary row becomes a singleton.
 - [ ] Create long higher, current, and departure strands. Narrow the pane and
   confirm the active node, branch attachment points, and known ends survive;
   omitted runs of two or more become counted ellipses, singleton omissions stay

@@ -1,3 +1,5 @@
+import type { DeckPositionMode } from "./workspace-layout.js";
+
 export interface AddressedDeckCard {
   readonly address: string;
   readonly path: string;
@@ -6,10 +8,12 @@ export interface AddressedDeckCard {
 export type PendingDeckCommand =
   | { readonly kind: "idle" }
   | { readonly kind: "address" }
+  | { readonly kind: "position" }
   | { readonly kind: "pile"; readonly digits: string };
 
 export type PendingDeckCommandCompletion =
   | { readonly kind: "address"; readonly initial: string }
+  | { readonly kind: "position"; readonly mode: DeckPositionMode }
   | { readonly kind: "pile"; readonly digits: string };
 
 export type PendingDeckCommandStep =
@@ -81,6 +85,10 @@ export function startPileCommand(): PendingDeckCommand {
   return { kind: "pile", digits: "" };
 }
 
+export function startPositionCommand(): PendingDeckCommand {
+  return { kind: "position" };
+}
+
 export function advancePendingDeckCommand(
   state: PendingDeckCommand,
   key: string,
@@ -104,6 +112,28 @@ export function advancePendingDeckCommand(
       consumed: true,
       state: IDLE_DECK_COMMAND,
       completion: { kind: "address", initial },
+    };
+  }
+
+  if (state.kind === "position") {
+    const mode = key === "z"
+      ? "centered"
+      : key === "t"
+        ? "top"
+        : key === "b"
+          ? "bottom"
+          : null;
+    if (mode === null) {
+      return {
+        consumed: true,
+        state: IDLE_DECK_COMMAND,
+        cancelled: true,
+      };
+    }
+    return {
+      consumed: true,
+      state: IDLE_DECK_COMMAND,
+      completion: { kind: "position", mode },
     };
   }
 

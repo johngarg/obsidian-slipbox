@@ -103,52 +103,6 @@ export function buildInferredStructure(
   };
 }
 
-export function inferredParentAddress(
-  index: InferredStructureIndex,
-  address: string,
-): string | null {
-  return index.nodesByAddress.get(address)?.parentAddress ?? null;
-}
-
-export function inferredChildAddresses(
-  index: InferredStructureIndex,
-  address: string,
-): readonly string[] {
-  return index.nodesByAddress.get(address)?.childAddresses ?? [];
-}
-
-export function inferredPreviousSiblingAddresses(
-  index: InferredStructureIndex,
-  address: string,
-): readonly string[] {
-  const siblings = siblingAddresses(index, address);
-  const currentIndex = siblings.indexOf(address);
-  return currentIndex < 0 ? [] : siblings.slice(0, currentIndex).reverse();
-}
-
-export function inferredNextSiblingAddresses(
-  index: InferredStructureIndex,
-  address: string,
-): readonly string[] {
-  const siblings = siblingAddresses(index, address);
-  const currentIndex = siblings.indexOf(address);
-  return currentIndex < 0 ? [] : siblings.slice(currentIndex + 1);
-}
-
-export function cycleForwardInferredSiblingAddress(
-  index: InferredStructureIndex,
-  address: string,
-): string | null {
-  return cycleSiblingAddress(index, address, 1);
-}
-
-export function cycleBackwardInferredSiblingAddress(
-  index: InferredStructureIndex,
-  address: string,
-): string | null {
-  return cycleSiblingAddress(index, address, -1);
-}
-
 function groupAddressNodes(
   filed: readonly AddressedPath[],
 ): MutableInferredAddressNode[] {
@@ -183,36 +137,4 @@ function completeSubtree(
 ): void {
   node.subtreeEndDeckIndexExclusive = deckEndExclusive;
   node.subtreeEndOrderIndexExclusive = orderEndExclusive;
-}
-
-function siblingAddresses(
-  index: InferredStructureIndex,
-  address: string,
-): readonly string[] {
-  const node = index.nodesByAddress.get(address);
-  if (node === undefined) {
-    return [];
-  }
-  return node.parentAddress === null
-    ? index.rootAddresses
-    : index.nodesByAddress.get(node.parentAddress)?.childAddresses ?? [];
-}
-
-function cycleSiblingAddress(
-  index: InferredStructureIndex,
-  address: string,
-  direction: -1 | 1,
-): string | null {
-  const siblings = siblingAddresses(index, address);
-  if (siblings.length < 2) {
-    return null;
-  }
-  const currentIndex = siblings.indexOf(address);
-  if (currentIndex < 0) {
-    return null;
-  }
-  const destinationIndex = (
-    currentIndex + direction + siblings.length
-  ) % siblings.length;
-  return siblings[destinationIndex] ?? null;
 }

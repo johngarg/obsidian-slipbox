@@ -60,9 +60,6 @@ export const CARD_HEADER_BUTTON_ACTIONS: readonly CardHeaderButtonAction[] = [
 export type SlipboxAction =
   | "previous-card"
   | "next-card"
-  | "jump-inferred-parent"
-  | "cycle-forward-inferred-siblings"
-  | "cycle-backward-inferred-siblings"
   | "move-backward-local-strand"
   | "move-forward-local-strand"
   | "move-to-local-strand-beginning"
@@ -74,7 +71,10 @@ export type SlipboxAction =
   | "next-bookmark"
   | "forward-ten-cards"
   | "backward-ten-cards"
+  | "position-deck"
+  | "position-deck-top"
   | "centre-card"
+  | "position-deck-bottom"
   | "first-card"
   | "last-card"
   | "open-note"
@@ -149,64 +149,46 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     defaultBindings: [binding("ArrowRight"), binding("j")],
   },
   {
-    id: "jump-inferred-parent",
-    label: "Move Deck anchor to parent of inserted strand",
-    repeatable: false,
-    defaultBindings: [binding("-")],
-  },
-  {
-    id: "cycle-forward-inferred-siblings",
-    label: "Cycle Deck anchor forward through inserted strand",
-    repeatable: true,
-    defaultBindings: [binding("n")],
-  },
-  {
-    id: "cycle-backward-inferred-siblings",
-    label: "Cycle Deck anchor backward through inserted strand",
-    repeatable: true,
-    defaultBindings: [binding("n", ["Shift"])],
-  },
-  {
     id: "move-backward-local-strand",
     label: "Move backward on local branch strand",
     repeatable: true,
-    defaultBindings: [],
+    defaultBindings: [binding("n", ["Shift"])],
   },
   {
     id: "move-forward-local-strand",
     label: "Move forward on local branch strand",
     repeatable: true,
-    defaultBindings: [],
+    defaultBindings: [binding("n")],
   },
   {
     id: "move-to-local-strand-beginning",
     label: "Move to beginning of local branch strand",
     repeatable: false,
-    defaultBindings: [],
+    defaultBindings: [binding("^", ["Shift"])],
   },
   {
     id: "enter-address-inferred-strand",
     label: "Enter inserted strand",
     repeatable: false,
-    defaultBindings: [],
+    defaultBindings: [binding(">", ["Shift"])],
   },
   {
     id: "enter-explicit-supplementary-strand",
     label: "Enter supplementary strand",
     repeatable: false,
-    defaultBindings: [],
+    defaultBindings: [binding("+", ["Shift"])],
   },
   {
     id: "move-to-higher-strand",
     label: "Move to higher local branch strand",
     repeatable: false,
-    defaultBindings: [],
+    defaultBindings: [binding("<", ["Shift"])],
   },
   {
     id: "toggle-local-branch-view",
     label: "Toggle local Branch View visibility",
     repeatable: false,
-    defaultBindings: [],
+    defaultBindings: [binding("b")],
   },
   {
     id: "previous-bookmark",
@@ -221,10 +203,29 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     defaultBindings: [binding("]")],
   },
   {
-    id: "centre-card",
-    label: "Centre Deck anchor",
+    id: "position-deck",
+    label: "Position Deck vertically…",
+    description: "Type z to centre, t for the top, or b for the bottom.",
     repeatable: false,
-    defaultBindings: [binding("c")],
+    defaultBindings: [binding("z")],
+  },
+  {
+    id: "position-deck-top",
+    label: "Position Deck near top",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "centre-card",
+    label: "Centre Deck vertically",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "position-deck-bottom",
+    label: "Position Deck near bottom",
+    repeatable: false,
+    defaultBindings: [],
   },
   {
     id: "first-card",
@@ -272,7 +273,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     id: "toggle-bookmark",
     label: "Toggle bookmark on focused Deck card",
     repeatable: false,
-    defaultBindings: [binding("b")],
+    defaultBindings: [binding("m")],
   },
   {
     id: "find-address-first",
@@ -328,7 +329,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     id: "toggle-deck-map",
     label: "Toggle Deck-map visibility",
     repeatable: false,
-    defaultBindings: [binding("m")],
+    defaultBindings: [binding("o", ["Shift"])],
   },
   {
     id: "bookmarks",
@@ -364,7 +365,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     id: "edit-card",
     label: "Edit focused card on Desk",
     repeatable: false,
-    defaultBindings: [binding("e")],
+    defaultBindings: [binding("i")],
   },
   {
     id: "show-card-in-deck",
@@ -646,7 +647,16 @@ export function formatKeyBinding(bindingValue: DeckKeyBinding): string {
   if (
     bindingValue.modifiers.length === 1 &&
     bindingValue.modifiers[0] === "Shift" &&
-    (key === "$" || key === "%" || key === "{" || key === "}")
+    (
+      key === "$" ||
+      key === "%" ||
+      key === "{" ||
+      key === "}" ||
+      key === "^" ||
+      key === ">" ||
+      key === "+" ||
+      key === "<"
+    )
   ) {
     return key;
   }

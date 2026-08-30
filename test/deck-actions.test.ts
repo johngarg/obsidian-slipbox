@@ -13,9 +13,6 @@ const READY: DeckActionContext = {
   hasActiveCard: true,
   hasPreviousCard: true,
   hasNextCard: true,
-  hasInferredParent: true,
-  hasForwardInferredSiblingCycle: true,
-  hasBackwardInferredSiblingCycle: true,
   hasLocalBranchTarget: true,
   canToggleLocalBranchView: true,
   hasPreviousBookmark: true,
@@ -40,9 +37,6 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("previous-card", READY), true);
     assert.equal(canRunDeckAction("previous-bookmark", READY), true);
     assert.equal(canRunDeckAction("next-bookmark", READY), true);
-    assert.equal(canRunDeckAction("jump-inferred-parent", READY), true);
-    assert.equal(canRunDeckAction("cycle-forward-inferred-siblings", READY), true);
-    assert.equal(canRunDeckAction("cycle-backward-inferred-siblings", READY), true);
     assert.equal(canRunDeckAction("open-note", READY), true);
     assert.equal(canRunDeckAction("copy-link", READY), true);
     assert.equal(canRunDeckAction("toggle-desk", READY), true);
@@ -57,9 +51,6 @@ describe("Deck action availability", () => {
       hasActiveCard: false,
       hasPreviousCard: false,
       hasNextCard: false,
-      hasInferredParent: false,
-      hasForwardInferredSiblingCycle: false,
-      hasBackwardInferredSiblingCycle: false,
       hasLocalBranchTarget: false,
       canToggleLocalBranchView: false,
       hasPreviousBookmark: false,
@@ -81,9 +72,6 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("next-card", unavailable), false);
     assert.equal(canRunDeckAction("previous-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("next-bookmark", unavailable), false);
-    assert.equal(canRunDeckAction("jump-inferred-parent", unavailable), false);
-    assert.equal(canRunDeckAction("cycle-forward-inferred-siblings", unavailable), false);
-    assert.equal(canRunDeckAction("cycle-backward-inferred-siblings", unavailable), false);
     assert.equal(canRunDeckAction("forward-ten-cards", unavailable), false);
     assert.equal(canRunDeckAction("toggle-bookmark", unavailable), false);
     assert.equal(canRunDeckAction("copy-link", unavailable), false);
@@ -160,7 +148,7 @@ describe("Deck action availability", () => {
     }
   });
 
-  test("does not expose removed creation or directional address-search actions", () => {
+  test("does not expose removed legacy actions", () => {
     const definitions = SLIPBOX_ACTION_DEFINITIONS as readonly {
       readonly id: string;
       readonly defaultBindings: readonly { readonly key: string }[];
@@ -169,14 +157,19 @@ describe("Deck action availability", () => {
     assert.equal(definitions.some((definition) => definition.id === "new-section"), false);
     assert.equal(definitions.some((definition) => definition.id === "file-here"), false);
     assert.equal(definitions.some((definition) => definition.id === "entry-points"), false);
-    assert.equal(
-      definitions.some((definition) => definition.id === "find-address-forward"),
-      false,
-    );
-    assert.equal(
-      definitions.some((definition) => definition.id === "find-address-backward"),
-      false,
-    );
+    for (const removed of [
+      "find-address-forward",
+      "find-address-backward",
+      "jump-previous-inferred-peer",
+      "jump-next-inferred-peer",
+      "jump-past-inferred-descendants",
+      "jump-first-inferred-child",
+    ]) {
+      assert.equal(
+        definitions.some((definition) => definition.id === removed),
+        false,
+      );
+    }
     assert.equal(
       definitions.some((definition) =>
         definition.defaultBindings.some((binding) => binding.key === "a")),
@@ -184,67 +177,24 @@ describe("Deck action availability", () => {
     );
   });
 
-  test("exposes only parent and wrapped sibling actions for inserted strands", () => {
+  test("registers six non-wrapping local Branch View shortcuts", () => {
     const expected = [
-      {
-        id: "jump-inferred-parent",
-        label: "Move Deck anchor to parent of inserted strand",
-        repeatable: false,
-        defaultBindings: [{ key: "-", modifiers: [] }],
-      },
-      {
-        id: "cycle-forward-inferred-siblings",
-        label: "Cycle Deck anchor forward through inserted strand",
-        repeatable: true,
-        defaultBindings: [{ key: "n", modifiers: [] }],
-      },
-      {
-        id: "cycle-backward-inferred-siblings",
-        label: "Cycle Deck anchor backward through inserted strand",
-        repeatable: true,
-        defaultBindings: [{ key: "n", modifiers: ["Shift"] }],
-      },
+      ["move-backward-local-strand", [{ key: "n", modifiers: ["Shift"] }]],
+      ["move-forward-local-strand", [{ key: "n", modifiers: [] }]],
+      ["move-to-local-strand-beginning", [{ key: "^", modifiers: ["Shift"] }]],
+      ["enter-address-inferred-strand", [{ key: ">", modifiers: ["Shift"] }]],
+      [
+        "enter-explicit-supplementary-strand",
+        [{ key: "+", modifiers: ["Shift"] }],
+      ],
+      ["move-to-higher-strand", [{ key: "<", modifiers: ["Shift"] }]],
     ] as const;
-    for (const expectedAction of expected) {
-      const definition = SLIPBOX_ACTION_DEFINITIONS.find(
-        (candidate) => candidate.id === expectedAction.id,
-      );
-      assert.equal(definition?.label, expectedAction.label);
-      assert.equal(definition?.repeatable, expectedAction.repeatable);
-      assert.deepEqual(
-        definition?.defaultBindings,
-        expectedAction.defaultBindings,
-      );
-      assert.equal(definition?.target, "deck-anchor");
-    }
-    for (const removed of [
-      "jump-previous-inferred-peer",
-      "jump-next-inferred-peer",
-      "jump-past-inferred-descendants",
-      "jump-first-inferred-child",
-    ]) {
-      assert.equal(
-        SLIPBOX_ACTION_DEFINITIONS.some((definition) => definition.id === removed),
-        false,
-      );
-    }
-  });
-
-  test("registers six non-wrapping local Branch View actions unbound", () => {
-    const expected = [
-      "move-backward-local-strand",
-      "move-forward-local-strand",
-      "move-to-local-strand-beginning",
-      "enter-address-inferred-strand",
-      "enter-explicit-supplementary-strand",
-      "move-to-higher-strand",
-    ] as const;
-    for (const id of expected) {
+    for (const [id, defaultBindings] of expected) {
       const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
         candidate.id === id
       );
       assert.notEqual(definition, undefined);
-      assert.deepEqual(definition?.defaultBindings, []);
+      assert.deepEqual(definition?.defaultBindings, defaultBindings);
       assert.equal(definition?.target, "deck-anchor");
       assert.equal(canRunDeckAction(id, READY), true);
       assert.equal(canRunDeckAction(id, {
@@ -254,14 +204,14 @@ describe("Deck action availability", () => {
     }
   });
 
-  test("registers an unbound per-view Branch View visibility action", () => {
+  test("registers b for per-view Branch View visibility", () => {
     const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
       candidate.id === "toggle-local-branch-view"
     );
 
     assert.equal(definition?.label, "Toggle local Branch View visibility");
     assert.equal(definition?.commandId, "toggle-local-branch-view-visibility");
-    assert.deepEqual(definition?.defaultBindings, []);
+    assert.deepEqual(definition?.defaultBindings, [{ key: "b", modifiers: [] }]);
     assert.equal(definition?.target, "view");
     assert.equal(canRunDeckAction("toggle-local-branch-view", READY), true);
     assert.equal(canRunDeckAction("toggle-local-branch-view", {
@@ -334,7 +284,7 @@ describe("Deck action availability", () => {
     assert.equal(deskToggleFocusTarget("deck", true, false), "preserve");
   });
 
-  test("registers Enter only for Show in Deck and e only for focused editing", () => {
+  test("registers Enter only for Show in Deck and i only for focused editing", () => {
     const show = SLIPBOX_ACTION_DEFINITIONS.find(
       (definition) => definition.id === "show-card-in-deck",
     );
@@ -342,7 +292,7 @@ describe("Deck action availability", () => {
       (definition) => definition.id === "edit-card",
     );
     assert.deepEqual(show?.defaultBindings, [{ key: "Enter", modifiers: [] }]);
-    assert.deepEqual(edit?.defaultBindings, [{ key: "e", modifiers: [] }]);
+    assert.deepEqual(edit?.defaultBindings, [{ key: "i", modifiers: [] }]);
     assert.equal(edit?.label, "Edit focused card on Desk");
     assert.equal(show?.target, "focused-card");
     assert.equal(show?.scope, "active-view");
@@ -406,6 +356,33 @@ describe("Deck action availability", () => {
     }), false);
   });
 
+  test("registers Vim Deck positioning with direct command-palette actions", () => {
+    const prefix = SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
+      definition.id === "position-deck"
+    );
+    assert.deepEqual(prefix?.defaultBindings, [{ key: "z", modifiers: [] }]);
+    assert.equal(prefix?.target, "deck-anchor");
+    assert.equal(prefix?.repeatable, false);
+
+    for (const [id, label] of [
+      ["position-deck-top", "Position Deck near top"],
+      ["centre-card", "Centre Deck vertically"],
+      ["position-deck-bottom", "Position Deck near bottom"],
+    ] as const) {
+      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
+        candidate.id === id
+      );
+      assert.equal(definition?.label, label);
+      assert.deepEqual(definition?.defaultBindings, []);
+      assert.equal(definition?.target, "deck-anchor");
+      assert.equal(canRunDeckAction(id, READY), true);
+      assert.equal(canRunDeckAction(id, {
+        ...READY,
+        hasActiveCard: false,
+      }), false);
+    }
+  });
+
   test("marks held ten-card motion repeatable and prefixes discrete", () => {
     assert.equal(
       SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
@@ -420,6 +397,7 @@ describe("Deck action availability", () => {
     for (const action of [
       "find-address-first",
       "pull-into-pile",
+      "position-deck",
     ]) {
       assert.equal(
         SLIPBOX_ACTION_DEFINITIONS.find((definition) =>

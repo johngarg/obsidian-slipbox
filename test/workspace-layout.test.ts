@@ -8,10 +8,9 @@ import {
 } from "../src/workspace-layout.js";
 
 describe("Deck recenter target", () => {
-  test("centres at 50 percent without piles and 67 percent with piles", () => {
+  test("starts centred without a pile and near the bottom with one", () => {
     assert.equal(deckPositionModeForPileCount(0), "centered");
-    assert.equal(deckPositionModeForPileCount(1), "lowered");
-    assert.equal(deckPositionModeForPileCount(4), "lowered");
+    assert.equal(deckPositionModeForPileCount(1), "bottom");
   });
 });
 

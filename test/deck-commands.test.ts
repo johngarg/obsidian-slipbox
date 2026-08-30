@@ -9,6 +9,7 @@ import {
   installPendingDeckCommandKeyCapture,
   startAddressCommand,
   startPileCommand,
+  startPositionCommand,
 } from "../src/deck-commands.js";
 
 const cards = [
@@ -199,5 +200,27 @@ describe("pending Deck command state", () => {
     const step = advancePendingDeckCommand(pending, "j");
     assert.equal(step.consumed, true);
     assert.deepEqual(step.state, pending);
+  });
+
+  test("maps Vim position continuations to top, centre, and bottom", () => {
+    for (const [key, mode] of [
+      ["t", "top"],
+      ["z", "centered"],
+      ["b", "bottom"],
+    ] as const) {
+      const step = advancePendingDeckCommand(startPositionCommand(), key);
+      assert.deepEqual("completion" in step ? step.completion : null, {
+        kind: "position",
+        mode,
+      });
+      assert.deepEqual(step.state, { kind: "idle" });
+    }
+  });
+
+  test("cancels an unrecognised Deck position continuation", () => {
+    const step = advancePendingDeckCommand(startPositionCommand(), "x");
+    assert.equal(step.consumed, true);
+    assert.equal("cancelled" in step && step.cancelled, true);
+    assert.deepEqual(step.state, { kind: "idle" });
   });
 });

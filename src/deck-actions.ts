@@ -4,9 +4,6 @@ export interface DeckActionContext {
   readonly hasActiveCard: boolean;
   readonly hasPreviousCard: boolean;
   readonly hasNextCard: boolean;
-  readonly hasInferredParent: boolean;
-  readonly hasForwardInferredSiblingCycle: boolean;
-  readonly hasBackwardInferredSiblingCycle: boolean;
   readonly hasLocalBranchTarget: boolean;
   readonly canToggleLocalBranchView: boolean;
   readonly hasPreviousBookmark: boolean;
@@ -66,12 +63,6 @@ export function canRunDeckAction(
       return context.hasPreviousCard;
     case "next-card":
       return context.hasNextCard;
-    case "jump-inferred-parent":
-      return context.hasInferredParent;
-    case "cycle-forward-inferred-siblings":
-      return context.hasForwardInferredSiblingCycle;
-    case "cycle-backward-inferred-siblings":
-      return context.hasBackwardInferredSiblingCycle;
     case "move-backward-local-strand":
     case "move-forward-local-strand":
     case "move-to-local-strand-beginning":
@@ -88,7 +79,10 @@ export function canRunDeckAction(
     case "forward-ten-cards":
     case "backward-ten-cards":
       return context.hasActiveCard;
+    case "position-deck":
+    case "position-deck-top":
     case "centre-card":
+    case "position-deck-bottom":
     case "find-address-first":
       return context.hasActiveCard;
     case "open-note":

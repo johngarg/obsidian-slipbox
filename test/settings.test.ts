@@ -58,7 +58,7 @@ describe("Slipbox settings", () => {
       { key: "y", modifiers: [] },
     ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["edit-card"], [
-      { key: "e", modifiers: [] },
+      { key: "i", modifiers: [] },
     ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["show-card-in-deck"], [
       { key: "Enter", modifiers: [] },
@@ -78,6 +78,12 @@ describe("Slipbox settings", () => {
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["backward-ten-cards"], [
       { key: "u", modifiers: ["Ctrl"] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["position-deck"], [
+      { key: "z", modifiers: [] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["position-deck-top"], []);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["centre-card"], []);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["position-deck-bottom"], []);
     assert.equal("find-address-forward" in DEFAULT_SETTINGS.deckKeybindings, false);
     assert.equal("find-address-backward" in DEFAULT_SETTINGS.deckKeybindings, false);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["find-address-first"], [
@@ -105,8 +111,38 @@ describe("Slipbox settings", () => {
       { key: "l", modifiers: [] },
     ]);
     assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-deck-map"], [
+      { key: "o", modifiers: ["Shift"] },
+    ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-bookmark"], [
       { key: "m", modifiers: [] },
     ]);
+    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["toggle-local-branch-view"], [
+      { key: "b", modifiers: [] },
+    ]);
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["move-backward-local-strand"],
+      [{ key: "n", modifiers: ["Shift"] }],
+    );
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["move-forward-local-strand"],
+      [{ key: "n", modifiers: [] }],
+    );
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["move-to-local-strand-beginning"],
+      [{ key: "^", modifiers: ["Shift"] }],
+    );
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["enter-address-inferred-strand"],
+      [{ key: ">", modifiers: ["Shift"] }],
+    );
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["enter-explicit-supplementary-strand"],
+      [{ key: "+", modifiers: ["Shift"] }],
+    );
+    assert.deepEqual(
+      DEFAULT_SETTINGS.deckKeybindings["move-to-higher-strand"],
+      [{ key: "<", modifiers: ["Shift"] }],
+    );
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["copy-link"], true);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["edit-card"], false);
     assert.equal(DEFAULT_SETTINGS.cardHeaderButtons.deck["toggle-viewed-card"], false);
@@ -124,17 +160,6 @@ describe("Slipbox settings", () => {
     assert.equal(DEFAULT_SETTINGS.showBranchLabels, true);
     assert.equal(DEFAULT_SETTINGS.inferAddressBranches, false);
     assert.equal(DEFAULT_SETTINGS.showLocalBranchView, true);
-    assert.deepEqual(DEFAULT_SETTINGS.deckKeybindings["jump-inferred-parent"], [
-      { key: "-", modifiers: [] },
-    ]);
-    assert.deepEqual(
-      DEFAULT_SETTINGS.deckKeybindings["cycle-forward-inferred-siblings"],
-      [{ key: "n", modifiers: [] }],
-    );
-    assert.deepEqual(
-      DEFAULT_SETTINGS.deckKeybindings["cycle-backward-inferred-siblings"],
-      [{ key: "n", modifiers: ["Shift"] }],
-    );
     assert.equal(DEFAULT_SETTINGS.showTooltips, false);
     assert.equal(DEFAULT_SETTINGS.showDeckMap, true);
     assert.equal(DEFAULT_SETTINGS.restrictViewedCardPaste, true);
@@ -291,35 +316,6 @@ describe("Slipbox settings", () => {
     );
   });
 
-  test("ignores retired inference bindings", () => {
-    const legacy = {
-      "jump-apparent-parent": [{ key: "u", modifiers: ["Alt"] }],
-      "cycle-backward-apparent-siblings": [{ key: "[", modifiers: ["Alt"] }],
-      "jump-next-apparent-peer": [{ key: "]", modifiers: ["Alt"] }],
-      "jump-past-apparent-descendants": [{ key: "p", modifiers: ["Alt"] }],
-      "jump-first-apparent-child": [{ key: "c", modifiers: ["Alt"] }],
-    };
-    const normalized = normalizeDeckKeybindings(legacy);
-    assert.deepEqual(
-      normalized["jump-inferred-parent"],
-      DEFAULT_SETTINGS.deckKeybindings["jump-inferred-parent"],
-    );
-    assert.deepEqual(
-      normalized["cycle-backward-inferred-siblings"],
-      DEFAULT_SETTINGS.deckKeybindings["cycle-backward-inferred-siblings"],
-    );
-    assert.deepEqual(
-      normalized["cycle-forward-inferred-siblings"],
-      DEFAULT_SETTINGS.deckKeybindings["cycle-forward-inferred-siblings"],
-    );
-    assert.equal(
-      Object.values(normalized).flat().some((binding) =>
-        binding.key === "p" && binding.modifiers.includes("Alt")
-      ),
-      false,
-    );
-  });
-
   test("falls back to filename titles when title and address keys collide", () => {
     const raw = {
       addressProperty: " card-key ",
@@ -383,40 +379,6 @@ describe("Slipbox settings", () => {
       );
       assert.equal(definition?.scope, "active-view");
       assert.equal(definition?.target, "focused-card");
-    }
-    const inferredDefaults = {
-      "jump-inferred-parent": [{ key: "-", modifiers: [] }],
-      "cycle-forward-inferred-siblings": [{ key: "n", modifiers: [] }],
-      "cycle-backward-inferred-siblings": [{
-        key: "n",
-        modifiers: ["Shift"],
-      }],
-    } as const;
-    for (const action of Object.keys(inferredDefaults) as Array<
-      keyof typeof inferredDefaults
-    >) {
-      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
-        candidate.id === action
-      );
-      assert.equal(definition?.scope, "active-view");
-      assert.equal(definition?.target, "deck-anchor");
-      assert.deepEqual(definition?.defaultBindings, inferredDefaults[action]);
-    }
-    assert.equal(
-      SLIPBOX_ACTION_DEFINITIONS.find((definition) =>
-        definition.id === "jump-inferred-parent"
-      )?.repeatable,
-      false,
-    );
-    for (const action of [
-      "cycle-forward-inferred-siblings",
-      "cycle-backward-inferred-siblings",
-    ] as const) {
-      assert.equal(
-        SLIPBOX_ACTION_DEFINITIONS.find((definition) => definition.id === action)
-          ?.repeatable,
-        true,
-      );
     }
   });
 
@@ -525,19 +487,6 @@ describe("Slipbox settings", () => {
     }]);
   });
 
-  test("preserves explicitly unbound current actions", () => {
-    const unboundInferenceDefaults = {
-      ...DEFAULT_SETTINGS.deckKeybindings,
-      "jump-inferred-parent": [],
-      "cycle-forward-inferred-siblings": [],
-      "cycle-backward-inferred-siblings": [],
-    };
-    const normalized = normalizeDeckKeybindings(unboundInferenceDefaults);
-    assert.deepEqual(normalized["jump-inferred-parent"], []);
-    assert.deepEqual(normalized["cycle-forward-inferred-siblings"], []);
-    assert.deepEqual(normalized["cycle-backward-inferred-siblings"], []);
-  });
-
   test("keeps current custom bindings and ignores unknown actions", () => {
     const normalized = normalizeDeckKeybindings({
       "first-card": [{ key: "g", modifiers: [] }],
@@ -574,18 +523,6 @@ describe("Slipbox settings", () => {
       modifiers: ["Ctrl"],
     }]);
 
-    const siblingConflict = normalizeDeckKeybindings({
-      "open-note": [{ key: "n", modifiers: [] }],
-    });
-    assert.deepEqual(siblingConflict["jump-inferred-parent"], [{
-      key: "-",
-      modifiers: [],
-    }]);
-    assert.deepEqual(siblingConflict["cycle-forward-inferred-siblings"], []);
-    assert.deepEqual(siblingConflict["cycle-backward-inferred-siblings"], [{
-      key: "n",
-      modifiers: ["Shift"],
-    }]);
   });
 
   test("normalizes, captures, and displays shifted and literal Ctrl bindings", () => {
@@ -598,6 +535,9 @@ describe("Slipbox settings", () => {
       modifiers: ["Shift"],
     });
     assert.equal(formatKeyBinding({ key: "$", modifiers: ["Shift"] }), "$");
+    for (const key of ["^", ">", "+", "<"]) {
+      assert.equal(formatKeyBinding({ key, modifiers: ["Shift"] }), key);
+    }
     assert.equal(formatKeyBinding({ key: "h", modifiers: ["Shift"] }), "Shift+h");
 
     const base = { metaKey: false, altKey: false };

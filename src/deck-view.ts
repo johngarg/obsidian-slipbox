@@ -184,7 +184,6 @@ import {
   type PileNavigationDirection,
 } from "./pile-navigation.js";
 import {
-  deckPositionModeForPileCount,
   deckTopForPileAnchor,
   type DeckPositionMode,
 } from "./workspace-layout.js";
@@ -1216,15 +1215,6 @@ export class DeckView extends ItemView {
       hasActiveCard: activeIndex >= 0,
       hasPreviousCard: activeIndex > 0,
       hasNextCard: activeIndex >= 0 && activeIndex < filed.length - 1,
-      hasInferredParent:
-        active !== null &&
-        this.plugin.index.inferredParentForPath(active.path) !== undefined,
-      hasForwardInferredSiblingCycle:
-        active !== null &&
-        this.plugin.index.cycleForwardInferredSiblingForPath(active.path) !== undefined,
-      hasBackwardInferredSiblingCycle:
-        active !== null &&
-        this.plugin.index.cycleBackwardInferredSiblingForPath(active.path) !== undefined,
       hasLocalBranchTarget:
         localBranchMovement !== null &&
         this.localBranchTargetsForMovement(localBranchMovement).length > 0,
@@ -1327,21 +1317,6 @@ export class DeckView extends ItemView {
       case "next-card":
         this.moveBy(1);
         break;
-      case "jump-inferred-parent":
-        this.jumpToInferredCard((path) =>
-          this.plugin.index.inferredParentForPath(path)
-        );
-        break;
-      case "cycle-forward-inferred-siblings":
-        this.jumpToInferredCard((path) =>
-          this.plugin.index.cycleForwardInferredSiblingForPath(path)
-        );
-        break;
-      case "cycle-backward-inferred-siblings":
-        this.jumpToInferredCard((path) =>
-          this.plugin.index.cycleBackwardInferredSiblingForPath(path)
-        );
-        break;
       case "move-backward-local-strand":
         this.navigateLocalBranch("backward");
         break;
@@ -1375,8 +1350,17 @@ export class DeckView extends ItemView {
       case "backward-ten-cards":
         this.moveBy(-10);
         break;
+      case "position-deck":
+        this.shortcutController.beginPositionCommand();
+        break;
+      case "position-deck-top":
+        this.positionDeck("top");
+        break;
       case "centre-card":
-        this.centerActiveCard();
+        this.positionDeck("centered");
+        break;
+      case "position-deck-bottom":
+        this.positionDeck("bottom");
         break;
       case "first-card":
         this.goToDeckBoundary("start");
@@ -1538,19 +1522,6 @@ export class DeckView extends ItemView {
         }
         void this.plugin.deskService.clearFiledCards();
         break;
-    }
-  }
-
-  private jumpToInferredCard(
-    destination: (path: string) => FiledCard | undefined,
-  ): void {
-    const active = this.activeCard;
-    if (active === null) {
-      return;
-    }
-    const target = destination(active.path);
-    if (target !== undefined) {
-      void this.jumpToPath(target.path);
     }
   }
 
@@ -2724,9 +2695,15 @@ export class DeckView extends ItemView {
   private completePendingDeckCommand(
     completion: PendingDeckCommandCompletion,
   ): PendingDeckCommandCompletionResult {
-    return completion.kind === "address"
-      ? this.completeAddressCommand(completion.initial)
-      : this.completePileCommand(completion.digits);
+    switch (completion.kind) {
+      case "address":
+        return this.completeAddressCommand(completion.initial);
+      case "position":
+        this.positionDeck(completion.mode);
+        return { kind: "complete" };
+      case "pile":
+        return this.completePileCommand(completion.digits);
+    }
   }
 
   private completeAddressCommand(
@@ -4052,15 +4029,13 @@ export class DeckView extends ItemView {
     this.centerViewportOnActive(targetIndex, true);
   }
 
-  private centerActiveCard(): void {
-    this.deckViewport.setPositionMode(deckPositionModeForPileCount(
-      this.plugin.deskService.snapshot.piles.length,
-    ));
+  private positionDeck(mode: DeckPositionMode): void {
+    this.deckViewport.setPositionMode(mode);
     this.applyDeckPositionMode();
     this.recenterSpace();
     const anchorPath = this.deckViewport.anchorPath;
     if (anchorPath === null) {
-      new Notice("There is no Deck anchor to centre.");
+      new Notice("There is no Deck anchor to position.");
       return;
     }
     const activeIndex = this.plugin.index.filedIndexForPath(anchorPath);
@@ -4074,6 +4049,7 @@ export class DeckView extends ItemView {
     const mode = this.deckViewport.positionModeOverride ??
       this.plugin.startupDeckPositionMode;
     this.contentEl.toggleClass("is-deck-centered-position", mode === "centered");
+    this.contentEl.toggleClass("is-deck-top-position", mode === "top");
   }
 
   private centerViewportOnActive(

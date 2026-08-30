@@ -4,6 +4,7 @@ import {
   installPendingDeckCommandKeyCapture,
   startAddressCommand,
   startPileCommand,
+  startPositionCommand,
   type PendingDeckCommand,
   type PendingDeckCommandCompletion,
 } from "./deck-commands.js";
@@ -38,6 +39,7 @@ const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const PENDING_COMMAND_ACTIONS = new Set<SlipboxAction>([
   "find-address-first",
   "pull-into-pile",
+  "position-deck",
 ]);
 
 export type PendingDeckCommandCompletionResult =
@@ -229,6 +231,13 @@ export class DeckShortcutController {
     this.pendingCommandStartEvent = null;
     this.clearPendingCommand();
     this.pendingCommand = startPileCommand();
+    this.updateStatus();
+  }
+
+  beginPositionCommand(): void {
+    this.pendingCommandStartEvent = null;
+    this.clearPendingCommand();
+    this.pendingCommand = startPositionCommand();
     this.updateStatus();
   }
 
@@ -488,6 +497,8 @@ export class DeckShortcutController {
     let instruction = "";
     if (this.pendingCommand.kind === "address") {
       instruction = "Find from start: type an address initial · Esc to cancel";
+    } else if (this.pendingCommand.kind === "position") {
+      instruction = "Position Deck: z centre · t top · b bottom · Esc to cancel";
     } else if (this.pendingCommand.kind === "pile") {
       const digits = this.pendingCommand.digits === ""
         ? "…"

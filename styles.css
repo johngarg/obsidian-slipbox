@@ -12,6 +12,12 @@
   --slipbox-deck-top: 31%;
 }
 
+.slipbox-deck-view.is-deck-top-position {
+  --slipbox-deck-center: 33%;
+  --slipbox-deck-max-height: calc(66% - 54px);
+  --slipbox-deck-top: 6%;
+}
+
 .view-content.slipbox-deck-view {
   --slipbox-card-radius: 10px;
   --slipbox-main-card-width: min(58%, 840px);
@@ -192,6 +198,10 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+.slipbox-desk.is-dragging-card {
+  z-index: 300;
 }
 
 .slipbox-desk-piles {

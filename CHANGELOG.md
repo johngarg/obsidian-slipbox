@@ -20,19 +20,25 @@ initial public beta.
   while labels that do not fit the header collapse into a `+N` menu. Exact
   aliases for `+`-addressed cards remain ordinary; `++address` asserts a branch
   whose label is `+address`.
-- Added optional inserted strands derived from address extension, with
-  commands for parent movement and wrapped forward/backward sibling cycling.
+- Added optional inserted strands derived from address extension.
 - Added an expanded-by-default local Branch View beneath the active Deck card.
   Its deterministic SVG shows the current strand, one higher context, active
   departures, hidden-branch stubs, responsive counted ellipses, exact duplicate
-  cards, and labelled supplementary edges. Six movement actions and a per-view
-  visibility action are available from the command palette without default
-  shortcuts.
+  cards, and labelled supplementary edges. Six movement actions are available
+  from the command palette with Vim-inspired defaults; `b` toggles per-view
+  visibility by default.
 - Added a Branching settings group. Both branch models are derived in memory
   and never rewrite notes or addresses.
 
 ### Changed
 
+- Changed the default inline-edit shortcut from `e` to Vim-style `i`.
+- Reassigned the default bookmark, Branch View, and Deck-map shortcuts to `m`,
+  `b`, and `O`, respectively.
+- Replaced the pile-dependent centre shortcut with Vim-style `zt`, `zz`, and
+  `zb` Deck positioning at 33%, 50%, and 67% of the view, respectively. New
+  views initially use `zb` when the reconstructed unfiled-card pile exists and
+  otherwise use `zz`; `c` is no longer bound by default.
 - Enlarged local Branch View nodes, reduced their address type, aligned each
   departure one column to the right of its source, straightened branch
   connections, and tightened the spacing between strands.
@@ -47,13 +53,9 @@ initial public beta.
 - Made duplicate-address cards consecutive strand members in normal Deck order;
   backward, forward, beginning, and higher movement now choose one exact card
   directly instead of presenting all cards at that address in a chooser.
-- Assigned Vim-style defaults for inserted-strand navigation: `-` for the parent and
-  `n`/`N` for forward/backward sibling cycling.
 - Adopted the archive terms “inserted” and “supplementary” throughout the
   interface, commands, settings, and documentation.
 - Divided the Branching settings into supplementary and inserted subsections.
-- Replaced inserted-strand navigation arrows on Deck, Desk, and viewed cards with one
-  transferable Branch View belonging only to the active ordinary Deck card.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.
 - Standardised the current implementation, commands, and styling hooks on
@@ -107,7 +109,7 @@ initial public beta.
   instead of giving it a disabled-looking grey background.
 - Disabled filing confirmation while the duplicate-address policy blocks the
   entered address.
-- Made the tooltip preference apply to inserted-strand navigation, branch annotations,
+- Made the tooltip preference apply to local Branch View controls, branch annotations,
   and links rendered inside Deck and Desk cards.
 - Made **Follow links from cards** govern supplementary branch-label navigation as
   well as ordinary links and backlinks, while preserving independent previews

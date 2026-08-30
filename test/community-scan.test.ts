@@ -18,6 +18,21 @@ describe("community scanner CSS compatibility", () => {
     assert.doesNotMatch(styles, /text-decoration-thickness\s*:/);
   });
 
+  test("defines symmetric top, centre, and bottom Deck positions", () => {
+    assert.match(
+      styles,
+      /\.slipbox-deck-view\s*\{[^}]*--slipbox-deck-center:\s*67%;/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-view\.is-deck-centered-position\s*\{[^}]*--slipbox-deck-center:\s*50%;/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-view\.is-deck-top-position\s*\{[^}]*--slipbox-deck-center:\s*33%;/su,
+    );
+  });
+
   test("avoids broad relational selectors while hiding a dragged card's Branch View", () => {
     assert.doesNotMatch(styles, /:has\(/);
     assert.match(

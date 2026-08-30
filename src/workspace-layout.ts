@@ -1,13 +1,13 @@
 const DEFAULT_PILE_HORIZONTAL_STEP_PERCENT = 6;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 36;
 
-export type DeckPositionMode = "centered" | "lowered";
+export type DeckPositionMode = "top" | "centered" | "bottom";
 
-/** Resolve the explicit startup or recenter target from the current piles. */
+/** Start near the bottom when the reconstructed unfiled-card pile exists. */
 export function deckPositionModeForPileCount(
   pileCount: number,
 ): DeckPositionMode {
-  return pileCount > 0 ? "lowered" : "centered";
+  return pileCount > 0 ? "bottom" : "centered";
 }
 
 export interface AutomaticPilePosition {

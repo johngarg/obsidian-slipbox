@@ -90,6 +90,8 @@ function createSubject(
         controller.beginAddressCommand();
       } else if (action === "pull-into-pile") {
         controller.beginPileCommand();
+      } else if (action === "position-deck") {
+        controller.beginPositionCommand();
       }
       return true;
     },
@@ -327,6 +329,33 @@ describe("DeckShortcutController", () => {
     dispatchKey(subject, "a", {}, subject.outside);
     assert.deepEqual(subject.completions, [
       { kind: "address", initial: "a" },
+    ]);
+  });
+
+  test("runs zt, zz, and zb as pending Deck position commands", async () => {
+    const subject = createSubject();
+    const expected = [
+      ["t", "top"],
+      ["z", "centered"],
+      ["b", "bottom"],
+    ] as const;
+
+    for (const [key, mode] of expected) {
+      dispatchKey(subject, "z");
+      await flushShortcut();
+      assert.equal(subject.controller.hasPendingCommand, true);
+      const continuation = dispatchKey(subject, key, {}, subject.outside);
+      assert.equal(continuation.defaultPrevented, true);
+      assert.deepEqual(subject.completions.at(-1), {
+        kind: "position",
+        mode,
+      });
+      assert.equal(subject.controller.hasPendingCommand, false);
+    }
+    assert.deepEqual(subject.runs, [
+      "position-deck",
+      "position-deck",
+      "position-deck",
     ]);
   });
 

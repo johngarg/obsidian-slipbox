@@ -17,10 +17,7 @@ import {
 } from "./branch-links.js";
 import {
   EMPTY_INFERRED_STRUCTURE,
-  inferredParentAddress,
   buildInferredStructure,
-  cycleBackwardInferredSiblingAddress,
-  cycleForwardInferredSiblingAddress,
   type InferredStructureIndex,
 } from "./inferred-structure.js";
 import { resolveFiledCardLink } from "./card-links.js";
@@ -190,36 +187,6 @@ export class CardIndex {
 
   incomingBranchesForPath(path: string): readonly ExplicitBranch[] {
     return this.current.explicitBranches.incomingByTargetPath.get(path) ?? NO_BRANCHES;
-  }
-
-  inferredParentForPath(path: string): FiledCard | undefined {
-    return this.inferredCardForAddressResult(path, inferredParentAddress);
-  }
-
-  cycleForwardInferredSiblingForPath(path: string): FiledCard | undefined {
-    return this.inferredCardForAddressResult(
-      path,
-      cycleForwardInferredSiblingAddress,
-    );
-  }
-
-  cycleBackwardInferredSiblingForPath(path: string): FiledCard | undefined {
-    return this.inferredCardForAddressResult(
-      path,
-      cycleBackwardInferredSiblingAddress,
-    );
-  }
-
-  private inferredCardForAddressResult(
-    path: string,
-    query: (index: InferredStructureIndex, address: string) => string | null,
-  ): FiledCard | undefined {
-    const card = this.filedByPath(path);
-    if (card === undefined) {
-      return undefined;
-    }
-    const address = query(this.current.inferredStructure, card.address);
-    return address === null ? undefined : this.firstFiledAtAddress(address);
   }
 
   /** Read only the note body, excluding the YAML frontmatter block. */

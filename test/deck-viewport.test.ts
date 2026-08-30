@@ -38,8 +38,8 @@ describe("DeckViewport", () => {
     assert.equal(viewport.anchorPath, "0.md");
     assert.equal(viewport.position(TEN_CARDS), 0);
 
-    viewport.setPositionMode("lowered");
-    assert.equal(viewport.snapshot.positionModeOverride, "lowered");
+    viewport.setPositionMode("bottom");
+    assert.equal(viewport.snapshot.positionModeOverride, "bottom");
     viewport.recordRenderedWindow(TEN_CARDS, 1);
     viewport.reset();
     assert.deepEqual(viewport.snapshot, {

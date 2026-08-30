@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  inferredChildAddresses,
-  inferredNextSiblingAddresses,
-  inferredParentAddress,
-  inferredPreviousSiblingAddresses,
-  buildInferredStructure,
-  cycleBackwardInferredSiblingAddress,
-  cycleForwardInferredSiblingAddress,
-} from "../src/inferred-structure.js";
+import { buildInferredStructure } from "../src/inferred-structure.js";
 import { isInferredAddressAncestor } from "../src/address-order.js";
 
 const cards = (addresses: readonly string[]) => addresses.map((address, index) => ({
@@ -18,18 +10,12 @@ const cards = (addresses: readonly string[]) => addresses.map((address, index) =
 }));
 
 describe("inferred address structure", () => {
-  test("models parents, ordered sibling lists, and wrapped sibling cycles", () => {
+  test("models parents and ordered sibling lists", () => {
     const index = buildInferredStructure(cards(["1", "2", "2a", "2b", "3"]), "natural");
     assert.deepEqual(index.rootAddresses, ["1", "2", "3"]);
-    assert.deepEqual(inferredChildAddresses(index, "2"), ["2a", "2b"]);
-    assert.equal(inferredParentAddress(index, "2a"), "2");
-    assert.deepEqual(inferredPreviousSiblingAddresses(index, "2b"), ["2a"]);
-    assert.deepEqual(inferredNextSiblingAddresses(index, "2a"), ["2b"]);
-    assert.equal(cycleForwardInferredSiblingAddress(index, "2a"), "2b");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "2b"), "2a");
-    assert.equal(cycleBackwardInferredSiblingAddress(index, "2a"), "2b");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "1"), "2");
-    assert.equal(cycleBackwardInferredSiblingAddress(index, "1"), "3");
+    assert.deepEqual(index.nodesByAddress.get("2")?.childAddresses, ["2a", "2b"]);
+    assert.equal(index.nodesByAddress.get("2a")?.parentAddress, "2");
+    assert.equal(index.nodesByAddress.get("2b")?.parentAddress, "2");
   });
 
   test("never crosses between equal-depth nodes with different parents", () => {
@@ -37,12 +23,10 @@ describe("inferred address structure", () => {
       cards(["1", "1a", "1a1", "1a1a", "1b", "1b1", "2"]),
       "natural",
     );
-    assert.equal(inferredParentAddress(index, "1a1a"), "1a1");
-    assert.deepEqual(inferredChildAddresses(index, "1"), ["1a", "1b"]);
-    assert.deepEqual(inferredNextSiblingAddresses(index, "1a1"), []);
-    assert.deepEqual(inferredPreviousSiblingAddresses(index, "1b1"), []);
-    assert.equal(cycleForwardInferredSiblingAddress(index, "1a1"), null);
-    assert.equal(cycleBackwardInferredSiblingAddress(index, "1b1"), null);
+    assert.equal(index.nodesByAddress.get("1a1a")?.parentAddress, "1a1");
+    assert.deepEqual(index.nodesByAddress.get("1")?.childAddresses, ["1a", "1b"]);
+    assert.deepEqual(index.nodesByAddress.get("1a")?.childAddresses, ["1a1"]);
+    assert.deepEqual(index.nodesByAddress.get("1b")?.childAddresses, ["1b1"]);
   });
 
   test("handles Luhmann-style and arbitrary prefix grammars", () => {
@@ -50,46 +34,30 @@ describe("inferred address structure", () => {
       cards(["57/12", "57/12a", "57/12a1", "57/12b", "57/13", "Project-1", "Project-1-final", "Project-2"]),
       "natural",
     );
-    assert.deepEqual(inferredChildAddresses(index, "57/12"), ["57/12a", "57/12b"]);
-    assert.equal(inferredParentAddress(index, "57/12a1"), "57/12a");
-    assert.equal(inferredParentAddress(index, "57/13"), null);
-    assert.equal(inferredParentAddress(index, "Project-1-final"), "Project-1");
+    assert.deepEqual(index.nodesByAddress.get("57/12")?.childAddresses, [
+      "57/12a",
+      "57/12b",
+    ]);
+    assert.equal(index.nodesByAddress.get("57/12a1")?.parentAddress, "57/12a");
+    assert.equal(index.nodesByAddress.get("57/13")?.parentAddress, null);
+    assert.equal(
+      index.nodesByAddress.get("Project-1-final")?.parentAddress,
+      "Project-1",
+    );
   });
 
-  test("cycles roots and descendants only within their local sibling axes", () => {
+  test("keeps roots and descendants on their local axes", () => {
     const index = buildInferredStructure(
       cards(["7", "8", "8a", "8a1", "8a2", "8b", "17", "17a"]),
       "natural",
     );
-    assert.deepEqual(inferredChildAddresses(index, "8"), ["8a", "8b"]);
-    assert.deepEqual(inferredChildAddresses(index, "8a"), ["8a1", "8a2"]);
-    assert.equal(cycleForwardInferredSiblingAddress(index, "8a"), "8b");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "8b"), "8a");
-    assert.equal(cycleBackwardInferredSiblingAddress(index, "8a"), "8b");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "8a1"), "8a2");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "8a2"), "8a1");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "17a"), null);
-    assert.equal(cycleForwardInferredSiblingAddress(index, "7"), "8");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "8"), "17");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "17"), "7");
-  });
-
-  test("keeps global sibling cycling independent of Branch View families", () => {
-    const index = buildInferredStructure(
-      cards(["17,1", "17,1,1", "17,1,2", "17,1A", "17,1a"]),
-      "natural",
-    );
-
-    assert.deepEqual(inferredChildAddresses(index, "17,1"), [
-      "17,1,1",
-      "17,1,2",
-      "17,1A",
-      "17,1a",
+    assert.deepEqual(index.rootAddresses, ["7", "8", "17"]);
+    assert.deepEqual(index.nodesByAddress.get("8")?.childAddresses, ["8a", "8b"]);
+    assert.deepEqual(index.nodesByAddress.get("8a")?.childAddresses, [
+      "8a1",
+      "8a2",
     ]);
-    assert.equal(
-      cycleForwardInferredSiblingAddress(index, "17,1,2"),
-      "17,1A",
-    );
+    assert.deepEqual(index.nodesByAddress.get("17")?.childAddresses, ["17a"]);
   });
 
   test("protects numeric tokens in natural mode and permits literal prefixes in lexical mode", () => {
@@ -106,8 +74,8 @@ describe("inferred address structure", () => {
     assert.equal(isInferredAddressAncestor("a", "a", "lexicographic"), false);
 
     const lexical = buildInferredStructure(cards(["1", "10", "100", "2"]), "lexicographic");
-    assert.equal(inferredParentAddress(lexical, "10"), "1");
-    assert.equal(inferredParentAddress(lexical, "100"), "10");
+    assert.equal(lexical.nodesByAddress.get("10")?.parentAddress, "1");
+    assert.equal(lexical.nodesByAddress.get("100")?.parentAddress, "10");
   });
 
   test("groups duplicates into one structural node and retains all paths", () => {
@@ -118,8 +86,6 @@ describe("inferred address structure", () => {
     assert.equal(index.nodesByAddress.get("2")?.firstDeckIndex, 0);
     assert.equal(index.nodesByAddress.get("2")?.lastDeckIndex, 1);
     assert.equal(index.nodesByAddress.get("2")?.subtreeEndDeckIndexExclusive, 3);
-    assert.equal(inferredParentAddress(index, "2a"), "2");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "2"), "3");
-    assert.equal(cycleForwardInferredSiblingAddress(index, "2a"), null);
+    assert.equal(index.nodesByAddress.get("2a")?.parentAddress, "2");
   });
 });

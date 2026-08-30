@@ -409,6 +409,12 @@ describe("local Branch View controller", () => {
       gap?.querySelector(".slipbox-local-branch-gap-ellipsis")?.textContent,
       "…",
     );
+    const compactScroller = subject.first.querySelector<HTMLElement>(
+      ".slipbox-local-branch-scroller",
+    );
+    if (compactScroller !== null) {
+      compactScroller.scrollLeft = 137;
+    }
     gap?.dispatchEvent(new subject.window.KeyboardEvent("keydown", {
       bubbles: true,
       key: "Enter",
@@ -420,7 +426,12 @@ describe("local Branch View controller", () => {
     const graph = subject.first.querySelector<SVGElement>(
       ".slipbox-local-branch-graph",
     );
+    const expandedScroller = subject.first.querySelector<HTMLElement>(
+      ".slipbox-local-branch-scroller",
+    );
     assert.equal(Number(graph?.getAttribute("width")) > 312, true);
+    assert.notEqual(expandedScroller, compactScroller);
+    assert.equal(expandedScroller?.scrollLeft, 137);
   });
 
   test("expands one hidden departure and chooses when several exist", async () => {

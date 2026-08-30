@@ -199,7 +199,10 @@ export class LocalBranchViewController {
     this.resizeObserver.observe(stage);
   }
 
-  private render(model: LocalBranchModel): void {
+  private render(
+    model: LocalBranchModel,
+    preservedScrollLeft: number | null = null,
+  ): void {
     const focusedId = this.focusedControlId();
     this.root.style.width = `${this.availableWidth()}px`;
     this.root.replaceChildren();
@@ -210,6 +213,14 @@ export class LocalBranchViewController {
       this.renderGraph(model);
     }
     this.restoreFocus(focusedId);
+    if (preservedScrollLeft !== null) {
+      const scroller = this.root.querySelector<HTMLElement>(
+        ".slipbox-local-branch-scroller",
+      );
+      if (scroller !== null) {
+        scroller.scrollLeft = preservedScrollLeft;
+      }
+    }
   }
 
   private renderCollapseControl(
@@ -291,8 +302,11 @@ export class LocalBranchViewController {
         this.environment.runAfterEditing(reason, action);
       },
       expandGap: (id) => {
+        const scrollLeft = this.root.querySelector<HTMLElement>(
+          ".slipbox-local-branch-scroller",
+        )?.scrollLeft ?? 0;
         this.expandedGapIds = new Set([id]);
-        this.render(model);
+        this.render(model, scrollLeft);
       },
       toggleDeparture: (departures) => this.toggleDeparture(departures),
     });

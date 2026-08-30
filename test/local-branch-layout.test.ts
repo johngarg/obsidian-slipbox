@@ -166,6 +166,31 @@ describe("local branch layout", () => {
     assert.equal(visiblePaths.includes("5.md"), true);
     assert.equal(visiblePaths.includes("11.md"), true);
     assert.equal(items.some((item) => item.kind === "gap"), true);
+    assert.equal(
+      items.every((item) => item.kind === "node" || item.count > 1),
+      true,
+    );
+  });
+
+  test("renders singleton omission runs as nodes", () => {
+    const nodes = Array.from({ length: 5 }, (_, index) => node(index));
+    const result = layoutLocalBranchModel({
+      ...model,
+      activePath: "2.md",
+      activeAddress: "2",
+      strands: [{
+        ...model.strands[0]!,
+        nodes,
+        selectedPath: "2.md",
+      }],
+    }, { width: 240 });
+    const items = result.strands[0]?.items ?? [];
+
+    assert.deepEqual(
+      items.map((item) => item.kind),
+      ["node", "node", "node", "node", "node"],
+    );
+    assert.equal(result.contentWidth > result.viewportWidth, true);
   });
 
   test("expands exactly the activated omitted run into horizontal overflow", () => {

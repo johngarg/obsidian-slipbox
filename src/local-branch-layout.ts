@@ -229,7 +229,7 @@ function projectStrand(
     }
     const end = index;
     const id = `${strand.id}:gap:${start}:${end}`;
-    if (expandedGapIds.has(id)) {
+    if (end - start === 1 || expandedGapIds.has(id)) {
       for (let omittedIndex = start; omittedIndex < end; omittedIndex += 1) {
         const node = strand.nodes[omittedIndex];
         if (node !== undefined) {

@@ -100,7 +100,7 @@ class LocalBranchSvgRenderer {
             item.y,
           );
         } else {
-          this.renderNode(items, item, layout.nodeRadius);
+          this.renderNode(items, row, item, layout.nodeRadius);
         }
       }
     }
@@ -204,6 +204,7 @@ class LocalBranchSvgRenderer {
 
   private renderNode(
     parent: SVGElement,
+    row: LocalBranchLayoutStrand,
     item: LocalBranchLayoutNode,
     radius: number,
   ): void {
@@ -267,12 +268,13 @@ class LocalBranchSvgRenderer {
       node.path !== this.options.model.activePath &&
       hiddenDepartures.length > 0
     ) {
-      this.renderStub(parent, item, radius, hiddenDepartures);
+      this.renderStub(parent, row, item, radius, hiddenDepartures);
     }
   }
 
   private renderStub(
     parent: SVGElement,
+    row: LocalBranchLayoutStrand,
     item: LocalBranchLayoutNode,
     radius: number,
     departures: readonly LocalBranchDeparture[],
@@ -294,7 +296,7 @@ class LocalBranchSvgRenderer {
     const types = [
       ...(inferredCount === 0
         ? []
-        : [`${inferredCount} address-inferred`]),
+        : [`${inferredCount} inserted`]),
       ...(explicitCount === 0
         ? []
         : [`${explicitCount} supplementary`]),
@@ -304,7 +306,7 @@ class LocalBranchSvgRenderer {
     } from ${item.node.address}: ${types}`;
     group.setAttribute("aria-label", label);
     const line = this.svg("line");
-    const verticalDirection = 1;
+    const verticalDirection = row.strand.role === "higher" ? -1 : 1;
     const radiusOffset = radius * DIAGONAL_COMPONENT;
     const stubOffset = BRANCH_STUB_LENGTH * DIAGONAL_COMPONENT;
     const startX = item.x + radiusOffset;

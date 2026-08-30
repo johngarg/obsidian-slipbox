@@ -17,6 +17,7 @@ const READY: DeckActionContext = {
   hasForwardInferredSiblingCycle: true,
   hasBackwardInferredSiblingCycle: true,
   hasLocalBranchTarget: true,
+  canToggleLocalBranchView: true,
   hasPreviousBookmark: true,
   hasNextBookmark: true,
   hasProblems: true,
@@ -60,6 +61,7 @@ describe("Deck action availability", () => {
       hasForwardInferredSiblingCycle: false,
       hasBackwardInferredSiblingCycle: false,
       hasLocalBranchTarget: false,
+      canToggleLocalBranchView: false,
       hasPreviousBookmark: false,
       hasNextBookmark: false,
       hasProblems: false,
@@ -91,6 +93,7 @@ describe("Deck action availability", () => {
     assert.equal(canRunDeckAction("confirm-filing", unavailable), false);
     assert.equal(canRunDeckAction("cancel-filing", unavailable), false);
     assert.equal(canRunDeckAction("toggle-deck-map", unavailable), true);
+    assert.equal(canRunDeckAction("toggle-local-branch-view", unavailable), false);
   });
 
   test("allows bookmarking only with a filed Deck card focused", () => {
@@ -181,23 +184,23 @@ describe("Deck action availability", () => {
     );
   });
 
-  test("exposes only parent and wrapped sibling actions for inferred navigation", () => {
+  test("exposes only parent and wrapped sibling actions for inserted strands", () => {
     const expected = [
       {
         id: "jump-inferred-parent",
-        label: "Move Deck anchor to inferred parent",
+        label: "Move Deck anchor to parent of inserted strand",
         repeatable: false,
         defaultBindings: [{ key: "-", modifiers: [] }],
       },
       {
         id: "cycle-forward-inferred-siblings",
-        label: "Cycle Deck anchor forward through inferred siblings",
+        label: "Cycle Deck anchor forward through inserted strand",
         repeatable: true,
         defaultBindings: [{ key: "n", modifiers: [] }],
       },
       {
         id: "cycle-backward-inferred-siblings",
-        label: "Cycle Deck anchor backward through inferred siblings",
+        label: "Cycle Deck anchor backward through inserted strand",
         repeatable: true,
         defaultBindings: [{ key: "n", modifiers: ["Shift"] }],
       },
@@ -249,6 +252,22 @@ describe("Deck action availability", () => {
         hasLocalBranchTarget: false,
       }), false);
     }
+  });
+
+  test("registers an unbound per-view Branch View visibility action", () => {
+    const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
+      candidate.id === "toggle-local-branch-view"
+    );
+
+    assert.equal(definition?.label, "Toggle local Branch View visibility");
+    assert.equal(definition?.commandId, "toggle-local-branch-view-visibility");
+    assert.deepEqual(definition?.defaultBindings, []);
+    assert.equal(definition?.target, "view");
+    assert.equal(canRunDeckAction("toggle-local-branch-view", READY), true);
+    assert.equal(canRunDeckAction("toggle-local-branch-view", {
+      ...READY,
+      canToggleLocalBranchView: false,
+    }), false);
   });
 
   test("does not expose browser history or toolbar actions and leaves H, L, and t free", () => {

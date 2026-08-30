@@ -100,11 +100,11 @@ export class SlipboxSettingTab extends PluginSettingTab {
       },
       {
         type: "group",
-        heading: "Explicit branching",
+        heading: "Supplementary branching",
         items: [
           this.definition(
-            "Recognise explicit branch links",
-            "Treat internal links with an explicitly displayed + alias, such as [[card|+a]], as branch assertions.",
+            "Recognise supplementary branch links",
+            "Treat internal links with a displayed + alias, such as [[card|+a]], as supplementary branch assertions.",
             (setting) => this.renderExplicitBranchLinks(setting),
           ),
           this.definition(
@@ -114,23 +114,23 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Hide branch-link markers in cards",
-            "Hide the + prefix on explicit aliases in rendered Slipbox cards. Link targets and ordinary Markdown views are unaffected.",
+            "Hide the + prefix on supplementary aliases in rendered Slipbox cards. Link targets and ordinary Markdown views are unaffected.",
             (setting) => this.renderHideBranchLinkMarkers(setting),
           ),
           this.definition(
             "Show branch labels",
-            "Show incoming explicit branch labels beside card addresses. Clicked labels return the Deck anchor to the source card.",
+            "Show incoming supplementary branch labels beside card addresses. Clicked labels return the Deck anchor to the source card.",
             (setting) => this.renderShowBranchLabels(setting),
           ),
         ],
       },
       {
         type: "group",
-        heading: "Inferred branching",
+        heading: "Inserted branching",
         items: [
           this.definition(
-            "Infer branches from addresses",
-            "Derive an inferred hierarchy from address extension and make structural navigation commands available.",
+            "Derive inserted strands from addresses",
+            "Derive inserted strands from address extension and make structural navigation commands available.",
             (setting) => this.renderInferAddressBranches(setting),
           ),
         ],
@@ -141,7 +141,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "Show local Branch View",
-            "Show archive-style local branch navigation beneath the active Deck card using whichever inferred and explicit relationships are enabled.",
+            "Show archive-style local branch navigation beneath the active Deck card using whichever inserted and supplementary relationships are enabled.",
             (setting) => this.renderShowLocalBranchView(setting),
           ),
         ],
@@ -178,7 +178,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Follow links from cards",
-            "Allow links, backlinks, and explicit branch labels inside Slipbox Desk cards to navigate. Explicit Open note actions remain available.",
+            "Allow links, backlinks, and supplementary branch labels inside Slipbox Desk cards to navigate. Open note actions remain available.",
             (setting) => this.renderFollowLinksFromCards(setting),
           ),
           this.definition(

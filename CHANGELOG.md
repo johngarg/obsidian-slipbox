@@ -13,20 +13,21 @@ initial public beta.
   retain their IDs and now expose accessible circle buttons alongside the
   optional title. Headers use an adaptive light/dark tint, Deck-map markers keep
   the selected colour, and bookmarks surround those markers with an accent ring.
-- Added optional explicit branch links using the fixed canonical `+` alias
+- Added optional supplementary branch links using the fixed canonical `+` alias
   syntax, such as `[[card|+a]]`, with interactive incoming labels on Deck,
   Desk, and viewed cards. Marked aliases can receive a quiet outline in
   rendered Slipbox card bodies and hide their `+` prefix there by default,
   while labels that do not fit the header collapse into a `+N` menu. Exact
   aliases for `+`-addressed cards remain ordinary; `++address` asserts a branch
   whose label is `+address`.
-- Added optional hierarchy inference from address extension, with
+- Added optional inserted strands derived from address extension, with
   commands for parent movement and wrapped forward/backward sibling cycling.
 - Added an expanded-by-default local Branch View beneath the active Deck card.
   Its deterministic SVG shows the current strand, one higher context, active
   departures, hidden-branch stubs, responsive counted ellipses, exact duplicate
-  cards, and labelled explicit edges. Six matching command-palette actions are
-  available without default shortcuts; provisional visual controls are deferred.
+  cards, and labelled supplementary edges. Six movement actions and a per-view
+  visibility action are available from the command palette without default
+  shortcuts.
 - Added a Branching settings group. Both branch models are derived in memory
   and never rewrite notes or addresses.
 
@@ -37,13 +38,21 @@ initial public beta.
   connections, and tightened the spacing between strands.
 - Presented the local Branch View as an uncapped transparent diagram beneath
   its card, widened it within the Deck stage, enabled Deck panning from its
-  noninteractive space, and kept its provisional navigation controls hidden.
-- Assigned Vim-style defaults for inferred navigation: `-` for the parent and
+  noninteractive space, and added a card-aligned floating control rail. A
+  persistent standard `git-branch` icon toggles the diagram, while its six
+  standard movement icons extend to the left only while the view is shown.
+- Replaced repeated supplementary movement buttons with one stable icon per
+  movement. A single destination opens directly and several destinations use
+  the searchable exact-card chooser shared with command-palette navigation.
+- Made duplicate-address cards consecutive strand members in normal Deck order;
+  backward, forward, beginning, and higher movement now choose one exact card
+  directly instead of presenting all cards at that address in a chooser.
+- Assigned Vim-style defaults for inserted-strand navigation: `-` for the parent and
   `n`/`N` for forward/backward sibling cycling.
-- Standardised address-derived hierarchy terminology on “inferred” throughout
-  the interface, commands, settings, and documentation.
-- Divided the Branching settings into explicit and inferred subsections.
-- Replaced inferred-navigation arrows on Deck, Desk, and viewed cards with one
+- Adopted the archive terms “inserted” and “supplementary” throughout the
+  interface, commands, settings, and documentation.
+- Divided the Branching settings into supplementary and inserted subsections.
+- Replaced inserted-strand navigation arrows on Deck, Desk, and viewed cards with one
   transferable Branch View belonging only to the active ordinary Deck card.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.
@@ -59,17 +68,19 @@ initial public beta.
 
 ### Fixed
 
+- Kept a Branch View tray's horizontal position when expanding an omission and
+  showed the actual card instead of an equally wide ellipsis for singleton runs.
 - Kept wheel gestures over the local Branch View scroller inside the tray
   instead of moving the surrounding Deck.
-- Pointed every hidden-branch stub down and right with the same compact length,
-  including stubs on the higher-context row.
+- Restored higher-context hidden-branch stubs to point up and right while all
+  other stubs retain the same compact down-and-right orientation.
 - Kept hidden-branch stub hit targets outside their node circles, so clicking a
   node consistently activates it and reveals all of its branches instead of
   intermittently opening the single-branch expansion chooser.
-- Kept explicit Branch View continuations inside their address-extension family,
+- Kept supplementary Branch View continuations inside their address-extension family,
   so comma-number strands such as `17,1,1` and `17,1,2` no longer absorb a
   separate appended-letter strand such as `17,1A` and `17,1a`.
-- Bounded promoted explicit strands at the next explicit start so diagram and
+- Bounded promoted supplementary strands at the next supplementary start so diagram and
   command navigation cannot cross into a neighbouring supplementary strand.
 - Made every interactive hidden-branch stub reveal one bounded auxiliary row,
   including stubs on departure rows, while suppressing stale, recursive, and
@@ -78,8 +89,8 @@ initial public beta.
   checks instead of rebuilding every filed card and title for each command.
 - Elided long local Branch View addresses from the beginning and reserved more
   clearance between node labels and their circles.
-- Partitioned local Branch View departures at later explicit branch starts so
-  one inferred sibling continuation is never repeated across several strands.
+- Partitioned local Branch View departures at later supplementary branch starts
+  so one inserted continuation is never repeated across several strands.
 - Prevented pointer navigation on the Deck map from retaining DOM focus and
   later acquiring a keyboard-focus outline during ordinary Deck navigation.
 - Coordinated index, Desk, and view updates after filing, and stopped reporting
@@ -92,9 +103,9 @@ initial public beta.
   instead of giving it a disabled-looking grey background.
 - Disabled filing confirmation while the duplicate-address policy blocks the
   entered address.
-- Made the tooltip preference apply to inferred navigation, branch annotations,
+- Made the tooltip preference apply to inserted-strand navigation, branch annotations,
   and links rendered inside Deck and Desk cards.
-- Made **Follow links from cards** govern explicit branch-label navigation as
+- Made **Follow links from cards** govern supplementary branch-label navigation as
   well as ordinary links and backlinks, while preserving independent previews
   and removing underlines from inert rendered card links.
 - Kept annotated Desk-card headers stable while labels, titles, and action
@@ -103,7 +114,7 @@ initial public beta.
 - Kept available Deck commands runnable from the command palette while its
   search field is focused.
 - Kept text-setting validation messages on their own row beneath the input.
-- Promoted explicit and inferred branching to separate top-level settings groups.
+- Promoted supplementary and inserted branching to separate top-level settings groups.
 - Removed CSS constructs flagged by Obsidian's community-plugin scanner while
   preserving signature focus and drag-time navigation behavior.
 - Desk piles can now be laid out on existing Canvases, including newly created

@@ -26,7 +26,7 @@ describe("community scanner CSS compatibility", () => {
     );
   });
 
-  test("presents the Branch View as an uncapped floating diagram", () => {
+  test("presents the Branch View as an uncapped floating diagram and control rail", () => {
     const viewRule = styles.match(
       /\.slipbox-local-branch-view\s*\{(?<body>[^}]*)\}/u,
     )?.groups?.body ?? "";
@@ -37,7 +37,11 @@ describe("community scanner CSS compatibility", () => {
     assert.match(viewRule, /box-shadow:\s*none;/u);
     assert.match(
       styles,
-      /\.slipbox-local-branch-header\s*\{[^}]*display:\s*none;/su,
+      /\.slipbox-local-branch-header\s*\{[^}]*position:\s*absolute;[^}]*display:\s*flex;[^}]*pointer-events:\s*none;/su,
+    );
+    assert.match(
+      styles,
+      /button\.slipbox-local-branch-control,[^{]+\{[^}]*pointer-events:\s*auto;/su,
     );
   });
 

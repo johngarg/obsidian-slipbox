@@ -16,7 +16,7 @@ const node = (index: number): LocalBranchNode => ({
   departures: index === 5 ? [{
     id: "departure:inferred:5",
     kind: "inferred",
-    label: "Address-inferred inserted strand",
+    label: "Inserted strand",
     target: { path: "5a.md", address: "5a", title: "Card 5a" },
   }] : [],
 });

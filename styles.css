@@ -1140,72 +1140,76 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 }
 
 .slipbox-local-branch-header {
-  display: none;
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  height: 24px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  pointer-events: none;
 }
 
 .slipbox-local-branch-toolbar {
-  display: grid;
-  width: min(360px, calc(100% - 48px));
-  grid-template-columns: repeat(6, minmax(36px, 1fr));
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
+  pointer-events: auto;
 }
 
 .slipbox-local-branch-control-slot {
   display: flex;
-  flex-wrap: wrap;
-  min-width: 0;
+  width: 30px;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  padding-block: 3px;
 }
 
 button.slipbox-local-branch-control,
-button.slipbox-local-branch-collapse {
+button.slipbox-local-branch-toggle {
   display: inline-flex;
-  width: 34px;
-  height: 30px;
+  width: 30px;
+  height: 24px;
   align-items: center;
   justify-content: center;
   margin: 0;
-  padding: 5px;
+  padding: 3px;
   border: 0;
   background: transparent;
   box-shadow: none;
   color: var(--text-muted);
+  opacity: 0.8;
+  pointer-events: auto;
   cursor: pointer;
+  transition: color 120ms ease, opacity 120ms ease;
 }
 
 button.slipbox-local-branch-control:hover,
 button.slipbox-local-branch-control:focus-visible,
-button.slipbox-local-branch-collapse:hover,
-button.slipbox-local-branch-collapse:focus-visible {
+button.slipbox-local-branch-toggle:hover,
+button.slipbox-local-branch-toggle:focus-visible,
+button.slipbox-local-branch-toggle.is-pressed {
   color: var(--text-accent);
+  opacity: 1;
 }
 
 button.slipbox-local-branch-control:focus-visible,
-button.slipbox-local-branch-collapse:focus-visible {
+button.slipbox-local-branch-toggle:focus-visible {
   outline: 2px solid var(--text-accent);
   outline-offset: -2px;
   border-radius: var(--radius-s);
 }
 
 button.slipbox-local-branch-control:disabled {
-  color: var(--text-faint);
-  opacity: 0.35;
+  color: var(--text-muted);
+  opacity: 0.36;
   cursor: default;
 }
 
 button.slipbox-local-branch-control svg,
-button.slipbox-local-branch-collapse svg {
-  width: 20px;
-  height: 20px;
-}
-
-.slipbox-local-branch-collapse {
-  position: absolute;
-  top: 3px;
-  right: 3px;
+button.slipbox-local-branch-toggle svg {
+  width: 18px;
+  height: 18px;
 }
 
 .slipbox-local-branch-scroller {
@@ -2241,7 +2245,9 @@ button.slipbox-card-color-choice.is-no-color::after {
   .slipbox-local-branch-view,
   .slipbox-local-branch-node,
   .slipbox-local-branch-edge,
-  .slipbox-local-branch-stub {
+  .slipbox-local-branch-stub,
+  button.slipbox-local-branch-control,
+  button.slipbox-local-branch-toggle {
     forced-color-adjust: none;
   }
 
@@ -2253,6 +2259,20 @@ button.slipbox-card-color-choice.is-no-color::after {
     background: Canvas;
     fill: Canvas;
     stroke: GrayText;
+  }
+
+  button.slipbox-local-branch-control,
+  button.slipbox-local-branch-toggle {
+    color: GrayText;
+  }
+
+  button.slipbox-local-branch-control:hover,
+  button.slipbox-local-branch-control:focus-visible,
+  button.slipbox-local-branch-toggle:hover,
+  button.slipbox-local-branch-toggle:focus-visible,
+  button.slipbox-local-branch-toggle.is-pressed {
+    color: Highlight;
+    outline-color: Highlight;
   }
 
   .slipbox-local-branch-node.is-active circle,

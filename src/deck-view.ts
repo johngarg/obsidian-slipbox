@@ -8,6 +8,7 @@ import {
   TFile,
   WorkspaceLeaf,
   getLinkpath,
+  setIcon,
 } from "obsidian";
 
 import type { CardIndexRuntime } from "./card-index-runtime.js";
@@ -377,14 +378,13 @@ export class DeckView extends ItemView {
     this.viewedCardSignature = new CardSignatureManager(signatureEnvironment);
     this.localBranchView = new LocalBranchViewController({
       activeDocument: this.contentEl.ownerDocument,
-      showView: () =>
-        this.plugin.settings.showLocalBranchView &&
-        (
-          this.plugin.settings.inferAddressBranches ||
-          this.plugin.settings.explicitBranchLinks
-        ),
+      canShowView: () =>
+        this.plugin.settings.inferAddressBranches ||
+        this.plugin.settings.explicitBranchLinks,
+      showViewByDefault: () => this.plugin.settings.showLocalBranchView,
       showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
+      setIcon,
       modelForPath: (path, expandedDepartureIds) =>
         this.localBranchModel(path, expandedDepartureIds),
       chooseDeparture: (departures) =>
@@ -1228,6 +1228,12 @@ export class DeckView extends ItemView {
       hasLocalBranchTarget:
         localBranchMovement !== null &&
         this.localBranchTargetsForMovement(localBranchMovement).length > 0,
+      canToggleLocalBranchView:
+        activeIndex >= 0 &&
+        (
+          this.plugin.settings.inferAddressBranches ||
+          this.plugin.settings.explicitBranchLinks
+        ),
       hasPreviousBookmark:
         action === "previous-bookmark" &&
         adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
@@ -1353,6 +1359,9 @@ export class DeckView extends ItemView {
         break;
       case "move-to-higher-strand":
         this.navigateLocalBranch("higher");
+        break;
+      case "toggle-local-branch-view":
+        this.localBranchView.toggleVisibility();
         break;
       case "previous-bookmark":
         this.jumpToAdjacentBookmark(-1);

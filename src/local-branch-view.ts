@@ -1,18 +1,23 @@
 import { renderLocalBranchSvg } from "./local-branch-svg.js";
 import { localBranchDomWindow } from "./local-branch-dom.js";
+import {
+  preventPointerActivatedButtonFocus,
+  releasePointerActivatedButtonFocus,
+} from "./pointer-button-focus.js";
 import type {
   LocalBranchDeparture,
   LocalBranchModel,
   LocalBranchMovement,
-  LocalBranchNavigationGroup,
   LocalBranchTarget,
 } from "./local-branch-types.js";
 
 export interface LocalBranchViewEnvironment {
   readonly activeDocument: Document;
-  readonly showView: () => boolean;
+  readonly canShowView: () => boolean;
+  readonly showViewByDefault: () => boolean;
   readonly showTooltips: () => boolean;
   readonly previewLinksOnHover: () => boolean;
+  readonly setIcon: (control: HTMLElement, icon: string) => void;
   readonly modelForPath: (
     path: string,
     expandedDepartureId: string | null,
@@ -50,37 +55,37 @@ export function localBranchTrayWidth(
 const MOVEMENTS: readonly {
   readonly movement: LocalBranchMovement;
   readonly label: string;
-  readonly icon: readonly string[];
+  readonly icon: string;
 }[] = [
   {
     movement: "backward",
     label: "Move backward on current strand",
-    icon: ["M17 6H8", "M11 3 8 6l3 3", "M8 6v12"],
+    icon: "arrow-left",
   },
   {
     movement: "forward",
     label: "Move forward on current strand",
-    icon: ["M7 6h9", "m13 3 3 3-3 3", "M16 6v12"],
+    icon: "arrow-right",
   },
   {
     movement: "beginning",
     label: "Move to beginning of current strand",
-    icon: ["M6 4v16", "M18 12H7", "m11 7-5 5 5 5"],
+    icon: "chevrons-left",
   },
   {
     movement: "inferred",
-    label: "Enter address-inferred inserted strand",
-    icon: ["M5 5v5c0 2 2 3 4 3h10", "m15 9 4 4-4 4"],
+    label: "Enter inserted strand",
+    icon: "git-fork",
   },
   {
     movement: "explicit",
-    label: "Enter explicit supplementary strand",
-    icon: ["M5 6h6c2 0 3 2 3 4v8", "m10 15 4 3 4-3", "M18 6v6"],
+    label: "Enter supplementary strand",
+    icon: "corner-down-right",
   },
   {
     movement: "higher",
     label: "Move to higher strand",
-    icon: ["M5 18h5c2 0 3-2 3-4V5", "m9 8 4-3 4 3"],
+    icon: "corner-up-left",
   },
 ];
 
@@ -91,7 +96,7 @@ export class LocalBranchViewController {
   private stage: HTMLElement | null = null;
   private path: string | null = null;
   private model: LocalBranchModel | null = null;
-  private collapsed = false;
+  private visibilityOverride: boolean | null = null;
   private expandedGapIds = new Set<string>();
   private expandedDepartureId: string | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -143,12 +148,27 @@ export class LocalBranchViewController {
     this.root.replaceChildren();
   }
 
+  toggleVisibility(): void {
+    if (!this.environment.canShowView()) {
+      return;
+    }
+    this.visibilityOverride = !this.isViewVisible();
+    this.expandedGapIds.clear();
+    this.refresh();
+  }
+
   refresh(): void {
     this.expandedGapIds.clear();
     const owner = this.owner;
     const path = this.path;
-    if (owner === null || path === null || !this.environment.showView()) {
+    if (owner === null || path === null || !this.environment.canShowView()) {
       this.hide();
+      return;
+    }
+    this.root.hidden = false;
+    if (!this.isViewVisible()) {
+      this.model = null;
+      this.render(null);
       return;
     }
     let model = this.environment.modelForPath(
@@ -166,7 +186,6 @@ export class LocalBranchViewController {
       this.expandedDepartureId = null;
     }
     this.model = model;
-    this.root.hidden = false;
     this.render(model);
   }
 
@@ -191,25 +210,27 @@ export class LocalBranchViewController {
       }
       this.lastWidth = width;
       this.expandedGapIds.clear();
-      if (this.model !== null) {
-        this.render(this.model);
-      }
+      this.render(this.model);
     });
     this.resizeObserver.observe(owner);
     this.resizeObserver.observe(stage);
   }
 
   private render(
-    model: LocalBranchModel,
+    model: LocalBranchModel | null,
     preservedScrollLeft: number | null = null,
   ): void {
     const focusedId = this.focusedControlId();
-    this.root.style.width = `${this.availableWidth()}px`;
+    const width = this.availableWidth();
+    this.root.style.width = `${width}px`;
     this.root.replaceChildren();
     const header = element(this.root, "div", "slipbox-local-branch-header");
-    this.renderToolbar(header, model);
-    this.renderCollapseControl(header, model);
-    if (!this.collapsed) {
+    header.style.right = `${Math.max(0, (width - this.ownerWidth()) / 2)}px`;
+    if (model !== null && this.isViewVisible()) {
+      this.renderToolbar(header, model);
+    }
+    this.renderVisibilityControl(header);
+    if (model !== null && this.isViewVisible()) {
       this.renderGraph(model);
     }
     this.restoreFocus(focusedId);
@@ -223,30 +244,24 @@ export class LocalBranchViewController {
     }
   }
 
-  private renderCollapseControl(
-    header: HTMLElement,
-    model: LocalBranchModel,
-  ): void {
-    const collapse = element(
+  private renderVisibilityControl(header: HTMLElement): void {
+    const visible = this.isViewVisible();
+    const toggle = element(
       header,
       "button",
-      "clickable-icon slipbox-local-branch-collapse",
+      "clickable-icon slipbox-local-branch-toggle",
     );
-    collapse.type = "button";
-    collapse.dataset.focusId = "collapse";
-    collapse.setAttribute("aria-expanded", String(!this.collapsed));
+    toggle.type = "button";
+    toggle.dataset.focusId = "toggle-visibility";
+    toggle.setAttribute("aria-expanded", String(visible));
+    toggle.setAttribute("aria-pressed", String(visible));
+    toggle.classList.toggle("is-pressed", visible);
     this.labelControl(
-      collapse,
-      this.collapsed ? "Expand local branch view" : "Collapse local branch view",
+      toggle,
+      visible ? "Hide local Branch View" : "Show local Branch View",
     );
-    collapse.append(iconSvg(this.root.ownerDocument, this.collapsed
-      ? ["m7 10 5 5 5-5"]
-      : ["m7 14 5-5 5 5"]));
-    collapse.addEventListener("click", () => {
-      this.collapsed = !this.collapsed;
-      this.expandedGapIds.clear();
-      this.render(model);
-    });
+    this.environment.setIcon(toggle, "git-branch");
+    this.configureButton(toggle, () => this.toggleVisibility());
   }
 
   private renderToolbar(parent: HTMLElement, model: LocalBranchModel): void {
@@ -256,31 +271,29 @@ export class LocalBranchViewController {
     for (const definition of MOVEMENTS) {
       const slot = element(toolbar, "div", "slipbox-local-branch-control-slot");
       slot.dataset.movement = definition.movement;
-      const groups = model.navigation[definition.movement];
-      if (groups.length === 0) {
-        slot.append(this.navigationButton(definition));
-      } else {
-        for (const group of groups) {
-          slot.append(this.navigationButton(definition, group));
-        }
-      }
+      slot.append(this.navigationButton(definition, model));
     }
   }
 
   private navigationButton(
     definition: typeof MOVEMENTS[number],
-    group?: LocalBranchNavigationGroup,
+    model: LocalBranchModel,
   ): HTMLButtonElement {
+    const targets = uniqueTargets(
+      model.navigation[definition.movement]
+        .flatMap((group) => group.targets),
+    );
     const button = localBranchDomWindow(this.root.ownerDocument)
       .createEl("button");
     button.className = "clickable-icon slipbox-local-branch-control";
     button.type = "button";
-    button.disabled = group === undefined || group.targets.length === 0;
-    button.dataset.focusId = group?.id ?? `${definition.movement}:disabled`;
-    this.labelControl(button, group?.label ?? definition.label);
-    button.append(iconSvg(this.root.ownerDocument, definition.icon));
-    if (group !== undefined) {
-      button.addEventListener("click", () => this.activateGroup(group));
+    button.disabled = targets.length === 0;
+    button.dataset.focusId = `movement:${definition.movement}`;
+    this.labelControl(button, definition.label);
+    this.environment.setIcon(button, definition.icon);
+    if (targets.length > 0) {
+      this.configureButton(button, () =>
+        this.activateMovement(definition.movement, targets));
     }
     return button;
   }
@@ -334,18 +347,41 @@ export class LocalBranchViewController {
     this.refresh();
   }
 
-  private activateGroup(group: LocalBranchNavigationGroup): void {
-    this.environment.runAfterEditing(`local-branch:${group.movement}`, () =>
-      this.environment.activate(group.targets)
+  private activateMovement(
+    movement: LocalBranchMovement,
+    targets: readonly LocalBranchTarget[],
+  ): void {
+    this.environment.runAfterEditing(`local-branch:${movement}`, () =>
+      this.environment.activate(targets)
     );
   }
 
-  private availableWidth(): number {
+  private configureButton(button: HTMLButtonElement, action: () => void): void {
+    button.addEventListener("pointerdown", (event) =>
+      preventPointerActivatedButtonFocus(event));
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+      releasePointerActivatedButtonFocus(button, event);
+    });
+  }
+
+  private isViewVisible(): boolean {
+    return this.environment.canShowView() &&
+      (this.visibilityOverride ?? this.environment.showViewByDefault());
+  }
+
+  private ownerWidth(): number {
     const owner = this.owner;
     if (owner === null) {
       return DEFAULT_WIDTH;
     }
-    const ownerWidth = owner.offsetWidth || owner.clientWidth;
+    return owner.offsetWidth || owner.clientWidth || DEFAULT_WIDTH;
+  }
+
+  private availableWidth(): number {
+    const ownerWidth = this.ownerWidth();
     const stage = this.stage;
     const stageWidth = stage === null
       ? 0
@@ -383,6 +419,12 @@ export class LocalBranchViewController {
   }
 }
 
+function uniqueTargets(
+  targets: readonly LocalBranchTarget[],
+): readonly LocalBranchTarget[] {
+  return [...new Map(targets.map((target) => [target.path, target])).values()];
+}
+
 function element<K extends keyof HTMLElementTagNameMap>(
   parent: HTMLElement,
   name: K,
@@ -392,21 +434,4 @@ function element<K extends keyof HTMLElementTagNameMap>(
   result.className = className;
   parent.append(result);
   return result;
-}
-
-function iconSvg(document: Document, paths: readonly string[]): SVGSVGElement {
-  const svg = localBranchDomWindow(document).createSvg("svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  for (const definition of paths) {
-    const path = localBranchDomWindow(document).createSvg("path");
-    path.setAttribute("d", definition);
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-width", "1.8");
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
-    svg.append(path);
-  }
-  return svg;
 }

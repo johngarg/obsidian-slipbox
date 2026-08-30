@@ -8,6 +8,7 @@ export interface DeckActionContext {
   readonly hasForwardInferredSiblingCycle: boolean;
   readonly hasBackwardInferredSiblingCycle: boolean;
   readonly hasLocalBranchTarget: boolean;
+  readonly canToggleLocalBranchView: boolean;
   readonly hasPreviousBookmark: boolean;
   readonly hasNextBookmark: boolean;
   readonly hasProblems: boolean;
@@ -78,6 +79,8 @@ export function canRunDeckAction(
     case "enter-explicit-supplementary-strand":
     case "move-to-higher-strand":
       return context.hasLocalBranchTarget;
+    case "toggle-local-branch-view":
+      return context.canToggleLocalBranchView;
     case "previous-bookmark":
       return context.hasPreviousBookmark;
     case "next-bookmark":

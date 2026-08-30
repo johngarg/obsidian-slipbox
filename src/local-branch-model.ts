@@ -455,7 +455,7 @@ function inferredDepartureDefinitions(
     return target === undefined ? [] : [{
       id: `departure:inferred:${source.address}:${family.id}`,
       kind: "inferred" as const,
-      description: "Address-inferred inserted strand",
+      description: "Inserted strand",
       target,
       addresses,
       knownEnd: true,

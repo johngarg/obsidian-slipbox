@@ -565,23 +565,110 @@ describe("local branch model", () => {
     );
   });
 
-  test("renders duplicate addresses as distinct exact nodes and chooser targets", () => {
+  test("renders duplicate addresses in Deck order and navigates them exactly", () => {
     const allCards: LocalBranchCard[] = [
       { path: "1.md", address: "1", title: "Parent" },
       { path: "a.md", address: "1a", title: "First" },
       { path: "b.md", address: "1a", title: "Second" },
       { path: "c.md", address: "1b", title: "Next" },
     ];
-    const result = model(allCards, "c.md");
-    const duplicates = result?.strands
+    const atNext = model(allCards, "c.md");
+    const duplicates = atNext?.strands
       .find((strand) => strand.role === "current")?.nodes
       .filter((node) => node.address === "1a") ?? [];
 
     assert.deepEqual(duplicates.map((node) => node.path), ["a.md", "b.md"]);
     assert.deepEqual(duplicates.map((node) => node.duplicateIndex), [0, 1]);
     assert.deepEqual(
-      localBranchTargets(result, "backward").map((target) => target.path),
-      ["a.md", "b.md"],
+      localBranchTargets(atNext, "backward").map((target) => target.path),
+      ["b.md"],
+    );
+
+    const atSecond = model(allCards, "b.md");
+    assert.deepEqual(
+      localBranchTargets(atSecond, "backward").map((target) => target.path),
+      ["a.md"],
+    );
+    assert.deepEqual(
+      localBranchTargets(atSecond, "forward").map((target) => target.path),
+      ["c.md"],
+    );
+    assert.deepEqual(
+      localBranchTargets(atSecond, "beginning").map((target) => target.path),
+      ["a.md"],
+    );
+
+    const atFirst = model(allCards, "a.md");
+    assert.deepEqual(
+      localBranchTargets(atFirst, "forward").map((target) => target.path),
+      ["b.md"],
+    );
+    assert.deepEqual(localBranchTargets(atFirst, "backward"), []);
+    assert.deepEqual(localBranchTargets(atFirst, "beginning"), []);
+  });
+
+  test("enters a duplicate-address higher strand at its first Deck card", () => {
+    const allCards: LocalBranchCard[] = [
+      { path: "parent-a.md", address: "1", title: "First parent" },
+      { path: "parent-b.md", address: "1", title: "Second parent" },
+      { path: "child.md", address: "1a", title: "Child" },
+    ];
+    const result = model(
+      allCards,
+      "child.md",
+      explicitIndex([{
+        sourcePath: "parent-b.md",
+        targetPath: "child.md",
+        label: "child",
+        sourceOrder: 0,
+      }]),
+    );
+
+    assert.deepEqual(
+      localBranchTargets(result, "higher").map((target) => target.path),
+      ["parent-a.md"],
+    );
+  });
+
+  test("enters duplicate-address supplementary targets in Deck order", () => {
+    const source: LocalBranchCard = {
+      path: "source.md",
+      address: "1",
+      title: "Source",
+    };
+    const first: LocalBranchCard = {
+      path: "target-a.md",
+      address: "9",
+      title: "First target",
+    };
+    const second: LocalBranchCard = {
+      path: "target-b.md",
+      address: "9",
+      title: "Second target",
+    };
+    const branches: ExplicitBranch[] = [
+      {
+        sourcePath: source.path,
+        targetPath: second.path,
+        label: "second",
+        sourceOrder: 0,
+      },
+      {
+        sourcePath: source.path,
+        targetPath: first.path,
+        label: "first",
+        sourceOrder: 1,
+      },
+    ];
+    const result = model(
+      [source, first, second],
+      source.path,
+      explicitIndex(branches),
+    );
+
+    assert.deepEqual(
+      localBranchTargets(result, "explicit").map((target) => target.path),
+      [first.path],
     );
   });
 

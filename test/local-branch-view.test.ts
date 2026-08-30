@@ -25,7 +25,7 @@ const branchNode = (
   departures: departures === 0 ? [] : [{
     id: `departure:inferred:${address}`,
     kind: "inferred",
-    label: "Address-inferred inserted strand",
+    label: "Inserted strand",
     target: { path: `${path}-child`, address: `${address}a`, title: "Child" },
   }],
 });
@@ -91,12 +91,19 @@ function fixture(
   const previews: string[] = [];
   const departureChoices: readonly string[][] = [];
   const mutableActivations = activations as string[][];
-  let visible = true;
+  let available = true;
+  let shownByDefault = true;
   const controller = new LocalBranchViewController({
     activeDocument: document,
-    showView: () => visible,
+    canShowView: () => available,
+    showViewByDefault: () => shownByDefault,
     showTooltips: () => false,
     previewLinksOnHover: () => true,
+    setIcon: (control, icon) => {
+      const svg = createNamespacedElement("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("data-icon", icon);
+      control.append(svg);
+    },
     modelForPath: (_path, expandedDepartureId) =>
       expandedDepartureId === null
         ? model
@@ -126,7 +133,8 @@ function fixture(
     activations,
     previews,
     departureChoices,
-    setVisible: (value: boolean) => { visible = value; },
+    setAvailable: (value: boolean) => { available = value; },
+    setShownByDefault: (value: boolean) => { shownByDefault = value; },
   };
 }
 
@@ -141,6 +149,11 @@ describe("local Branch View controller", () => {
 
     assert.equal(root?.style.width, "852px");
     assert.equal(root?.style.maxHeight, "");
+    assert.equal(
+      root?.querySelector<HTMLElement>(".slipbox-local-branch-header")
+        ?.style.right,
+      "152px",
+    );
     assert.equal(localBranchTrayWidth(ownerWidth, 500), ownerWidth);
     assert.equal(localBranchTrayWidth(ownerWidth, 1_200), 900);
     assert.equal(localBranchTrayWidth(ownerWidth, 0), ownerWidth);
@@ -157,7 +170,52 @@ describe("local Branch View controller", () => {
       4,
     );
     assert.equal(root?.querySelector("[data-movement='backward'] button")
-      ?.getAttribute("aria-label"), "Move backward");
+      ?.getAttribute("aria-label"), "Move backward on current strand");
+    assert.deepEqual(
+      Array.from(root?.querySelectorAll(".slipbox-local-branch-control svg") ?? [])
+        .map((icon) => icon.getAttribute("data-icon")),
+      [
+        "arrow-left",
+        "arrow-right",
+        "chevrons-left",
+        "git-fork",
+        "corner-down-right",
+        "corner-up-left",
+      ],
+    );
+    assert.equal(
+      root?.querySelector(".slipbox-local-branch-toggle svg")
+        ?.getAttribute("data-icon"),
+      "git-branch",
+    );
+  });
+
+  test("uses one movement icon and passes every destination to the chooser path", () => {
+    const subject = fixture({
+      ...MODEL,
+      navigation: {
+        ...MODEL.navigation,
+        explicit: [
+          {
+            id: "explicit:first",
+            movement: "explicit",
+            label: "First supplementary strand",
+            targets: [{ path: "x.md", address: "1x", title: "First" }],
+          },
+          {
+            id: "explicit:second",
+            movement: "explicit",
+            label: "Second supplementary strand",
+            targets: [{ path: "y.md", address: "1y", title: "Second" }],
+          },
+        ],
+      },
+    });
+    const slot = subject.first.querySelector("[data-movement='explicit']");
+
+    assert.equal(slot?.querySelectorAll("button").length, 1);
+    slot?.querySelector<HTMLButtonElement>("button")?.click();
+    assert.deepEqual(subject.activations, [["x.md", "y.md"]]);
   });
 
   test("transfers one stable root between Deck owners", () => {
@@ -275,7 +333,7 @@ describe("local Branch View controller", () => {
     }
   });
 
-  test("points every hidden branch stub down and right", () => {
+  test("points higher-context stubs up and all other stubs down", () => {
     const subject = fixture({
       ...MODEL,
       strands: [{
@@ -288,7 +346,10 @@ describe("local Branch View controller", () => {
       }, ...MODEL.strands],
     });
 
-    for (const path of ["higher.md", "a.md"]) {
+    for (const [path, verticalDirection] of [
+      ["higher.md", -1],
+      ["a.md", 1],
+    ] as const) {
       const line = subject.first.querySelector<SVGLineElement>(
         `[data-focus-id='stub:${path}'] .slipbox-local-branch-stub-line`,
       );
@@ -298,7 +359,7 @@ describe("local Branch View controller", () => {
         Number(line?.getAttribute("y1"));
 
       assert.equal(deltaX > 0, true);
-      assert.equal(deltaY > 0, true);
+      assert.equal(Math.sign(deltaY), verticalDirection);
       assert.equal(Math.abs(deltaX - Math.abs(deltaY)) < 1e-9, true);
       assert.equal(Math.abs(Math.hypot(deltaX, deltaY) - 12) < 1e-9, true);
     }
@@ -439,7 +500,7 @@ describe("local Branch View controller", () => {
     const first = {
       id: "departure:inferred:1a",
       kind: "inferred" as const,
-      label: "Address-inferred inserted strand",
+      label: "Inserted strand",
       target: { path: "a1.md", address: "1a1", title: "First" },
     };
     const second = {
@@ -458,7 +519,7 @@ describe("local Branch View controller", () => {
     const stub = subject.first.querySelector<SVGElement>(
       "[data-focus-id='stub:a.md']",
     );
-    assert.match(stub?.getAttribute("aria-label") ?? "", /address-inferred/);
+    assert.match(stub?.getAttribute("aria-label") ?? "", /inserted/);
     assert.match(stub?.getAttribute("aria-label") ?? "", /supplementary/);
     stub?.dispatchEvent(new subject.window.MouseEvent("click", {
       bubbles: true,
@@ -472,24 +533,50 @@ describe("local Branch View controller", () => {
     );
   });
 
-  test("remembers collapsed state for the controller lifetime", () => {
+  test("keeps one visibility override while the control rail changes owners", () => {
     const subject = fixture();
-    subject.first.querySelector<HTMLButtonElement>(
-      ".slipbox-local-branch-collapse",
-    )?.click();
+    const toggle = subject.first.querySelector<HTMLButtonElement>(
+      ".slipbox-local-branch-toggle",
+    );
+
+    assert.equal(toggle?.getAttribute("aria-pressed"), "true");
+    assert.equal(toggle?.getAttribute("aria-label"), "Hide local Branch View");
+    toggle?.click();
     assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+    assert.equal(subject.first.querySelector(".slipbox-local-branch-toolbar"), null);
+    assert.equal(
+      subject.first.querySelector(".slipbox-local-branch-view")?.getAttribute("hidden"),
+      null,
+    );
     subject.controller.attach(subject.second, "c.md", subject.stage);
     assert.equal(subject.second.querySelector(".slipbox-local-branch-graph"), null);
     assert.equal(
-      subject.second.querySelector(".slipbox-local-branch-collapse")
-        ?.getAttribute("aria-expanded"),
+      subject.second.querySelector(".slipbox-local-branch-toggle")
+        ?.getAttribute("aria-pressed"),
       "false",
+    );
+    assert.equal(
+      subject.second.querySelector(".slipbox-local-branch-toggle")
+        ?.getAttribute("aria-label"),
+      "Show local Branch View",
     );
   });
 
-  test("hides cleanly when the presentation setting turns off", () => {
+  test("can show the view over a disabled global default", () => {
     const subject = fixture();
-    subject.setVisible(false);
+    subject.setShownByDefault(false);
+    subject.controller.refresh();
+    assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+
+    subject.first.querySelector<HTMLButtonElement>(
+      ".slipbox-local-branch-toggle",
+    )?.click();
+    assert.notEqual(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+  });
+
+  test("hides cleanly when no branch model is enabled", () => {
+    const subject = fixture();
+    subject.setAvailable(false);
     subject.controller.refresh();
     const root = subject.first.querySelector<HTMLElement>(
       ".slipbox-local-branch-view",

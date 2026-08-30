@@ -69,6 +69,7 @@ export type SlipboxAction =
   | "enter-address-inferred-strand"
   | "enter-explicit-supplementary-strand"
   | "move-to-higher-strand"
+  | "toggle-local-branch-view"
   | "previous-bookmark"
   | "next-bookmark"
   | "forward-ten-cards"
@@ -149,19 +150,19 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "jump-inferred-parent",
-    label: "Move Deck anchor to inferred parent",
+    label: "Move Deck anchor to parent of inserted strand",
     repeatable: false,
     defaultBindings: [binding("-")],
   },
   {
     id: "cycle-forward-inferred-siblings",
-    label: "Cycle Deck anchor forward through inferred siblings",
+    label: "Cycle Deck anchor forward through inserted strand",
     repeatable: true,
     defaultBindings: [binding("n")],
   },
   {
     id: "cycle-backward-inferred-siblings",
-    label: "Cycle Deck anchor backward through inferred siblings",
+    label: "Cycle Deck anchor backward through inserted strand",
     repeatable: true,
     defaultBindings: [binding("n", ["Shift"])],
   },
@@ -185,19 +186,25 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "enter-address-inferred-strand",
-    label: "Enter address-inferred strand",
+    label: "Enter inserted strand",
     repeatable: false,
     defaultBindings: [],
   },
   {
     id: "enter-explicit-supplementary-strand",
-    label: "Enter explicit supplementary strand",
+    label: "Enter supplementary strand",
     repeatable: false,
     defaultBindings: [],
   },
   {
     id: "move-to-higher-strand",
     label: "Move to higher local branch strand",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "toggle-local-branch-view",
+    label: "Toggle local Branch View visibility",
     repeatable: false,
     defaultBindings: [],
   },
@@ -416,6 +423,7 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   "toggle-bookmark": "add-bookmark-current-card",
   "find-address-first": "find-first-address-initial",
   "pull-into-pile": "pull-into-numbered-pile",
+  "toggle-local-branch-view": "toggle-local-branch-view-visibility",
   "toggle-deck-map": "toggle-deck-map-visibility",
   bookmarks: "manage-bookmarks",
   problems: "show-card-problems",
@@ -443,6 +451,7 @@ const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
 const GLOBAL_ACTIONS = new Set<SlipboxAction>(["bookmarks", "problems"]);
 
 const VIEW_ACTIONS = new Set<SlipboxAction>([
+  "toggle-local-branch-view",
   "toggle-deck-map",
   "confirm-filing",
   "cancel-filing",

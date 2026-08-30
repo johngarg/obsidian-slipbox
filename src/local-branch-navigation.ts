@@ -39,23 +39,25 @@ export function buildLocalBranchNavigation(
     explicitContext,
     inferredDepartures,
   } = input;
-  const currentIndex = currentAddresses.indexOf(active.address);
+  const currentCards = currentAddresses.flatMap((address) =>
+    cardsByAddress.get(address) ?? []
+  );
+  const currentIndex = currentCards.findIndex((card) => card.path === active.path);
   const root = modelInput.inferred.nodesByAddress.get(active.address)
     ?.parentAddress === null;
-  const groupForAddress = (
+  const groupForCard = (
     movement: LocalBranchMovement,
-    address: string | undefined,
+    card: LocalBranchCard | undefined,
     label: string,
   ): readonly LocalBranchNavigationGroup[] => {
-    if (address === undefined) {
+    if (card === undefined) {
       return EMPTY_GROUPS;
     }
-    const targets = targetCards(cardsByAddress.get(address) ?? []);
-    return targets.length === 0 ? EMPTY_GROUPS : [{
-      id: `${movement}:${address}`,
+    return [{
+      id: `${movement}:${card.path}`,
       movement,
       label,
-      targets,
+      targets: targetCards([card]),
     }];
   };
 
@@ -82,10 +84,12 @@ export function buildLocalBranchNavigation(
     : cardsByPath.get(explicitContext.branch.sourcePath);
   const inferredParentAddress = modelInput.inferred.nodesByAddress
     .get(active.address)?.parentAddress ?? undefined;
-  const inferredHigher = groupForAddress(
+  const inferredHigher = groupForCard(
     "higher",
-    inferredParentAddress,
-    "Move to higher inferred strand",
+    inferredParentAddress === undefined
+      ? undefined
+      : cardsByAddress.get(inferredParentAddress)?.[0],
+    "Move to higher inserted strand",
   );
   const explicitHigherGroups = explicitHigher === undefined
     ? EMPTY_GROUPS
@@ -106,39 +110,71 @@ export function buildLocalBranchNavigation(
     ),
   ];
 
-  const firstAddress = currentAddresses[0];
-  const explicitBeginning = explicitContext === null
-    ? undefined
-    : cardsByPath.get(explicitContext.targetPath);
   const beginning = currentIndex <= 0 || (root && explicitContext === null)
     ? EMPTY_GROUPS
-    : explicitContext === null
-      ? groupForAddress("beginning", firstAddress, "Move to strand beginning")
-      : explicitBeginning === undefined
-        ? EMPTY_GROUPS
-        : [{
-          id: `beginning:explicit:${explicitBeginning.path}`,
-          movement: "beginning" as const,
-          label: "Move to supplementary strand beginning",
-          targets: targetCards([explicitBeginning]),
-        }];
+    : groupForCard(
+      "beginning",
+      currentCards[0],
+      explicitContext === null
+        ? "Move to strand beginning"
+        : "Move to supplementary strand beginning",
+    );
 
+  const backward = groupForCard(
+    "backward",
+    currentIndex > 0 ? currentCards[currentIndex - 1] : undefined,
+    "Move backward on current strand",
+  );
+  const forward = groupForCard(
+    "forward",
+    currentIndex >= 0 ? currentCards[currentIndex + 1] : undefined,
+    "Move forward on current strand",
+  );
+  const collapse = (groups: readonly LocalBranchNavigationGroup[]) =>
+    collapseDuplicateAddressTargets(groups, cardsByAddress);
   return {
-    backward: groupForAddress(
-      "backward",
-      currentIndex > 0 ? currentAddresses[currentIndex - 1] : undefined,
-      "Move backward on current strand",
-    ),
-    forward: groupForAddress(
-      "forward",
-      currentIndex >= 0 ? currentAddresses[currentIndex + 1] : undefined,
-      "Move forward on current strand",
-    ),
-    beginning,
-    inferred,
-    explicit,
-    higher,
+    backward: collapse(backward),
+    forward: collapse(forward),
+    beginning: collapse(beginning),
+    inferred: collapse(inferred),
+    explicit: collapse(explicit),
+    higher: collapse(higher),
   };
+}
+
+function collapseDuplicateAddressTargets(
+  groups: readonly LocalBranchNavigationGroup[],
+  cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
+): readonly LocalBranchNavigationGroup[] {
+  const candidatePathsByAddress = new Map<string, Set<string>>();
+  for (const target of groups.flatMap((group) => group.targets)) {
+    const paths = candidatePathsByAddress.get(target.address) ?? new Set<string>();
+    paths.add(target.path);
+    candidatePathsByAddress.set(target.address, paths);
+  }
+  const preferredByAddress = new Map<string, LocalBranchTarget>();
+  for (const [address, candidatePaths] of candidatePathsByAddress) {
+    const preferred = (cardsByAddress.get(address) ?? [])
+      .find((card) => candidatePaths.has(card.path));
+    if (preferred !== undefined) {
+      const target = targetCards([preferred])[0];
+      if (target !== undefined) {
+        preferredByAddress.set(address, target);
+      }
+    }
+  }
+
+  const emittedAddresses = new Set<string>();
+  return groups.flatMap((group) => {
+    const targets = group.targets.flatMap((target) => {
+      if (emittedAddresses.has(target.address)) {
+        return [];
+      }
+      emittedAddresses.add(target.address);
+      return [preferredByAddress.get(target.address) ?? target];
+    });
+    return targets.length === 0 ? [] : [{ ...group, targets }];
+  });
 }
 
 export function localBranchTargets(

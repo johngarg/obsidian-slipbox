@@ -64,7 +64,7 @@ export function buildLocalBranchNavigation(
   const inferred = inferredDepartures.map((departure) => ({
     id: `inferred:${departure.id}`,
     movement: "inferred" as const,
-    label: "Enter inserted strand",
+    label: "Enter inserted branch",
     targets: [departure.target],
   }));
   const explicit = (
@@ -74,7 +74,7 @@ export function buildLocalBranchNavigation(
     return target === undefined ? [] : [{
       id: `explicit:${branch.sourcePath}:${branch.targetPath}`,
       movement: "explicit" as const,
-      label: `Enter supplementary strand ${branch.label}`,
+      label: `Enter supplementary branch ${branch.label}`,
       targets: targetCards([target], branch.label),
     }];
   });

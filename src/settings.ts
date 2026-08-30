@@ -168,13 +168,13 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "enter-address-inferred-strand",
-    label: "Enter inserted strand",
+    label: "Enter inserted branch",
     repeatable: false,
     defaultBindings: [binding(">", ["Shift"])],
   },
   {
     id: "enter-explicit-supplementary-strand",
-    label: "Enter supplementary strand",
+    label: "Enter supplementary branch",
     repeatable: false,
     defaultBindings: [binding("+", ["Shift"])],
   },

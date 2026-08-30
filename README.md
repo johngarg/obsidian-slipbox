@@ -86,12 +86,14 @@ In [Communication with Zettelkastens](https://zettelkasten.de/communications-wit
 
 For this reason, the same branch types and navigation inspired by the Niklas Luhmann Archive can be used to navigate the Slipbox. Again, this feature can be toggled in the settings.
 
-- **Supplementary strands** or _ergänzende Stränge_ represent explicit branches in the _Zettelkasten_. See [this example](https://niklas-luhmann-archiv.de/bestand/zettelkasten/zettel/ZK_1_NB_57-2-25_V) from Luhmann.
-- **Inserted strands** or _eingeschobene Stränge_ are branches inferred from the card address.
+Here, a **strand** is any linear sequence of cards, including the root strand, while a **branch** is a departure or relationship that leads from one strand to another.
+
+- **Supplementary branches** or _ergänzende Stränge_ are created by explicit links in the _Zettelkasten_. See [this example](https://niklas-luhmann-archiv.de/bestand/zettelkasten/zettel/ZK_1_NB_57-2-25_V) from Luhmann.
+- **Inserted branches** or _eingeschobene Stränge_ are inferred from the card address.
 
 The **Recognise supplementary branch links** setting treats a link alias beginning with the `+` symbol, such as `[[Child card|+a]]`, as a supplementary branch. With **Show supplementary branch labels on cards** enabled, its remaining alias, `a` in this example, appears beside the child card's address.
 
-The separate **Derive inserted strands from addresses** setting derives structural relationships from address extensions. With natural ordering, `2a` can be a child of `2`, while `20` is not.
+The separate **Derive inserted branches from addresses** setting derives structural relationships from address extensions. With natural ordering, `2a` can be a child of `2`, while `20` is not.
 
 With either relationship type enabled, **Show local Branch View** displays an Archive-inspired diagram beneath the active Deck card. Turning it off hides the diagram and its controls; branch navigation commands remain available.
 
@@ -103,10 +105,10 @@ There are some actions that are very quick to do in the real world, but take tim
 | --- | --- |
 | `←` / `k` | Move to the previous Deck card |
 | `→` / `j` | Move to the next Deck card |
-| `n` / `N` | Move forward/backward on the current branch strand |
-| `^` | Move to the current branch strand's beginning |
-| `>` / `<` | Enter an inserted strand or move to a higher strand |
-| `+` | Enter a supplementary strand |
+| `n` / `N` | Move forward/backward on the current strand |
+| `^` | Move to the current strand's beginning |
+| `>` / `<` | Enter an inserted branch or move to a higher strand |
+| `+` | Enter a supplementary branch |
 | `b` | Toggle Branch View |
 | `p` | Put the focused card on the Desk, or return it |
 | `i` | Edit the focused Desk or viewed card |

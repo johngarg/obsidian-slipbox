@@ -25,7 +25,7 @@ const branchNode = (
   departures: departures === 0 ? [] : [{
     id: `departure:inferred:${address}`,
     kind: "inferred",
-    label: "Inserted strand",
+    label: "Inserted branch",
     target: { path: `${path}-child`, address: `${address}a`, title: "Child" },
   }],
 });
@@ -231,13 +231,13 @@ describe("local Branch View controller", () => {
           {
             id: "explicit:first",
             movement: "explicit",
-            label: "First supplementary strand",
+            label: "First supplementary branch",
             targets: [{ path: "x.md", address: "1x", title: "First" }],
           },
           {
             id: "explicit:second",
             movement: "explicit",
-            label: "Second supplementary strand",
+            label: "Second supplementary branch",
             targets: [{ path: "y.md", address: "1y", title: "Second" }],
           },
         ],
@@ -532,13 +532,13 @@ describe("local Branch View controller", () => {
     const first = {
       id: "departure:inferred:1a",
       kind: "inferred" as const,
-      label: "Inserted strand",
+      label: "Inserted branch",
       target: { path: "a1.md", address: "1a1", title: "First" },
     };
     const second = {
       id: "departure:explicit:a.md:x.md",
       kind: "explicit" as const,
-      label: "Supplementary strand x",
+      label: "Supplementary branch x",
       target: { path: "x.md", address: "9", title: "Second" },
     };
     const subject = fixture({

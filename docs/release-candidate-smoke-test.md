@@ -109,8 +109,8 @@ test. Record unexpected warnings or errors under Findings.
   strand with duplicate cards selects its first card without opening a chooser.
 - [ ] Add inserted children and several outgoing `+` branches to the active
   card. Confirm all departures appear below it, supplementary labels omit the `+`,
-  and the default `>`, `+`, and `<` shortcuts enter an inserted strand, enter a
-  supplementary strand, and move to a higher strand. Confirm each movement
+  and the default `>`, `+`, and `<` shortcuts enter an inserted branch, enter a
+  supplementary branch, and move to a higher strand. Confirm each movement
   retains one icon, a sole supplementary destination navigates directly, and
   several supplementary or duplicate-address destinations open a searchable
   exact-path chooser. Confirm supplementary aliases appear as chooser options

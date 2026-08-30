@@ -20,7 +20,7 @@ initial public beta.
   while labels that do not fit the header collapse into a `+N` menu. Exact
   aliases for `+`-addressed cards remain ordinary; `++address` asserts a branch
   whose label is `+address`.
-- Added optional inserted strands derived from address extension.
+- Added optional inserted branches derived from address extension.
 - Added an expanded-by-default local Branch View beneath the active Deck card.
   Its deterministic SVG shows the current strand, one higher context, active
   departures, hidden-branch stubs, responsive counted ellipses, exact duplicate
@@ -61,6 +61,8 @@ initial public beta.
   directly instead of presenting all cards at that address in a chooser.
 - Adopted the archive terms “inserted” and “supplementary” throughout the
   interface, commands, settings, and documentation.
+- Clarified branching terminology: a strand is a linear card sequence, while a
+  branch is a departure or relationship between strands.
 - Divided the Branching settings into supplementary and inserted subsections.
 - Coalesced metadata-driven index rebuilds and removed redundant Deck renders
   when ordering, creating Desk cards, filing, or adjusting card spread.

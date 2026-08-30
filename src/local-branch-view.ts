@@ -75,12 +75,12 @@ const MOVEMENTS: readonly {
   },
   {
     movement: "inferred",
-    label: "Enter inserted strand",
+    label: "Enter inserted branch",
     icon: "git-fork",
   },
   {
     movement: "explicit",
-    label: "Enter supplementary strand",
+    label: "Enter supplementary branch",
     icon: "corner-down-right",
   },
   {

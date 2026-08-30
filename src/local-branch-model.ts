@@ -428,7 +428,7 @@ function departureDefinitions(
     return {
       id: `departure:explicit:${source.path}:${start.target.path}`,
       kind: "explicit",
-      description: `Supplementary strand ${start.branch.label}`,
+      description: `Supplementary branch ${start.branch.label}`,
       edgeLabel: start.branch.label,
       target: start.target,
       addresses: interval.addresses,
@@ -455,7 +455,7 @@ function inferredDepartureDefinitions(
     return target === undefined ? [] : [{
       id: `departure:inferred:${source.address}:${family.id}`,
       kind: "inferred" as const,
-      description: "Inserted strand",
+      description: "Inserted branch",
       target,
       addresses,
       knownEnd: true,

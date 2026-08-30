@@ -108,8 +108,8 @@ export class SlipboxSettingTab extends PluginSettingTab {
             (setting) => this.renderExplicitBranchLinks(setting),
           ),
           this.definition(
-            "Derive inserted strands from addresses",
-            "Derive inserted strands from address extension and make structural navigation commands available.",
+            "Derive inserted branches from addresses",
+            "Derive inserted branches from address extension and make structural navigation commands available.",
             (setting) => this.renderInferAddressBranches(setting),
           ),
         ],

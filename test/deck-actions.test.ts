@@ -197,12 +197,12 @@ describe("Deck action availability", () => {
       [
         "enter-address-inferred-strand",
         [{ key: ">", modifiers: ["Shift"] }],
-        "Enter inserted strand",
+        "Enter inserted branch",
       ],
       [
         "enter-explicit-supplementary-strand",
         [{ key: "+", modifiers: ["Shift"] }],
-        "Enter supplementary strand",
+        "Enter supplementary branch",
       ],
       [
         "move-to-higher-strand",

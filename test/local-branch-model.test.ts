@@ -688,6 +688,116 @@ describe("local branch model", () => {
     );
   });
 
+  test("retains supplementary context across duplicate-address cards", () => {
+    const source: LocalBranchCard = {
+      path: "source.md",
+      address: "1",
+      title: "Source",
+    };
+    const first: LocalBranchCard = {
+      path: "target-a.md",
+      address: "9",
+      title: "First target",
+    };
+    const second: LocalBranchCard = {
+      path: "target-b.md",
+      address: "9",
+      title: "Second target",
+    };
+    const branch: ExplicitBranch = {
+      sourcePath: source.path,
+      targetPath: first.path,
+      label: "x",
+      sourceOrder: 0,
+    };
+    const result = model(
+      [source, first, second],
+      second.path,
+      explicitIndex([branch]),
+    );
+
+    assert.deepEqual(
+      result?.strands.find((strand) => strand.role === "current")?.nodes
+        .map((node) => node.path),
+      [first.path, second.path],
+    );
+    assert.deepEqual(
+      result?.strands.find((strand) => strand.role === "higher")?.connection,
+      {
+        fromPath: source.path,
+        toPath: first.path,
+        kind: "explicit",
+        label: "x",
+      },
+    );
+    assert.deepEqual(
+      localBranchTargets(result, "backward").map((target) => target.path),
+      [first.path],
+    );
+    assert.deepEqual(
+      localBranchTargets(result, "beginning").map((target) => target.path),
+      [first.path],
+    );
+    assert.deepEqual(
+      localBranchTargets(result, "higher").map((target) => target.path),
+      [source.path],
+    );
+  });
+
+  test("prefers a duplicate card's direct supplementary context", () => {
+    const firstSource: LocalBranchCard = {
+      path: "source-a.md",
+      address: "1",
+      title: "First source",
+    };
+    const secondSource: LocalBranchCard = {
+      path: "source-b.md",
+      address: "2",
+      title: "Second source",
+    };
+    const firstTarget: LocalBranchCard = {
+      path: "target-a.md",
+      address: "9",
+      title: "First target",
+    };
+    const secondTarget: LocalBranchCard = {
+      path: "target-b.md",
+      address: "9",
+      title: "Second target",
+    };
+    const result = model(
+      [firstSource, secondSource, firstTarget, secondTarget],
+      secondTarget.path,
+      explicitIndex([
+        {
+          sourcePath: firstSource.path,
+          targetPath: firstTarget.path,
+          label: "first",
+          sourceOrder: 0,
+        },
+        {
+          sourcePath: secondSource.path,
+          targetPath: secondTarget.path,
+          label: "second",
+          sourceOrder: 0,
+        },
+      ]),
+    );
+
+    const higher = result?.strands.find((strand) => strand.role === "higher");
+    assert.equal(higher?.selectedPath, secondSource.path);
+    assert.deepEqual(higher?.connection, {
+      fromPath: secondSource.path,
+      toPath: secondTarget.path,
+      kind: "explicit",
+      label: "second",
+    });
+    assert.deepEqual(
+      localBranchTargets(result, "higher").map((target) => target.path),
+      [secondSource.path],
+    );
+  });
+
   test("uses only the stable first explicit parent as local context", () => {
     const allCards = cards(["1", "1a", "8", "9"]);
     const target = allCards[1];

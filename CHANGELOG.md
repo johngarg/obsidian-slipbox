@@ -76,6 +76,8 @@ initial public beta.
 
 ### Fixed
 
+- Preserved supplementary strand context while navigating between exact cards
+  that share one address.
 - Removed whole-card identity tooltips from Deck, Desk, and viewed cards while
   retaining their accessible names and all tooltips on their controls.
 - Removed duplicate native tooltips from Branch View controls and prevented its

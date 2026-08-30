@@ -573,7 +573,10 @@ function findExplicitContext(
     };
   }
 
-  for (let index = activeAddressIndex - 1; index >= 0; index -= 1) {
+  // Exact duplicates share one structural position. After preferring a branch
+  // that targets the active path directly, inherit from the first targeted
+  // peer at the same address before looking at earlier strand positions.
+  for (let index = activeAddressIndex; index >= 0; index -= 1) {
     const address = siblingAddresses[index];
     if (address === undefined) {
       continue;

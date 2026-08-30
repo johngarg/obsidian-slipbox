@@ -1,5 +1,6 @@
 import { renderLocalBranchSvg } from "./local-branch-svg.js";
 import { localBranchDomWindow } from "./local-branch-dom.js";
+import { setCardTooltip } from "./card-tooltip.js";
 import {
   preventPointerActivatedButtonFocus,
   releasePointerActivatedButtonFocus,
@@ -41,6 +42,7 @@ export interface LocalBranchViewEnvironment {
 const DEFAULT_WIDTH = 720;
 const MAX_WIDTH = 900;
 const STAGE_INSET = 48;
+let accessibleLabelSequence = 0;
 
 export function localBranchTrayWidth(
   ownerWidth: number,
@@ -92,6 +94,7 @@ const MOVEMENTS: readonly {
 /** Owns one stable, transferable Branch View for a Deck view. */
 export class LocalBranchViewController {
   private readonly root: HTMLElement;
+  private readonly rootLabel: HTMLElement;
   private owner: HTMLElement | null = null;
   private stage: HTMLElement | null = null;
   private path: string | null = null;
@@ -106,7 +109,7 @@ export class LocalBranchViewController {
     this.root = localBranchDomWindow(environment.activeDocument)
       .createEl("section");
     this.root.className = "slipbox-local-branch-view";
-    this.root.setAttribute("aria-label", "Local branch view");
+    this.rootLabel = appendHiddenLabel(this.root, "Local branch view");
   }
 
   attach(owner: HTMLElement, path: string, stage: HTMLElement): void {
@@ -191,7 +194,7 @@ export class LocalBranchViewController {
 
   private hide(): void {
     this.root.hidden = true;
-    this.root.replaceChildren();
+    this.root.replaceChildren(this.rootLabel);
     this.model = null;
   }
 
@@ -223,7 +226,7 @@ export class LocalBranchViewController {
     const focusedId = this.focusedControlId();
     const width = this.availableWidth();
     this.root.style.width = `${width}px`;
-    this.root.replaceChildren();
+    this.root.replaceChildren(this.rootLabel);
     const header = element(this.root, "div", "slipbox-local-branch-header");
     header.style.right = `${Math.max(0, (width - this.ownerWidth()) / 2)}px`;
     if (model !== null && this.isViewVisible()) {
@@ -267,7 +270,7 @@ export class LocalBranchViewController {
   private renderToolbar(parent: HTMLElement, model: LocalBranchModel): void {
     const toolbar = element(parent, "div", "slipbox-local-branch-toolbar");
     toolbar.setAttribute("role", "toolbar");
-    toolbar.setAttribute("aria-label", "Branch navigation");
+    appendHiddenLabel(toolbar, "Branch navigation");
     for (const definition of MOVEMENTS) {
       const slot = element(toolbar, "div", "slipbox-local-branch-control-slot");
       slot.dataset.movement = definition.movement;
@@ -390,11 +393,9 @@ export class LocalBranchViewController {
   }
 
   private labelControl(control: HTMLElement, label: string): void {
-    control.setAttribute("aria-label", label);
-    if (this.environment.showTooltips()) {
-      control.setAttribute("title", label);
-      control.setAttribute("data-tooltip-position", "bottom");
-    }
+    setCardTooltip(control, label, this.environment.showTooltips(), {
+      placement: "bottom",
+    });
   }
 
   private focusedControlId(): string | null {
@@ -423,6 +424,14 @@ function uniqueTargets(
   targets: readonly LocalBranchTarget[],
 ): readonly LocalBranchTarget[] {
   return [...new Map(targets.map((target) => [target.path, target])).values()];
+}
+
+function appendHiddenLabel(parent: HTMLElement, label: string): HTMLElement {
+  const hidden = element(parent, "span", "slipbox-visually-hidden");
+  hidden.id = `slipbox-local-branch-label-${++accessibleLabelSequence}`;
+  hidden.textContent = label;
+  parent.setAttribute("aria-labelledby", hidden.id);
+  return hidden;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(

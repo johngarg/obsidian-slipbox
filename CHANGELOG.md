@@ -68,6 +68,8 @@ initial public beta.
 
 ### Fixed
 
+- Removed duplicate native tooltips from Branch View controls and prevented its
+  accessible region and toolbar names from appearing as tooltips when disabled.
 - Kept a Branch View tray's horizontal position when expanding an omission and
   showed the actual card instead of an equally wide ellipsis for singleton runs.
 - Kept wheel gestures over the local Branch View scroller inside the tray

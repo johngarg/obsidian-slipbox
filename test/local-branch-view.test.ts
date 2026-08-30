@@ -66,6 +66,7 @@ function fixture(
   model: LocalBranchModel = MODEL,
   ownerWidth = 520,
   stageWidth = 900,
+  showTooltips = false,
 ) {
   const htmlNamespace = "http://www.w3.org/1999/xhtml";
   const window = new Window();
@@ -97,7 +98,7 @@ function fixture(
     activeDocument: document,
     canShowView: () => available,
     showViewByDefault: () => shownByDefault,
-    showTooltips: () => false,
+    showTooltips: () => showTooltips,
     previewLinksOnHover: () => true,
     setIcon: (control, icon) => {
       const svg = createNamespacedElement("http://www.w3.org/2000/svg", "svg");
@@ -169,8 +170,14 @@ describe("local Branch View controller", () => {
       root?.querySelectorAll("button.slipbox-local-branch-control:disabled").length,
       4,
     );
-    assert.equal(root?.querySelector("[data-movement='backward'] button")
-      ?.getAttribute("aria-label"), "Move backward on current strand");
+    const backward = root?.querySelector<HTMLElement>(
+      "[data-movement='backward'] button",
+    );
+    const labelId = backward?.getAttribute("aria-labelledby") ?? "";
+    assert.equal(
+      subject.document.getElementById(labelId)?.textContent,
+      "Move backward on current strand",
+    );
     assert.deepEqual(
       Array.from(root?.querySelectorAll(".slipbox-local-branch-control svg") ?? [])
         .map((icon) => icon.getAttribute("data-icon")),
@@ -188,6 +195,34 @@ describe("local Branch View controller", () => {
         ?.getAttribute("data-icon"),
       "git-branch",
     );
+  });
+
+  test("uses only the Obsidian tooltip on branch controls", () => {
+    const subject = fixture(MODEL, 520, 900, true);
+    const button = subject.first.querySelector<HTMLElement>(
+      "[data-movement='backward'] button",
+    );
+
+    assert.equal(button?.getAttribute("aria-label"), "Move backward on current strand");
+    assert.equal(button?.getAttribute("data-tooltip-position"), "bottom");
+    assert.equal(button?.getAttribute("title"), null);
+  });
+
+  test("names Branch View containers without visual tooltip attributes", () => {
+    const subject = fixture();
+    const containers = [
+      [".slipbox-local-branch-view", "Local branch view"],
+      [".slipbox-local-branch-toolbar", "Branch navigation"],
+    ] as const;
+
+    for (const [selector, label] of containers) {
+      const container = subject.first.querySelector<HTMLElement>(selector);
+      const labelId = container?.getAttribute("aria-labelledby") ?? "";
+      assert.equal(container?.getAttribute("aria-label"), null);
+      assert.equal(container?.getAttribute("title"), null);
+      assert.equal(container?.getAttribute("data-tooltip-position"), null);
+      assert.equal(subject.document.getElementById(labelId)?.textContent, label);
+    }
   });
 
   test("uses one movement icon and passes every destination to the chooser path", () => {
@@ -540,7 +575,12 @@ describe("local Branch View controller", () => {
     );
 
     assert.equal(toggle?.getAttribute("aria-pressed"), "true");
-    assert.equal(toggle?.getAttribute("aria-label"), "Hide local Branch View");
+    assert.equal(
+      subject.document.getElementById(
+        toggle?.getAttribute("aria-labelledby") ?? "",
+      )?.textContent,
+      "Hide local Branch View",
+    );
     toggle?.click();
     assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
     assert.equal(subject.first.querySelector(".slipbox-local-branch-toolbar"), null);
@@ -556,8 +596,10 @@ describe("local Branch View controller", () => {
       "false",
     );
     assert.equal(
-      subject.second.querySelector(".slipbox-local-branch-toggle")
-        ?.getAttribute("aria-label"),
+      subject.document.getElementById(
+        subject.second.querySelector(".slipbox-local-branch-toggle")
+          ?.getAttribute("aria-labelledby") ?? "",
+      )?.textContent,
       "Show local Branch View",
     );
   });
@@ -582,6 +624,9 @@ describe("local Branch View controller", () => {
       ".slipbox-local-branch-view",
     );
     assert.equal(root?.hidden, true);
-    assert.equal(root?.childElementCount, 0);
+    assert.equal(root?.childElementCount, 1);
+    assert.equal(root?.firstElementChild?.className, "slipbox-visually-hidden");
+    assert.equal(root?.querySelector(".slipbox-local-branch-header"), null);
+    assert.equal(root?.querySelector(".slipbox-local-branch-graph"), null);
   });
 });

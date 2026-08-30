@@ -39,6 +39,53 @@ const INTERACTIVE_DROP_BLOCKER =
   ".slipbox-card-actions, .slipbox-desk-card-actions, " +
   "button, a, input, textarea, select, [contenteditable='true']";
 
+const COVERED_DESK_DRAG_BLOCKER =
+  "button, a, input, textarea, select, [contenteditable='true']";
+
+export type CoveredDeskDragTarget =
+  | { readonly kind: "card"; readonly card: HTMLElement }
+  | {
+    readonly kind: "pile";
+    readonly pile: HTMLElement;
+    readonly dragSurface: HTMLElement;
+  };
+
+/** Prefer any ordinary Desk drag surface beneath transparent Branch content. */
+export function coveredDeskDragTarget(
+  elements: readonly Element[],
+): CoveredDeskDragTarget | null {
+  for (const element of elements) {
+    const handle = element.closest<HTMLElement>(
+      "button.slipbox-desk-pile-handle",
+    );
+    const pile = element.closest<HTMLElement>(".slipbox-desk-pile");
+    if (
+      handle !== null &&
+      pile?.classList.contains("is-expanded") === true
+    ) {
+      return { kind: "pile", pile, dragSurface: handle };
+    }
+    if (pile === null) {
+      continue;
+    }
+    const blocker = element.closest(COVERED_DESK_DRAG_BLOCKER);
+    if (blocker !== null && pile.contains(blocker)) {
+      return null;
+    }
+    if (pile.classList.contains("is-collapsed")) {
+      return { kind: "pile", pile, dragSurface: pile };
+    }
+    const card = element.closest<HTMLElement>(
+      ".slipbox-desk-card:not(.is-viewed-ghost)",
+    );
+    if (card !== null && pile.classList.contains("is-expanded")) {
+      return { kind: "card", card };
+    }
+    return null;
+  }
+  return null;
+}
+
 /** Resolve a Deck-card drop without treating covered cards or controls as free space. */
 export function deckCardDropTarget(
   elements: readonly Element[],

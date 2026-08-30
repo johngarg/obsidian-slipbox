@@ -62,6 +62,7 @@ import {
 } from "./pointer-drag.js";
 import {
   cardDropTargetPile,
+  coveredDeskDragTarget,
   pileHeaderPositionAtWorkspacePoint,
   pilePositionAtWorkspacePoint,
 } from "./desk-drop.js";
@@ -1168,48 +1169,100 @@ export class DeskRenderer {
       ) {
         return;
       }
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const pointerId = event.pointerId;
-      beginPointerActionAfterGate(
-        event,
-        (action) => this.actions.runAfterEditing("desk-card-drag", action),
-        () => {
-          beginThresholdPointerDrag({
-            captureTarget: element,
-            pointerId,
-            startX,
-            startY,
-            threshold: DRAG_THRESHOLD_PX,
-            onDragStart: () => {
-              element.addClass("is-dragging");
-              this.rootEl?.addClass("is-dragging-card");
-            },
-            onDragMove: (moveEvent, dx, dy) => {
-              element.style.translate = `${dx}px ${dy}px`;
-              this.updateCardDropCues(moveEvent, pile.id, element);
-            },
-            onDrop: (upEvent) => {
-              this.suppressClickUntil = upEvent.win.performance.now() + 400;
-              const next = this.cardDropState(
-                card.cardRef,
-                pile.id,
-                upEvent.clientX,
-                upEvent.clientY,
-                element,
-              );
-              const nextPosition = cardPosition(next, card.cardRef);
-              if (nextPosition !== null) {
-                this.actions.focusDeskCard(card.cardRef, nextPosition.pileId);
-              }
-              this.clearDropCues();
-              void this.plugin.deskService.replace(next);
-            },
-            onCancel: () => this.clearDropCues(),
-          });
-        },
-      );
+      this.beginCardDragging(event, element, pile, card);
     });
+  }
+
+  /** Start a Desk drag that an overlaid transparent Branch View intercepted. */
+  beginCoveredDeskDrag(event: PointerEvent): boolean {
+    const root = this.rootEl;
+    if (event.button !== 0 || root === null) {
+      return false;
+    }
+    const target = coveredDeskDragTarget(
+      root.ownerDocument.elementsFromPoint(event.clientX, event.clientY),
+    );
+    if (target === null) {
+      return false;
+    }
+    const pileElement = target.kind === "pile"
+      ? target.pile
+      : target.card.closest<HTMLElement>(".slipbox-desk-pile");
+    if (pileElement === null || !root.contains(pileElement)) {
+      return false;
+    }
+    const pileId = pileElement.dataset.pileId;
+    const pile = this.plugin.deskService.snapshot.piles.find(
+      (candidate) => candidate.id === pileId,
+    );
+    if (pile === undefined) {
+      return false;
+    }
+    if (target.kind === "pile") {
+      this.beginPileDragging(
+        event,
+        target.pile,
+        target.dragSurface,
+        pile,
+      );
+      return true;
+    }
+    const cardRef = target.card.dataset.cardRef;
+    const card = pile.cards.find((candidate) => candidate.cardRef === cardRef);
+    if (card === undefined) {
+      return false;
+    }
+    this.beginCardDragging(event, target.card, pile, card);
+    return true;
+  }
+
+  private beginCardDragging(
+    event: PointerEvent,
+    element: HTMLElement,
+    pile: DeskPile,
+    card: DeskCard,
+  ): void {
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const pointerId = event.pointerId;
+    beginPointerActionAfterGate(
+      event,
+      (action) => this.actions.runAfterEditing("desk-card-drag", action),
+      () => {
+        beginThresholdPointerDrag({
+          captureTarget: element,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => {
+            element.addClass("is-dragging");
+            this.rootEl?.addClass("is-dragging-item");
+          },
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updateCardDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = upEvent.win.performance.now() + 400;
+            const next = this.cardDropState(
+              card.cardRef,
+              pile.id,
+              upEvent.clientX,
+              upEvent.clientY,
+              element,
+            );
+            const nextPosition = cardPosition(next, card.cardRef);
+            if (nextPosition !== null) {
+              this.actions.focusDeskCard(card.cardRef, nextPosition.pileId);
+            }
+            this.clearDropCues();
+            void this.plugin.deskService.replace(next);
+          },
+          onCancel: () => this.clearDropCues(),
+        });
+      },
+    );
   }
 
   private attachPileDragging(
@@ -1228,51 +1281,63 @@ export class DeskRenderer {
       ) {
         return;
       }
-      const startX = event.clientX;
-      const startY = event.clientY;
-      const pointerId = event.pointerId;
-      beginPointerActionAfterGate(
-        event,
-        (action) => this.actions.runAfterEditing("desk-pile-drag", action),
-        () => {
-          const origin = this.renderedPilePosition(element) ?? pile.position ?? {
-            x: 0,
-            y: 0,
-          };
-          beginThresholdPointerDrag({
-            captureTarget: dragSurface,
-            pointerId,
-            startX,
-            startY,
-            threshold: DRAG_THRESHOLD_PX,
-            onDragStart: () => element.addClass("is-dragging"),
-            onDragMove: (moveEvent, dx, dy) => {
-              element.style.translate = `${dx}px ${dy}px`;
-              this.updatePileDropCues(moveEvent, pile.id, element);
-            },
-            onDrop: (upEvent) => {
-              this.suppressClickUntil = upEvent.win.performance.now() + 400;
-              const next = this.pileDropState(
-                pile.id,
-                upEvent.clientX,
-                upEvent.clientY,
-                element,
-                {
-                  x: origin.x + upEvent.clientX - startX,
-                  y: origin.y + upEvent.clientY - startY,
-                },
-              );
-              this.clearDropCues();
-              void this.plugin.deskService.replace(next);
-            },
-            onCancel: () => {
-              element.setCssProps({ translate: "" });
-              this.clearDropCues();
-            },
-          });
-        },
-      );
+      this.beginPileDragging(event, element, dragSurface, pile);
     });
+  }
+
+  private beginPileDragging(
+    event: PointerEvent,
+    element: HTMLElement,
+    dragSurface: HTMLElement,
+    pile: DeskPile,
+  ): void {
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const pointerId = event.pointerId;
+    beginPointerActionAfterGate(
+      event,
+      (action) => this.actions.runAfterEditing("desk-pile-drag", action),
+      () => {
+        const origin = this.renderedPilePosition(element) ?? pile.position ?? {
+          x: 0,
+          y: 0,
+        };
+        beginThresholdPointerDrag({
+          captureTarget: dragSurface,
+          pointerId,
+          startX,
+          startY,
+          threshold: DRAG_THRESHOLD_PX,
+          onDragStart: () => {
+            element.addClass("is-dragging");
+            this.rootEl?.addClass("is-dragging-item");
+          },
+          onDragMove: (moveEvent, dx, dy) => {
+            element.style.translate = `${dx}px ${dy}px`;
+            this.updatePileDropCues(moveEvent, pile.id, element);
+          },
+          onDrop: (upEvent) => {
+            this.suppressClickUntil = upEvent.win.performance.now() + 400;
+            const next = this.pileDropState(
+              pile.id,
+              upEvent.clientX,
+              upEvent.clientY,
+              element,
+              {
+                x: origin.x + upEvent.clientX - startX,
+                y: origin.y + upEvent.clientY - startY,
+              },
+            );
+            this.clearDropCues();
+            void this.plugin.deskService.replace(next);
+          },
+          onCancel: () => {
+            element.setCssProps({ translate: "" });
+            this.clearDropCues();
+          },
+        });
+      },
+    );
   }
 
   private cardDropState(
@@ -1456,7 +1521,7 @@ export class DeskRenderer {
       ]);
       element.setCssProps({ translate: "" });
     });
-    this.rootEl?.removeClass("is-dragging-card");
+    this.rootEl?.removeClass("is-dragging-item");
   }
 
   private moveAndFocus(nextState: DeskState, cardRef: string): void {

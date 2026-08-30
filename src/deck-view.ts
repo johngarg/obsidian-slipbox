@@ -3903,6 +3903,9 @@ export class DeckView extends ItemView {
       if (!shouldBeginDeckPan(event, stage)) {
         return;
       }
+      if (this.deskRenderer.beginCoveredDeskDrag(event)) {
+        return;
+      }
       const begin = (): void => {
         if ((event.buttons & 1) === 0) {
           return;

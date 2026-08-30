@@ -4,6 +4,7 @@ import { Window } from "happy-dom";
 
 import {
   cardDropTargetPile,
+  coveredDeskDragTarget,
   deckCardPileDropFocusPath,
   deckCardDropTarget,
   pileHeaderPositionAtWorkspacePoint,
@@ -41,6 +42,76 @@ function div(window: Window, className = ""): HTMLElement {
 }
 
 describe("Desk card drops", () => {
+  test("finds an expanded Desk card beneath transparent overlay content", () => {
+    const window = new Window();
+    const expanded = pile(window, "expanded");
+    const preview = div(window, "slipbox-desk-card-preview");
+    const overlay = div(window, "slipbox-local-branch-graph");
+    expanded.card.append(preview);
+
+    const target = coveredDeskDragTarget([
+      overlay,
+      preview,
+      expanded.card,
+      expanded.pile,
+    ]);
+    assert.equal(target?.kind, "card");
+    assert.equal(target?.kind === "card" ? target.card : null, expanded.card);
+  });
+
+  test("finds collapsed piles and expanded-pile handles beneath overlays", () => {
+    const window = new Window();
+    const collapsed = pile(window, "collapsed");
+    collapsed.pile.className = "slipbox-desk-pile is-collapsed";
+    const collapsedTarget = coveredDeskDragTarget([
+      collapsed.card,
+      collapsed.pile,
+    ]);
+    assert.equal(collapsedTarget?.kind, "pile");
+    assert.equal(
+      collapsedTarget?.kind === "pile" ? collapsedTarget.pile : null,
+      collapsed.pile,
+    );
+    assert.equal(
+      collapsedTarget?.kind === "pile" ? collapsedTarget.dragSurface : null,
+      collapsed.pile,
+    );
+
+    const expanded = pile(window, "expanded");
+    const handle = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "button",
+    ) as unknown as HTMLElement;
+    handle.className = "slipbox-desk-pile-handle";
+    expanded.pile.append(handle);
+    const handleTarget = coveredDeskDragTarget([handle, expanded.pile]);
+    assert.equal(handleTarget?.kind, "pile");
+    assert.equal(
+      handleTarget?.kind === "pile" ? handleTarget.dragSurface : null,
+      handle,
+    );
+  });
+
+  test("rejects covered card controls and viewed ghosts", () => {
+    const window = new Window();
+    const expanded = pile(window, "expanded");
+    const button = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "button",
+    ) as unknown as HTMLElement;
+    expanded.card.append(button);
+    assert.equal(
+      coveredDeskDragTarget([button, expanded.card, expanded.pile]),
+      null,
+    );
+
+    expanded.card.classList.add("is-viewed-ghost");
+    assert.equal(
+      coveredDeskDragTarget([expanded.card, expanded.pile]),
+      null,
+    );
+  });
+
   test("treats source-pile whitespace as empty while retaining card reorder targets", () => {
     const window = new Window();
     const source = pile(window, "source");

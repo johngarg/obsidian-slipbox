@@ -200,7 +200,7 @@
   pointer-events: none;
 }
 
-.slipbox-desk.is-dragging-card {
+.slipbox-desk.is-dragging-item {
   z-index: 300;
 }
 

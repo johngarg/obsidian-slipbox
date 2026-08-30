@@ -6,7 +6,9 @@ Slipbox Desk is a paper-like _Zettelkasten_ for Obsidian: addressed cards, a bro
 
 > Warning! Slipbox Desk is under active development. If you find a bug, please [open a GitHub issue](https://github.com/johngarg/obsidian-slipbox/issues) and include the steps to reproduce it, your Obsidian version, and your operating system.
 
-Notes become cards, organised into a single sequence by addresses that mark out lines of thought. Browse with a mouse, trackpad, or vim-like keys. Pull cards out of the Deck and stack them in piles on the Desk, where you can work out how notes connect and begin structuring your writing. The Deck map helps you find your way around and remember where ideas live.
+> **Temporary upgrade notice:** Upgrading from 0.13.0 or earlier resets Slipbox Desk settings. Path bookmarks are retained, but shortcut and card-header customisations must be configured again. Notes and frontmatter are unaffected.  See the [changelog](CHANGELOG.md) for release history.
+
+Notes become cards, organised into a single sequence by addresses that mark out lines of thought. Browse with a mouse, trackpad, or vim-like keys. Pull cards out of the Deck and stack them in piles on the Desk, where you can work out how notes connect and begin structuring your writing. The Deck map and Branch View help you find your way around and remember where ideas live.
 
 A note becomes a card when it has the configured address property. The default is `slipbox-id`:
 
@@ -33,24 +35,11 @@ The strictest paper-like experience might be too extreme for some users. For thi
 
 The Deck is the canonical sequence, while the Desk is a temporary working area beside it. Cards on the Desk keep their filed address and remain in the Deck. Slipbox Desk integrates with Obsidian Canvas, and piles can be moved easily to an existing or new canvas.
 
-## Features
-
-- Browse rendered Markdown cards with the keyboard, track your place on the Deck map, and keep bookmarks.
-- Pull filed cards onto the Desk without changing their address or filing order.
-- Expand, collapse, reorder, split, merge, and move Desk piles.
-- View and edit Desk cards inside the Slipbox workspace.
-- File an unfiled card while checking where it will enter the real Deck.
-- Follow card links, copy links, insert links from an Obsidian editor, and show automatic backlinks.
-- Mark supplementary branches with link aliases and navigate optional inserted strands derived from addresses.
-- Configure card sizes, titles, header actions, ordering, shortcuts, and the paper workflow.
-
-See the [changelog](CHANGELOG.md) for user-facing release history.
-
 ## Installation
 
 Slipbox Desk requires Obsidian 1.13.0 or later and is available on desktop only.
 
-The preferred installation method is **Settings → Community plugins → Browse**. If Slipbox Desk is not yet available there, install it manually from a GitHub Release:
+The preferred installation method is **Settings → Community plugins → Browse**. Slipbox Desk can also be installed manually from a GitHub Release:
 
 1. Download `manifest.json`, `main.js`, and `styles.css` from the same release.
 2. Put the files in `<Vault>/.obsidian/plugins/slipbox/`.
@@ -76,13 +65,9 @@ Any trimmed, nonempty, single-line string without control characters is a valid 
 
 Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox Desk never rewrites an existing address automatically.
 
-### Card colours
+## Card colours
 
-Run **Slipbox Desk: New card with options** or its Desk variant to choose an
-optional card colour while creating the note. The compact colour row offers
-directly selectable circles for **No colour**, selected by default, followed by
-red, orange, yellow, green, cyan, blue, purple, and pink. The quick **New card**
-commands remain immediate and create uncoloured cards.
+Run **Slipbox Desk: New card with options** or its Desk variant and choose a card colour.
 
 The selected value is stored in the fixed `slipbox-card-color` property:
 
@@ -93,31 +78,22 @@ slipbox-card-color: yellow
 ---
 ```
 
-Slipbox Desk reads this property on Deck, Desk, and viewed cards but offers no
-way to change it after creation. As ordinary Markdown frontmatter, it remains
-directly editable in Obsidian. Missing and unsupported values simply display
-an uncoloured card. The card body remains unchanged; its header mixes a 5%
-hint of the selected colour with Obsidian's semantic background in light themes
-and 8% in dark themes. The Deck map uses the colour for that card's marker;
-bookmarks add an accent ring around the marker without hiding its card colour.
-The treatment therefore follows community themes while retaining the theme's
-normal contrast.
+The colour tints the card header and its Deck-map marker; edit or remove the property directly in Markdown to change it later.
 
 ## Branching and structural navigation
 
-The optional **Recognise supplementary branch links** setting treats a link alias beginning with the canonical `+` syntax, such as `[[Child card|+a]]`, as a supplementary branch. Its remaining alias, `a` in this example, appears beside the child card's address. When **Follow links from cards** is enabled, activating the label returns the Deck anchor to the source card; hover previews remain independently controlled by **Preview links on hover**. Wiki links require a displayed alias; Markdown links use their displayed text. Embeds, self-links, ordinary notes, and links between unfiled cards are not branch relations.
+In [Communication with Zettelkastens](https://zettelkasten.de/communications-with-zettelkastens/), Luhmann described free internal branching as one of the main advantages of his method, while lamenting that later card insertions could obscure an earlier sequence.
 
-Card addresses may themselves begin with `+`. An alias exactly matching the resolved target card's address remains an ordinary link, so `[[Plus card|+12]]` is ordinary when the target is addressed `+12`. Add the branch marker separately to assert a branch: `[[Plus card|++12]]` has the branch label `+12`.
+For this reason, the same branch types and navigation inspired by the Niklas Luhmann Archive can be used to navigate the Slipbox. Again, this feature can be toggled in the settings.
 
-**Outline branch links in cards** draws a quiet outline around marked aliases in rendered Deck, Desk, and viewed-card bodies. The outline identifies the supplementary alias syntax itself, so it also appears on marked self-links or links whose target is unresolved or unfiled even though those links do not enter the branch index. **Hide branch-link markers in cards**, enabled by default, hides the `+` prefix in those rendered aliases while preserving the link target. Both settings affect only Slipbox cards; ordinary Obsidian Markdown views and editors are unaffected.
+- **Supplementary strands** or _ergänzende Stränge_ represent explicit branches in the _Zettelkasten_. See [this example](https://niklas-luhmann-archiv.de/bestand/zettelkasten/zettel/ZK_1_NB_57-2-25_V) from Luhmann.
+- **Inserted strands** or _eingeschobene Stränge_ are branches inferred from the card address.
 
-The separate **Derive inserted strands from addresses** setting derives ephemeral structural relationships from address extension. With natural ordering, `2a` can be a child of `2`, while `20` is not; lexicographic ordering uses every proper literal prefix. Duplicate-address cards share one structural position while remaining separate exact cards. They appear consecutively in normal Deck order, and strand navigation moves through them one exact card at a time without opening a chooser. Roots form their own sibling axis; equal-depth cards under different parents do not.
+The **Recognise supplementary branch links** setting treats a link alias beginning with the `+` symbol, such as `[[Child card|+a]]`, as a supplementary branch. With **Show supplementary branch labels on cards** enabled, its remaining alias, `a` in this example, appears beside the child card's address.
 
-**Show local Branch View** supplies the default visibility of an archive-inspired deterministic local diagram beneath the active Deck card. A floating `git-branch` control can override that default for the current Deck view; while the diagram is shown, six standard navigation icons extend to its left. The control rail and diagram never appear on Desk cards, viewed cards, or Deck placeholders. The transparent tray can grow wider than its card within the Deck stage, and dragging its noninteractive space pans the Deck. The current strand is horizontal, one higher context appears above, and the active card's inserted and supplementary departures appear below. Within one address-derived parent, child addresses with the same leading extension delimiter and token kind form a continuation family: for example, `17,1,1 → 17,1,2` is distinct from `17,1A → 17,1a`. A supplementary branch target inherits only later cards in its own family, bounded by the next supplementary start there; other families remain separate inserted departures. Other visible cards use short stubs for hidden departures; selecting a stub expands its sole departure or asks which one to show, with one auxiliary row visible at a time. Same-strand omissions of two or more cards use a counted ellipsis marker; a single omitted card remains visible. Selecting an ellipsis reveals that run with horizontal scrolling while retaining the tray's current position. Nodes show canonical addresses, retain exact-path identity for duplicate addresses, and preview targets according to **Preview links on hover**.
+The separate **Derive inserted strands from addresses** setting derives structural relationships from address extensions. With natural ordering, `2a` can be a child of `2`, while `20` is not.
 
-The six Branch View movement actions move backward or forward without wrapping, move to a known strand beginning, enter an inserted or supplementary strand, and move to a higher inserted or supplementary strand. Their default keys are `N`, `n`, `^`, `>`, `+`, and `<`, respectively. Each action has one stable control: one destination is activated directly, while several destinations open a searchable exact-card chooser. Supplementary choices show their branch alias, address, title, and path, and all four fields are searchable. A seventh command-palette action toggles Branch View visibility for the current Deck view with `b` by default. Repeated supplementary and higher destinations remain separate available relations. If a card has several incoming supplementary branches, the local view uses the first relationship in deterministic Deck order as its supplementary higher context without reporting an error; the other relationships remain indexed and available as outgoing branches from their sources.
-
-Both forms of branching are derived in memory. Enabling, disabling, or navigating them never writes Markdown, frontmatter, or addresses.
+With either relationship type enabled, **Show local Branch View** displays an Archive-inspired diagram beneath the active Deck card. Turning it off hides the diagram and its controls; branch navigation commands remain available.
 
 ## Essential keys
 
@@ -131,7 +107,7 @@ There are some actions that are very quick to do in the real world, but take tim
 | `^` | Move to the current branch strand's beginning |
 | `>` / `<` | Enter an inserted strand or move to a higher strand |
 | `+` | Enter a supplementary strand |
-| `b` | Toggle the local Branch View |
+| `b` | Toggle Branch View |
 | `p` | Put the focused card on the Desk, or return it |
 | `i` | Edit the focused Desk or viewed card |
 | `v` | View a Desk card, or return a viewed card |
@@ -146,14 +122,9 @@ There are some actions that are very quick to do in the real world, but take tim
 
 These shortcuts apply only while a Slipbox Desk view is active. You can change them under **Settings → Slipbox Desk**. Obsidian hotkeys take priority when bindings conflict.
 
-When a view first opens, the Deck starts at the `zb` position if the automatic
-unfiled-card pile is present; otherwise it starts at `zz`.
-
 ## Data and privacy
 
 Slipbox Desk works locally and offline. It makes no network requests, collects no telemetry, and does not load remote code.
-
-To build the Deck, Slipbox Desk checks the frontmatter of Markdown files through Obsidian's metadata cache. When supplementary branching is enabled, it also reads cached ordinary links and their display text; it does not scan note bodies to find branch assertions. It reads note bodies when displaying or editing cards, and writes vault files only when you create, edit, file, link, delete, or move piles to Canvas. New-card creation can also write the selected `slipbox-card-color`; Slipbox does not change that property afterward. The Desk is session-only; settings and bookmarks are stored as plugin data.
 
 ## Development
 

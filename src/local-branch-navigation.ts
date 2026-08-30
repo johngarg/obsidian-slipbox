@@ -89,14 +89,14 @@ export function buildLocalBranchNavigation(
     inferredParentAddress === undefined
       ? undefined
       : cardsByAddress.get(inferredParentAddress)?.[0],
-    "Move to higher inserted strand",
+    "Move to higher strand",
   );
   const explicitHigherGroups = explicitHigher === undefined
     ? EMPTY_GROUPS
     : [{
       id: `higher:explicit:${explicitHigher.path}`,
       movement: "higher" as const,
-      label: "Move to higher supplementary strand",
+      label: "Move to higher strand",
       targets: targetCards([explicitHigher]),
     }];
   const higher = [
@@ -115,20 +115,18 @@ export function buildLocalBranchNavigation(
     : groupForCard(
       "beginning",
       currentCards[0],
-      explicitContext === null
-        ? "Move to strand beginning"
-        : "Move to supplementary strand beginning",
+      "Move to strand beginning",
     );
 
   const backward = groupForCard(
     "backward",
     currentIndex > 0 ? currentCards[currentIndex - 1] : undefined,
-    "Move backward on current strand",
+    "Move backward on strand",
   );
   const forward = groupForCard(
     "forward",
     currentIndex >= 0 ? currentCards[currentIndex + 1] : undefined,
-    "Move forward on current strand",
+    "Move forward on strand",
   );
   const collapse = (groups: readonly LocalBranchNavigationGroup[]) =>
     collapseDuplicateAddressTargets(groups, cardsByAddress);

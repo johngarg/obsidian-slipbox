@@ -84,15 +84,17 @@ test. Record unexpected warnings or errors under Findings.
   the address, annotation, title, and action toolbar remain stationary while
   annotations fit into the `+N` menu. A short annotation should reserve only
   its content width so the title can use the remaining header space.
-- [ ] Disable labels or inspect a card without incoming branch annotations and
-  confirm no separator dot follows its canonical address.
+- [ ] Disable **Show supplementary branch labels on cards** or inspect a card
+  without incoming branch annotations and confirm no separator dot follows its
+  canonical address.
 - [ ] Change the branching toggles; confirm the UI refreshes and no
   Markdown or frontmatter changes.
 - [ ] Confirm the local Branch View and its floating `git-branch` control appear
   only beneath the active ordinary Deck card. Hide and show the diagram with
-  the icon and with **Toggle local Branch View visibility** in the command
-  palette and its default `b` shortcut; confirm the per-view override can show
-  it over a disabled default.
+  the icon and with **Toggle Branch View** in the command palette and its default
+  `b` shortcut. Turn off **Show local Branch View** and confirm the diagram,
+  control rail, command action, and `b` behavior are all absent; turn it back on
+  and confirm the diagram starts shown.
   While shown, confirm six standard movement icons extend left from the toggle.
   Move the Deck anchor, open a viewed card, focus expanded Desk piles, and move
   cards without seeing a second control rail or remounting card bodies.

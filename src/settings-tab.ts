@@ -100,12 +100,33 @@ export class SlipboxSettingTab extends PluginSettingTab {
       },
       {
         type: "group",
-        heading: "Supplementary branching",
+        heading: "Branch relationships",
         items: [
           this.definition(
             "Recognise supplementary branch links",
             "Treat internal links with a displayed + alias, such as [[card|+a]], as supplementary branch assertions.",
             (setting) => this.renderExplicitBranchLinks(setting),
+          ),
+          this.definition(
+            "Derive inserted strands from addresses",
+            "Derive inserted strands from address extension and make structural navigation commands available.",
+            (setting) => this.renderInferAddressBranches(setting),
+          ),
+        ],
+      },
+      {
+        type: "group",
+        heading: "Branch presentation",
+        items: [
+          this.definition(
+            "Show local Branch View",
+            "Show archive-style local branch navigation beneath the active Deck card. When off, its control rail and toggle action are unavailable.",
+            (setting) => this.renderShowLocalBranchView(setting),
+          ),
+          this.definition(
+            "Show supplementary branch labels on cards",
+            "Show incoming supplementary branch aliases beside card addresses. When Follow links from cards is enabled, selecting one returns the Deck anchor to its source card.",
+            (setting) => this.renderShowBranchLabels(setting),
           ),
           this.definition(
             "Outline branch links in cards",
@@ -116,33 +137,6 @@ export class SlipboxSettingTab extends PluginSettingTab {
             "Hide branch-link markers in cards",
             "Hide the + prefix on supplementary aliases in rendered Slipbox cards. Link targets and ordinary Markdown views are unaffected.",
             (setting) => this.renderHideBranchLinkMarkers(setting),
-          ),
-          this.definition(
-            "Show branch labels",
-            "Show incoming supplementary branch labels beside card addresses. Clicked labels return the Deck anchor to the source card.",
-            (setting) => this.renderShowBranchLabels(setting),
-          ),
-        ],
-      },
-      {
-        type: "group",
-        heading: "Inserted branching",
-        items: [
-          this.definition(
-            "Derive inserted strands from addresses",
-            "Derive inserted strands from address extension and make structural navigation commands available.",
-            (setting) => this.renderInferAddressBranches(setting),
-          ),
-        ],
-      },
-      {
-        type: "group",
-        heading: "Branch View",
-        items: [
-          this.definition(
-            "Show local Branch View",
-            "Show archive-style local branch navigation beneath the active Deck card using whichever inserted and supplementary relationships are enabled.",
-            (setting) => this.renderShowLocalBranchView(setting),
           ),
         ],
       },

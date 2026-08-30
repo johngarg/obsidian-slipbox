@@ -93,11 +93,9 @@ function fixture(
   const departureChoices: readonly string[][] = [];
   const mutableActivations = activations as string[][];
   let available = true;
-  let shownByDefault = true;
   const controller = new LocalBranchViewController({
     activeDocument: document,
     canShowView: () => available,
-    showViewByDefault: () => shownByDefault,
     showTooltips: () => showTooltips,
     previewLinksOnHover: () => true,
     setIcon: (control, icon) => {
@@ -135,7 +133,6 @@ function fixture(
     previews,
     departureChoices,
     setAvailable: (value: boolean) => { available = value; },
-    setShownByDefault: (value: boolean) => { shownByDefault = value; },
   };
 }
 
@@ -176,7 +173,7 @@ describe("local Branch View controller", () => {
     const labelId = backward?.getAttribute("aria-labelledby") ?? "";
     assert.equal(
       subject.document.getElementById(labelId)?.textContent,
-      "Move backward on current strand",
+      "Move backward on strand",
     );
     assert.deepEqual(
       Array.from(root?.querySelectorAll(".slipbox-local-branch-control svg") ?? [])
@@ -203,7 +200,7 @@ describe("local Branch View controller", () => {
       "[data-movement='backward'] button",
     );
 
-    assert.equal(button?.getAttribute("aria-label"), "Move backward on current strand");
+    assert.equal(button?.getAttribute("aria-label"), "Move backward on strand");
     assert.equal(button?.getAttribute("data-tooltip-position"), "bottom");
     assert.equal(button?.getAttribute("title"), null);
   });
@@ -579,7 +576,7 @@ describe("local Branch View controller", () => {
       subject.document.getElementById(
         toggle?.getAttribute("aria-labelledby") ?? "",
       )?.textContent,
-      "Hide local Branch View",
+      "Hide Branch View",
     );
     toggle?.click();
     assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
@@ -600,20 +597,34 @@ describe("local Branch View controller", () => {
         subject.second.querySelector(".slipbox-local-branch-toggle")
           ?.getAttribute("aria-labelledby") ?? "",
       )?.textContent,
-      "Show local Branch View",
+      "Show Branch View",
     );
   });
 
-  test("can show the view over a disabled global default", () => {
+  test("removes the controls while disabled and starts shown when re-enabled", () => {
     const subject = fixture();
-    subject.setShownByDefault(false);
-    subject.controller.refresh();
-    assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
-
     subject.first.querySelector<HTMLButtonElement>(
       ".slipbox-local-branch-toggle",
     )?.click();
+    assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+
+    subject.setAvailable(false);
+    subject.controller.refresh();
+    const root = subject.first.querySelector<HTMLElement>(
+      ".slipbox-local-branch-view",
+    );
+    assert.equal(root?.hidden, true);
+    assert.equal(root?.querySelector(".slipbox-local-branch-toggle"), null);
+
+    subject.controller.toggleVisibility();
+    subject.setAvailable(true);
+    subject.controller.refresh();
     assert.notEqual(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+    assert.equal(
+      subject.first.querySelector(".slipbox-local-branch-toggle")
+        ?.getAttribute("aria-pressed"),
+      "true",
+    );
   });
 
   test("hides cleanly when no branch model is enabled", () => {

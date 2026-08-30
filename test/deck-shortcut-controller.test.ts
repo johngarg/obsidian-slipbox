@@ -176,9 +176,10 @@ describe("DeckShortcutController", () => {
     dispatchKey(subject, "j");
     subject.setSuspended(false);
     subject.setAvailable(false);
-    dispatchKey(subject, "j");
+    const unavailableEvent = dispatchKey(subject, "j");
     await flushShortcut();
     assert.deepEqual(subject.runs, ["next-card"]);
+    assert.equal(unavailableEvent.defaultPrevented, false);
     assert.equal(subject.controller.canRunCommand("next-card"), false);
   });
 

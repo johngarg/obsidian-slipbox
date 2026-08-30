@@ -36,6 +36,10 @@ initial public beta.
 - Reassigned the default bookmark, Branch View, and Deck-map shortcuts to `m`,
   `b`, and `O`, respectively. Saved copies of the unreleased earlier defaults
   are replaced on load, while bindings that were actually customized remain.
+- Split branching settings into relationship and presentation groups, clarified
+  supplementary-label scope, and shortened the Branch View action names. Turning
+  off **Show local Branch View** now removes its control rail and disables its
+  toggle action instead of leaving a per-view override available.
 - Replaced the pile-dependent centre shortcut with Vim-style `zt`, `zz`, and
   `zb` Deck positioning at 33%, 50%, and 67% of the view, respectively. New
   views initially use `zb` when the reconstructed unfiled-card pile exists and

@@ -150,19 +150,19 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "move-backward-local-strand",
-    label: "Move backward on local branch strand",
+    label: "Move backward on strand",
     repeatable: true,
     defaultBindings: [binding("n", ["Shift"])],
   },
   {
     id: "move-forward-local-strand",
-    label: "Move forward on local branch strand",
+    label: "Move forward on strand",
     repeatable: true,
     defaultBindings: [binding("n")],
   },
   {
     id: "move-to-local-strand-beginning",
-    label: "Move to beginning of local branch strand",
+    label: "Move to strand beginning",
     repeatable: false,
     defaultBindings: [binding("^", ["Shift"])],
   },
@@ -180,13 +180,13 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "move-to-higher-strand",
-    label: "Move to higher local branch strand",
+    label: "Move to higher strand",
     repeatable: false,
     defaultBindings: [binding("<", ["Shift"])],
   },
   {
     id: "toggle-local-branch-view",
-    label: "Toggle local Branch View visibility",
+    label: "Toggle Branch View",
     repeatable: false,
     defaultBindings: [binding("b")],
   },

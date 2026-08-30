@@ -15,7 +15,6 @@ import type {
 export interface LocalBranchViewEnvironment {
   readonly activeDocument: Document;
   readonly canShowView: () => boolean;
-  readonly showViewByDefault: () => boolean;
   readonly showTooltips: () => boolean;
   readonly previewLinksOnHover: () => boolean;
   readonly setIcon: (control: HTMLElement, icon: string) => void;
@@ -61,17 +60,17 @@ const MOVEMENTS: readonly {
 }[] = [
   {
     movement: "backward",
-    label: "Move backward on current strand",
+    label: "Move backward on strand",
     icon: "arrow-left",
   },
   {
     movement: "forward",
-    label: "Move forward on current strand",
+    label: "Move forward on strand",
     icon: "arrow-right",
   },
   {
     movement: "beginning",
-    label: "Move to beginning of current strand",
+    label: "Move to strand beginning",
     icon: "chevrons-left",
   },
   {
@@ -164,7 +163,11 @@ export class LocalBranchViewController {
     this.expandedGapIds.clear();
     const owner = this.owner;
     const path = this.path;
-    if (owner === null || path === null || !this.environment.canShowView()) {
+    const canShowView = this.environment.canShowView();
+    if (owner === null || path === null || !canShowView) {
+      if (!canShowView) {
+        this.visibilityOverride = null;
+      }
       this.hide();
       return;
     }
@@ -261,7 +264,7 @@ export class LocalBranchViewController {
     toggle.classList.toggle("is-pressed", visible);
     this.labelControl(
       toggle,
-      visible ? "Hide local Branch View" : "Show local Branch View",
+      visible ? "Hide Branch View" : "Show Branch View",
     );
     this.environment.setIcon(toggle, "git-branch");
     this.configureButton(toggle, () => this.toggleVisibility());
@@ -372,7 +375,7 @@ export class LocalBranchViewController {
 
   private isViewVisible(): boolean {
     return this.environment.canShowView() &&
-      (this.visibilityOverride ?? this.environment.showViewByDefault());
+      (this.visibilityOverride ?? true);
   }
 
   private ownerWidth(): number {

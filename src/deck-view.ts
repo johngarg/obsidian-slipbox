@@ -377,10 +377,7 @@ export class DeckView extends ItemView {
     this.viewedCardSignature = new CardSignatureManager(signatureEnvironment);
     this.localBranchView = new LocalBranchViewController({
       activeDocument: this.contentEl.ownerDocument,
-      canShowView: () =>
-        this.plugin.settings.inferAddressBranches ||
-        this.plugin.settings.explicitBranchLinks,
-      showViewByDefault: () => this.plugin.settings.showLocalBranchView,
+      canShowView: () => this.canShowLocalBranchView(),
       showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       setIcon,
@@ -1220,10 +1217,7 @@ export class DeckView extends ItemView {
         this.localBranchTargetsForMovement(localBranchMovement).length > 0,
       canToggleLocalBranchView:
         activeIndex >= 0 &&
-        (
-          this.plugin.settings.inferAddressBranches ||
-          this.plugin.settings.explicitBranchLinks
-        ),
+        this.canShowLocalBranchView(),
       hasPreviousBookmark:
         action === "previous-bookmark" &&
         adjacentBookmarkIndex(bookmarkIndices, activeIndex, -1) !== null,
@@ -2201,6 +2195,14 @@ export class DeckView extends ItemView {
       }),
     });
     return projector.modelForPath(path, expandedDepartureId);
+  }
+
+  private canShowLocalBranchView(): boolean {
+    return this.plugin.settings.showLocalBranchView &&
+      (
+        this.plugin.settings.inferAddressBranches ||
+        this.plugin.settings.explicitBranchLinks
+      );
   }
 
   private localBranchTargetsForMovement(

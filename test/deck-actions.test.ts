@@ -179,21 +179,43 @@ describe("Deck action availability", () => {
 
   test("registers six non-wrapping local Branch View shortcuts", () => {
     const expected = [
-      ["move-backward-local-strand", [{ key: "n", modifiers: ["Shift"] }]],
-      ["move-forward-local-strand", [{ key: "n", modifiers: [] }]],
-      ["move-to-local-strand-beginning", [{ key: "^", modifiers: ["Shift"] }]],
-      ["enter-address-inferred-strand", [{ key: ">", modifiers: ["Shift"] }]],
+      [
+        "move-backward-local-strand",
+        [{ key: "n", modifiers: ["Shift"] }],
+        "Move backward on strand",
+      ],
+      [
+        "move-forward-local-strand",
+        [{ key: "n", modifiers: [] }],
+        "Move forward on strand",
+      ],
+      [
+        "move-to-local-strand-beginning",
+        [{ key: "^", modifiers: ["Shift"] }],
+        "Move to strand beginning",
+      ],
+      [
+        "enter-address-inferred-strand",
+        [{ key: ">", modifiers: ["Shift"] }],
+        "Enter inserted strand",
+      ],
       [
         "enter-explicit-supplementary-strand",
         [{ key: "+", modifiers: ["Shift"] }],
+        "Enter supplementary strand",
       ],
-      ["move-to-higher-strand", [{ key: "<", modifiers: ["Shift"] }]],
+      [
+        "move-to-higher-strand",
+        [{ key: "<", modifiers: ["Shift"] }],
+        "Move to higher strand",
+      ],
     ] as const;
-    for (const [id, defaultBindings] of expected) {
+    for (const [id, defaultBindings, label] of expected) {
       const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
         candidate.id === id
       );
       assert.notEqual(definition, undefined);
+      assert.equal(definition?.label, label);
       assert.deepEqual(definition?.defaultBindings, defaultBindings);
       assert.equal(definition?.target, "deck-anchor");
       assert.equal(canRunDeckAction(id, READY), true);
@@ -209,7 +231,7 @@ describe("Deck action availability", () => {
       candidate.id === "toggle-local-branch-view"
     );
 
-    assert.equal(definition?.label, "Toggle local Branch View visibility");
+    assert.equal(definition?.label, "Toggle Branch View");
     assert.equal(definition?.commandId, "toggle-local-branch-view-visibility");
     assert.deepEqual(definition?.defaultBindings, [{ key: "b", modifiers: [] }]);
     assert.equal(definition?.target, "view");

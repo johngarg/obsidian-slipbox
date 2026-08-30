@@ -545,6 +545,23 @@ export const DEFAULT_DECK_KEYBINDINGS = Object.fromEntries(
   ]),
 ) as Readonly<Record<SlipboxAction, readonly DeckKeyBinding[]>>;
 
+const RETIRED_UNRELEASED_DEFAULT_DECK_KEYBINDINGS: Partial<Readonly<Record<
+  SlipboxAction,
+  readonly DeckKeyBinding[]
+>>> = {
+  "move-backward-local-strand": [],
+  "move-forward-local-strand": [],
+  "move-to-local-strand-beginning": [],
+  "enter-address-inferred-strand": [],
+  "enter-explicit-supplementary-strand": [],
+  "move-to-higher-strand": [],
+  "toggle-local-branch-view": [],
+  "centre-card": [binding("c")],
+  "toggle-bookmark": [binding("b")],
+  "toggle-deck-map": [binding("m")],
+  "edit-card": [binding("e")],
+};
+
 export const DEFAULT_SETTINGS: SlipboxSettings = {
   addressProperty: "slipbox-id",
   deckOrdering: "natural",
@@ -698,6 +715,21 @@ export function keyBindingFromKeyboardEvent(
   };
 }
 
+function bindingsMatch(
+  value: unknown,
+  expected: readonly DeckKeyBinding[],
+): boolean {
+  return Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((candidate, index) => {
+      const normalized = normalizeKeyBinding(candidate);
+      const expectedBinding = expected[index];
+      return normalized !== null &&
+        expectedBinding !== undefined &&
+        keyBindingSignature(normalized) === keyBindingSignature(expectedBinding);
+    });
+}
+
 export function normalizeDeckKeybindings(
   value: unknown,
 ): Readonly<Record<SlipboxAction, readonly DeckKeyBinding[]>> {
@@ -709,6 +741,15 @@ export function normalizeDeckKeybindings(
   // defaults, preventing a default from displacing a current customization.
   for (const definition of SLIPBOX_ACTION_DEFINITIONS) {
     const candidate = source[definition.id];
+    const retiredDefault = RETIRED_UNRELEASED_DEFAULT_DECK_KEYBINDINGS[
+      definition.id
+    ];
+    if (
+      retiredDefault !== undefined &&
+      bindingsMatch(candidate, retiredDefault)
+    ) {
+      continue;
+    }
     if (!Array.isArray(candidate)) {
       continue;
     }

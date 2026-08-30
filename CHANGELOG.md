@@ -34,7 +34,8 @@ initial public beta.
 
 - Changed the default inline-edit shortcut from `e` to Vim-style `i`.
 - Reassigned the default bookmark, Branch View, and Deck-map shortcuts to `m`,
-  `b`, and `O`, respectively.
+  `b`, and `O`, respectively. Saved copies of the unreleased earlier defaults
+  are replaced on load, while bindings that were actually customized remain.
 - Replaced the pile-dependent centre shortcut with Vim-style `zt`, `zz`, and
   `zb` Deck positioning at 33%, 50%, and 67% of the view, respectively. New
   views initially use `zb` when the reconstructed unfiled-card pile exists and

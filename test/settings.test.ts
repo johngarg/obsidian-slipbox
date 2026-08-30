@@ -506,6 +506,38 @@ describe("Slipbox settings", () => {
     assert.equal("toggle-toolbar" in normalized, false);
   });
 
+  test("replaces the unreleased saved defaults with the revised keymap", () => {
+    const normalized = normalizeDeckKeybindings({
+      "move-backward-local-strand": [],
+      "move-forward-local-strand": [],
+      "move-to-local-strand-beginning": [],
+      "enter-address-inferred-strand": [],
+      "enter-explicit-supplementary-strand": [],
+      "move-to-higher-strand": [],
+      "toggle-local-branch-view": [],
+      "centre-card": [{ key: "c", modifiers: [] }],
+      "toggle-bookmark": [{ key: "b", modifiers: [] }],
+      "toggle-deck-map": [{ key: "m", modifiers: [] }],
+      "edit-card": [{ key: "e", modifiers: [] }],
+    });
+
+    assert.deepEqual(normalized, DEFAULT_SETTINGS.deckKeybindings);
+  });
+
+  test("preserves bindings that differ from the retired defaults", () => {
+    const normalized = normalizeDeckKeybindings({
+      "centre-card": [{ key: "x", modifiers: [] }],
+      "toggle-bookmark": [],
+      "toggle-deck-map": [{ key: "q", modifiers: [] }],
+      "edit-card": [{ key: "e", modifiers: ["Mod"] }],
+    });
+
+    assert.deepEqual(normalized["centre-card"], [{ key: "x", modifiers: [] }]);
+    assert.deepEqual(normalized["toggle-bookmark"], []);
+    assert.deepEqual(normalized["toggle-deck-map"], [{ key: "q", modifiers: [] }]);
+    assert.deepEqual(normalized["edit-card"], [{ key: "e", modifiers: ["Mod"] }]);
+  });
+
   test("supplies missing defaults only when existing bindings do not conflict", () => {
     const normalized = normalizeDeckKeybindings({
       bookmarks: [

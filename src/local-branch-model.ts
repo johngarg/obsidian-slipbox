@@ -662,14 +662,20 @@ function departureForDefinition(
     id: departure.id,
     kind: departure.kind,
     label: departure.description,
-    target: targetForCard(departure.target),
+    target: targetForCard(departure.target, departure.edgeLabel),
   };
 }
 
 function targetForCard(
   card: LocalBranchCard,
+  alias?: string,
 ): LocalBranchDeparture["target"] {
-  return { path: card.path, address: card.address, title: card.title };
+  return {
+    path: card.path,
+    address: card.address,
+    title: card.title,
+    ...(alias === undefined ? {} : { alias }),
+  };
 }
 
 function groupCardsByAddress(

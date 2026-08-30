@@ -169,8 +169,21 @@ describe("local branch model", () => {
       "β",
     ]);
     assert.deepEqual(
-      result?.navigation.explicit.map((group) => group.targets[0]?.path),
-      [first.path, second.path],
+      result?.strands.find((strand) => strand.role === "current")?.nodes
+        .find((node) => node.path === active.path)?.departures
+        .filter((departure) => departure.kind === "explicit")
+        .map((departure) => departure.target.alias),
+      ["supplement", "β"],
+    );
+    assert.deepEqual(
+      result?.navigation.explicit.map((group) => ({
+        path: group.targets[0]?.path,
+        alias: group.targets[0]?.alias,
+      })),
+      [
+        { path: first.path, alias: "supplement" },
+        { path: second.path, alias: "β" },
+      ],
     );
   });
 
@@ -667,8 +680,11 @@ describe("local branch model", () => {
     );
 
     assert.deepEqual(
-      localBranchTargets(result, "explicit").map((target) => target.path),
-      [first.path],
+      localBranchTargets(result, "explicit").map((target) => ({
+        path: target.path,
+        alias: target.alias,
+      })),
+      [{ path: first.path, alias: "first" }],
     );
   });
 

@@ -50,7 +50,8 @@ initial public beta.
   standard movement icons extend to the left only while the view is shown.
 - Replaced repeated supplementary movement buttons with one stable icon per
   movement. A single destination opens directly and several destinations use
-  the searchable exact-card chooser shared with command-palette navigation.
+  the exact-card chooser shared with command-palette navigation; supplementary
+  choices now show their aliases and include them in search.
 - Made duplicate-address cards consecutive strand members in normal Deck order;
   backward, forward, beginning, and higher movement now choose one exact card
   directly instead of presenting all cards at that address in a chooser.

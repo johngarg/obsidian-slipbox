@@ -55,6 +55,7 @@ export interface LocalBranchTarget {
   readonly path: string;
   readonly address: string;
   readonly title: string;
+  readonly alias?: string;
 }
 
 export interface LocalBranchNavigationGroup {

@@ -110,8 +110,10 @@ test. Record unexpected warnings or errors under Findings.
   supplementary strand, and move to a higher strand. Confirm each movement
   retains one icon, a sole supplementary destination navigates directly, and
   several supplementary or duplicate-address destinations open a searchable
-  exact-path chooser. Add several incoming supplementary parents and confirm
-  the view quietly uses one stable higher context.
+  exact-path chooser. Confirm supplementary aliases appear as chooser options
+  and filtering by an alias finds the corresponding destination. Add several
+  incoming supplementary parents and confirm the view quietly uses one stable
+  higher context.
 - [ ] From `17,1`, add a supplementary branch to `17,1,1` alongside `17,1,2`,
   `17,1A`, and `17,1a`. Confirm the supplementary row contains only
   `17,1,1 → 17,1,2`, the appended-letter cards remain a separate inserted row,

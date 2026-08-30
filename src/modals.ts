@@ -19,6 +19,7 @@ import {
   type CardLinkSuggestion,
 } from "./card-link-suggestions.js";
 import { modalChoice, type ModalChoice } from "./modal-choice.js";
+import { filterLocalBranchTargets } from "./local-branch-target-search.js";
 import type {
   LocalBranchDeparture,
   LocalBranchTarget,
@@ -206,20 +207,21 @@ class LocalBranchTargetModal extends SuggestModal<LocalBranchTarget> {
   }
 
   getSuggestions(query: string): LocalBranchTarget[] {
-    const normalized = query.trim().toLocaleLowerCase();
-    return normalized === ""
-      ? [...this.targets]
-      : this.targets.filter((target) =>
-        `${target.address}\n${target.title}\n${target.path}`
-          .toLocaleLowerCase()
-          .includes(normalized)
-      );
+    return filterLocalBranchTargets(this.targets, query);
   }
 
   renderSuggestion(target: LocalBranchTarget, el: HTMLElement): void {
     el.addClass("slipbox-card-link-suggestion");
-    el.createDiv({ cls: "slipbox-card-link-address", text: target.address });
-    el.createDiv({ cls: "slipbox-card-link-title", text: target.title });
+    el.createDiv({
+      cls: "slipbox-card-link-address",
+      text: target.alias ?? target.address,
+    });
+    el.createDiv({
+      cls: "slipbox-card-link-title",
+      text: target.alias === undefined
+        ? target.title
+        : `${target.address} · ${target.title}`,
+    });
     el.createDiv({ cls: "slipbox-card-link-path", text: target.path });
   }
 

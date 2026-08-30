@@ -75,7 +75,7 @@ export function buildLocalBranchNavigation(
       id: `explicit:${branch.sourcePath}:${branch.targetPath}`,
       movement: "explicit" as const,
       label: `Enter supplementary strand ${branch.label}`,
-      targets: targetCards([target]),
+      targets: targetCards([target], branch.label),
     }];
   });
 
@@ -146,18 +146,21 @@ function collapseDuplicateAddressTargets(
   groups: readonly LocalBranchNavigationGroup[],
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
 ): readonly LocalBranchNavigationGroup[] {
-  const candidatePathsByAddress = new Map<string, Set<string>>();
+  const candidatesByAddress = new Map<string, LocalBranchTarget[]>();
   for (const target of groups.flatMap((group) => group.targets)) {
-    const paths = candidatePathsByAddress.get(target.address) ?? new Set<string>();
-    paths.add(target.path);
-    candidatePathsByAddress.set(target.address, paths);
+    const candidates = candidatesByAddress.get(target.address) ?? [];
+    candidates.push(target);
+    candidatesByAddress.set(target.address, candidates);
   }
   const preferredByAddress = new Map<string, LocalBranchTarget>();
-  for (const [address, candidatePaths] of candidatePathsByAddress) {
+  for (const [address, candidates] of candidatesByAddress) {
+    const candidatePaths = new Set(candidates.map((target) => target.path));
     const preferred = (cardsByAddress.get(address) ?? [])
       .find((card) => candidatePaths.has(card.path));
     if (preferred !== undefined) {
-      const target = targetCards([preferred])[0];
+      const target = candidates.find((candidate) =>
+        candidate.path === preferred.path
+      );
       if (target !== undefined) {
         preferredByAddress.set(address, target);
       }
@@ -189,6 +192,12 @@ export function localBranchTargets(
 
 function targetCards(
   cards: readonly LocalBranchCard[],
+  alias?: string,
 ): readonly LocalBranchTarget[] {
-  return cards.map(({ path, address, title }) => ({ path, address, title }));
+  return cards.map(({ path, address, title }) => ({
+    path,
+    address,
+    title,
+    ...(alias === undefined ? {} : { alias }),
+  }));
 }

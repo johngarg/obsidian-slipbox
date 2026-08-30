@@ -211,10 +211,21 @@ export function renderTei(xml, context = {}) {
 }
 function cleanInline(value) { return value.replace(/[ \t\r\n]+/gu, " ").replace(/ +([.,;:!?])/gu, "$1").trim(); }
 
+function groupBy(items, keyFor) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = keyFor(item);
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [item]);
+    else group.push(item);
+  }
+  return groups;
+}
+
 export function assignFilenames(records, existing = new Map()) {
   const result = new Map(); const used = new Set();
   for (const record of records) if (existing.has(record.archiveId)) { const name = existing.get(record.archiveId); result.set(record.archiveId, name); used.add(name.toLocaleLowerCase("en-US")); }
-  const groups = Map.groupBy(records, (record) => record.address);
+  const groups = groupBy(records, (record) => record.address);
   for (const [address, group] of groups) {
     for (const record of group) {
       if (result.has(record.archiveId)) continue;
@@ -289,7 +300,10 @@ export async function stageCorpus({ vault, log = console.log }) {
 }
 
 function renderRefs(records, references) {
-  const byFrom = Map.groupBy(references.filter((reference) => !reference.imported), (reference) => reference.from);
+  const byFrom = groupBy(
+    references.filter((reference) => !reference.imported),
+    (reference) => reference.from,
+  );
   const sections = [];
   for (const record of records) {
     const refs = byFrom.get(record.archiveId) ?? []; if (!refs.length) continue;

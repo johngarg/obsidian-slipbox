@@ -62,6 +62,7 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] With **Outline branch links in cards** enabled, confirm marked aliases
   receive a quiet outline in Deck, Desk, and viewed-card bodies but not in
   ordinary Reading view, Live Preview, source mode, or Slipbox inline editing.
+  Confirm an alias inside authored bold Markdown remains bold.
   Confirm unresolved, unfiled-target, and self-link aliases are outlined while
   `[[+a]]`, embeds, external links, and unmarked aliases remain ordinary.
 - [ ] Disable ordinary card-link following and confirm outlined aliases remain

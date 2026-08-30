@@ -1675,7 +1675,6 @@ a.slipbox-explicit-branch-link {
   background: transparent;
   box-shadow: none;
   text-decoration: none;
-  font-weight: var(--font-semibold);
 }
 
 .slipbox-explicit-branch-marker {

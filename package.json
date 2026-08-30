@@ -21,7 +21,8 @@
     "validate:release": "node scripts/validate-release.mjs",
     "preversion": "npm run check",
     "version": "node version-bump.mjs && npm run validate:release && git add manifest.json versions.json package-lock.json",
-    "generate:scale-vault": "node scripts/generate-scale-vault.mjs"
+    "generate:scale-vault": "node scripts/generate-scale-vault.mjs",
+    "import:luhmann": "node scripts/import-luhmann.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",

@@ -26,6 +26,7 @@ export default defineConfig(
             "eslint.config.mjs",
             "manifest.json",
             "scripts/*.mjs",
+            "test/*.mjs",
             "version-bump.mjs",
           ],
         },
@@ -44,7 +45,9 @@ export default defineConfig(
     },
     rules: {
       "no-console": "off",
+      "no-restricted-globals": "off",
       "obsidianmd/hardcoded-config-path": "off",
+      "obsidianmd/prefer-window-timers": "off",
       "obsidianmd/rule-custom-message": "off",
     },
   },

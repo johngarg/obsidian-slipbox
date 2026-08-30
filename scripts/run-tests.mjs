@@ -16,11 +16,16 @@ const testFiles = (await readdir(testOutput, { withFileTypes: true }))
   .map((entry) => resolve(testOutput, entry.name))
   .sort();
 
+const scriptTests = (await readdir(resolve(root, "test"), { withFileTypes: true }))
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
+  .map((entry) => resolve(root, "test", entry.name))
+  .sort();
+
 if (testFiles.length === 0) {
   throw new Error("No compiled test files were found");
 }
 
-await run(process.execPath, ["--test", ...testFiles]);
+await run(process.execPath, ["--test", ...testFiles, ...scriptTests]);
 
 function run(command, arguments_) {
   return new Promise((resolvePromise, reject) => {

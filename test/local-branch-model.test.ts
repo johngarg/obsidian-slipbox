@@ -134,7 +134,7 @@ describe("local branch model", () => {
     );
   });
 
-  test("shows every outgoing explicit branch and keeps its label", () => {
+  test("shows every outgoing explicit relation and keeps its label", () => {
     const allCards = cards(["1", "1a", "2", "2a", "3"]);
     const active = allCards[0];
     const first = allCards[2];
@@ -160,11 +160,11 @@ describe("local branch model", () => {
       },
     ];
     const result = model(allCards, active.path, explicitIndex(branches));
-    const explicit = result?.strands.filter((strand) =>
-      strand.connection?.kind === "explicit" && strand.role === "departure"
+    const explicit = result?.relationships.filter((relationship) =>
+      relationship.kind === "explicit"
     ) ?? [];
 
-    assert.deepEqual(explicit.map((strand) => strand.connection?.label), [
+    assert.deepEqual(explicit.map((relationship) => relationship.label), [
       "supplement",
       "β",
     ]);
@@ -184,6 +184,144 @@ describe("local branch model", () => {
         { path: first.path, alias: "supplement" },
         { path: second.path, alias: "β" },
       ],
+    );
+  });
+
+  test("reconnects a supplementary branch to an exact higher-strand node", () => {
+    const allCards = cards([
+      "1/1",
+      "1/2",
+      "1/3",
+      "1/4",
+      "1/4.1",
+      "1/5",
+      "1/6",
+    ]);
+    const source = allCards[4];
+    const target = allCards[5];
+    assert.notEqual(source, undefined);
+    assert.notEqual(target, undefined);
+    if (source === undefined || target === undefined) {
+      return;
+    }
+    const result = model(allCards, source.path, explicitIndex([{
+      sourcePath: source.path,
+      targetPath: target.path,
+      label: "1/5",
+      sourceOrder: 0,
+    }]));
+    const visiblePaths = result?.strands.flatMap((strand) =>
+      strand.nodes.map((node) => node.path)
+    ) ?? [];
+
+    assert.equal(new Set(visiblePaths).size, visiblePaths.length);
+    assert.deepEqual(
+      result?.strands.map((strand) => ({
+        role: strand.role,
+        addresses: strand.nodes.map((node) => node.address),
+      })),
+      [
+        {
+          role: "higher",
+          addresses: ["1/1", "1/2", "1/3", "1/4", "1/5", "1/6"],
+        },
+        { role: "current", addresses: ["1/4.1"] },
+      ],
+    );
+    assert.deepEqual(result?.relationships, [{
+      id: `departure:explicit:${source.path}:${target.path}`,
+      fromStrandId: "current",
+      toStrandId: "higher:inferred:1/4",
+      fromPath: source.path,
+      toPath: target.path,
+      kind: "explicit",
+      label: "1/5",
+    }]);
+    assert.deepEqual(
+      localBranchTargets(result, "explicit").map((candidate) => candidate.path),
+      [target.path],
+    );
+  });
+
+  test("keeps an off-projection supplementary target as a bounded departure", () => {
+    const allCards = cards([
+      "1",
+      "1a",
+      "1b",
+      "9",
+      "9a",
+      "9b",
+    ]);
+    const source = allCards[2];
+    const target = allCards[4];
+    assert.notEqual(source, undefined);
+    assert.notEqual(target, undefined);
+    if (source === undefined || target === undefined) {
+      return;
+    }
+    const result = model(allCards, source.path, explicitIndex([{
+      sourcePath: source.path,
+      targetPath: target.path,
+      label: "remote",
+      sourceOrder: 0,
+    }]));
+    const departure = result?.strands.find((strand) =>
+      strand.role === "departure" && strand.connection?.kind === "explicit"
+    );
+
+    assert.deepEqual(result?.relationships, []);
+    assert.deepEqual(
+      departure?.nodes.map((node) => node.address),
+      ["9a", "9b"],
+    );
+    assert.equal(departure?.connection?.toPath, target.path);
+  });
+
+  test("reconnects to one exact duplicate-address target without merging peers", () => {
+    const source: LocalBranchCard = {
+      path: "inserted.md",
+      address: "1/4.1",
+      title: "Inserted",
+    };
+    const firstTarget: LocalBranchCard = {
+      path: "first-1-5.md",
+      address: "1/5",
+      title: "First 1/5",
+    };
+    const exactTarget: LocalBranchCard = {
+      path: "exact-1-5.md",
+      address: "1/5",
+      title: "Exact 1/5",
+    };
+    const allCards: LocalBranchCard[] = [
+      { path: "1-1.md", address: "1/1", title: "1/1" },
+      { path: "1-4.md", address: "1/4", title: "1/4" },
+      source,
+      firstTarget,
+      exactTarget,
+      { path: "1-6.md", address: "1/6", title: "1/6" },
+    ];
+    const result = model(allCards, source.path, explicitIndex([{
+      sourcePath: source.path,
+      targetPath: exactTarget.path,
+      label: "exact",
+      sourceOrder: 0,
+    }]));
+    const higher = result?.strands.find((strand) => strand.role === "higher");
+    const visiblePaths = result?.strands.flatMap((strand) =>
+      strand.nodes.map((node) => node.path)
+    ) ?? [];
+
+    assert.deepEqual(
+      higher?.nodes.filter((node) => node.address === "1/5")
+        .map((node) => node.path),
+      [firstTarget.path, exactTarget.path],
+    );
+    assert.equal(new Set(visiblePaths).size, visiblePaths.length);
+    assert.equal(result?.relationships[0]?.toPath, exactTarget.path);
+    assert.deepEqual(
+      localBranchTargets(result, "explicit").map((candidate) => candidate.path),
+      [exactTarget.path],
     );
   });
 
@@ -837,7 +975,7 @@ describe("local branch model", () => {
     );
   });
 
-  test("expands only the selected hidden departure", () => {
+  test("expands a hidden departure as a relationship when its target is visible", () => {
     const allCards = cards(["1", "1a", "1a1", "1b", "9"]);
     const owner = allCards[1];
     const active = allCards[3];
@@ -862,19 +1000,29 @@ describe("local branch model", () => {
       expandedDepartureId:
         `departure:explicit:${owner.path}:${explicitTarget.path}`,
     });
-    const expanded = result?.strands.filter((strand) =>
-      strand.role === "departure"
-    ) ?? [];
-
-    assert.equal(expanded.length, 1);
-    assert.equal(expanded[0]?.connection?.kind, "explicit");
-    assert.equal(expanded[0]?.connection?.toPath, explicitTarget.path);
+    assert.equal(
+      result?.strands.some((strand) => strand.role === "departure"),
+      false,
+    );
+    assert.deepEqual(result?.relationships, [{
+      id: `departure:explicit:${owner.path}:${explicitTarget.path}`,
+      fromStrandId: "current",
+      toStrandId: "higher:inferred:1",
+      fromPath: owner.path,
+      toPath: explicitTarget.path,
+      kind: "explicit",
+      label: "supplement",
+    }]);
+    assert.equal(
+      result?.expandedDepartureId,
+      `departure:explicit:${owner.path}:${explicitTarget.path}`,
+    );
   });
 
   test("expands a stub from a base departure row without recursive stubs", () => {
     const allCards = cards(["1", "1a", "9", "9a", "9a1"]);
     const active = allCards[0];
-    const explicitTarget = allCards[2];
+    const explicitTarget = allCards[3];
     assert.notEqual(active, undefined);
     assert.notEqual(explicitTarget, undefined);
     if (active === undefined || explicitTarget === undefined) {
@@ -905,7 +1053,7 @@ describe("local branch model", () => {
     assert.equal(auxiliary?.id, departureId);
     assert.deepEqual(
       auxiliary?.nodes.map((node) => node.address),
-      ["9a"],
+      ["9a1"],
     );
     assert.deepEqual(auxiliary?.nodes[0]?.departures, []);
     assert.equal(projector.modelForPath(active.path, "stale"), base);
@@ -1062,7 +1210,8 @@ describe("local branch model", () => {
     const withCycle = model(allCards, first.path, cyclic);
     const rebuilt = model(allCards, first.path);
 
-    assert.equal(withCycle?.strands.length, 3);
+    assert.equal(withCycle?.strands.length, 2);
+    assert.equal(withCycle?.relationships.length, 1);
     assert.equal(withCycle?.navigation.explicit.length, 1);
     assert.equal(
       rebuilt?.strands.some((strand) => strand.connection?.kind === "explicit"),

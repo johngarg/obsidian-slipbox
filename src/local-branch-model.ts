@@ -15,6 +15,7 @@ import type {
   LocalBranchModelInput,
   LocalBranchNode,
   LocalBranchProjectionInput,
+  LocalBranchRelationship,
   LocalBranchStrand,
   LocalBranchStrandRole,
 } from "./local-branch-types.js";
@@ -28,6 +29,7 @@ export type {
   LocalBranchNavigationGroup,
   LocalBranchNode,
   LocalBranchProjectionInput,
+  LocalBranchRelationship,
   LocalBranchStrand,
   LocalBranchTarget,
 } from "./local-branch-types.js";
@@ -191,11 +193,17 @@ function buildBaseModel(
     active,
     explicitContext,
   );
-  const departures = buildDepartures(
+  const baseStrands = [
+    ...(higher === null ? [] : [higher]),
+    current,
+  ];
+  const departures = projectDepartures(
     modelInput,
     cardsByPath,
     cardsByAddress,
     active,
+    current.id,
+    baseStrands,
   );
   const inferredDepartures = departureDefinitions(
     modelInput,
@@ -204,15 +212,15 @@ function buildBaseModel(
     active,
   ).filter((departure) => departure.kind === "inferred");
   const strands = [
-    ...(higher === null ? [] : [higher]),
-    current,
-    ...departures,
+    ...baseStrands,
+    ...departures.strands,
   ];
 
   return {
     activePath: active.path,
     activeAddress: active.address,
     strands,
+    relationships: departures.relationships,
     expandedDepartureId: null,
     navigation: buildLocalBranchNavigation({
       modelInput,
@@ -235,9 +243,12 @@ function expandDeparture(
   departureId: string,
 ): LocalBranchModel {
   const visibleDepartureIds = new Set(
-    base.strands
-      .filter((strand) => strand.role === "departure")
-      .map((strand) => strand.id),
+    [
+      ...base.strands
+        .filter((strand) => strand.role === "departure")
+        .map((strand) => strand.id),
+      ...base.relationships.map((relationship) => relationship.id),
+    ],
   );
   if (visibleDepartureIds.has(departureId)) {
     return base;
@@ -262,19 +273,29 @@ function expandDeparture(
       if (owner === undefined) {
         return base;
       }
-      const expanded = buildDepartures(
+      const expanded = projectDepartures(
         modelInput,
         cardsByPath,
         cardsByAddress,
         owner,
+        row.id,
+        base.strands,
         false,
-      ).find((strand) => strand.id === departureId);
-      if (expanded === undefined) {
+        departureId,
+      );
+      const expandedStrand = expanded.strands[0];
+      const expandedRelationship = expanded.relationships[0];
+      if (expandedStrand === undefined && expandedRelationship === undefined) {
         return base;
       }
       return {
         ...base,
-        strands: [...base.strands, expanded],
+        strands: expandedStrand === undefined
+          ? base.strands
+          : [...base.strands, expandedStrand],
+        relationships: expandedRelationship === undefined
+          ? base.relationships
+          : [...base.relationships, expandedRelationship],
         expandedDepartureId: departureId,
       };
     }
@@ -359,15 +380,57 @@ function buildHigherStrand(
   };
 }
 
-function buildDepartures(
+interface ProjectedDepartures {
+  readonly strands: readonly LocalBranchStrand[];
+  readonly relationships: readonly LocalBranchRelationship[];
+}
+
+function projectDepartures(
   input: PreparedLocalBranchModelInput,
   cardsByPath: ReadonlyMap<string, LocalBranchCard>,
   cardsByAddress: ReadonlyMap<string, readonly LocalBranchCard[]>,
   active: LocalBranchCard,
+  sourceStrandId: string,
+  visibleStrands: readonly LocalBranchStrand[],
   includeDepartures = true,
-): readonly LocalBranchStrand[] {
-  return departureDefinitions(input, cardsByPath, cardsByAddress, active)
-    .map((departure) => ({
+  departureId?: string,
+): ProjectedDepartures {
+  const strands: LocalBranchStrand[] = [];
+  const relationships: LocalBranchRelationship[] = [];
+  const strandIdByPath = new Map<string, string>();
+  for (const visible of visibleStrands) {
+    for (const node of visible.nodes) {
+      if (!strandIdByPath.has(node.path)) {
+        strandIdByPath.set(node.path, visible.id);
+      }
+    }
+  }
+
+  const definitions = departureDefinitions(
+    input,
+    cardsByPath,
+    cardsByAddress,
+    active,
+  ).filter((departure) =>
+    departureId === undefined || departure.id === departureId
+  );
+  for (const departure of definitions) {
+    const targetStrandId = strandIdByPath.get(departure.target.path);
+    if (targetStrandId !== undefined) {
+      relationships.push({
+        id: departure.id,
+        fromStrandId: sourceStrandId,
+        toStrandId: targetStrandId,
+        fromPath: active.path,
+        toPath: departure.target.path,
+        kind: departure.kind,
+        ...(departure.edgeLabel === undefined
+          ? {}
+          : { label: departure.edgeLabel }),
+      });
+      continue;
+    }
+    const projected = {
       ...strand(
         departure.id,
         "departure",
@@ -388,7 +451,15 @@ function buildDepartures(
           ? {}
           : { label: departure.edgeLabel }),
       },
-    }));
+    };
+    strands.push(projected);
+    for (const node of projected.nodes) {
+      if (!strandIdByPath.has(node.path)) {
+        strandIdByPath.set(node.path, projected.id);
+      }
+    }
+  }
+  return { strands, relationships };
 }
 
 interface DepartureDefinition {

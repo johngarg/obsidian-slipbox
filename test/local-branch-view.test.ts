@@ -34,6 +34,7 @@ const MODEL: LocalBranchModel = {
   activePath: "b.md",
   activeAddress: "1b",
   expandedDepartureId: null,
+  relationships: [],
   strands: [{
     id: "current",
     role: "current",
@@ -363,6 +364,81 @@ describe("local Branch View controller", () => {
         null,
       );
     }
+  });
+
+  test("draws and activates a supplementary relationship to an existing row", () => {
+    const target = branchNode("target.md", "1/5");
+    const source = branchNode("source.md", "1/4.1");
+    const subject = fixture({
+      ...MODEL,
+      activePath: source.path,
+      activeAddress: source.address,
+      relationships: [{
+        id: "departure:explicit:source.md:target.md",
+        fromStrandId: "current",
+        toStrandId: "higher",
+        fromPath: source.path,
+        toPath: target.path,
+        kind: "explicit",
+        label: "1/5",
+      }],
+      strands: [
+        {
+          id: "higher",
+          role: "higher",
+          nodes: [target],
+          selectedPath: target.path,
+          knownBeginning: false,
+          knownEnd: false,
+        },
+        {
+          id: "current",
+          role: "current",
+          nodes: [source],
+          selectedPath: source.path,
+          knownBeginning: true,
+          knownEnd: true,
+        },
+      ],
+      navigation: {
+        ...MODEL.navigation,
+        explicit: [{
+          id: "explicit:source.md:target.md",
+          movement: "explicit",
+          label: "Enter supplementary branch 1/5",
+          targets: [{
+            path: target.path,
+            address: target.address,
+            title: target.title,
+            alias: "1/5",
+          }],
+        }],
+      },
+    });
+    const edge = subject.first.querySelector<SVGLineElement>(
+      "line.slipbox-local-branch-edge.is-explicit",
+    );
+    const sourceCircle = subject.first.querySelector<SVGCircleElement>(
+      "[data-focus-id='node:source.md'] circle",
+    );
+    const targetCircle = subject.first.querySelector<SVGCircleElement>(
+      "[data-focus-id='node:target.md'] circle",
+    );
+
+    assert.equal(edge?.getAttribute("x1"), sourceCircle?.getAttribute("cx"));
+    assert.equal(edge?.getAttribute("y1"), sourceCircle?.getAttribute("cy"));
+    assert.equal(edge?.getAttribute("x2"), targetCircle?.getAttribute("cx"));
+    assert.equal(edge?.getAttribute("y2"), targetCircle?.getAttribute("cy"));
+    assert.equal(
+      subject.first.querySelector(
+        ".slipbox-local-branch-edge-label text",
+      )?.textContent,
+      "1/5",
+    );
+    subject.first.querySelector<HTMLButtonElement>(
+      "[data-movement='explicit'] button",
+    )?.click();
+    assert.deepEqual(subject.activations, [[target.path]]);
   });
 
   test("points higher-context stubs up and all other stubs down", () => {

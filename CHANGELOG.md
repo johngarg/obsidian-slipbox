@@ -6,6 +6,12 @@ initial public beta.
 
 ## [Unreleased]
 
+### Fixed
+
+- Reconnected supplementary Branch View links to an exact card already shown on
+  another visible strand instead of repeating that card and its continuation on
+  a second row.
+
 ## [0.14.0] - 2026-08-31
 
 ### Added

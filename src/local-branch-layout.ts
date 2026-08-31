@@ -269,5 +269,9 @@ function connectionEndpoints(model: LocalBranchModel): ReadonlySet<string> {
       result.add(strand.connection.toPath);
     }
   }
+  for (const relationship of model.relationships) {
+    result.add(relationship.fromPath);
+    result.add(relationship.toPath);
+  }
   return result;
 }

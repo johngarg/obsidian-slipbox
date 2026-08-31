@@ -25,6 +25,7 @@ const model: LocalBranchModel = {
   activePath: "5.md",
   activeAddress: "5",
   expandedDepartureId: null,
+  relationships: [],
   strands: [{
     id: "current",
     role: "current",
@@ -168,6 +169,62 @@ describe("local branch layout", () => {
     assert.equal(items.some((item) => item.kind === "gap"), true);
     assert.equal(
       items.every((item) => item.kind === "node" || item.count > 1),
+      true,
+    );
+  });
+
+  test("keeps a compacted relationship endpoint visible", () => {
+    const higherNodes = Array.from({ length: 12 }, (_, index) => node(index));
+    const source = {
+      ...node(20),
+      path: "source.md",
+      address: "1/4.1",
+      title: "Source",
+    };
+    const result = layoutLocalBranchModel({
+      ...model,
+      activePath: source.path,
+      activeAddress: source.address,
+      relationships: [{
+        id: "departure:explicit:source.md:10.md",
+        fromStrandId: "current",
+        toStrandId: "higher",
+        fromPath: source.path,
+        toPath: "10.md",
+        kind: "explicit",
+        label: "10",
+      }],
+      strands: [
+        {
+          id: "higher",
+          role: "higher",
+          nodes: higherNodes,
+          selectedPath: "0.md",
+          knownBeginning: false,
+          knownEnd: false,
+          connection: {
+            fromPath: "5.md",
+            toPath: source.path,
+            kind: "inferred",
+          },
+        },
+        {
+          id: "current",
+          role: "current",
+          nodes: [source],
+          selectedPath: source.path,
+          knownBeginning: true,
+          knownEnd: true,
+        },
+      ],
+    }, { width: 240 });
+    const visibleHigherPaths = result.strands[0]?.items.flatMap((item) =>
+      item.kind === "node" ? [item.node.path] : []
+    ) ?? [];
+
+    assert.equal(visibleHigherPaths.includes("10.md"), true);
+    assert.equal(
+      result.strands[0]?.items.some((item) => item.kind === "gap"),
       true,
     );
   });

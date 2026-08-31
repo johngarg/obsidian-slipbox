@@ -4,9 +4,7 @@ Slipbox Desk is a paper-like _Zettelkasten_ for Obsidian: addressed cards, a bro
 
 ![Slipbox Desk showing filed cards, Desk piles, and a viewed card](docs/assets/slipbox-hero.png)
 
-> Warning! Slipbox Desk is under active development. If you find a bug, please [open a GitHub issue](https://github.com/johngarg/obsidian-slipbox/issues) and include the steps to reproduce it, your Obsidian version, and your operating system.
-
-> **Temporary upgrade notice:** Upgrading from 0.13.0 or earlier resets Slipbox Desk settings. Path bookmarks are retained, but shortcut and card-header customisations must be configured again. Notes and frontmatter are unaffected.  See the [changelog](CHANGELOG.md) for release history.
+> Warning! Slipbox Desk is under active development. If you find a bug, please [open a GitHub issue](https://github.com/johngarg/obsidian-slipbox/issues) and include the steps to reproduce it, your Obsidian version, and your operating system.  See the [changelog](CHANGELOG.md) for release history.
 
 Notes become cards, organised into a single sequence by addresses that mark out lines of thought. Browse with a mouse, trackpad, or vim-like keys. Pull cards out of the Deck and stack them in piles on the Desk, where you can work out how notes connect and begin structuring your writing. The Deck map and Branch View help you find your way around and remember where ideas live.
 
@@ -102,8 +100,6 @@ In [Communication with Zettelkastens](https://zettelkasten.de/communications-wit
 
 For this reason, the same branch types and navigation inspired by the Niklas Luhmann Archive can be used to navigate the Slipbox. Again, this feature can be toggled in the settings.
 
-Here, a **strand** is any linear sequence of cards, including the root strand, while a **branch** is a departure or relationship that leads from one strand to another.
-
 - **Supplementary branches** or _ergänzende Stränge_ are created by explicit links in the _Zettelkasten_. See [this example](https://niklas-luhmann-archiv.de/bestand/zettelkasten/zettel/ZK_1_NB_57-2-25_V) from Luhmann.
 - **Inserted branches** or _eingeschobene Stränge_ are inferred from the card address.
 
@@ -115,7 +111,7 @@ With either relationship type enabled, **Show local Branch View** displays an Ar
 
 ## Essential keys
 
-There are some actions that are very quick to do in the real world, but take time in the digital world. For this reason, a default set of vim-inspired keybindings tries to streamline the process of all such card actions.
+There are some actions that are very quick to do in the real world, but take time in the digital world. For this reason, a default set of vim-inspired keybindings tries to streamline the process of all such card actions. (Here, a strand is any linear sequence of cards, including the root strand, while a branch is a departure or relationship that leads from one strand to another.)
 
 | Key | Action |
 | --- | --- |

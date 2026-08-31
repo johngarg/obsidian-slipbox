@@ -107,26 +107,15 @@ import {
   type FilingSessionSnapshot,
   type FilingSourceSurface,
 } from "./filing-session.js";
-import {
-  buildDeckMapSectionMarkers,
-  deckMapCoordinate,
-  deckMapIndexAtOffset,
-  preventPrimaryDeckMapPointerFocus,
-  sampleDeckMapIndices,
-  visibleDeckMapSectionMarkers,
-  type DeckMapSectionMarker,
-} from "./deck-map.js";
-import {
-  DeckMapMarkerRenderer,
-  type DeckMapMarkerCard,
-} from "./deck-map-markers.js";
+import { type DeckMapCard } from "./deck-map.js";
+import { DeckMapController } from "./deck-map-controller.js";
 import {
   findAddressInitialIndex,
   type PendingDeckCommandCompletion,
 } from "./deck-commands.js";
 import {
   DEFAULT_DECK_MAP_VISIBILITY,
-  applyDeckMapVisibility,
+  deckMapIsVisible,
   toggleDeckMapVisibility,
   type DeckMapVisibility,
 } from "./deck-chrome.js";
@@ -212,8 +201,6 @@ export interface DeckViewHost extends DeskViewHost {
 const LAYOUT_MEASUREMENT_RETRIES = 2;
 const SPACE_RECENTER_DURATION_MS = 180;
 const VIEWPORT_CENTER_DURATION_MS = 180;
-const DECK_MAP_SECTION_LABEL_SPACING = 14;
-const DECK_MAP_MARKER_BUDGET = 512;
 const DECK_CARD_DRAG_THRESHOLD_PX = 5;
 const DECK_CARD_CLICK_SUPPRESSION_MS = 400;
 const VIEWED_CARD_DRAG_THRESHOLD_PX = 5;
@@ -277,13 +264,8 @@ export class DeckView extends ItemView {
   private renderRefreshQueued = false;
   private renderVersion = 0;
   private deckRenderVersion = 0;
-  private deckMapEl: HTMLElement | null = null;
-  private deckMapRailEl: HTMLElement | null = null;
-  private deckMapSectionLayerEl: HTMLElement | null = null;
-  private deckMapMarkerRenderer: DeckMapMarkerRenderer | null = null;
-  private deckMapActiveMarkerEl: HTMLElement | null = null;
-  private deckMapSections: readonly DeckMapSectionMarker[] = [];
-  private deckMapBookmarkCount = 0;
+  private deckShellEl: HTMLElement | null = null;
+  private deckMapController: DeckMapController | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private viewedCardHeaderButtonController: CardHeaderButtonController | null = null;
@@ -596,13 +578,9 @@ export class DeckView extends ItemView {
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
     this.renderedCards = [];
-    this.deckMapEl = null;
-    this.deckMapRailEl = null;
-    this.deckMapSectionLayerEl = null;
-    this.deckMapMarkerRenderer = null;
-    this.deckMapActiveMarkerEl = null;
-    this.deckMapSections = [];
-    this.deckMapBookmarkCount = 0;
+    this.deckMapController?.dispose();
+    this.deckMapController = null;
+    this.deckShellEl = null;
   }
 
   override onResize(): void {
@@ -612,7 +590,7 @@ export class DeckView extends ItemView {
     this.cardSignatures.scheduleLayout();
     this.viewedCardSignature.scheduleLayout();
     this.deskRenderer.scheduleBranchLayout();
-    this.updateDeckMapSectionLabels();
+    this.deckMapController?.refreshLayout();
     this.constrainViewedCard();
   }
 
@@ -2474,16 +2452,11 @@ export class DeckView extends ItemView {
     this.viewedCardSignature.clear();
     this.clearViewedCardHeaderButtonController();
     this.unloadViewedCardComponent();
-    this.contentEl.empty();
+    this.stageEl?.remove();
+    this.stageEl = null;
+    this.spaceEl = null;
     this.renderedCards = [];
     this.deckCardsEl = null;
-    this.deckMapEl = null;
-    this.deckMapRailEl = null;
-    this.deckMapSectionLayerEl = null;
-    this.deckMapMarkerRenderer = null;
-    this.deckMapActiveMarkerEl = null;
-    this.deckMapSections = [];
-    this.deckMapBookmarkCount = 0;
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.viewedFilingEditor = null;
@@ -2491,9 +2464,8 @@ export class DeckView extends ItemView {
     this.contentEl.dataset.deskCardSize = this.plugin.settings.deskCardSize;
     this.applyDeckPositionMode();
 
-    const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
-    this.renderDeckMap(shell);
-    this.shortcutController.renderStatus(shell);
+    const shell = this.ensureDeckShell();
+    this.reconcileDeckMap();
     this.applyDeckMapVisibility();
 
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
@@ -2537,6 +2509,7 @@ export class DeckView extends ItemView {
 
     this.renderBookmarkEdgeTabs(stage);
     this.positionCards();
+    this.updateDeckMapActiveUi();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
     this.viewedCardFooter.scheduleLayout();
@@ -2585,6 +2558,7 @@ export class DeckView extends ItemView {
       return;
     }
     this.positionCards();
+    this.updateDeckMapActiveUi();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
     if (this.stageEl !== null) {
@@ -2592,106 +2566,41 @@ export class DeckView extends ItemView {
     }
   }
 
-  private renderDeckMap(shell: HTMLElement): void {
-    const filed = this.plugin.index.snapshot.filed;
-    if (filed.length === 0) {
-      return;
+  private ensureDeckShell(): HTMLElement {
+    const current = this.deckShellEl;
+    if (current !== null && current.isConnected) {
+      return current;
     }
-
-    const map = shell.createDiv({
-      cls: "slipbox-deck-map",
-      attr: {
-        role: "slider",
-        tabindex: "0",
-        "aria-valuemin": "1",
-        "aria-valuemax": String(filed.length),
+    this.deckMapController?.dispose();
+    this.contentEl.empty();
+    const shell = this.contentEl.createDiv({ cls: "slipbox-deck-shell" });
+    this.deckShellEl = shell;
+    this.deckMapController = new DeckMapController(shell, {
+      navigate: (path) => this.jumpToPath(path),
+      runAfterEditing: (reason, action) => {
+        void this.runAfterInlineEditing(reason, action);
       },
+      runAction: (action) => this.runAction(action),
     });
-    setCardTooltip(map, "Deck map", this.plugin.settings.showTooltips, {
-      placement: "bottom",
-      delay: 350,
-    });
-    const rail = map.createDiv({
-      cls: "slipbox-deck-map-rail",
-      attr: { "aria-hidden": "true" },
-    });
-    // Paint bookmark rings first so the independently owned dots remain above.
-    const bookmarkLayer = rail.createDiv({
-      cls: "slipbox-deck-map-markers",
-    });
-    const markerLayer = rail.createDiv({
-      cls: "slipbox-deck-map-markers",
-    });
-    this.deckMapSectionLayerEl = rail.createDiv({
-      cls: "slipbox-deck-map-sections",
-    });
-    this.deckMapEl = map;
-    this.deckMapRailEl = rail;
-    this.deckMapMarkerRenderer = new DeckMapMarkerRenderer(
-      markerLayer,
-      bookmarkLayer,
-    );
-    const activeLayer = rail.createDiv({
-      cls: "slipbox-deck-map-markers",
-    });
-    this.deckMapActiveMarkerEl = activeLayer.createSpan({
-      cls: "slipbox-deck-map-marker is-active is-hidden",
-    });
-    this.deckMapSections = buildDeckMapSectionMarkers(filed);
-    this.deckMapBookmarkCount = this.deckMapMarkerRenderer.render(
-      this.deckMapMarkerCards(),
-      sampleDeckMapIndices(filed.length, DECK_MAP_MARKER_BUDGET),
-      this.bookmarkedPaths(),
-    );
-    this.updateDeckMapActiveUi();
-    this.updateDeckMapSectionLabels();
+    this.shortcutController.renderStatus(shell);
+    return shell;
+  }
 
-    map.addEventListener("pointerdown", preventPrimaryDeckMapPointerFocus);
-    map.addEventListener("click", (event) => {
-      const bounds = rail.getBoundingClientRect();
-      const cards = this.plugin.index.snapshot.filed;
-      const targetIndex = deckMapIndexAtOffset(
-        event.clientX - bounds.left,
-        bounds.width,
-        cards.length,
-      );
-      const target = targetIndex === null ? undefined : cards[targetIndex];
-      if (
-        target !== undefined &&
-        target.path !== this.deckViewport.anchorPath
-      ) {
-        void this.runAfterInlineEditing(
-          "deck-map-jump",
-          () => this.jumpToPath(target.path),
-        );
-      }
-    });
-    map.addEventListener("keydown", (event) => {
-      const action = event.key === "ArrowLeft"
-        ? "previous-card"
-        : event.key === "ArrowRight"
-          ? "next-card"
-          : event.key === "Home"
-            ? "first-card"
-            : event.key === "End"
-              ? "last-card"
-              : null;
-      if (action === null) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      this.runAction(action);
-    });
+  private reconcileDeckMap(): void {
+    this.deckMapController?.reconcile(
+      this.deckMapCards(),
+      this.deckViewport.anchorPath,
+      this.bookmarkedPaths(),
+      this.deckViewport.snapshot.renderedWindow,
+    );
   }
 
   private applyDeckMapVisibility(): void {
-    applyDeckMapVisibility(
-      this.deckMapEl,
+    this.deckMapController?.setVisible(deckMapIsVisible(
       this.deckMapVisibility,
       this.plugin.settings.showDeckMap,
       this.plugin.index.snapshot.filed.length,
-    );
+    ));
   }
 
   private completePendingDeckCommand(
@@ -2777,89 +2686,30 @@ export class DeckView extends ItemView {
     };
   }
 
-  private deckMapMarkerCards(): readonly DeckMapMarkerCard[] {
+  private deckMapCards(): readonly DeckMapCard[] {
     const filed = this.plugin.index.snapshot.filed;
-    return filed.map((card, index) => ({
+    return filed.map((card) => ({
       path: card.path,
-      position: deckMapCoordinate(index, filed.length) ?? 0,
+      address: card.address,
+      title: this.plugin.cards.title(card.file),
       color: this.plugin.cards.color(card.file),
       onDesk: this.plugin.deskService.contains(card.file.path),
     }));
   }
 
   private updateDeckMapBookmarks(bookmarkedPaths: Set<string>): void {
-    const renderer = this.deckMapMarkerRenderer;
-    if (this.deckMapEl === null || renderer === null) {
-      return;
-    }
-    this.deckMapBookmarkCount = renderer.updateBookmarks(
-      this.deckMapMarkerCards(),
-      bookmarkedPaths,
-    );
-    this.updateDeckMapActiveUi();
+    this.deckMapController?.updateBookmarks(bookmarkedPaths);
   }
 
   private updateDeckMapSectionLabels(): void {
-    const rail = this.deckMapRailEl;
-    const layer = this.deckMapSectionLayerEl;
-    if (rail === null || layer === null) {
-      return;
-    }
-    const sections = visibleDeckMapSectionMarkers(
-      this.deckMapSections,
-      rail.getBoundingClientRect().width,
-      DECK_MAP_SECTION_LABEL_SPACING,
-    );
-    layer.empty();
-    for (const section of sections) {
-      const label = layer.createSpan({
-        cls: "slipbox-deck-map-section",
-        text: section.label,
-      });
-      label.style.setProperty(
-        "--slipbox-deck-map-position",
-        String(section.position),
-      );
-    }
+    this.deckMapController?.refreshLayout();
   }
 
   private updateDeckMapActiveUi(): void {
-    const map = this.deckMapEl;
-    if (map === null) {
-      return;
-    }
-
-    const cardCount = this.plugin.index.snapshot.filed.length;
-    const activeIndex = this.plugin.index.filedIndexForPath(
+    this.deckMapController?.updateActive(
       this.deckViewport.anchorPath,
+      this.deckViewport.snapshot.renderedWindow,
     );
-    const position = deckMapCoordinate(activeIndex, cardCount);
-    const activeMarker = this.deckMapActiveMarkerEl;
-    const bookmarkLabel =
-      `${this.deckMapBookmarkCount} bookmark${this.deckMapBookmarkCount === 1 ? "" : "s"}`;
-    if (position === null) {
-      if (activeMarker !== null) {
-        activeMarker.addClass("is-hidden");
-      }
-      map.removeAttribute("aria-valuenow");
-      map.setAttr(
-        "aria-valuetext",
-        `${cardCount} filed cards; ${bookmarkLabel}`,
-      );
-      return;
-    }
-
-    if (activeMarker !== null) {
-      activeMarker.removeClass("is-hidden");
-      activeMarker.style.setProperty(
-        "--slipbox-deck-map-position",
-        String(position),
-      );
-    }
-    const summary =
-      `Deck anchor ${activeIndex + 1} of ${cardCount}; ${bookmarkLabel}`;
-    map.setAttr("aria-valuenow", String(activeIndex + 1));
-    map.setAttr("aria-valuetext", summary);
   }
 
   private renderEmptyDeck(stage: HTMLElement): void {

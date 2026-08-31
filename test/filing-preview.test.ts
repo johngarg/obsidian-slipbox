@@ -266,6 +266,11 @@ describe("inline filing editor DOM", () => {
       "http://www.w3.org/1999/xhtml",
       "a",
     );
+    const deckMap = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    deckMap.className = "slipbox-deck-map";
 
     assert.equal(shouldSuspendDeckShortcut(
       deck as unknown as EventTarget,
@@ -289,6 +294,10 @@ describe("inline filing editor DOM", () => {
     ), true);
     assert.equal(shouldSuspendDeckShortcut(
       link as unknown as EventTarget,
+      false,
+    ), true);
+    assert.equal(shouldSuspendDeckShortcut(
+      deckMap as unknown as EventTarget,
       false,
     ), true);
     assert.equal(shouldSuspendDeckShortcut(
@@ -317,7 +326,12 @@ describe("inline filing editor DOM", () => {
       "http://www.w3.org/1999/xhtml",
       "input",
     );
-    deckRoot.append(deckInput);
+    const deckMap = window.document.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    );
+    deckMap.className = "slipbox-deck-map";
+    deckRoot.append(deckInput, deckMap);
     window.document.body.append(deckRoot, paletteInput);
     const commandRoot = deckRoot as unknown as HTMLElement;
 
@@ -331,6 +345,11 @@ describe("inline filing editor DOM", () => {
     ), false);
     assert.equal(shouldSuspendDeckCommand(
       deckInput as unknown as EventTarget,
+      false,
+      commandRoot,
+    ), true);
+    assert.equal(shouldSuspendDeckCommand(
+      deckMap as unknown as EventTarget,
       false,
       commandRoot,
     ), true);

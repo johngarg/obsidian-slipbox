@@ -89,6 +89,18 @@ describe("filing placement preview", () => {
     assert.equal(preview.nextPath, "z.md");
   });
 
+  test("places an unsuffixed duplicate before a cross-folder collision copy", () => {
+    const preview = createFilingPreview(
+      [{ address: "8,1c", path: "Imported/Luhmann 8,1c 1.md" }],
+      { address: "8,1c", path: "Luhmann 8,1c.md" },
+      "Original",
+      "natural",
+    );
+    assert.equal(preview.insertionIndex, 0);
+    assert.equal(preview.previousPath, null);
+    assert.equal(preview.nextPath, "Imported/Luhmann 8,1c 1.md");
+  });
+
   test("focuses the real card immediately before the candidate", () => {
     const middle = createFilingPreview(
       filed,

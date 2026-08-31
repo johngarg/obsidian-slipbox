@@ -195,7 +195,7 @@ export function updateInlineFilingEditor(
   const summary = createHtmlElement(feedback.ownerDocument, "summary");
   summary.textContent = `${state.address} is used by ${state.duplicatePaths.length} card${
     state.duplicatePaths.length === 1 ? "" : "s"
-  } · path ordered`;
+  } · filename ordered`;
   details.append(summary);
   const paths = createHtmlElement(feedback.ownerDocument, "ul");
   for (const path of state.duplicatePaths) {

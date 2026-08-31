@@ -92,6 +92,25 @@ describe("indexCardMetadata", () => {
     assert.deepEqual(result.issues, []);
   });
 
+  test("keeps an unsuffixed duplicate before a cross-folder collision copy", () => {
+    const result = indexCardMetadata([
+      {
+        path: "Imported/Luhmann 8,1c 1.md",
+        hasAddress: true,
+        address: "8,1c",
+      },
+      {
+        path: "Luhmann 8,1c.md",
+        hasAddress: true,
+        address: "8,1c",
+      },
+    ]);
+    assert.deepEqual(result.filed.map((card) => card.path), [
+      "Luhmann 8,1c.md",
+      "Imported/Luhmann 8,1c 1.md",
+    ]);
+  });
+
   test("reports invalid addresses under either duplicate policy", () => {
     const records = [
       { path: "bad.md", hasAddress: true, address: 42 },

@@ -52,8 +52,8 @@ export type CardIssue = InvalidCardIssue | DuplicateAddressIssue;
  *
  * Duplicates remain structurally supported under both policies: the vault can
  * always acquire them from outside Slipbox, and the Deck keeps every copy
- * selectable and adjacent in path order. The policy decides only whether they
- * are reported as a problem and whether filing may create one.
+ * selectable and adjacent in filename-first order. The policy decides only
+ * whether they are reported as a problem and whether filing may create one.
  */
 export type DuplicateAddressPolicy = "allowed" | "problem";
 
@@ -66,7 +66,7 @@ export function issueListDescription(
   duplicatePolicy: DuplicateAddressPolicy,
 ): string {
   const duplicates = duplicatePolicy === "problem"
-    ? " Duplicate-address cards remain in the Deck beside one another, ordered by file path, and filing onto an occupied address is refused."
+    ? " Duplicate-address cards remain in the Deck beside one another, ordered by filename and then file path, and filing onto an occupied address is refused."
     : "";
   return `Invalid addresses are excluded until corrected.${duplicates} Slipbox Desk never repairs addresses automatically.`;
 }
@@ -151,8 +151,9 @@ export function buildFiledCardLookups<T extends FiledCardRecord>(
  *
  * Missing properties are ordinary notes. Null, undefined, and the empty string
  * are unfiled cards. Valid nonempty strings are filed; duplicate addresses stay
- * adjacent and are ordered by exact vault-relative path under either policy,
- * which only decides whether they are also reported as problems.
+ * adjacent and are ordered by extensionless filename, then exact vault-relative
+ * path, under either policy, which only decides whether they are also reported
+ * as problems.
  */
 export function indexCardMetadata(
   records: Iterable<CardMetadataRecord>,

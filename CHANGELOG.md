@@ -6,6 +6,12 @@ initial public beta.
 
 ## [Unreleased]
 
+### Fixed
+
+- Ordered duplicate-address cards by extensionless filename before exact vault
+  path, so collision-suffixed filenames follow their unsuffixed originals even
+  when the cards are in different folders.
+
 ## [0.14.0] - 2026-08-31
 
 ### Added

@@ -149,6 +149,23 @@ describe("card-level ordering and insertion", () => {
     );
   });
 
+  test("orders duplicate addresses by extensionless filename before path", () => {
+    const duplicates = [
+      { address: "8,1c", path: "Imported/Luhmann 8,1c 1.md" },
+      { address: "8,1c", path: "Luhmann 8,1c.md" },
+      { address: "8,1c", path: "Archive/Luhmann 8,1c.md" },
+    ];
+
+    assert.deepEqual(
+      duplicates.sort(cardComparatorFor("natural")).map((card) => card.path),
+      [
+        "Archive/Luhmann 8,1c.md",
+        "Luhmann 8,1c.md",
+        "Imported/Luhmann 8,1c 1.md",
+      ],
+    );
+  });
+
   test("does not mutate the filed collection during insertion", () => {
     const snapshot = structuredClone(filed);
     candidateInsertionIndex(

@@ -127,14 +127,28 @@ export function compareVaultPaths(left: string, right: string): number {
   return compareCodeUnits(left, right);
 }
 
+/** Return the final path component without its final extension. */
+function extensionlessFilename(path: string): string {
+  const filename = path.slice(path.lastIndexOf("/") + 1);
+  const extensionIndex = filename.lastIndexOf(".");
+  return extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
+}
+
 export function cardComparatorFor<T extends AddressedPath>(
   ordering: DeckOrdering,
 ): (left: T, right: T) => number {
   const compareAddress = addressComparatorFor(ordering);
   return (left, right) => {
     const addressComparison = compareAddress(left.address, right.address);
-    return addressComparison !== 0
-      ? addressComparison
+    if (addressComparison !== 0) {
+      return addressComparison;
+    }
+    const filenameComparison = compareCodeUnits(
+      extensionlessFilename(left.path),
+      extensionlessFilename(right.path),
+    );
+    return filenameComparison !== 0
+      ? filenameComparison
       : compareVaultPaths(left.path, right.path);
   };
 }

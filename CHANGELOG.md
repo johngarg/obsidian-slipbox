@@ -6,6 +6,8 @@ initial public beta.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-31
+
 ### Changed
 
 - Replaced the sampled Deck-map dot texture with a larger ordinal section rail.
@@ -223,7 +225,8 @@ Initial public beta.
 - Improved default pile placement and kept the Deck stable as cards and piles
   are added or moved.
 
-[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.14.0...HEAD
+[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.15.0...HEAD
+[0.15.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.14.0...0.15.0
 [0.14.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.13.0...0.14.0
 [0.13.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...0.13.0
 [0.12.2]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.1...0.12.2

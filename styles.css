@@ -277,8 +277,7 @@
   transform: translateX(-100%);
 }
 
-.slipbox-deck-map-readout-primary,
-.slipbox-deck-map-readout-cluster {
+.slipbox-deck-map-readout-primary {
   flex: none;
 }
 

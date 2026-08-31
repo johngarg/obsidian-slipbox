@@ -139,7 +139,7 @@ describe("Deck-map controller", () => {
     assert.equal(value.controller.rootElement.tabIndex, 0);
   });
 
-  test("shows candidate and cluster readouts and clears them reliably", () => {
+  test("shows signature and nonempty title readouts and clears them reliably", () => {
     const value = subject(1);
     value.controller.reconcile(
       cards(3, true),
@@ -156,8 +156,7 @@ describe("Deck-map controller", () => {
     );
     assert.ok(readout);
     assert.equal(readout.classList.contains("is-hidden"), false);
-    assert.match(readout.textContent ?? "", /B · 2 \/ 3/u);
-    assert.match(readout.textContent ?? "", /3 landmarks \(3 Desk\)/u);
+    assert.equal(readout.textContent, "B · Card 1");
 
     value.controller.rootElement.dispatchEvent(new value.window.PointerEvent(
       "pointerleave",

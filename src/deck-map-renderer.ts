@@ -19,7 +19,6 @@ export class DeckMapRenderer {
   private readonly readoutElement: HTMLElement;
   private readonly readoutPrimary: HTMLElement;
   private readonly readoutTitle: HTMLElement;
-  private readonly readoutCluster: HTMLElement;
   private readonly sectionElements = new Map<string, SectionElements>();
   private readonly landmarkElements = new Map<string, HTMLElement>();
 
@@ -52,14 +51,9 @@ export class DeckMapRenderer {
       "span",
       "slipbox-deck-map-readout-title",
     );
-    this.readoutCluster = this.create(
-      "span",
-      "slipbox-deck-map-readout-cluster",
-    );
     this.readoutElement.append(
       this.readoutPrimary,
       this.readoutTitle,
-      this.readoutCluster,
     );
     rootElement.append(this.readoutElement);
   }
@@ -138,7 +132,6 @@ export class DeckMapRenderer {
       this.readoutElement.removeAttribute("data-slipbox-deck-map-readout-key");
       this.readoutPrimary.textContent = "";
       this.readoutTitle.textContent = "";
-      this.readoutCluster.textContent = "";
       return;
     }
     this.readoutElement.dataset.slipboxDeckMapReadoutKey = readout.key;
@@ -152,9 +145,6 @@ export class DeckMapRenderer {
     this.readoutTitle.textContent = readout.title === ""
       ? ""
       : ` · ${readout.title}`;
-    this.readoutCluster.textContent = readout.clusterSummary === ""
-      ? ""
-      : ` · ${readout.clusterSummary}`;
   }
 
   clear(): void {

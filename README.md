@@ -76,9 +76,10 @@ Ordinary cards do not produce individual marks. Coloured cards appear as small,
 subdued colour ticks; bookmarks use taller accent-coloured ticks, while Desk
 membership remains a sparse secondary outline. The active cursor and bookmarks
 render over colour marks. Move the pointer along the rail to see the nearest
-card's address, title, and ordinal. Clicking any position jumps to the nearest
-filed card even when there is no visible landmark; when the rail is focused,
-the arrow, Home, and End keys navigate the same complete Deck.
+card's signature and its configured title when one is present. Clicking any
+position jumps to the nearest filed card even when there is no visible
+landmark; when the rail is focused, the arrow, Home, and End keys navigate the
+same complete Deck.
 
 ## Card colours
 

@@ -67,7 +67,6 @@ export interface DeckMapReadout {
   readonly position: number;
   readonly primary: string;
   readonly title: string;
-  readonly clusterSummary: string;
 }
 
 interface DeckMapPointerActivation {
@@ -364,25 +363,17 @@ export function deckMapReadout(
   card: DeckMapCard,
   index: number,
   cardCount: number,
-  cluster: DeckMapClusterLandmark | null,
   physicalBucket: number | null = null,
 ): DeckMapReadout | null {
   const position = deckMapCoordinate(index, cardCount);
   if (position === null) {
     return null;
   }
-  const clusterSummary = cluster === null
-    ? ""
-    : `${cluster.count} landmarks (${[
-        cluster.colorCount > 0 ? `${cluster.colorCount} coloured` : "",
-        cluster.onDeskCount > 0 ? `${cluster.onDeskCount} Desk` : "",
-      ].filter((count) => count !== "").join(", ")})`;
   return {
-    key: `${card.path}:${physicalBucket ?? cluster?.bucket ?? "card"}`,
+    key: `${card.path}:${physicalBucket ?? "card"}`,
     position,
-    primary: `${card.address} · ${formatDeckMapNumber(index + 1)} / ${formatDeckMapNumber(cardCount)}`,
+    primary: card.address,
     title: card.title,
-    clusterSummary,
   };
 }
 
@@ -400,7 +391,8 @@ export function deckMapAriaValueText(
   const visible = viewport === null
     ? ""
     : `; visible ${formatDeckMapNumber(viewport.startOrdinal)}–${formatDeckMapNumber(viewport.endOrdinal)}`;
-  return `${active.address} · ${formatDeckMapNumber(active.ordinal)} of ${formatDeckMapNumber(cardCount)} · ${active.title}${visible}; ${bookmarks}`;
+  const title = active.title === "" ? "" : ` · ${active.title}`;
+  return `${active.address} · ${formatDeckMapNumber(active.ordinal)} of ${formatDeckMapNumber(cardCount)}${title}${visible}; ${bookmarks}`;
 }
 
 function formatDeckMapNumber(value: number): string {

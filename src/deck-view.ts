@@ -2691,7 +2691,7 @@ export class DeckView extends ItemView {
     return filed.map((card) => ({
       path: card.path,
       address: card.address,
-      title: this.plugin.cards.title(card.file),
+      title: this.plugin.cards.displayTitle(card.file) ?? "",
       color: this.plugin.cards.color(card.file),
       onDesk: this.plugin.deskService.contains(card.file.path),
     }));

@@ -166,19 +166,22 @@ describe("Deck-map sparse rail DOM", () => {
     value.renderer.updateReadout({
       key: "a.md:cluster:2",
       position: 0.25,
-      primary: "1 · 2 / 8",
+      primary: "1",
       title: "A title",
-      clusterSummary: "3 landmarks (2 coloured, 3 Desk)",
     });
     const readout = value.root.querySelector<HTMLElement>(
       ".slipbox-deck-map-readout",
     );
     assert.ok(readout);
-    assert.match(readout.textContent ?? "", /A title/u);
-    assert.match(
-      readout.textContent ?? "",
-      /3 landmarks \(2 coloured, 3 Desk\)/u,
-    );
+    assert.equal(readout.textContent, "1 · A title");
+
+    value.renderer.updateReadout({
+      key: "b.md:3",
+      position: 0.5,
+      primary: "2",
+      title: "",
+    });
+    assert.equal(readout.textContent, "2");
 
     value.renderer.updateReadout(null);
     assert.equal(readout.classList.contains("is-hidden"), true);

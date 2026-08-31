@@ -296,10 +296,17 @@ describe("Deck map", () => {
     assert.deepEqual(deckMapReadout(candidate, 411, 1_009, null), {
       key: "a.md:card",
       position: 411 / 1_008,
-      primary: "17,3,9 · 412 / 1,009",
+      primary: "17,3,9",
       title: "A title",
-      clusterSummary: "",
     });
+    assert.equal(
+      deckMapReadout(
+        card("untitled.md", "17,3,10", { title: "" }),
+        412,
+        1_009,
+      )?.title,
+      "",
+    );
     const active = buildDeckMapLandmarks(
       [candidate],
       "a.md",
@@ -313,6 +320,15 @@ describe("Deck map", () => {
         1,
       ),
       "17,3,9 · 1 of 1 · A title; visible 1–1; 1 bookmark",
+    );
+    const untitledActive = buildDeckMapLandmarks(
+      [card("untitled.md", "17,3,10", { title: "" })],
+      "untitled.md",
+      new Set(),
+    )[0] ?? null;
+    assert.equal(
+      deckMapAriaValueText(untitledActive, 1, null, 0),
+      "17,3,10 · 1 of 1; 0 bookmarks",
     );
   });
 

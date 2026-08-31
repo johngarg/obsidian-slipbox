@@ -13,7 +13,6 @@ import {
   preventPrimaryDeckMapPointerFocus,
   visibleDeckMapSectionLabels,
   type DeckMapCard,
-  type DeckMapClusterLandmark,
   type DeckMapLandmark,
   type DeckMapRenderableLandmark,
   type DeckMapSection,
@@ -47,7 +46,6 @@ export class DeckMapController {
   private sections: readonly DeckMapSection[] = [];
   private landmarksByPath = new Map<string, DeckMapLandmark>();
   private renderedLandmarks: readonly DeckMapRenderableLandmark[] = [];
-  private clustersByBucket = new Map<number, DeckMapClusterLandmark>();
   private railWidth = 0;
   private devicePixelRatio = 1;
   private currentReadoutKey: string | null = null;
@@ -199,7 +197,6 @@ export class DeckMapController {
     this.cards = [];
     this.cardIndexByPath.clear();
     this.landmarksByPath.clear();
-    this.clustersByBucket.clear();
   }
 
   private get ownerWindow(): Window | null {
@@ -232,11 +229,6 @@ export class DeckMapController {
       this.landmarksByPath.values(),
       this.railWidth,
       this.devicePixelRatio,
-    );
-    this.clustersByBucket = new Map(
-      this.renderedLandmarks.flatMap((landmark) =>
-        landmark.kind === "cluster" ? [[landmark.bucket, landmark]] : []
-      ),
     );
     this.renderer.reconcileLandmarks(this.renderedLandmarks);
   }
@@ -307,7 +299,6 @@ export class DeckMapController {
       card,
       index,
       this.cards.length,
-      this.clustersByBucket.get(bucket) ?? null,
       bucket,
     );
     if (readout === null || readout.key === this.currentReadoutKey) {

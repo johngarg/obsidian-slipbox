@@ -58,6 +58,10 @@ describe("community scanner CSS compatibility", () => {
       styles,
       /button\.slipbox-local-branch-control,[^{]+\{[^}]*pointer-events:\s*auto;/su,
     );
+    assert.match(
+      styles,
+      /\.slipbox-local-branch-scroller\s*\{[^}]*padding-top:\s*5px;/su,
+    );
   });
 
   test("keeps the Branch View stub hit target visually inert", () => {

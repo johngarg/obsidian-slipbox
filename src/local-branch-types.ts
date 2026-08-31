@@ -33,6 +33,12 @@ export interface LocalBranchConnection {
   readonly label?: string;
 }
 
+export interface LocalBranchRelationship extends LocalBranchConnection {
+  readonly id: string;
+  readonly fromStrandId: string;
+  readonly toStrandId: string;
+}
+
 export interface LocalBranchStrand {
   readonly id: string;
   readonly role: LocalBranchStrandRole;
@@ -69,6 +75,7 @@ export interface LocalBranchModel {
   readonly activePath: string;
   readonly activeAddress: string;
   readonly strands: readonly LocalBranchStrand[];
+  readonly relationships: readonly LocalBranchRelationship[];
   readonly expandedDepartureId: string | null;
   readonly navigation: Readonly<Record<
     LocalBranchMovement,

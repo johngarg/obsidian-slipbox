@@ -19,6 +19,9 @@ initial public beta.
 - Ordered duplicate-address cards by extensionless filename before exact vault
   path, so collision-suffixed filenames follow their unsuffixed originals even
   when the cards are in different folders.
+- Reconnected supplementary Branch View links to an exact card already shown on
+  another visible strand instead of repeating that card and its continuation on
+  a second row.
 
 ## [0.14.0] - 2026-08-31
 

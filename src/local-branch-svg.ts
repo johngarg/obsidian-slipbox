@@ -59,7 +59,8 @@ class LocalBranchSvgRenderer {
           strand.role === "departure" &&
           strand.id !== options.model.expandedDepartureId
         )
-        .map((strand) => strand.id),
+        .map((strand) => strand.id)
+        .concat(options.model.relationships.map((relationship) => relationship.id)),
     );
   }
 
@@ -85,6 +86,7 @@ class LocalBranchSvgRenderer {
     svg.append(edges);
     this.renderContinuationEdges(edges, layout);
     this.renderBranchEdges(edges, layout);
+    this.renderRelationships(edges, layout);
 
     const items = this.svg("g");
     items.classList.add("slipbox-local-branch-items");
@@ -158,22 +160,60 @@ class LocalBranchSvgRenderer {
       if (from === null || to === null) {
         continue;
       }
-      const line = this.svg("line");
-      line.classList.add("slipbox-local-branch-edge", `is-${connection.kind}`);
-      line.setAttribute("x1", String(from.x));
-      line.setAttribute("y1", String(from.y));
-      line.setAttribute("x2", String(to.x));
-      line.setAttribute("y2", String(to.y));
-      const middleY = (from.y + to.y) / 2;
-      parent.append(line);
-      if (connection.label !== undefined) {
-        this.renderEdgeLabel(
-          parent,
-          connection.label,
-          (from.x + to.x) / 2,
-          middleY,
-        );
+      this.renderBranchEdge(parent, from, to, connection.kind, connection.label);
+    }
+  }
+
+  private renderRelationships(
+    parent: SVGElement,
+    layout: LocalBranchLayout,
+  ): void {
+    for (const relationship of this.options.model.relationships) {
+      const from = this.findNodeInStrand(
+        layout,
+        relationship.fromStrandId,
+        relationship.fromPath,
+      );
+      const to = this.findNodeInStrand(
+        layout,
+        relationship.toStrandId,
+        relationship.toPath,
+      );
+      if (from === null || to === null) {
+        continue;
       }
+      this.renderBranchEdge(
+        parent,
+        from,
+        to,
+        relationship.kind,
+        relationship.label,
+      );
+    }
+  }
+
+  private renderBranchEdge(
+    parent: SVGElement,
+    from: LocalBranchLayoutNode,
+    to: LocalBranchLayoutNode,
+    kind: "inferred" | "explicit",
+    label?: string,
+  ): void {
+    const line = this.svg("line");
+    line.classList.add("slipbox-local-branch-edge", `is-${kind}`);
+    line.setAttribute("x1", String(from.x));
+    line.setAttribute("y1", String(from.y));
+    line.setAttribute("x2", String(to.x));
+    line.setAttribute("y2", String(to.y));
+    const middleY = (from.y + to.y) / 2;
+    parent.append(line);
+    if (label !== undefined) {
+      this.renderEdgeLabel(
+        parent,
+        label,
+        (from.x + to.x) / 2,
+        middleY,
+      );
     }
   }
 
@@ -422,6 +462,23 @@ class LocalBranchSvgRenderer {
       }
     }
     return null;
+  }
+
+  private findNodeInStrand(
+    layout: LocalBranchLayout,
+    strandId: string,
+    path: string,
+  ): LocalBranchLayoutNode | null {
+    const row = layout.strands.find((candidate) =>
+      candidate.strand.id === strandId
+    );
+    if (row === undefined) {
+      return null;
+    }
+    return row.items.find(
+      (candidate): candidate is LocalBranchLayoutNode =>
+        candidate.kind === "node" && candidate.node.path === path,
+    ) ?? null;
   }
 
   private appendTitle(parent: SVGElement, label: string): void {

@@ -110,7 +110,7 @@ describe("community scanner CSS compatibility", () => {
     );
   });
 
-  test("separates adaptive card tints from bookmark map rings", () => {
+  test("separates adaptive card tints from accent bookmark ticks", () => {
     assert.match(styles, /--slipbox-card-color-tint-strength:\s*5%/u);
     assert.match(styles, /--slipbox-card-bookmark-tint-strength:\s*10%/u);
     assert.match(
@@ -119,11 +119,47 @@ describe("community scanner CSS compatibility", () => {
     );
     assert.match(
       styles,
-      /\.slipbox-deck-map-bookmark-ring\s*\{[^}]*width:\s*8px;[^}]*height:\s*8px;[^}]*border:\s*1px solid var\(--interactive-accent\);[^}]*background:\s*none;/su,
+      /\.slipbox-deck-map-landmark\.is-bookmarked\s+\.slipbox-deck-map-landmark-layer\.is-bookmark\s*\{[^}]*width:\s*2px;[^}]*height:\s*13px;[^}]*background:\s*var\(--interactive-accent\)/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-colored\s+\.slipbox-deck-map-landmark-layer\.is-color\s*\{[^}]*z-index:\s*2;[^}]*width:\s*1px;[^}]*height:\s*4px;[^}]*var\(--slipbox-card-tone\) 50%,[^}]*var\(--text-faint\)/su,
     );
     assert.doesNotMatch(
       styles,
-      /\.slipbox-deck-map-marker\.is-bookmarked/u,
+      /slipbox-deck-map-(?:marker|bookmark-ring|markers)/u,
+    );
+  });
+
+  test("defines the sparse rail hierarchy in ordinary and forced colours", () => {
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-track\s*\{[^}]*height:\s*2px;[^}]*background:\s*var\(--background-modifier-border-hover\)/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-active\s+\.slipbox-deck-map-landmark-layer\.is-active\s*\{[^}]*z-index:\s*4;[^}]*width:\s*3px;[^}]*height:\s*18px;[^}]*background:\s*var\(--text-normal\)/su,
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-bookmarked\.is-active/u,
+    );
+    assert.match(styles, /\.slipbox-deck-map\s*\{[^}]*height:\s*32px/su);
+    assert.match(styles, /\.slipbox-deck-map-section-label\s*\{[^}]*font-size:\s*10px/su);
+    assert.doesNotMatch(styles, /slipbox-deck-map-viewport/u);
+    assert.match(styles, /slipbox-deck-map-landmark\.is-colored/u);
+    assert.match(styles, /@media \(forced-colors: active\)/u);
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-bookmarked\s+\.slipbox-deck-map-landmark-layer\.is-bookmark\s*\{[^}]*background:\s*LinkText/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-colored\s+\.slipbox-deck-map-landmark-layer\.is-color\s*\{[^}]*background:\s*GrayText/su,
+    );
+    assert.match(
+      styles,
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.slipbox-deck-map-readout\s*\{[^}]*transition:\s*none/su,
     );
   });
 });

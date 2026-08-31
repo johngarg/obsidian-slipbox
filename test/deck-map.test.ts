@@ -2,15 +2,36 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  buildDeckMapModel,
-  buildDeckMapSectionMarkers,
+  bucketDeckMapLandmarks,
+  buildDeckMapLandmarks,
+  buildDeckMapSections,
+  deckMapAriaValueText,
   deckMapCoordinate,
   deckMapIndexAtOffset,
+  deckMapPhysicalPixelBucket,
+  deckMapPhysicalPixelWidth,
+  deckMapReadout,
   deckMapSectionLabel,
+  deckMapViewportRange,
   preventPrimaryDeckMapPointerFocus,
-  sampleDeckMapIndices,
-  visibleDeckMapSectionMarkers,
+  visibleDeckMapSectionLabels,
+  type DeckMapCard,
+  type DeckMapClusterLandmark,
 } from "../src/deck-map.js";
+
+function card(
+  path: string,
+  address: string,
+  options: Partial<Pick<DeckMapCard, "title" | "color" | "onDesk">> = {},
+): DeckMapCard {
+  return {
+    path,
+    address,
+    title: options.title ?? path.replace(/\.md$/u, ""),
+    color: options.color ?? null,
+    onDesk: options.onDesk ?? false,
+  };
+}
 
 describe("Deck map", () => {
   test("prevents only primary pointer focus", () => {
@@ -26,125 +47,292 @@ describe("Deck map", () => {
     assert.equal(prevented, 1);
   });
 
-  test("returns an empty model for an empty Deck", () => {
-    assert.deepEqual(buildDeckMapModel([], null, []), {
-      cardCount: 0,
-      active: null,
-      bookmarks: [],
-    });
+  test("maps empty, single, first, middle, and last coordinates exactly", () => {
     assert.equal(deckMapCoordinate(0, 0), null);
+    assert.equal(deckMapCoordinate(0, 1), 0.5);
+    assert.equal(deckMapCoordinate(0, 5), 0);
+    assert.equal(deckMapCoordinate(2, 5), 0.5);
+    assert.equal(deckMapCoordinate(4, 5), 1);
+    assert.equal(deckMapCoordinate(-1, 5), null);
+    assert.equal(deckMapCoordinate(5, 5), null);
+    assert.equal(deckMapCoordinate(0.5, 5), null);
   });
 
-  test("centres the only filed card", () => {
-    assert.deepEqual(buildDeckMapModel(["only.md"], "only.md", ["only.md"]), {
-      cardCount: 1,
-      active: { path: "only.md", ordinal: 1, position: 0.5 },
-      bookmarks: [{ path: "only.md", ordinal: 1, position: 0.5 }],
-    });
-  });
-
-  test("places endpoints and interior cards proportionally", () => {
-    const paths = ["a.md", "b.md", "c.md", "d.md", "e.md"];
-    assert.equal(buildDeckMapModel(paths, "a.md", []).active?.position, 0);
-    assert.equal(buildDeckMapModel(paths, "c.md", []).active?.position, 0.5);
-    assert.equal(buildDeckMapModel(paths, "e.md", []).active?.position, 1);
-  });
-
-  test("omits unresolved active and bookmark paths", () => {
-    assert.deepEqual(
-      buildDeckMapModel(["a.md", "b.md"], "missing.md", [
-        "b.md",
-        "missing.md",
-      ]),
-      {
-        cardCount: 2,
-        active: null,
-        bookmarks: [{ path: "b.md", ordinal: 2, position: 1 }],
-      },
-    );
-  });
-
-  test("keeps exact paths distinct and deduplicates bookmark input", () => {
-    const model = buildDeckMapModel(
-      ["Duplicate/one.md", "Duplicate/two.md", "other.md"],
-      "Duplicate/two.md",
-      ["Duplicate/one.md", "Duplicate/two.md", "Duplicate/one.md"],
-    );
-    assert.deepEqual(model.bookmarks, [
-      { path: "Duplicate/one.md", ordinal: 1, position: 0 },
-      { path: "Duplicate/two.md", ordinal: 2, position: 0.5 },
+  test("derives proportional consecutive sections without deeper invention", () => {
+    const sections = buildDeckMapSections([
+      card("one.md", "1/1"),
+      card("two.md", "1/2"),
+      card("ten-decimal.md", "10,5/3t"),
+      card("ten.md", "10/2a"),
+      card("alpha.md", "A/1"),
+      card("alpha-child.md", "A/1a"),
+      card("beta.md", "B/1"),
     ]);
-    assert.deepEqual(model.active, {
-      path: "Duplicate/two.md",
-      ordinal: 2,
-      position: 0.5,
-    });
+    assert.deepEqual(sections, [
+      {
+        path: "one.md",
+        label: "1",
+        startOrdinal: 1,
+        endOrdinal: 2,
+        startPosition: 0,
+        endPosition: 1 / 6,
+      },
+      {
+        path: "ten-decimal.md",
+        label: "10",
+        startOrdinal: 3,
+        endOrdinal: 4,
+        startPosition: 1 / 3,
+        endPosition: 0.5,
+      },
+      {
+        path: "alpha.md",
+        label: "A",
+        startOrdinal: 5,
+        endOrdinal: 6,
+        startPosition: 2 / 3,
+        endPosition: 5 / 6,
+      },
+      {
+        path: "beta.md",
+        label: "B",
+        startOrdinal: 7,
+        endOrdinal: 7,
+        startPosition: 1,
+        endPosition: 1,
+      },
+    ]);
+    assert.deepEqual(buildDeckMapSections([
+      card("a.md", "A/1"),
+      card("b.md", "A/2"),
+    ]).map(({ label }) => label), ["A"]);
   });
 
-  test("derives every position from the supplied Deck order", () => {
-    const natural = buildDeckMapModel(
-      ["A-2.md", "A-10.md"],
-      "A-2.md",
-      ["A-10.md"],
-    );
-    const lexicographic = buildDeckMapModel(
-      ["A-10.md", "A-2.md"],
-      "A-2.md",
-      ["A-10.md"],
-    );
-    assert.equal(natural.active?.position, 0);
-    assert.equal(natural.bookmarks[0]?.position, 1);
-    assert.equal(lexicographic.active?.position, 1);
-    assert.equal(lexicographic.bookmarks[0]?.position, 0);
-  });
-
-  test("rejects invalid direct coordinate requests", () => {
-    assert.equal(deckMapCoordinate(-1, 3), null);
-    assert.equal(deckMapCoordinate(3, 3), null);
-    assert.equal(deckMapCoordinate(0.5, 3), null);
-  });
-
-  test("uses a leading natural number or the first Unicode character as the section label", () => {
+  test("retains section semantics and collision-aware labels", () => {
     assert.equal(deckMapSectionLabel("10/2a"), "10");
     assert.equal(deckMapSectionLabel("10,5/3t"), "10");
     assert.equal(deckMapSectionLabel("A/1"), "A");
     assert.equal(deckMapSectionLabel("α/12"), "α");
     assert.equal(deckMapSectionLabel(""), "");
-  });
 
-  test("marks the first card whenever the derived address section changes", () => {
-    assert.deepEqual(buildDeckMapSectionMarkers([
-      { path: "one.md", address: "1/1" },
-      { path: "two.md", address: "1/2" },
-      { path: "ten-decimal.md", address: "10,5/3t" },
-      { path: "ten.md", address: "10/2a" },
-      { path: "alpha.md", address: "A/1" },
-      { path: "alpha-child.md", address: "A/1a" },
-      { path: "beta.md", address: "B/1" },
-    ]), [
-      { path: "one.md", ordinal: 1, position: 0, label: "1" },
-      { path: "ten-decimal.md", ordinal: 3, position: 1 / 3, label: "10" },
-      { path: "alpha.md", ordinal: 5, position: 2 / 3, label: "A" },
-      { path: "beta.md", ordinal: 7, position: 1, label: "B" },
-    ]);
-  });
-
-  test("keeps the first section label when later labels would overlap", () => {
-    const sections = buildDeckMapSectionMarkers([
-      { path: "a.md", address: "A" },
-      { path: "b.md", address: "B" },
-      { path: "b2.md", address: "B2" },
-      { path: "c.md", address: "C" },
-      { path: "c2.md", address: "C2" },
-      { path: "c3.md", address: "C3" },
+    const sections = buildDeckMapSections([
+      card("a.md", "A"),
+      card("b.md", "B"),
+      card("b2.md", "B2"),
+      card("c.md", "C"),
+      card("c2.md", "C2"),
+      card("c3.md", "C3"),
     ]);
     assert.deepEqual(
-      visibleDeckMapSectionMarkers(sections, 50, 14).map(({ label }) => label),
+      visibleDeckMapSectionLabels(sections, 50, 14)
+        .map(({ label }) => label),
       ["A", "C"],
     );
   });
 
-  test("resolves clicks to the nearest filed-card dot", () => {
+  test("updates section identity deterministically after index changes", () => {
+    const original = [card("a.md", "A/1"), card("b.md", "B/1")];
+    const inserted = [
+      card("new.md", "A/0"),
+      ...original,
+      card("c.md", "C/1"),
+    ];
+    assert.deepEqual(
+      buildDeckMapSections(original).map(({ path, label }) => [path, label]),
+      [["a.md", "A"], ["b.md", "B"]],
+    );
+    assert.deepEqual(
+      buildDeckMapSections(inserted).map(({ path, label }) => [path, label]),
+      [["new.md", "A"], ["b.md", "B"], ["c.md", "C"]],
+    );
+    assert.deepEqual(
+      buildDeckMapSections([
+        card("renamed.md", "A/1"),
+        card("b.md", "C/1"),
+      ]).map(({ path, label }) => [path, label]),
+      [["renamed.md", "A"], ["b.md", "C"]],
+    );
+  });
+
+  test("keeps exact viewport endpoints for accessibility without visual state", () => {
+    const middle = deckMapViewportRange({ start: 5, end: 5 }, 11);
+    assert.deepEqual(middle, {
+      startOrdinal: 6,
+      endOrdinal: 6,
+      startPosition: 0.5,
+      endPosition: 0.5,
+    });
+    const first = deckMapViewportRange({ start: 0, end: 0 }, 11);
+    const last = deckMapViewportRange({ start: 10, end: 10 }, 11);
+    assert.equal(first?.startPosition, 0);
+    assert.equal(last?.endPosition, 1);
+    assert.equal(deckMapViewportRange(null, 10), null);
+    assert.equal(deckMapViewportRange({ start: 0, end: 10 }, 10), null);
+  });
+
+  test("emits only meaningful exact-path landmarks and composes states", () => {
+    const cards = [
+      card("ordinary.md", "1"),
+      card("bookmark.md", "1a"),
+      card("colour.md", "1b", { color: "purple" }),
+      card("desk.md", "1c", { onDesk: true }),
+      card("combined-one.md", "2", { color: "green", onDesk: true }),
+      card("combined-two.md", "2", { color: "blue", onDesk: true }),
+    ];
+    const landmarks = buildDeckMapLandmarks(
+      cards,
+      "combined-two.md",
+      new Set(["bookmark.md", "combined-two.md"]),
+    );
+    assert.deepEqual(landmarks.map(({ path }) => path), [
+      "bookmark.md",
+      "colour.md",
+      "desk.md",
+      "combined-one.md",
+      "combined-two.md",
+    ]);
+    assert.deepEqual(
+      landmarks.find(({ path }) => path === "combined-two.md"),
+      {
+        path: "combined-two.md",
+        address: "2",
+        title: "combined-two",
+        ordinal: 6,
+        position: 1,
+        color: "blue",
+        active: true,
+        bookmarked: true,
+        onDesk: true,
+      },
+    );
+    assert.equal(landmarks.some(({ path }) => path === "ordinary.md"), false);
+    assert.equal(landmarks.some(({ path }) => path === "colour.md"), true);
+  });
+
+  test("retains exact active and bookmarks while clustering lower states", () => {
+    const cards = [
+      card("colour-a.md", "1", { color: "red" }),
+      card("bookmark.md", "2", { color: "red" }),
+      card("desk-a.md", "3", { onDesk: true }),
+      card("desk-b.md", "4", { color: "blue", onDesk: true }),
+      card("active.md", "5", { onDesk: true }),
+    ];
+    const landmarks = buildDeckMapLandmarks(
+      cards,
+      "active.md",
+      new Set(["bookmark.md"]),
+    );
+    const rendered = bucketDeckMapLandmarks(landmarks, 2, 1);
+    assert.deepEqual(
+      rendered.filter(({ kind }) => kind === "exact")
+        .map(({ id }) => id),
+      ["path:colour-a.md", "path:bookmark.md", "path:active.md"],
+    );
+    const clusters = rendered.filter(
+      (landmark): landmark is DeckMapClusterLandmark =>
+        landmark.kind === "cluster",
+    );
+    assert.equal(clusters.length, 1);
+    assert.deepEqual(clusters.map((cluster) => ({
+      id: cluster.id,
+      count: cluster.count,
+      colorCount: cluster.colorCount,
+      onDeskCount: cluster.onDeskCount,
+    })), [
+      { id: "cluster:1", count: 2, colorCount: 1, onDeskCount: 2 },
+    ]);
+  });
+
+  test("recomputes deterministic physical-pixel buckets for display geometry", () => {
+    assert.equal(deckMapPhysicalPixelWidth(100, 2), 200);
+    assert.equal(deckMapPhysicalPixelBucket(0, 200), 0);
+    assert.equal(deckMapPhysicalPixelBucket(0.5, 200), 100);
+    assert.equal(deckMapPhysicalPixelBucket(1, 200), 199);
+    const cards = [
+      card("a.md", "1", { color: "red", onDesk: true }),
+      card("b.md", "2", { color: "blue", onDesk: true }),
+      card("c.md", "3", { onDesk: true }),
+    ];
+    const landmarks = buildDeckMapLandmarks(cards, null, new Set());
+    assert.deepEqual(
+      bucketDeckMapLandmarks(landmarks, 1, 1).map(({ id }) => id),
+      ["cluster:0"],
+    );
+    assert.deepEqual(
+      bucketDeckMapLandmarks(landmarks, 100, 2).map(({ id }) => id),
+      ["path:a.md", "path:b.md", "path:c.md"],
+    );
+    assert.deepEqual(
+      bucketDeckMapLandmarks(landmarks, 1, 1),
+      bucketDeckMapLandmarks(landmarks, 1, 1),
+    );
+  });
+
+  test("keeps ordinary-card output constant from hundreds to 10,000", () => {
+    const makeCards = (count: number): DeckMapCard[] =>
+      Array.from({ length: count }, (_, index) =>
+        card(`${index}.md`, `A-${index}`)
+      );
+    assert.equal(buildDeckMapLandmarks(makeCards(100), null, new Set()).length, 0);
+    assert.equal(
+      buildDeckMapLandmarks(makeCards(10_000), null, new Set()).length,
+      0,
+    );
+    assert.equal(
+      buildDeckMapLandmarks(
+        makeCards(10_000).map((candidate) => ({
+          ...candidate,
+          color: "blue",
+        })),
+        null,
+        new Set(),
+      ).length,
+      10_000,
+    );
+  });
+
+  test("formats candidate, cluster, and accessible position readouts", () => {
+    const candidate = card("a.md", "17,3,9", { title: "A title" });
+    assert.deepEqual(deckMapReadout(candidate, 411, 1_009, null), {
+      key: "a.md:card",
+      position: 411 / 1_008,
+      primary: "17,3,9",
+      title: "A title",
+    });
+    assert.equal(
+      deckMapReadout(
+        card("untitled.md", "17,3,10", { title: "" }),
+        412,
+        1_009,
+      )?.title,
+      "",
+    );
+    const active = buildDeckMapLandmarks(
+      [candidate],
+      "a.md",
+      new Set(["a.md"]),
+    )[0] ?? null;
+    assert.equal(
+      deckMapAriaValueText(
+        active,
+        1,
+        deckMapViewportRange({ start: 0, end: 0 }, 1),
+        1,
+      ),
+      "17,3,9 · 1 of 1 · A title; visible 1–1; 1 bookmark",
+    );
+    const untitledActive = buildDeckMapLandmarks(
+      [card("untitled.md", "17,3,10", { title: "" })],
+      "untitled.md",
+      new Set(),
+    )[0] ?? null;
+    assert.equal(
+      deckMapAriaValueText(untitledActive, 1, null, 0),
+      "17,3,10 · 1 of 1; 0 bookmarks",
+    );
+  });
+
+  test("resolves navigation to the nearest complete-Deck coordinate", () => {
     assert.equal(deckMapIndexAtOffset(0, 100, 5), 0);
     assert.equal(deckMapIndexAtOffset(24, 100, 5), 1);
     assert.equal(deckMapIndexAtOffset(76, 100, 5), 3);
@@ -153,14 +341,5 @@ describe("Deck map", () => {
     assert.equal(deckMapIndexAtOffset(120, 100, 5), 4);
     assert.equal(deckMapIndexAtOffset(20, 100, 1), 0);
     assert.equal(deckMapIndexAtOffset(0, 0, 5), null);
-  });
-
-  test("bounds dense map markers while retaining evenly spaced endpoints", () => {
-    assert.deepEqual(sampleDeckMapIndices(5, 10), [0, 1, 2, 3, 4]);
-    assert.deepEqual(sampleDeckMapIndices(10_000, 5), [0, 2500, 5000, 7499, 9999]);
-    assert.equal(sampleDeckMapIndices(100_000, 512).length, 512);
-    assert.deepEqual(sampleDeckMapIndices(10, 1), [4]);
-    assert.deepEqual(sampleDeckMapIndices(0, 10), []);
-    assert.deepEqual(sampleDeckMapIndices(10, 0), []);
   });
 });

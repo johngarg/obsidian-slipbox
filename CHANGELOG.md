@@ -6,6 +6,14 @@ initial public beta.
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the sampled Deck-map dot texture with a larger ordinal section rail.
+  Clear section labels, a prominent active cursor, accent bookmark ticks, and
+  subdued colour ticks and sparse Desk marks expose structure without marking
+  ordinary cards. Pointer readouts and unmarked-position navigation cover the
+  full Deck.
+
 ### Fixed
 
 - Ordered duplicate-address cards by extensionless filename before exact vault

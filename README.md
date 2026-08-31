@@ -65,6 +65,22 @@ Any trimmed, nonempty, single-line string without control characters is a valid 
 
 Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox Desk never rewrites an existing address automatically.
 
+## Deck map
+
+The Deck map is an ordinal rail across the top of the view. The complete
+filed Deck runs from its first card at the left edge to its last card at the
+right edge. Clear dividers and labels mark top-level address sections, and a
+prominent vertical cursor marks the active card.
+
+Ordinary cards do not produce individual marks. Coloured cards appear as small,
+subdued colour ticks; bookmarks use taller accent-coloured ticks, while Desk
+membership remains a sparse secondary outline. The active cursor and bookmarks
+render over colour marks. Move the pointer along the rail to see the nearest
+card's signature and its configured title when one is present. Clicking any
+position jumps to the nearest filed card even when there is no visible
+landmark; when the rail is focused, the arrow, Home, and End keys navigate the
+same complete Deck.
+
 ## Card colours
 
 Run **Slipbox Desk: New card with options** or its Desk variant and choose a card colour.
@@ -78,7 +94,7 @@ slipbox-card-color: yellow
 ---
 ```
 
-The colour tints the card header and its Deck-map marker; edit or remove the property directly in Markdown to change it later.
+The colour tints the card header and adds a subdued tick to the Deck map; edit or remove the property directly in Markdown to change it later.
 
 ## Branching and structural navigation
 

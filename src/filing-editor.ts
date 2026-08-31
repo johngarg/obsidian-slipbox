@@ -77,6 +77,9 @@ export function shouldSuspendDeckShortcut(
   }
   const target = eventTarget as Partial<HTMLElement>;
   const tagName = target.tagName?.toLowerCase();
+  if (target.classList?.contains("slipbox-deck-map") === true) {
+    return true;
+  }
   return tagName === "input" ||
     tagName === "textarea" ||
     tagName === "select" ||

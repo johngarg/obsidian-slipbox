@@ -294,6 +294,25 @@ describe("DeckShortcutController", () => {
     assert.equal(subject.controller.canRunCommand("next-card"), false);
   });
 
+  test("leaves focused Deck-map keys to the slider controller", async () => {
+    const subject = createSubject();
+    const deckMap = createHtmlElement(subject.window, "div");
+    deckMap.className = "slipbox-deck-map";
+    subject.root.append(deckMap as unknown as Node);
+
+    const event = dispatchKey(
+      subject,
+      "ArrowRight",
+      {},
+      deckMap as unknown as HTMLElement,
+    );
+    subject.setLastEvent(event);
+    await flushShortcut();
+
+    assert.deepEqual(subject.runs, []);
+    assert.equal(subject.controller.canRunCommand("next-card"), false);
+  });
+
   test("captures address continuations outside the Deck", () => {
     const subject = createSubject();
     const statusHost = createHtmlElement(

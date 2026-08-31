@@ -88,7 +88,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Show Deck map",
-            "Show a clickable overview sampled from the filed sequence, with exact anchor and bookmark positions.",
+            "Show an ordinal rail with section labels, a prominent active cursor, accent bookmark ticks, subdued colour ticks, and sparse Desk marks.",
             (setting) => this.renderShowDeckMap(setting),
           ),
           this.definition(

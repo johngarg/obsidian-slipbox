@@ -49,7 +49,7 @@ describe("Deck-map sparse rail DOM", () => {
     const value = subject();
     const cards = [
       card("ordinary.md", "1"),
-      card("bookmark.md", "2"),
+      card("bookmark.md", "2", { color: "red" }),
       card("colour.md", "3", { color: "purple" }),
       card("desk.md", "4", { onDesk: true }),
     ];
@@ -65,10 +65,14 @@ describe("Deck-map sparse rail DOM", () => {
     const desk = landmark(value.root, "path:desk.md");
     assert.ok(active);
     assert.ok(bookmark);
-    assert.equal(colour, null);
+    assert.ok(colour);
     assert.ok(desk);
     assert.equal(active.classList.contains("is-active"), true);
     assert.equal(bookmark.classList.contains("is-bookmarked"), true);
+    assert.equal(bookmark.classList.contains("is-colored"), true);
+    assert.equal(bookmark.dataset.slipboxCardColor, "red");
+    assert.equal(colour.classList.contains("is-colored"), true);
+    assert.equal(colour.dataset.slipboxCardColor, "purple");
     assert.equal(desk.classList.contains("is-on-desk"), true);
 
     value.renderer.reconcileLandmarks(bucketDeckMapLandmarks(
@@ -86,7 +90,10 @@ describe("Deck-map sparse rail DOM", () => {
     assert.equal(landmark(value.root, "path:bookmark.md"), bookmark);
     assert.equal(landmark(value.root, "path:desk.md"), desk);
     assert.equal(active.isConnected, false);
+    assert.equal(colour.isConnected, false);
     assert.equal(bookmark.classList.contains("is-active"), true);
+    assert.equal(bookmark.classList.contains("is-bookmarked"), true);
+    assert.equal(bookmark.classList.contains("is-colored"), true);
   });
 
   test("composes combined states and reuses stable cluster buckets", () => {
@@ -104,6 +111,7 @@ describe("Deck-map sparse rail DOM", () => {
     const cluster = landmark(value.root, "cluster:0");
     assert.ok(cluster);
     assert.equal(cluster.dataset.slipboxDeckMapClusterCount, "3");
+    assert.equal(cluster.dataset.slipboxDeckMapClusterColorCount, "3");
     assert.equal(cluster.classList.contains("is-on-desk"), true);
 
     value.renderer.reconcileLandmarks(bucketDeckMapLandmarks(
@@ -113,6 +121,7 @@ describe("Deck-map sparse rail DOM", () => {
     ));
     assert.equal(landmark(value.root, "cluster:0"), cluster);
     assert.equal(cluster.dataset.slipboxDeckMapClusterCount, "2");
+    assert.equal(cluster.dataset.slipboxDeckMapClusterColorCount, "2");
   });
 
   test("keeps section nodes stable while labels respond to width", () => {
@@ -159,14 +168,17 @@ describe("Deck-map sparse rail DOM", () => {
       position: 0.25,
       primary: "1 · 2 / 8",
       title: "A title",
-      clusterSummary: "3 Desk landmarks",
+      clusterSummary: "3 landmarks (2 coloured, 3 Desk)",
     });
     const readout = value.root.querySelector<HTMLElement>(
       ".slipbox-deck-map-readout",
     );
     assert.ok(readout);
     assert.match(readout.textContent ?? "", /A title/u);
-    assert.match(readout.textContent ?? "", /3 Desk landmarks/u);
+    assert.match(
+      readout.textContent ?? "",
+      /3 landmarks \(2 coloured, 3 Desk\)/u,
+    );
 
     value.renderer.updateReadout(null);
     assert.equal(readout.classList.contains("is-hidden"), true);
@@ -174,6 +186,22 @@ describe("Deck-map sparse rail DOM", () => {
   });
 
   test("renders no landmark nodes for a large ordinary Deck", () => {
+    const value = subject();
+    const cards = Array.from({ length: 10_000 }, (_, index) =>
+      card(`${index}.md`, `A-${index}`)
+    );
+    value.renderer.reconcileLandmarks(bucketDeckMapLandmarks(
+      buildDeckMapLandmarks(cards, null, new Set()),
+      1_000,
+      2,
+    ));
+    assert.equal(
+      value.root.querySelectorAll(".slipbox-deck-map-landmark").length,
+      0,
+    );
+  });
+
+  test("buckets a large coloured Deck into physical-pixel landmarks", () => {
     const value = subject();
     const cards = Array.from({ length: 10_000 }, (_, index) =>
       card(`${index}.md`, `A-${index}`, { color: "blue" })
@@ -185,7 +213,7 @@ describe("Deck-map sparse rail DOM", () => {
     ));
     assert.equal(
       value.root.querySelectorAll(".slipbox-deck-map-landmark").length,
-      0,
+      2_000,
     );
   });
 });

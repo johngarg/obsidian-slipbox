@@ -88,7 +88,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition(
             "Show Deck map",
-            "Show an ordinal rail with section labels, a prominent active cursor, accent bookmark ticks, and sparse Desk marks.",
+            "Show an ordinal rail with section labels, a prominent active cursor, accent bookmark ticks, subdued colour ticks, and sparse Desk marks.",
             (setting) => this.renderShowDeckMap(setting),
           ),
           this.definition(

@@ -72,12 +72,13 @@ filed Deck runs from its first card at the left edge to its last card at the
 right edge. Clear dividers and labels mark top-level address sections, and a
 prominent vertical cursor marks the active card.
 
-Ordinary and coloured cards do not produce individual marks. Bookmarks appear
-as accent-coloured ticks, while Desk membership remains a sparse secondary
-outline. Move the pointer along the rail to see the nearest card's address,
-title, and ordinal. Clicking any position jumps to the nearest filed card even
-when there is no visible landmark; when the rail is focused, the arrow, Home,
-and End keys navigate the same complete Deck.
+Ordinary cards do not produce individual marks. Coloured cards appear as small,
+subdued colour ticks; bookmarks use taller accent-coloured ticks, while Desk
+membership remains a sparse secondary outline. The active cursor and bookmarks
+render over colour marks. Move the pointer along the rail to see the nearest
+card's address, title, and ordinal. Clicking any position jumps to the nearest
+filed card even when there is no visible landmark; when the rail is focused,
+the arrow, Home, and End keys navigate the same complete Deck.
 
 ## Card colours
 
@@ -92,7 +93,7 @@ slipbox-card-color: yellow
 ---
 ```
 
-The colour tints the card header; edit or remove the property directly in Markdown to change it later.
+The colour tints the card header and adds a subdued tick to the Deck map; edit or remove the property directly in Markdown to change it later.
 
 ## Branching and structural navigation
 

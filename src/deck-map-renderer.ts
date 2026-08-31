@@ -166,7 +166,7 @@ export class DeckMapRenderer {
   private createLandmark(id: string): HTMLElement {
     const element = this.create("span", "slipbox-deck-map-landmark");
     element.dataset.slipboxDeckMapLandmarkId = id;
-    for (const state of ["desk", "cluster", "bookmark", "active"]) {
+    for (const state of ["desk", "cluster", "color", "bookmark", "active"]) {
       element.append(this.create(
         "span",
         `slipbox-deck-map-landmark-layer is-${state}`,
@@ -188,15 +188,26 @@ export class DeckMapRenderer {
     element.classList.toggle("is-cluster", cluster);
     if (cluster) {
       delete element.dataset.slipboxDeckMapPath;
+      delete element.dataset.slipboxCardColor;
       element.dataset.slipboxDeckMapClusterCount = String(landmark.count);
-      element.classList.remove("is-active", "is-bookmarked");
+      element.dataset.slipboxDeckMapClusterColorCount = String(
+        landmark.colorCount,
+      );
+      element.classList.remove("is-active", "is-bookmarked", "is-colored");
       element.classList.toggle("is-on-desk", landmark.onDeskCount > 0);
       return;
     }
     element.dataset.slipboxDeckMapPath = landmark.path;
     delete element.dataset.slipboxDeckMapClusterCount;
+    delete element.dataset.slipboxDeckMapClusterColorCount;
+    if (landmark.color === null) {
+      delete element.dataset.slipboxCardColor;
+    } else {
+      element.dataset.slipboxCardColor = landmark.color;
+    }
     element.classList.toggle("is-active", landmark.active);
     element.classList.toggle("is-bookmarked", landmark.bookmarked);
+    element.classList.toggle("is-colored", landmark.color !== null);
     element.classList.toggle("is-on-desk", landmark.onDesk);
   }
 

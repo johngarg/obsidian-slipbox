@@ -121,6 +121,10 @@ describe("community scanner CSS compatibility", () => {
       styles,
       /\.slipbox-deck-map-landmark\.is-bookmarked\s+\.slipbox-deck-map-landmark-layer\.is-bookmark\s*\{[^}]*width:\s*2px;[^}]*height:\s*13px;[^}]*background:\s*var\(--interactive-accent\)/su,
     );
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-colored\s+\.slipbox-deck-map-landmark-layer\.is-color\s*\{[^}]*z-index:\s*2;[^}]*width:\s*1px;[^}]*height:\s*4px;[^}]*var\(--slipbox-card-tone\) 50%,[^}]*var\(--text-faint\)/su,
+    );
     assert.doesNotMatch(
       styles,
       /slipbox-deck-map-(?:marker|bookmark-ring|markers)/u,
@@ -143,11 +147,15 @@ describe("community scanner CSS compatibility", () => {
     assert.match(styles, /\.slipbox-deck-map\s*\{[^}]*height:\s*32px/su);
     assert.match(styles, /\.slipbox-deck-map-section-label\s*\{[^}]*font-size:\s*10px/su);
     assert.doesNotMatch(styles, /slipbox-deck-map-viewport/u);
-    assert.doesNotMatch(styles, /slipbox-deck-map-landmark\.is-colored/u);
+    assert.match(styles, /slipbox-deck-map-landmark\.is-colored/u);
     assert.match(styles, /@media \(forced-colors: active\)/u);
     assert.match(
       styles,
       /\.slipbox-deck-map-landmark\.is-bookmarked\s+\.slipbox-deck-map-landmark-layer\.is-bookmark\s*\{[^}]*background:\s*LinkText/su,
+    );
+    assert.match(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-colored\s+\.slipbox-deck-map-landmark-layer\.is-color\s*\{[^}]*background:\s*GrayText/su,
     );
     assert.match(
       styles,

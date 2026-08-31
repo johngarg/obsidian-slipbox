@@ -157,7 +157,7 @@ describe("Deck-map controller", () => {
     assert.ok(readout);
     assert.equal(readout.classList.contains("is-hidden"), false);
     assert.match(readout.textContent ?? "", /B · 2 \/ 3/u);
-    assert.match(readout.textContent ?? "", /3 Desk landmarks/u);
+    assert.match(readout.textContent ?? "", /3 landmarks \(3 Desk\)/u);
 
     value.controller.rootElement.dispatchEvent(new value.window.PointerEvent(
       "pointerleave",

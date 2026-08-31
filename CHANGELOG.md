@@ -10,8 +10,9 @@ initial public beta.
 
 - Replaced the sampled Deck-map dot texture with a larger ordinal section rail.
   Clear section labels, a prominent active cursor, accent bookmark ticks, and
-  sparse Desk marks expose structure without marking ordinary or coloured
-  cards. Pointer readouts and unmarked-position navigation cover the full Deck.
+  subdued colour ticks and sparse Desk marks expose structure without marking
+  ordinary cards. Pointer readouts and unmarked-position navigation cover the
+  full Deck.
 
 ## [0.14.0] - 2026-08-31
 

@@ -186,6 +186,7 @@ describe("Deck map", () => {
     );
     assert.deepEqual(landmarks.map(({ path }) => path), [
       "bookmark.md",
+      "colour.md",
       "desk.md",
       "combined-one.md",
       "combined-two.md",
@@ -198,13 +199,14 @@ describe("Deck map", () => {
         title: "combined-two",
         ordinal: 6,
         position: 1,
+        color: "blue",
         active: true,
         bookmarked: true,
         onDesk: true,
       },
     );
     assert.equal(landmarks.some(({ path }) => path === "ordinary.md"), false);
-    assert.equal(landmarks.some(({ path }) => path === "colour.md"), false);
+    assert.equal(landmarks.some(({ path }) => path === "colour.md"), true);
   });
 
   test("retains exact active and bookmarks while clustering lower states", () => {
@@ -224,7 +226,7 @@ describe("Deck map", () => {
     assert.deepEqual(
       rendered.filter(({ kind }) => kind === "exact")
         .map(({ id }) => id),
-      ["path:bookmark.md", "path:active.md"],
+      ["path:colour-a.md", "path:bookmark.md", "path:active.md"],
     );
     const clusters = rendered.filter(
       (landmark): landmark is DeckMapClusterLandmark =>
@@ -234,9 +236,10 @@ describe("Deck map", () => {
     assert.deepEqual(clusters.map((cluster) => ({
       id: cluster.id,
       count: cluster.count,
+      colorCount: cluster.colorCount,
       onDeskCount: cluster.onDeskCount,
     })), [
-      { id: "cluster:1", count: 2, onDeskCount: 2 },
+      { id: "cluster:1", count: 2, colorCount: 1, onDeskCount: 2 },
     ]);
   });
 
@@ -284,7 +287,7 @@ describe("Deck map", () => {
         null,
         new Set(),
       ).length,
-      0,
+      10_000,
     );
   });
 

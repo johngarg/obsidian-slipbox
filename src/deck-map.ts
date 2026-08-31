@@ -35,6 +35,7 @@ export interface DeckMapLandmark {
   readonly title: string;
   readonly ordinal: number;
   readonly position: number;
+  readonly color: CardColor | null;
   readonly active: boolean;
   readonly bookmarked: boolean;
   readonly onDesk: boolean;
@@ -53,6 +54,7 @@ export interface DeckMapClusterLandmark {
   readonly position: number;
   readonly members: readonly DeckMapLandmark[];
   readonly count: number;
+  readonly colorCount: number;
   readonly onDeskCount: number;
 }
 
@@ -207,7 +209,7 @@ export function deckMapLandmarkForCard(
 ): DeckMapLandmark | null {
   const active = card.path === activePath;
   const bookmarked = bookmarkedPaths.has(card.path);
-  if (!active && !bookmarked && !card.onDesk) {
+  if (!active && !bookmarked && card.color === null && !card.onDesk) {
     return null;
   }
   const position = deckMapCoordinate(index, cardCount);
@@ -219,6 +221,7 @@ export function deckMapLandmarkForCard(
         title: card.title,
         ordinal: index + 1,
         position,
+        color: card.color,
         active,
         bookmarked,
         onDesk: card.onDesk,
@@ -325,6 +328,7 @@ export function bucketDeckMapLandmarks(
         members.length,
       members,
       count: members.length,
+      colorCount: members.filter((member) => member.color !== null).length,
       onDeskCount: members.filter((member) => member.onDesk).length,
     });
   }
@@ -369,7 +373,10 @@ export function deckMapReadout(
   }
   const clusterSummary = cluster === null
     ? ""
-    : `${cluster.count} Desk landmarks`;
+    : `${cluster.count} landmarks (${[
+        cluster.colorCount > 0 ? `${cluster.colorCount} coloured` : "",
+        cluster.onDeskCount > 0 ? `${cluster.onDeskCount} Desk` : "",
+      ].filter((count) => count !== "").join(", ")})`;
   return {
     key: `${card.path}:${physicalBucket ?? cluster?.bucket ?? "card"}`,
     position,

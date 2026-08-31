@@ -167,6 +167,19 @@
   background: transparent;
 }
 
+.slipbox-deck-map-landmark.is-colored
+  .slipbox-deck-map-landmark-layer.is-color {
+  display: block;
+  z-index: 2;
+  width: 1px;
+  height: 4px;
+  background: color-mix(
+    in srgb,
+    var(--slipbox-card-tone) 50%,
+    var(--text-faint)
+  );
+}
+
 .slipbox-deck-map-landmark.is-bookmarked
   .slipbox-deck-map-landmark-layer.is-bookmark {
   display: block;
@@ -2327,6 +2340,11 @@ button.slipbox-card-color-choice.is-no-color::after {
   .slipbox-deck-map-landmark.is-bookmarked
     .slipbox-deck-map-landmark-layer.is-bookmark {
     background: LinkText;
+  }
+
+  .slipbox-deck-map-landmark.is-colored
+    .slipbox-deck-map-landmark-layer.is-color {
+    background: GrayText;
   }
 
   .slipbox-deck-map-landmark.is-active

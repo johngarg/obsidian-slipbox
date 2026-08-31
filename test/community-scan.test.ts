@@ -134,7 +134,11 @@ describe("community scanner CSS compatibility", () => {
     );
     assert.match(
       styles,
-      /\.slipbox-deck-map-landmark\.is-active\s+\.slipbox-deck-map-landmark-layer\.is-active\s*\{[^}]*height:\s*18px;[^}]*background:\s*var\(--text-normal\)/su,
+      /\.slipbox-deck-map-landmark\.is-active\s+\.slipbox-deck-map-landmark-layer\.is-active\s*\{[^}]*z-index:\s*4;[^}]*width:\s*3px;[^}]*height:\s*18px;[^}]*background:\s*var\(--text-normal\)/su,
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.slipbox-deck-map-landmark\.is-bookmarked\.is-active/u,
     );
     assert.match(styles, /\.slipbox-deck-map\s*\{[^}]*height:\s*32px/su);
     assert.match(styles, /\.slipbox-deck-map-section-label\s*\{[^}]*font-size:\s*10px/su);

@@ -177,11 +177,6 @@
   background: var(--interactive-accent);
 }
 
-.slipbox-deck-map-landmark.is-bookmarked.is-active
-  .slipbox-deck-map-landmark-layer.is-bookmark {
-  transform: translate(calc(-50% - 4px), -50%);
-}
-
 .slipbox-deck-map-landmark.is-active
   .slipbox-deck-map-landmark-layer.is-active {
   display: block;

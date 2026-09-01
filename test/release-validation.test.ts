@@ -26,7 +26,7 @@ function releaseFixture(options: ReleaseFixtureOptions = {}): string {
     name: "slipbox",
     version: packageVersion,
     private: true,
-    license: "0BSD",
+    license: "MIT",
     engines: { node: ">=20" },
     allowScripts: { "esbuild@0.25.12": true },
   };
@@ -39,7 +39,7 @@ function releaseFixture(options: ReleaseFixtureOptions = {}): string {
       "": {
         name: "slipbox",
         version: packageVersion,
-        license: "0BSD",
+        license: "MIT",
         engines: { node: ">=20" },
       },
       "node_modules/esbuild": {

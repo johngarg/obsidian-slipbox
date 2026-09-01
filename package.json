@@ -3,7 +3,7 @@
   "version": "0.15.0",
   "private": true,
   "description": "A tactile, sequential card index for Obsidian",
-  "license": "0BSD",
+  "license": "MIT",
   "main": "main.js",
   "engines": {
     "node": ">=20"

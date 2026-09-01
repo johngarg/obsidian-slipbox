@@ -99,8 +99,8 @@ function validateRelease({ root, tag }) {
   if (versions[version] !== manifest.minAppVersion) {
     throw new Error("versions.json must map the current version to manifest.minAppVersion");
   }
-  if (packageJson.license !== "0BSD") {
-    throw new Error("package.license must be 0BSD");
+  if (packageJson.license !== "MIT") {
+    throw new Error("package.license must be MIT");
   }
   if (packageJson.private !== true) {
     throw new Error("package.private must remain true");

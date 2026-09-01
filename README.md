@@ -159,7 +159,7 @@ Feedback and contributions are welcome.
 
 Report bugs and request features through [GitHub Issues](https://github.com/johngarg/obsidian-slipbox/issues).
 
-Slipbox Desk is available under the [0BSD license](LICENSE).
+Slipbox Desk is available under the [MIT License](LICENSE).
 
 ## Support
 

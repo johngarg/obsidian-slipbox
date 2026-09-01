@@ -6,6 +6,10 @@ initial public beta.
 
 ## [Unreleased]
 
+### Changed
+
+- Relicensed Slipbox Desk from 0BSD to the MIT License.
+
 ## [0.15.0] - 2026-08-31
 
 ### Changed

@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { assignFilenames, cacheFilename, extractTitle, normalizeSearchRecord, renderTei } from "../scripts/luhmann-import-lib.mjs";
+import { assignFilenames, cacheFilename, CORPORA, extractTitle, normalizeSearchRecord, parseArgs, renderTei } from "../scripts/luhmann-import-lib.mjs";
 
 const tei = (body) => `<TEI><text><body><div type="zettel-vorderseite">${body}</div></body></text></TEI>`;
 
 describe("Luhmann importer", () => {
+  test("selects the legacy Division 17 and scoped ZK II corpora explicitly", () => {
+    assert.equal(parseArgs(["--mode", "stage", "--division", "17", "--vault", "/tmp/vault"]).corpus, CORPORA.division17);
+    assert.equal(parseArgs(["--mode", "stage", "--zk", "2", "--prefix", "9/8", "--vault", "/tmp/vault"]).corpus, CORPORA.zk2_9_8);
+    assert.throws(() => parseArgs(["--mode", "stage", "--zk", "1", "--prefix", "17", "--vault", "/tmp/vault"]), /Select either/u);
+  });
+
   test("accepts only leading autograph title markup", () => {
     assert.deepEqual(extractTitle(tei('<p><fw type="luhmann_num">17,1</fw><hi rendition="#u">Ideologie</hi> Text</p>')).title, "Ideologie");
     assert.equal(extractTitle(tei('<p><fw type="luhmann_num">17,1</fw>Text <hi rendition="#u">Ding an sich</hi></p>')).title, "");
@@ -36,6 +42,20 @@ describe("Luhmann importer", () => {
     assert.equal(departing.references[0].omitted, false);
   });
 
+  test("omits a leading red distant return label while keeping the outgoing link", () => {
+    const childXml = tei('<p><fw type="luhmann_num">9/8,1</fw><ref type="nl_vw_einzel_entf" target="#parent"><hi rendition="#red">1</hi></ref> Thema</p>');
+    const parentXml = tei('<p><fw type="luhmann_num">9/8</fw><ref type="nl_vw_einzel_entf" target="#child"><hi rendition="#red">1</hi></ref> System</p>');
+    const filenameById = new Map([["parent", "Luhmann 9-8.md"], ["child", "Luhmann 9-8,1.md"]]);
+    const addressById = new Map([["parent", "9/8"], ["child", "9/8,1"]]);
+    const child = renderTei(childXml, { filenameById, addressById, sourceAddress: "9/8,1" });
+    const parent = renderTei(parentXml, { filenameById, addressById, sourceAddress: "9/8" });
+    assert.equal(child.body, "Thema");
+    assert.equal(child.references[0].redHeaderLabel, true);
+    assert.equal(child.references[0].omitted, true);
+    assert.equal(parent.body, "[[Luhmann 9-8,1|1]] System");
+    assert.equal(parent.references[0].omitted, false);
+  });
+
   test("can suppress TEI face markers when the reverse is modeled separately", () => {
     const xml = tei('<p><fw type="luhmann_num">17,7bc</fw><ref type="nl_vw_einzel_nah" target="#reverse">R</ref> S<add hand="#editor">orel</add></p>');
     const result = renderTei(xml, { filenameById: new Map([["reverse", "Luhmann 17,7bc (R).md"]]), suppressReferenceIds: new Set(["reverse"]) });
@@ -63,5 +83,26 @@ describe("Luhmann importer", () => {
     ]);
     assert.notEqual(files.get("lower").toLowerCase(), files.get("upper").toLowerCase());
     assert.equal(normalizeSearchRecord({ ekin: "x_V", shortTitle: "17,1a", meta: {}, transcription: {} }).address, "17,1a");
+  });
+
+  test("keeps ZK II signatures exact while replacing slashes only in filenames", () => {
+    const records = [
+      { archiveId: "ZK_2_NB_9-8_V", address: "9/8", shortTitle: "9/8" },
+      { archiveId: "ZK_2_NB_9-8a1_V", address: "9/8a1", shortTitle: "9/8a1" },
+    ];
+    const files = assignFilenames(records, new Map(), CORPORA.zk2_9_8);
+    assert.equal(files.get("ZK_2_NB_9-8_V"), "Luhmann 9-8.md");
+    assert.equal(files.get("ZK_2_NB_9-8a1_V"), "Luhmann 9-8a1.md");
+    assert.equal(normalizeSearchRecord({ ekin: "ZK_2_NB_9-8a1_V", shortTitle: "9/8a1", meta: {}, transcription: {} }).address, "9/8a1");
+  });
+
+  test("renders ZK II continuation joins with safe targets and exact aliases", () => {
+    const xml = tei('<p><fw type="luhmann_num">9/8</fw>Fortsetzung <join target="#ZK_2_NB_9-8a_V"/></p>');
+    const result = renderTei(xml, {
+      filenameById: new Map([["ZK_2_NB_9-8a_V", "Luhmann 9-8a.md"]]),
+      addressById: new Map([["ZK_2_NB_9-8a_V", "9/8a"]]),
+      sourceAddress: "9/8",
+    });
+    assert.equal(result.body, "Fortsetzung [[Luhmann 9-8a|9/8a]]");
   });
 });

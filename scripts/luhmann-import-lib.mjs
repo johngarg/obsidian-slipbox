@@ -6,16 +6,58 @@ import { Window } from "happy-dom";
 export const ARCHIVE_BASE = "https://niklas-luhmann-archiv.de/bestand/zettelkasten/zettel";
 export const API_BASE = "https://v0.api.niklas-luhmann-archiv.de/ZK";
 export const LICENSE = "CC BY-NC-SA 4.0";
-export const EXPECTED = { total: 1009, fronts: 1008, dummies: 2, reverses: 1 };
-const PRESERVE_IDS = new Set(["ZK_1_NB_17_2_V", "ZK_1_NB_17-1_V", "ZK_1_NB_17-1a_V", "ZK_1_NB_17-1b_V", "ZK_1_NB_17-1c_V"]);
-const START = "<!-- BEGIN GENERATED DIVISION 17 -->";
-const END = "<!-- END GENERATED DIVISION 17 -->";
+export const CORPORA = Object.freeze({
+  division17: Object.freeze({
+    key: "17",
+    label: "ZK I Division 17",
+    zk: "1",
+    prefix: "17",
+    expected: Object.freeze({ total: 1009, fronts: 1008, dummies: 2, reverses: 1 }),
+    dummyIds: Object.freeze(["ZK_1_NB_17-1b5d_V", "ZK_1_NB_17-1j_V"]),
+    reverseIds: Object.freeze(["ZK_1_NB_17-7bc_R"]),
+    preserveIds: Object.freeze(["ZK_1_NB_17_2_V", "ZK_1_NB_17-1_V", "ZK_1_NB_17-1a_V", "ZK_1_NB_17-1b_V", "ZK_1_NB_17-1c_V"]),
+    refsStart: "<!-- BEGIN GENERATED DIVISION 17 -->",
+    refsEnd: "<!-- END GENERATED DIVISION 17 -->",
+    legacyRefsHeading: /^## 17(?:$|[, (])/u,
+    reverse: Object.freeze({
+      frontId: "ZK_1_NB_17-7bc_V",
+      reverseId: "ZK_1_NB_17-7bc_R",
+      reverseFilename: "Luhmann 17,7bc (R).md",
+      branchLink: "[[Luhmann 17,7bc (R)|+R]]",
+    }),
+  }),
+  zk2_9_8: Object.freeze({
+    key: "zk2-9-8",
+    label: "ZK II 9/8",
+    zk: "2",
+    prefix: "9/8",
+    expected: Object.freeze({ total: 18, fronts: 18, dummies: 0, reverses: 0 }),
+    dummyIds: Object.freeze([]),
+    reverseIds: Object.freeze([]),
+    preserveIds: Object.freeze([]),
+    refsStart: "<!-- BEGIN GENERATED ZK II 9/8 -->",
+    refsEnd: "<!-- END GENERATED ZK II 9/8 -->",
+    legacyRefsHeading: null,
+    reverse: null,
+  }),
+});
+
+export const EXPECTED = CORPORA.division17.expected;
 
 export function sha256(value) { return createHash("sha256").update(value).digest("hex"); }
 export function archiveUrl(id) { return `${ARCHIVE_BASE}/${id}`; }
 export function xmlUrl(id) { return `${API_BASE}/zettel/${id}/xml`; }
 export function importRoot(vault) { return join(resolve(vault), ".luhmann-import"); }
 export function cacheFilename(archiveId) { return `${archiveId}.${sha256(archiveId).slice(0, 10)}.xml`; }
+
+function corpusFromValues(values) {
+  if (values.division !== undefined) {
+    if (values.division !== "17" || values.zk !== undefined || values.prefix !== undefined) throw new Error("--division supports only 17 and cannot be combined with --zk or --prefix");
+    return CORPORA.division17;
+  }
+  if (values.zk === "2" && values.prefix === "9/8") return CORPORA.zk2_9_8;
+  throw new Error("Select either --division 17 or --zk 2 --prefix 9/8");
+}
 
 export function parseArgs(argv) {
   const values = {};
@@ -25,9 +67,8 @@ export function parseArgs(argv) {
     values[key.slice(2)] = value;
   }
   if (!["fetch", "stage", "validate", "apply"].includes(values.mode)) throw new Error("--mode must be fetch, stage, validate, or apply");
-  if (values.division !== "17") throw new Error("Only --division 17 is supported");
   if (!values.vault) throw new Error("--vault is required");
-  return { mode: values.mode, division: values.division, vault: resolve(values.vault) };
+  return { mode: values.mode, corpus: corpusFromValues(values), vault: resolve(values.vault) };
 }
 
 export function normalizeSearchRecord(item) {
@@ -46,17 +87,19 @@ export function normalizeSearchRecord(item) {
   };
 }
 
-export function assertCorpus(records) {
+export function assertCorpus(records, corpus = CORPORA.division17) {
   const ids = new Set(records.map((record) => record.archiveId));
   const fronts = records.filter((record) => record.side === "front");
   const dummies = records.filter((record) => record.isDummy);
   const reverses = records.filter((record) => record.side === "reverse");
-  if (records.length !== EXPECTED.total || ids.size !== EXPECTED.total || fronts.length !== EXPECTED.fronts || dummies.length !== EXPECTED.dummies || reverses.length !== EXPECTED.reverses) {
-    throw new Error(`Unexpected Division 17 corpus: ${records.length} records, ${ids.size} IDs, ${fronts.length} fronts, ${dummies.length} dummies, ${reverses.length} reverses`);
+  const expected = corpus.expected;
+  if (records.length !== expected.total || ids.size !== expected.total || fronts.length !== expected.fronts || dummies.length !== expected.dummies || reverses.length !== expected.reverses) {
+    throw new Error(`Unexpected ${corpus.label} corpus: ${records.length} records, ${ids.size} IDs, ${fronts.length} fronts, ${dummies.length} dummies, ${reverses.length} reverses`);
   }
   const dummyIds = dummies.map((record) => record.archiveId).sort();
-  if (dummyIds.join("\n") !== ["ZK_1_NB_17-1b5d_V", "ZK_1_NB_17-1j_V"].join("\n")) throw new Error(`Unexpected placeholders: ${dummyIds.join(", ")}`);
-  if (reverses[0]?.archiveId !== "ZK_1_NB_17-7bc_R") throw new Error(`Unexpected reverse: ${reverses[0]?.archiveId}`);
+  if (dummyIds.join("\n") !== [...corpus.dummyIds].sort().join("\n")) throw new Error(`Unexpected placeholders: ${dummyIds.join(", ")}`);
+  const reverseIds = reverses.map((record) => record.archiveId).sort();
+  if (reverseIds.join("\n") !== [...corpus.reverseIds].sort().join("\n")) throw new Error(`Unexpected reverses: ${reverseIds.join(", ")}`);
 }
 
 async function json(path) { return JSON.parse(await readFile(path, "utf8")); }
@@ -87,15 +130,15 @@ async function mapLimit(items, limit, task) {
   }));
 }
 
-export async function fetchCorpus({ vault, log = console.log }) {
-  const cache = join(importRoot(vault), "cache", "17");
+export async function fetchCorpus({ vault, corpus = CORPORA.division17, log = console.log }) {
+  const cache = join(importRoot(vault), "cache", corpus.key);
   await mkdir(cache, { recursive: true });
-  const query = { page: 1, rows: 2000, fulltext: "", fuzzy: false, FTSearchMode: "and", zettelnummer: "17", zettelnummerSearchMode: "starts-with", areas: [], ref: "", zks: ["1"] };
+  const query = { page: 1, rows: 5000, fulltext: "", fuzzy: false, FTSearchMode: "and", zettelnummer: corpus.prefix, zettelnummerSearchMode: "starts-with", areas: [], ref: "", zks: [corpus.zk] };
   const searchText = await retryFetch(`${API_BASE}/search?q=${encodeURIComponent(JSON.stringify(query))}`);
   const search = JSON.parse(searchText);
-  if (search.numberOfResults !== EXPECTED.total || !Array.isArray(search.results)) throw new Error(`Search returned ${search.numberOfResults ?? "unknown"} results`);
+  if (search.numberOfResults !== corpus.expected.total || !Array.isArray(search.results)) throw new Error(`Search returned ${search.numberOfResults ?? "unknown"} results for ${corpus.label}`);
   const records = search.results.map(normalizeSearchRecord);
-  assertCorpus(records);
+  assertCorpus(records, corpus);
   const oldPath = join(cache, "manifest.json");
   const old = await exists(oldPath) ? await json(oldPath) : { records: [] };
   const oldById = new Map(old.records.map((record) => [record.archiveId, record]));
@@ -113,7 +156,7 @@ export async function fetchCorpus({ vault, log = console.log }) {
     if ((index + 1) % 100 === 0) log(`Fetched ${index + 1}/${records.length}`);
   });
   records.sort((a, b) => a.physicalOrder.localeCompare(b.physicalOrder) || a.archiveId.localeCompare(b.archiveId));
-  const manifest = { schemaVersion: 1, division: "17", fetchedAt: new Date().toISOString(), searchChecksum: sha256(searchText), records };
+  const manifest = { schemaVersion: 2, corpus: corpus.key, zk: corpus.zk, prefix: corpus.prefix, fetchedAt: new Date().toISOString(), searchChecksum: sha256(searchText), records };
   await atomicWrite(oldPath, `${JSON.stringify(manifest, null, 2)}\n`);
   log(`Fetch complete: ${downloaded} downloaded, ${reused} reused`);
   return manifest;
@@ -142,7 +185,16 @@ export function extractTitle(xml) {
 }
 
 function targetAddress(target) {
-  return target.replace(/^#/u, "").replace(/^ZK_1_[A-Z]+_/u, "").replace(/_[VR]$/u, "").replace(/_/gu, ",").replace(/-/gu, ",");
+  const id = target.replace(/^#/u, "");
+  const match = id.match(/^ZK_(\d+)_[A-Z]+_(.+)_[VR]$/u);
+  if (!match) return id;
+  const zk = match[1]; const encoded = match[2]?.replace(/_/gu, "-") ?? "";
+  if (zk === "2") {
+    const parts = encoded.split("-");
+    const division = parts.shift() ?? ""; const first = parts.shift() ?? "";
+    return `${division}/${first}${parts.length ? `,${parts.join(",")}` : ""}`;
+  }
+  return encoded.replace(/-/gu, ",");
 }
 function wiki(target, alias) { return `[[${target}${alias && alias !== target ? `|${alias}` : ""}]]`; }
 function isNaturalAddressAncestor(parent, candidate) {
@@ -159,6 +211,18 @@ export function renderTei(xml, context = {}) {
   const number = card.querySelector('fw[type="luhmann_num"]');
   if (number) skipped.add(number);
   if (title.evidence) { let node = number?.nextSibling; while (node && node.nodeType === 3 && meaningfulText(node) === "") node = node.nextSibling; if (node) skipped.add(node); }
+  const isLeadingCardReference = (node) => {
+    const paragraph = node.closest?.("p");
+    if (!paragraph || card.querySelector("p") !== paragraph) return false;
+    for (const sibling of paragraph.childNodes) {
+      if (sibling === node) return true;
+      if (skipped.has(sibling)) continue;
+      if (sibling.nodeType === 3 && meaningfulText(sibling) === "") continue;
+      if (sibling.nodeType === 1 && ["fw", "pb"].includes(sibling.localName)) continue;
+      return false;
+    }
+    return false;
+  };
   const references = [];
   const render = (node) => {
     if (skipped.has(node)) return "";
@@ -173,16 +237,17 @@ export function renderTei(xml, context = {}) {
     if (name === "choice") { const preferred = node.querySelector(":scope > orig, :scope > abbr"); return preferred ? render(preferred) : Array.from(node.childNodes).map(render).join(""); }
     if (name === "ref" || name === "join") {
       const raw = node.getAttribute("target") ?? ""; const id = raw.replace(/^#/u, "");
-      const visible = name === "join" ? targetAddress(raw) : meaningfulText(node);
       const near = node.getAttribute("type") === "nl_vw_einzel_nah";
       if (context.suppressReferenceIds?.has(id)) return "";
       const imported = context.filenameById?.get(id);
       const importedAddress = context.addressById?.get(id);
-      const returnsToAncestor = near && importedAddress !== undefined && context.sourceAddress !== undefined && isNaturalAddressAncestor(importedAddress, context.sourceAddress);
+      const visible = name === "join" ? importedAddress ?? targetAddress(raw) : meaningfulText(node);
+      const redHeaderLabel = name === "ref" && isLeadingCardReference(node) && (rendition(node).includes("#red") || Boolean(node.querySelector('[rendition*="#red"]')));
+      const returnsToAncestor = (near || redHeaderLabel) && importedAddress !== undefined && context.sourceAddress !== undefined && isNaturalAddressAncestor(importedAddress, context.sourceAddress);
       const branch = near && !returnsToAncestor;
       const linkTarget = imported ? imported.replace(/\.md$/u, "") : targetAddress(raw) || visible;
       const alias = `${branch ? "+" : ""}${visible || targetAddress(raw)}`;
-      if (id) references.push({ archiveId: id, visible: visible || targetAddress(raw), near, branch, omitted: returnsToAncestor, imported: Boolean(imported), filename: imported, url: archiveUrl(id) });
+      if (id) references.push({ archiveId: id, visible: visible || targetAddress(raw), near, redHeaderLabel, branch, omitted: returnsToAncestor, imported: Boolean(imported), filename: imported, url: archiveUrl(id) });
       if (returnsToAncestor) return "";
       return wiki(linkTarget, alias);
     }
@@ -222,19 +287,22 @@ function groupBy(items, keyFor) {
   return groups;
 }
 
-export function assignFilenames(records, existing = new Map()) {
+function filenameAddress(address, corpus) { return corpus === CORPORA.zk2_9_8 ? address.replaceAll("/", "-") : address; }
+
+export function assignFilenames(records, existing = new Map(), corpus = CORPORA.division17) {
   const result = new Map(); const used = new Set();
   for (const record of records) if (existing.has(record.archiveId)) { const name = existing.get(record.archiveId); result.set(record.archiveId, name); used.add(name.toLocaleLowerCase("en-US")); }
   const groups = groupBy(records, (record) => record.address);
   for (const [address, group] of groups) {
+    const safeAddress = filenameAddress(address, corpus);
     for (const record of group) {
       if (result.has(record.archiveId)) continue;
       let name;
-      if (record.archiveId === "ZK_1_NB_17-7bc_R") name = "Luhmann 17,7bc (R).md";
+      if (corpus.reverse?.reverseId === record.archiveId) name = corpus.reverse.reverseFilename;
       else {
         const ordinal = record.shortTitle.match(/\((\d+)\)$/u)?.[1];
-        name = `Luhmann ${address}${ordinal && group.length > 1 ? ` (${ordinal})` : ""}.md`;
-        if (used.has(name.toLocaleLowerCase("en-US"))) { let suffix = 2; do { name = `Luhmann ${address} (${suffix}).md`; suffix += 1; } while (used.has(name.toLocaleLowerCase("en-US"))); }
+        name = `Luhmann ${safeAddress}${ordinal && group.length > 1 ? ` (${ordinal})` : ""}.md`;
+        if (used.has(name.toLocaleLowerCase("en-US"))) { let suffix = 2; do { name = `Luhmann ${safeAddress} (${suffix}).md`; suffix += 1; } while (used.has(name.toLocaleLowerCase("en-US"))); }
       }
       result.set(record.archiveId, name); used.add(name.toLocaleLowerCase("en-US"));
     }
@@ -268,58 +336,66 @@ async function existingNotes(vault) {
   return result;
 }
 
-export async function stageCorpus({ vault, log = console.log }) {
-  const root = importRoot(vault); const cache = join(root, "cache", "17"); const manifest = await json(join(cache, "manifest.json"));
-  assertCorpus(manifest.records);
+export async function stageCorpus({ vault, corpus = CORPORA.division17, log = console.log }) {
+  const root = importRoot(vault); const cache = join(root, "cache", corpus.key); const manifest = await json(join(cache, "manifest.json"));
+  assertCorpus(manifest.records, corpus);
   const existing = await existingNotes(vault); const existingNames = new Map(Array.from(existing, ([id, value]) => [id, value.filename]));
-  const filenameById = assignFilenames(manifest.records, existingNames);
+  const filenameById = assignFilenames(manifest.records, existingNames, corpus);
   const addressById = new Map(manifest.records.map((record) => [record.archiveId, record.address]));
   const filenameByAddress = new Map(); for (const record of manifest.records) if (!filenameByAddress.has(record.address)) filenameByAddress.set(record.address, filenameById.get(record.archiveId));
-  const stage = join(root, "stage", "17"); await rm(stage, { recursive: true, force: true }); await mkdir(stage, { recursive: true });
+  const stage = join(root, "stage", corpus.key); await rm(stage, { recursive: true, force: true }); await mkdir(stage, { recursive: true });
   const staged = []; const allReferences = [];
+  const preserved = new Set(corpus.preserveIds);
   for (const record of manifest.records) {
     const xmlPath = join(cache, cacheFilename(record.archiveId)); const xml = await readFile(xmlPath, "utf8");
     if (sha256(xml) !== record.checksum) throw new Error(`Cache checksum mismatch: ${record.archiveId}`);
-    const suppressReferenceIds = record.archiveId === "ZK_1_NB_17-7bc_V"
-      ? new Set(["ZK_1_NB_17-7bc_R"])
-      : record.archiveId === "ZK_1_NB_17-7bc_R" ? new Set(["ZK_1_NB_17-7bc_V"]) : new Set();
+    const suppressReferenceIds = record.archiveId === corpus.reverse?.frontId
+      ? new Set([corpus.reverse.reverseId])
+      : record.archiveId === corpus.reverse?.reverseId ? new Set([corpus.reverse.frontId]) : new Set();
     const rendered = record.isDummy ? { body: "", title: "", titleEvidence: null, references: [] } : renderTei(xml, { filenameById, addressById, sourceAddress: record.address, suppressReferenceIds });
     let body = rendered.body;
-    if (PRESERVE_IDS.has(record.archiveId) && existing.has(record.archiveId)) body = normalizeExistingBody(splitNote(existing.get(record.archiveId).text).body, filenameByAddress, rendered.references);
-    if (record.archiveId === "ZK_1_NB_17-7bc_V") body = `${body}${body ? "\n\n" : ""}[[Luhmann 17,7bc (R)|+R]]`;
+    if (preserved.has(record.archiveId) && existing.has(record.archiveId)) body = normalizeExistingBody(splitNote(existing.get(record.archiveId).text).body, filenameByAddress, rendered.references);
+    if (corpus.reverse !== null && record.archiveId === corpus.reverse.frontId) body = `${body}${body ? "\n\n" : ""}${corpus.reverse.branchLink}`;
     const content = `${frontmatter(record, rendered)}\n${body ? `${body}\n` : ""}`;
     const filename = filenameById.get(record.archiveId); await writeFile(join(stage, filename), content);
     staged.push({ ...record, filename, checksum: sha256(content), title: rendered.title, titleEvidence: rendered.titleEvidence, references: rendered.references });
     for (const reference of rendered.references) allReferences.push({ from: record.archiveId, ...reference });
   }
-  const refs = renderRefs(staged, allReferences);
-  await writeFile(join(root, "stage", "17-refs.md"), refs);
-  const stageManifest = { schemaVersion: 1, division: "17", generatedAt: new Date().toISOString(), cacheManifestChecksum: sha256(await readFile(join(cache, "manifest.json"))), refsChecksum: sha256(refs), records: staged };
-  await atomicWrite(join(root, "stage", "17-manifest.json"), `${JSON.stringify(stageManifest, null, 2)}\n`);
+  const refs = renderRefs(staged, allReferences, corpus);
+  await writeFile(join(root, "stage", `${corpus.key}-refs.md`), refs);
+  const stageManifest = { schemaVersion: 2, corpus: corpus.key, zk: corpus.zk, prefix: corpus.prefix, generatedAt: new Date().toISOString(), cacheManifestChecksum: sha256(await readFile(join(cache, "manifest.json"))), refsChecksum: sha256(refs), records: staged };
+  await atomicWrite(join(root, "stage", `${corpus.key}-manifest.json`), `${JSON.stringify(stageManifest, null, 2)}\n`);
   log(`Staged ${staged.length} notes in ${stage}`); return stageManifest;
 }
 
-function renderRefs(records, references) {
+function renderRefs(records, references, corpus) {
   const byFrom = groupBy(
     references.filter((reference) => !reference.imported),
     (reference) => reference.from,
   );
+  const addressCounts = new Map();
+  for (const record of records) addressCounts.set(record.address, (addressCounts.get(record.address) ?? 0) + 1);
   const sections = [];
   for (const record of records) {
     const refs = byFrom.get(record.archiveId) ?? []; if (!refs.length) continue;
     const unique = new Map(refs.map((reference) => [reference.archiveId, reference]));
-    sections.push(`## ${record.filename.replace(/^Luhmann |\.md$/gu, "")}\n\n${Array.from(unique.values(), (reference) => `[${reference.visible}](${reference.url})`).join(" · ")}`);
+    const heading = (addressCounts.get(record.address) ?? 0) > 1 || record.side === "reverse"
+      ? record.filename.replace(/^Luhmann |\.md$/gu, "")
+      : record.address;
+    sections.push(`## ${heading}\n\n${Array.from(unique.values(), (reference) => `[${reference.visible}](${reference.url})`).join(" · ")}`);
   }
-  return `${START}\n${sections.join("\n\n")}\n${END}\n`;
+  return `${corpus.refsStart}\n${sections.join("\n\n")}\n${corpus.refsEnd}\n`;
 }
 
 function balancedLinks(text) { return (text.match(/\[\[/gu)?.length ?? 0) === (text.match(/\]\]/gu)?.length ?? 0); }
-export async function validateCorpus({ vault, log = console.log }) {
-  const root = importRoot(vault); const stagePath = join(root, "stage", "17"); const manifestPath = join(root, "stage", "17-manifest.json"); const manifestText = await readFile(manifestPath); const manifest = JSON.parse(manifestText);
+export async function validateCorpus({ vault, corpus = CORPORA.division17, log = console.log }) {
+  const root = importRoot(vault); const stagePath = join(root, "stage", corpus.key); const manifestPath = join(root, "stage", `${corpus.key}-manifest.json`); const manifestText = await readFile(manifestPath); const manifest = JSON.parse(manifestText);
   const errors = []; const warnings = []; const files = (await readdir(stagePath)).filter((file) => file.endsWith(".md"));
-  if (files.length !== EXPECTED.total) errors.push(`Expected ${EXPECTED.total} Markdown files, found ${files.length}`);
-  if (new Set(manifest.records.map((record) => record.archiveId)).size !== EXPECTED.total) errors.push("Archive IDs are not unique");
-  if (new Set(manifest.records.map((record) => record.filename)).size !== EXPECTED.total) errors.push("Filenames are not unique");
+  const expected = corpus.expected;
+  if (files.length !== expected.total) errors.push(`Expected ${expected.total} Markdown files, found ${files.length}`);
+  if (new Set(manifest.records.map((record) => record.archiveId)).size !== expected.total) errors.push("Archive IDs are not unique");
+  if (new Set(manifest.records.map((record) => record.filename)).size !== expected.total) errors.push("Filenames are not unique");
+  if (new Set(manifest.records.map((record) => record.filename.toLocaleLowerCase("en-US"))).size !== expected.total) errors.push("Filenames collide on a case-insensitive filesystem");
   const filenames = new Set(files.map((file) => file.replace(/\.md$/u, "")));
   const recordsById = new Map(manifest.records.map((record) => [record.archiveId, record]));
   for (const record of manifest.records) {
@@ -328,52 +404,58 @@ export async function validateCorpus({ vault, log = console.log }) {
     if (!balancedLinks(content)) errors.push(`Unbalanced wikilinks: ${record.filename}`);
     if (record.title && !record.titleEvidence) errors.push(`Title lacks TEI evidence: ${record.filename}`);
     if (!/^---\nzettel-id: .+\ntitle: .*\narchive-id: .+\nsource: .+\nlicense: .+\n/mu.test(content)) errors.push(`Invalid frontmatter order: ${record.filename}`);
+    if (!content.startsWith(`---\nzettel-id: ${JSON.stringify(record.address)}\n`)) errors.push(`Address changed in ${record.filename}`);
+    if (record.filename.includes("/")) errors.push(`Filename contains a path separator: ${record.filename}`);
     for (const reference of record.references) {
       const target = recordsById.get(reference.archiveId);
       if (reference.branch && target && isNaturalAddressAncestor(target.address, record.address)) errors.push(`Return reference marked as branch: ${record.filename} -> ${target.filename}`);
-      if (reference.omitted && (!reference.near || !target || !isNaturalAddressAncestor(target.address, record.address))) errors.push(`Invalid omitted reference evidence: ${record.filename} -> ${reference.archiveId}`);
+      if (reference.omitted && (!(reference.near || reference.redHeaderLabel) || !target || !isNaturalAddressAncestor(target.address, record.address))) errors.push(`Invalid omitted reference evidence: ${record.filename} -> ${reference.archiveId}`);
     }
     for (const match of content.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/gu)) {
       const target = match[1]; const alias = match[2];
-      if (target.startsWith("Luhmann 17") && !filenames.has(target)) errors.push(`Missing internal target ${target} in ${record.filename}`);
+      if (target.startsWith("Luhmann ") && !filenames.has(target)) errors.push(`Missing internal target ${target} in ${record.filename}`);
       if (alias?.startsWith("+") && !/^\+[^+]/u.test(alias)) errors.push(`Noncanonical branch alias in ${record.filename}`);
     }
   }
-  const reverseLink = "[[Luhmann 17,7bc (R)|+R]]";
-  const front = await readFile(join(stagePath, "Luhmann 17,7bc.md"), "utf8");
-  const reverse = await readFile(join(stagePath, "Luhmann 17,7bc (R).md"), "utf8");
-  if (!front.trimEnd().endsWith(reverseLink) || front.split(reverseLink).length !== 2) errors.push("Front 17,7bc must end with exactly one +R branch");
-  if (reverse.includes("|+R]]")) errors.push("Reverse 17,7bc must not branch back to its front");
-  const report = { schemaVersion: 1, division: "17", validatedAt: new Date().toISOString(), passed: errors.length === 0 && warnings.length === 0, stageManifestChecksum: sha256(manifestText), errors, warnings };
-  await atomicWrite(join(root, "stage", "17-validation.json"), `${JSON.stringify(report, null, 2)}\n`);
+  if (corpus.reverse !== null) {
+    const frontRecord = manifest.records.find((record) => record.archiveId === corpus.reverse.frontId);
+    const front = frontRecord ? await readFile(join(stagePath, frontRecord.filename), "utf8") : "";
+    const reverse = await readFile(join(stagePath, corpus.reverse.reverseFilename), "utf8");
+    if (!front.trimEnd().endsWith(corpus.reverse.branchLink) || front.split(corpus.reverse.branchLink).length !== 2) errors.push(`Front must end with exactly one reverse branch in ${corpus.label}`);
+    if (reverse.includes("|+R]]")) errors.push(`Reverse must not branch back to its front in ${corpus.label}`);
+  }
+  const report = { schemaVersion: 2, corpus: corpus.key, zk: corpus.zk, prefix: corpus.prefix, validatedAt: new Date().toISOString(), passed: errors.length === 0 && warnings.length === 0, stageManifestChecksum: sha256(manifestText), errors, warnings };
+  await atomicWrite(join(root, "stage", `${corpus.key}-validation.json`), `${JSON.stringify(report, null, 2)}\n`);
   log(report.passed ? "Validation passed" : `Validation failed with ${errors.length} errors and ${warnings.length} warnings`); return report;
 }
 
-function replaceRefs(original, generated) {
-  const marked = new RegExp(`${START}[\\s\\S]*?${END}\\n?`, "u"); if (marked.test(original)) return original.replace(marked, generated);
-  const lines = original.split("\n"); const first = lines.findIndex((line) => /^## 17(?:$|[, (])/u.test(line));
+function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"); }
+function replaceRefs(original, generated, corpus) {
+  const marked = new RegExp(`${escapeRegExp(corpus.refsStart)}[\\s\\S]*?${escapeRegExp(corpus.refsEnd)}\\n?`, "u"); if (marked.test(original)) return original.replace(marked, generated);
+  if (corpus.legacyRefsHeading === null) return `${original.trimEnd()}\n\n${generated}`;
+  const lines = original.split("\n"); const first = lines.findIndex((line) => corpus.legacyRefsHeading.test(line));
   if (first < 0) return `${original.trimEnd()}\n\n${generated}`;
-  let end = first + 1; while (end < lines.length && (!lines[end].startsWith("## ") || /^## 17(?:$|[, (])/u.test(lines[end]))) end += 1;
+  let end = first + 1; while (end < lines.length && (!lines[end].startsWith("## ") || corpus.legacyRefsHeading.test(lines[end]))) end += 1;
   return [...lines.slice(0, first), generated.trimEnd(), ...lines.slice(end)].join("\n").replace(/\n{3,}/gu, "\n\n").trimEnd() + "\n";
 }
 
-export async function applyCorpus({ vault, log = console.log }) {
-  const root = importRoot(vault); const stageRoot = join(root, "stage"); const manifestText = await readFile(join(stageRoot, "17-manifest.json")); const manifest = JSON.parse(manifestText); const report = await json(join(stageRoot, "17-validation.json"));
+export async function applyCorpus({ vault, corpus = CORPORA.division17, log = console.log }) {
+  const root = importRoot(vault); const stageRoot = join(root, "stage"); const manifestText = await readFile(join(stageRoot, `${corpus.key}-manifest.json`)); const manifest = JSON.parse(manifestText); const report = await json(join(stageRoot, `${corpus.key}-validation.json`));
   if (!report.passed || report.stageManifestChecksum !== sha256(manifestText)) throw new Error("Apply requires an unchanged, passing validation report");
-  for (const record of manifest.records) if (sha256(await readFile(join(stageRoot, "17", record.filename))) !== record.checksum) throw new Error(`Stage changed after validation: ${record.filename}`);
+  for (const record of manifest.records) if (sha256(await readFile(join(stageRoot, corpus.key, record.filename))) !== record.checksum) throw new Error(`Stage changed after validation: ${record.filename}`);
   const stamp = new Date().toISOString().replace(/[:.]/gu, "-"); const backup = join(root, "backups", stamp); await mkdir(backup, { recursive: true });
   const operations = [];
   for (const record of manifest.records) {
     const destination = join(vault, record.filename); const wasPresent = await exists(destination);
     if (wasPresent) { await mkdir(join(backup, "notes"), { recursive: true }); await cp(destination, join(backup, "notes", record.filename)); }
-    await atomicWrite(destination, await readFile(join(stageRoot, "17", record.filename)));
+    await atomicWrite(destination, await readFile(join(stageRoot, corpus.key, record.filename)));
     operations.push({ path: record.filename, action: wasPresent ? "replaced" : "created" });
   }
   const refsPath = join(vault, ".luhmann-refs.md"); const refsWasPresent = await exists(refsPath); const refsOriginal = refsWasPresent ? await readFile(refsPath, "utf8") : "# Luhmann refs\n\n";
   if (refsWasPresent) await cp(refsPath, join(backup, ".luhmann-refs.md"));
-  const generated = await readFile(join(stageRoot, "17-refs.md"), "utf8"); await atomicWrite(refsPath, replaceRefs(refsOriginal, generated));
+  const generated = await readFile(join(stageRoot, `${corpus.key}-refs.md`), "utf8"); await atomicWrite(refsPath, replaceRefs(refsOriginal, generated, corpus));
   operations.push({ path: ".luhmann-refs.md", action: refsWasPresent ? "replaced" : "created" });
-  const rollback = { schemaVersion: 1, appliedAt: new Date().toISOString(), vault, operations };
+  const rollback = { schemaVersion: 2, corpus: corpus.key, zk: corpus.zk, prefix: corpus.prefix, appliedAt: new Date().toISOString(), vault, operations };
   await atomicWrite(join(backup, "rollback.json"), `${JSON.stringify(rollback, null, 2)}\n`);
   log(`Applied ${manifest.records.length} notes; backup and rollback manifest: ${backup}`); return rollback;
 }

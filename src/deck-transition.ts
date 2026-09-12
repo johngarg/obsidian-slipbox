@@ -30,8 +30,13 @@ export class DeckTransition {
     return this.startedAt !== null && now - this.startedAt < duration;
   }
 
+  displayedPose(path: string): CardMotionStyle | undefined {
+    return this.displayed.get(path);
+  }
+
   retain(paths: ReadonlySet<string>): void {
     for (const path of this.displayed.keys()) if (!paths.has(path)) this.displayed.delete(path);
+    for (const path of this.origins.keys()) if (!paths.has(path)) this.origins.delete(path);
   }
 
   reset(): void {

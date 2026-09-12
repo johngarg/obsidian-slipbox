@@ -31,6 +31,9 @@ initial public beta.
 
 ### Fixed
 
+- Sustained Drawer scrolling now releases off-screen cards during transitions,
+  preventing rendering work from growing with the distance browsed.
+
 - Centred vertical Deck map bookmark, active, colour, and Desk markers on the rail.
 
 - Kept `zt` and `zb` positioning inside the pane by accounting for the fixed card

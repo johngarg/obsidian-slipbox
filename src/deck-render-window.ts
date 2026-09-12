@@ -1,5 +1,5 @@
 import { deckAxis } from "./deck-axis.js";
-import { DRAWER_GAP, type DeckGeometry } from "./deck-motion.js";
+import { DRAWER_GAP, type CardMotionStyle, type DeckGeometry } from "./deck-motion.js";
 import type { DeckRenderWindow } from "./deck-viewport.js";
 
 /** Invert each linear half of the stack; cost does not depend on vault size. */
@@ -31,4 +31,24 @@ export function deckRenderWindow(count: number, geometry: DeckGeometry): DeckRen
   const start = indices[0];
   const end = indices[indices.length - 1];
   return start === undefined || end === undefined ? null : { start, end };
+}
+
+/** Keep only mounted transitions whose remaining sweep can enter the buffered pane. */
+export function deckTransitionIntersects(
+  geometry: DeckGeometry,
+  displayed: CardMotionStyle,
+  target: CardMotionStyle,
+): boolean {
+  const axis = deckAxis(geometry.orientation);
+  const extent = axis.extent(geometry.cardWidth, geometry.cardHeight);
+  const transverse = axis.extent(geometry.cardHeight, geometry.cardWidth);
+  // Rotation interpolates between the two endpoints. This deliberately bounds
+  // every intermediate footprint, not just the endpoint rectangles.
+  const angle = Math.max(Math.abs(displayed.rotation), Math.abs(target.rotation)) * Math.PI / 180;
+  const half = (extent + transverse * Math.sin(angle)) * Math.max(displayed.scale, target.scale) / 2;
+  const origin = geometry.anchorCoordinate + geometry.panOffset;
+  const buffer = extent * geometry.spread * 2;
+  const low = origin + Math.min(displayed.along, target.along) - half;
+  const high = origin + Math.max(displayed.along, target.along) + half;
+  return high >= -buffer && low <= geometry.paneExtent + buffer;
 }

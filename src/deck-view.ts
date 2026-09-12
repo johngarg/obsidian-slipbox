@@ -1,5 +1,5 @@
 import { deckAxis, deckCardDimensions } from "./deck-axis.js";
-import { deckRenderWindow, deckRenderedIndices } from "./deck-render-window.js";
+import { deckRenderWindow, deckRenderedIndices, deckTransitionIntersects } from "./deck-render-window.js";
 import { DeckTransition } from "./deck-transition.js";
 import { DeckWheelController } from "./deck-wheel.js";
 import { resolvedDeckKeybindings } from "./settings.js";
@@ -2744,19 +2744,20 @@ export class DeckView extends ItemView {
     activeIndex: number,
     deckVersion: number,
   ): Promise<void> {
+    const geometry = this.deckGeometry();
     const renderedWindow = this.deckViewport.recordRenderedWindow(
       filed,
-      this.deckGeometry(),
+      geometry,
     );
     if (renderedWindow === null) {
       return;
     }
-    const indices = deckRenderedIndices(filed.length, this.deckGeometry());
+    const indices = deckRenderedIndices(filed.length, geometry);
     const wanted = new Set(indices.map((index) => filed[index]?.path));
     const transitioning = this.drawerTransition.active(this.contentEl.win.performance.now(), VIEWPORT_CENTER_DURATION_MS);
     this.renderedCards = this.renderedCards.filter((element) => {
       const path = element.dataset.path ?? "";
-      if (wanted.has(path) || element.hasClass("is-dragging-to-desk") || transitioning) return true;
+      if (wanted.has(path) || this.retainTransitionCard(element, geometry, transitioning)) return true;
       this.renderComponents.get(path)?.unload();
       this.renderComponents.delete(path);
       this.cardFooters.removeCard(element);
@@ -4344,11 +4345,13 @@ export class DeckView extends ItemView {
     if (this.renderRefreshPending) {
       return;
     }
-    const desired = deckRenderWindow(this.plugin.index.snapshot.filed.length, this.deckGeometry());
+    const geometry = this.deckGeometry();
+    const desired = deckRenderWindow(this.plugin.index.snapshot.filed.length, geometry);
     const previous = this.deckViewport.snapshot.renderedWindow;
-    const wanted = new Set(deckRenderedIndices(this.plugin.index.snapshot.filed.length, this.deckGeometry()));
-    const hasSurplus = !this.drawerTransition.active(this.contentEl.win.performance.now(), VIEWPORT_CENTER_DURATION_MS) &&
-      this.renderedCards.some((card) => !wanted.has(Number(card.dataset.index)));
+    const wanted = new Set(deckRenderedIndices(this.plugin.index.snapshot.filed.length, geometry));
+    const transitioning = this.drawerTransition.active(this.contentEl.win.performance.now(), VIEWPORT_CENTER_DURATION_MS);
+    const hasSurplus = this.renderedCards.some((card) =>
+      !wanted.has(Number(card.dataset.index)) && !this.retainTransitionCard(card, geometry, transitioning));
     if (desired?.start === previous?.start && desired?.end === previous?.end && !hasSurplus) return;
 
     if (this.renderRefreshRunning) {
@@ -4394,6 +4397,15 @@ export class DeckView extends ItemView {
     };
   }
 
+  private retainTransitionCard(card: HTMLElement, geometry: DeckGeometry, transitioning: boolean): boolean {
+    if (card.hasClass("is-dragging-to-desk")) return true;
+    if (!transitioning) return false;
+    const displayed = this.drawerTransition.displayedPose(card.dataset.path ?? "");
+    return displayed !== undefined && deckTransitionIntersects(
+      geometry, displayed, cardMotionStyle({ ...geometry, cardIndex: Number(card.dataset.index) }),
+    );
+  }
+
   private cardStep(): number {
     const geometry = this.deckGeometry();
     return deckAxis(geometry.orientation).extent(geometry.cardWidth, geometry.cardHeight) * geometry.spread;
@@ -4408,10 +4420,9 @@ export class DeckView extends ItemView {
     const advance = (): void => {
       this.drawerFrame = null;
       this.positionCards();
+      this.queueRenderWindowRefresh();
       if (this.drawerTransition.active(win.performance.now(), VIEWPORT_CENTER_DURATION_MS)) {
         this.drawerFrame = win.requestAnimationFrame(advance);
-      } else {
-        this.queueRenderWindowRefresh();
       }
     };
     this.drawerFrame = win.requestAnimationFrame(advance);

@@ -12,6 +12,11 @@ import {
   LocalBranchViewController,
 } from "../src/local-branch-view.js";
 
+function svgLabel(element: Element | null | undefined): string {
+  const id = element?.getAttribute("aria-labelledby");
+  return id ? element?.ownerDocument.getElementById(id)?.textContent ?? "" : "";
+}
+
 const branchNode = (
   path: string,
   address: string,
@@ -68,6 +73,8 @@ function fixture(
   ownerWidth = 520,
   stageWidth = 900,
   showTooltips = false,
+  placement: "left" | "below" | "hidden" = "below",
+  orientation: "horizontal" | "vertical" = "vertical",
 ) {
   const htmlNamespace = "http://www.w3.org/1999/xhtml";
   const window = new Window();
@@ -97,6 +104,8 @@ function fixture(
   const controller = new LocalBranchViewController({
     activeDocument: document,
     canShowView: () => available,
+    placement: () => placement,
+    orientation: () => orientation,
     showTooltips: () => showTooltips,
     previewLinksOnHover: () => true,
     setIcon: (control, icon) => {
@@ -141,7 +150,7 @@ describe("local Branch View controller", () => {
   test("widens within the Deck stage and caps at the layout maximum", () => {
     const ownerWidth = 548;
     const stageWidth = 900;
-    const subject = fixture(MODEL, ownerWidth, stageWidth);
+    const subject = fixture(MODEL, ownerWidth, stageWidth, false, "below", "horizontal");
     const root = subject.first.querySelector<HTMLElement>(
       ".slipbox-local-branch-view",
     );
@@ -180,12 +189,12 @@ describe("local Branch View controller", () => {
       Array.from(root?.querySelectorAll(".slipbox-local-branch-control svg") ?? [])
         .map((icon) => icon.getAttribute("data-icon")),
       [
-        "arrow-left",
-        "arrow-right",
-        "chevrons-left",
+        "corner-left-up",
+        "corner-left-down",
         "git-fork",
-        "corner-down-right",
-        "corner-up-left",
+        "chevrons-up",
+        "arrow-down",
+        "arrow-up",
       ],
     );
     assert.equal(
@@ -289,7 +298,7 @@ describe("local Branch View controller", () => {
     }) as unknown as Event);
     assert.deepEqual(subject.activations, [["a.md"]]);
     assert.equal(subject.first.querySelector("title"), null);
-    assert.match(node?.getAttribute("aria-label") ?? "", /a\.md/);
+    assert.match(svgLabel(node), /a\.md/);
   });
 
   test("draws inter-strand connections as straight lines", () => {
@@ -522,7 +531,7 @@ describe("local Branch View controller", () => {
     assert.deepEqual(spans.map((span) => span.textContent), ["57,", "2,25"]);
     assert.equal(spans[0]?.getAttribute("y"), "43.5");
     assert.equal(spans[1]?.getAttribute("y"), "52.5");
-    assert.match(node?.getAttribute("aria-label") ?? "", /57,2,25/);
+    assert.match(svgLabel(node), /57,2,25/);
   });
 
   test("elides overlong wrapped addresses from the beginning", () => {
@@ -547,7 +556,7 @@ describe("local Branch View controller", () => {
         .map((span) => span.textContent);
 
     assert.deepEqual(lines, ["…7890", "12345"]);
-    assert.match(node?.getAttribute("aria-label") ?? "", /123456789012345/);
+    assert.match(svgLabel(node), /123456789012345/);
   });
 
   test("renders omitted runs as a counted ellipsis slot", () => {
@@ -569,7 +578,7 @@ describe("local Branch View controller", () => {
     );
     const focusId = gap?.getAttribute("data-focus-id") ?? "";
 
-    assert.match(gap?.getAttribute("aria-label") ?? "", /Show \d+ omitted cards/);
+    assert.match(svgLabel(gap), /Show \d+ omitted cards/);
     assert.match(
       gap?.querySelector(".slipbox-local-branch-gap-count")?.textContent ?? "",
       /^\d+$/,
@@ -627,8 +636,8 @@ describe("local Branch View controller", () => {
     const stub = subject.first.querySelector<SVGElement>(
       "[data-focus-id='stub:a.md']",
     );
-    assert.match(stub?.getAttribute("aria-label") ?? "", /inserted/);
-    assert.match(stub?.getAttribute("aria-label") ?? "", /supplementary/);
+    assert.match(svgLabel(stub), /inserted/);
+    assert.match(svgLabel(stub), /supplementary/);
     stub?.dispatchEvent(new subject.window.MouseEvent("click", {
       bubbles: true,
     }) as unknown as Event);
@@ -716,4 +725,47 @@ describe("local Branch View controller", () => {
     assert.equal(root?.querySelector(".slipbox-local-branch-header"), null);
     assert.equal(root?.querySelector(".slipbox-local-branch-graph"), null);
   });
+});
+
+test("left Branch View transforms stub hit targets with their visible lines", () => {
+  const subject = fixture(MODEL, 840, 600, false, "left");
+  const root = subject.first.querySelector<HTMLElement>(".slipbox-local-branch-view");
+  assert.equal(root?.dataset.placement, "left");
+  const line = root?.querySelector(".slipbox-local-branch-stub-line");
+  const hit = root?.querySelector(".slipbox-local-branch-stub-hit");
+  assert.ok(line && hit);
+  const dx = Number(line.getAttribute("x2")) - Number(line.getAttribute("x1"));
+  const dy = Number(line.getAttribute("y2")) - Number(line.getAttribute("y1"));
+  const hitDx = Number(hit.getAttribute("x2")) - Number(hit.getAttribute("x1"));
+  const hitDy = Number(hit.getAttribute("y2")) - Number(hit.getAttribute("y1"));
+  assert.ok(dx < 0 && dy > 0);
+  assert.ok(hitDx < 0 && hitDy > 0);
+  assert.ok(Math.abs(dx / dy - hitDx / hitDy) < 1e-10);
+  const scroller = root?.querySelector<HTMLElement>(".slipbox-local-branch-scroller");
+  assert.ok(scroller);
+  scroller.scrollTop = 30;
+  subject.controller.attach(subject.first, "b.md", subject.stage);
+  assert.equal(root?.querySelector(".slipbox-local-branch-scroller"), scroller);
+  assert.equal(scroller.scrollTop, 30);
+  subject.controller.disconnect();
+});
+
+test("hidden placement can be temporarily shown using automatic orientation", () => {
+  const subject = fixture(MODEL, 840, 600, false, "hidden");
+  assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+  subject.controller.toggleVisibility();
+  assert.ok(subject.first.querySelector(".slipbox-local-branch-graph"));
+  assert.equal(subject.first.querySelector<HTMLElement>(".slipbox-local-branch-view")?.dataset.placement, "left");
+  subject.controller.disconnect();
+});
+
+test("SVG controls retain accessible labels without invoking Obsidian HTML tooltips", () => {
+  const subject = fixture(MODEL, 840, 600, false, "left");
+  const graph = subject.first.querySelector(".slipbox-local-branch-graph");
+  assert.ok(graph);
+  assert.equal(graph.querySelector("[aria-label]"), null);
+  assert.equal(graph.getAttribute("aria-label"), null);
+  assert.equal(svgLabel(graph), "Local branch diagram");
+  graph.querySelectorAll("[role='button']").forEach((control) => assert.ok(svgLabel(control).length > 0));
+  subject.controller.disconnect();
 });

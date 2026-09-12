@@ -4,7 +4,7 @@ import type { DuplicateAddressPolicy } from "./card-metadata.js";
 export const SLIPBOX_DATA_SCHEMA_VERSION = 14;
 
 export const DEFAULT_CARD_SPREAD = 0.58;
-export const MIN_CARD_SPREAD = 0.18;
+export const MIN_CARD_SPREAD = 0.10;
 export const MAX_CARD_SPREAD = 1.12;
 
 export function metadataPropertyError(
@@ -478,7 +478,19 @@ export const SLIPBOX_ACTION_DEFINITIONS: readonly SlipboxActionDefinition[] =
           : "deck-anchor",
   }));
 
+export type DeckOrientation = "horizontal" | "vertical";
+export type DeckStackModel = "drawer" | "fan";
+export type BranchViewPlacement = "auto" | "left" | "below" | "hidden";
+export type NavigationAction = "previous-card" | "next-card";
+
 export interface SlipboxSettings {
+  readonly deckOrientation: DeckOrientation;
+  readonly deckStackModel: DeckStackModel;
+  readonly fanHeadersAtBottom: boolean;
+  readonly cardTilt: number;
+  readonly branchViewPlacement: BranchViewPlacement;
+  readonly wheelOverCardBody: "body-first" | "deck";
+  readonly navigationKeyOverrides: Readonly<Record<NavigationAction, boolean>>;
   readonly addressProperty: string;
   readonly deckOrdering: DeckOrdering;
   readonly duplicateAddresses: DuplicateAddressPolicy;
@@ -563,6 +575,13 @@ const RETIRED_UNRELEASED_DEFAULT_DECK_KEYBINDINGS: Partial<Readonly<Record<
 };
 
 export const DEFAULT_SETTINGS: SlipboxSettings = {
+  deckOrientation: "horizontal",
+  deckStackModel: "drawer",
+  fanHeadersAtBottom: false,
+  cardTilt: 0,
+  branchViewPlacement: "auto",
+  wheelOverCardBody: "body-first",
+  navigationKeyOverrides: { "previous-card": false, "next-card": false },
   addressProperty: "slipbox-id",
   deckOrdering: "natural",
   duplicateAddresses: "allowed",
@@ -910,9 +929,17 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       typeof source.allowCardScrolling === "boolean"
         ? source.allowCardScrolling
         : DEFAULT_SETTINGS.allowCardScrolling,
+    deckOrientation: source.deckOrientation === "vertical" ? "vertical" : "horizontal",
+    deckStackModel: source.deckStackModel === "fan" ? "fan" : "drawer",
+    fanHeadersAtBottom: source.fanHeadersAtBottom === true,
+    cardTilt: typeof source.cardTilt === "number" && Number.isFinite(source.cardTilt)
+      ? Math.max(0, Math.min(5, source.cardTilt)) : 0,
+    branchViewPlacement: normalizeBranchViewPlacement(source),
+    wheelOverCardBody: source.wheelOverCardBody === "deck" ? "deck" : "body-first",
+    navigationKeyOverrides: normalizeNavigationOverrides(source),
     cardSpread: normalizeCardSpread(source.cardSpread),
     cardHeaderButtons: normalizeCardHeaderButtons(source.cardHeaderButtons),
-    deckKeybindings: normalizeDeckKeybindings(source.deckKeybindings),
+    deckKeybindings: normalizeSettingsBindings(source),
   };
 }
 
@@ -933,4 +960,55 @@ export function keyBindingConflict(
     }
   }
   return null;
+}
+
+function normalizeBranchViewPlacement(source: Record<string, unknown>): BranchViewPlacement {
+  const value = source.branchViewPlacement;
+  if (value === "left" || value === "below" || value === "hidden" || value === "auto") {
+    return value;
+  }
+  return value === undefined && (source.showLocalBranchView === false ||
+    source.showInferredBranchNavigation === false) ? "hidden" : "auto";
+}
+
+function normalizeNavigationOverrides(source: Record<string, unknown>): Record<NavigationAction, boolean> {
+  const explicit = isRecord(source.navigationKeyOverrides) ? source.navigationKeyOverrides : {};
+  const bindings = isRecord(source.deckKeybindings) ? source.deckKeybindings : {};
+  const result = { "previous-card": false, "next-card": false };
+  for (const action of ["previous-card", "next-card"] as const) {
+    result[action] = typeof explicit[action] === "boolean" ? explicit[action]
+      : Array.isArray(bindings[action]) && !bindingsMatch(bindings[action], DEFAULT_DECK_KEYBINDINGS[action]);
+  }
+  return result;
+}
+
+export function defaultNavigationBindings(action: NavigationAction, orientation: DeckOrientation): readonly DeckKeyBinding[] {
+  if (orientation === "horizontal") return DEFAULT_DECK_KEYBINDINGS[action];
+  return action === "previous-card" ? [binding("ArrowUp"), binding("k")]
+    : [binding("ArrowDown"), binding("j")];
+}
+
+/** User bindings claim keys first; orientation defaults fill the remaining keys. */
+export function resolvedDeckKeybindings(settings: SlipboxSettings): SlipboxSettings["deckKeybindings"] {
+  const result = { ...settings.deckKeybindings };
+  const automatic = (["previous-card", "next-card"] as const)
+    .filter((action) => !settings.navigationKeyOverrides[action]);
+  const claimed = new Set(Object.entries(result)
+    .filter(([action]) => !automatic.some((candidate) => candidate === action))
+    .flatMap(([, bindings]) => bindings.map(keyBindingSignature)));
+  for (const action of automatic) {
+    result[action] = defaultNavigationBindings(action, settings.deckOrientation)
+      .filter((candidate) => !claimed.has(keyBindingSignature(candidate)));
+    for (const candidate of result[action]) claimed.add(keyBindingSignature(candidate));
+  }
+  return result;
+}
+
+function normalizeSettingsBindings(source: Record<string, unknown>): SlipboxSettings["deckKeybindings"] {
+  const bindings = isRecord(source.deckKeybindings) ? { ...source.deckKeybindings } : {};
+  const overrides = normalizeNavigationOverrides(source);
+  for (const action of ["previous-card", "next-card"] as const) {
+    if (!overrides[action]) delete bindings[action];
+  }
+  return normalizeDeckKeybindings(bindings);
 }

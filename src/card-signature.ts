@@ -186,6 +186,17 @@ export class CardSignatureManager {
     this.flushLayout();
   }
 
+  removeCard(card: HTMLElement): void {
+    for (const entry of this.entries) {
+      if (!card.contains(entry.signature)) continue;
+      if (this.overflowEntry === entry) this.closeOverflowMenu();
+      this.resizeObserver?.unobserve(entry.signature);
+      this.resizeObserver?.unobserve(entry.intrinsicSizer);
+      this.entries.delete(entry);
+      this.entriesBySignature.delete(entry.signature);
+    }
+  }
+
   clear(): void {
     this.closeOverflowMenu();
     this.resizeObserver?.disconnect();

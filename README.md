@@ -63,11 +63,52 @@ Any trimmed, nonempty, single-line string without control characters is a valid 
 
 Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox Desk never rewrites an existing address automatically.
 
+## Deck layout
+
+Choose **Deck orientation** (horizontal or vertical) and **Stacking model**
+(Drawer or Fan) independently. Horizontal Drawer is the default, including when
+upgrading. Drawer keeps cards in filing order and opens a 12 px reading gap
+following the anchor. Selecting a card brings it to the anchor position. Fan
+keeps the selected card above its neighbours and retains stationary selection.
+
+Deck cards have fixed dimensions: Small 720 × 480 px, Medium 840 × 560 px,
+and Large 960 × 640 px. Resizing the pane or positioning the Deck does not resize
+cards. Drag empty workspace to pan in either direction and reach offscreen
+content. Viewed cards and Desk piles retain their own sizing behavior.
+
+Enable **Show lower Fan headers at bottom** to place the address, title, and
+header controls at the bottom of cards below the anchor in vertical Fan. They
+return to the top as soon as the card becomes the anchor or moves above it.
+This option is off by default and does not affect Drawer or horizontal layouts.
+
+**Card spread** runs from 0.10 to 1.12 and measures separation as a fraction of
+card width horizontally or card height vertically. **Card tilt** adds up to
+5 degrees of deterministic rotation to neighbours; the anchor stays straight.
+A spread near 0.46 and tilt near 2.4 produces a loose stack. No card-count setting
+is needed: the rendered window follows pane geometry and panning.
+
+In vertical orientation, wheel gestures browse the Deck. With **Wheel over card
+body: Body first**, long anchor bodies scroll first, followed by a short boundary
+resistance before browsing continues. **Deck** bypasses body scrolling. Editor
+and Branch View scrolling remain independent. Vertical header drags pan the
+workspace; sideways header drags pull cards onto the Desk. Horizontal header
+drags retain their existing behavior.
+
+`zt`, `zz`, and `zb` prefer 22%, 50%, and 78% of pane height in vertical mode.
+Top and bottom positions move inward as needed to keep the fixed card inside the
+pane with a small margin. If the pane is shorter than the card, `zt` exposes its
+header and `zb` its footer; pan to reach the rest.
+Default arrows follow the orientation: Left/Right horizontally, Up/Down
+vertically; `k`/`j` always mean previous/next. Existing bindings matching the old
+defaults are treated as automatic on upgrade. Custom and disabled bindings are
+preserved, and explicitly edited shortcuts no longer follow orientation until
+reset.
+
 ## Deck map
 
-The Deck map is an ordinal rail across the top of the view. The complete
-filed Deck runs from its first card at the left edge to its last card at the
-right edge. Clear dividers and labels mark top-level address sections, and a
+The Deck map is an ordinal rail across the top in horizontal orientation, or
+along the right edge in vertical orientation. The complete filed Deck runs from
+left to right, or top to bottom. Clear dividers and labels mark top-level address sections, and a
 prominent vertical cursor marks the active card.
 
 Ordinary cards do not produce individual marks. Coloured cards appear as small,
@@ -107,7 +148,7 @@ The **Recognise supplementary branch links** setting treats a link alias beginni
 
 The separate **Derive inserted branches from addresses** setting derives structural relationships from address extensions. With natural ordering, `2a` can be a child of `2`, while `20` is not.
 
-With either relationship type enabled, **Show local Branch View** displays an Archive-inspired diagram beneath the active Deck card. Turning it off hides the diagram and its controls; branch navigation commands remain available.
+With either relationship type enabled, **Branch View placement** chooses Automatic, Left, Below, or Hidden. Automatic places the diagram below a horizontal Deck or left of a vertical Deck. Left placement runs strands downward and expands departure columns to the left; pan the workspace to explore columns outside the pane. The diagram keeps its full-size nodes and scrolls along strands. The existing Branch View command can temporarily show or hide it; branch navigation commands remain available.
 
 ## Essential keys
 
@@ -115,8 +156,8 @@ There are some actions that are very quick to do in the real world, but take tim
 
 | Key | Action |
 | --- | --- |
-| `←` / `k` | Move to the previous Deck card |
-| `→` / `j` | Move to the next Deck card |
+| `←` (horizontal), `↑` (vertical) / `k` | Move to the previous Deck card |
+| `→` (horizontal), `↓` (vertical) / `j` | Move to the next Deck card |
 | `n` / `N` | Move forward/backward on the current strand |
 | `^` | Move to the current strand's beginning |
 | `>` / `<` | Enter an inserted branch or move to a higher strand |

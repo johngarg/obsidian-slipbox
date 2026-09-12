@@ -7,6 +7,7 @@ import {
   adjacentBookmarkIndex,
   bookmarkEdgeTargets,
   cardMotionStyle,
+  type DeckGeometry,
   cardStackOrder,
   centredViewportPosition,
   clampViewportPosition,
@@ -15,6 +16,12 @@ import {
   setCardMotionOpacity,
   setCardStackOrder,
 } from "../src/deck-motion.js";
+
+const geometry: DeckGeometry = {
+  cardWidth: 100, cardHeight: 100, anchorIndex: 4, viewportPosition: 4,
+  spread: 1, orientation: "horizontal", model: "fan", tilt: 0,
+  paneExtent: 300, anchorCoordinate: 150, panOffset: 0,
+};
 
 describe("free Deck motion", () => {
   test("chooses the closest bookmark on either side without wrapping", () => {
@@ -75,20 +82,20 @@ describe("free Deck motion", () => {
 
   test("chooses the nearest off-screen bookmark on each side", () => {
     assert.deepEqual(
-      bookmarkEdgeTargets([0, 2, 4, 6, 8], 4, 100, 300, 100),
-      { left: 2, right: 6 },
+      bookmarkEdgeTargets([0, 2, 4, 6, 8], geometry),
+      { before: 2, after: 6 },
     );
-    assert.deepEqual(bookmarkEdgeTargets([4], 4, 100, 300, 100), {
-      left: null,
-      right: null,
+    assert.deepEqual(bookmarkEdgeTargets([4], geometry), {
+      before: null,
+      after: null,
     });
     assert.deepEqual(
-      bookmarkEdgeTargets([2, 6], 4, 60, 300, 100),
-      { left: 2, right: 6 },
+      bookmarkEdgeTargets([2, 6], { ...geometry, spread: 0.6 }),
+      { before: 2, after: 6 },
     );
-    assert.deepEqual(bookmarkEdgeTargets([0, 8], 4, 0, 300, 100), {
-      left: null,
-      right: null,
+    assert.deepEqual(bookmarkEdgeTargets([0, 8], { ...geometry, spread: 0 }), {
+      before: null,
+      after: null,
     });
   });
 
@@ -115,58 +122,42 @@ describe("free Deck motion", () => {
     assert.equal(clampViewportPosition(9, 6), 5);
   });
 
-  test("positions cards continuously without snapping to integer indices", () => {
-    assert.deepEqual(cardMotionStyle(2, 1.25, 400), {
-      translateX: 300,
-      scale: 0.97375,
-      opacity: 0.9025,
-    });
-    assert.equal(cardMotionStyle(1, 1.25, 400).translateX, -100);
+  test("keeps translation continuous while Fan emphasis follows the selected card", () => {
+    const options = { ...geometry, viewportPosition: 2.4, cardWidth: 300 };
+    const focused = cardMotionStyle({ ...options, cardIndex: 4 });
+    const adjacent = cardMotionStyle({ ...options, cardIndex: 3 });
+    const farther = cardMotionStyle({ ...options, cardIndex: 2 });
+    assert.equal(focused.along, 480);
+    assert.equal(focused.scale, 1);
+    assert.equal(adjacent.scale, 0.965);
+    assert.ok(Math.abs(farther.scale - 0.93) < 1e-12);
+    assert.equal(focused.opacity, 1);
+    assert.equal(adjacent.opacity, 0.87);
   });
 
-  test("keeps the active card legible away from the Deck centre", () => {
-    assert.deepEqual(cardMotionStyle(0, 4, 300, true), {
-      translateX: -1200,
-      scale: 0.98,
-      opacity: 1,
-    });
-    assert.deepEqual(cardMotionStyle(0, 4, 300), {
-      translateX: -1200,
-      scale: 0.86,
-      opacity: 0.48,
-    });
+  test("Drawer opens a full-card gap without raising or shrinking the anchor", () => {
+    for (const orientation of ["horizontal", "vertical"] as const) {
+      const options = { ...geometry, model: "drawer" as const, orientation, spread: 0.1 };
+      assert.equal(cardMotionStyle({ ...options, cardIndex: 3 }).along, -10);
+      assert.equal(cardMotionStyle({ ...options, cardIndex: 4 }).along, 0);
+      assert.equal(cardMotionStyle({ ...options, cardIndex: 5 }).along, 112);
+      assert.equal(cardMotionStyle({ ...options, cardIndex: 6 }).along, 122);
+      for (let index = 0; index < 1000; index++) {
+        assert.equal(cardMotionStyle({ ...options, cardIndex: index }).scale, 1);
+        assert.ok(cardStackOrder(index + 1, 4, "drawer") > cardStackOrder(index, 4, "drawer"));
+      }
+    }
   });
 
-  test("sizes cards monotonically around a keyboard-focused card", () => {
-    const viewportPosition = 2.4;
-    const activeIndex = 4;
-    const focused = cardMotionStyle(
-      activeIndex,
-      viewportPosition,
-      300,
-      true,
-      activeIndex,
-    );
-    const adjacent = cardMotionStyle(
-      activeIndex - 1,
-      viewportPosition,
-      300,
-      false,
-      activeIndex,
-    );
-    const farther = cardMotionStyle(
-      activeIndex - 2,
-      viewportPosition,
-      300,
-      false,
-      activeIndex,
-    );
-
-    assert.ok(focused.scale > adjacent.scale);
-    assert.ok(adjacent.scale > farther.scale);
-    assert.ok(focused.opacity > adjacent.opacity);
-    assert.ok(adjacent.opacity > farther.opacity);
-    assert.equal(focused.translateX, 480);
+  test("tilt survives anchor changes and vertical Fan never scales", () => {
+    const tilted = { ...geometry, tilt: 5, orientation: "vertical" as const, cardIndex: 9 };
+    const first = cardMotionStyle(tilted);
+    const second = cardMotionStyle({ ...tilted, anchorIndex: 5 });
+    assert.equal(first.rotation, second.rotation);
+    assert.equal(first.across, second.across);
+    assert.equal(first.scale, 1);
+    assert.equal(cardMotionStyle({ ...tilted, anchorIndex: 9 }).rotation, 0);
+    assert.equal(cardMotionStyle({ ...tilted, anchorIndex: 9 }).across, 0);
   });
 
   test("centres discrete navigation targets and clamps Deck boundaries", () => {

@@ -1,3 +1,4 @@
+import type { DeckOrientation } from "./settings.js";
 import type {
   DeckMapReadout,
   DeckMapRenderableLandmark,
@@ -56,6 +57,11 @@ export class DeckMapRenderer {
       this.readoutTitle,
     );
     rootElement.append(this.readoutElement);
+  }
+
+  setOrientation(orientation: DeckOrientation): void {
+    this.rootElement.dataset.orientation = orientation;
+    this.rootElement.setAttribute("aria-orientation", orientation);
   }
 
   reconcileSections(

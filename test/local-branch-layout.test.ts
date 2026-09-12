@@ -46,7 +46,7 @@ const model: LocalBranchModel = {
 
 describe("local branch layout", () => {
   test("leaves a 40-percent narrower gap between adjacent nodes", () => {
-    const result = layoutLocalBranchModel(model, { width: 840 });
+    const result = layoutLocalBranchModel(model, { strandExtent: 840 });
     const first = result.strands[0]?.items[0];
     const second = result.strands[0]?.items[1];
     const centreDistance = (second?.x ?? 0) - (first?.x ?? 0);
@@ -87,7 +87,7 @@ describe("local branch layout", () => {
           },
         },
       ],
-    }, { width: 840 });
+    }, { strandExtent: 840 });
     const current = result.strands[0]?.items;
     const departure = result.strands[1]?.items;
     const nextNode = current?.find((item) =>
@@ -146,7 +146,7 @@ describe("local branch layout", () => {
           knownEnd: true,
         },
       ],
-    }, { width: 840 });
+    }, { strandExtent: 840 });
     const higherNext = result.strands[0]?.items.find((item) =>
       item.kind === "node" && item.node.path === next.path
     );
@@ -158,7 +158,7 @@ describe("local branch layout", () => {
   });
 
   test("preserves active and known boundaries while creating omission runs", () => {
-    const result = layoutLocalBranchModel(model, { width: 310 });
+    const result = layoutLocalBranchModel(model, { strandExtent: 310 });
     const items = result.strands[0]?.items ?? [];
     const visiblePaths = items.flatMap((item) =>
       item.kind === "node" ? [item.node.path] : []
@@ -217,7 +217,7 @@ describe("local branch layout", () => {
           knownEnd: true,
         },
       ],
-    }, { width: 240 });
+    }, { strandExtent: 240 });
     const visibleHigherPaths = result.strands[0]?.items.flatMap((item) =>
       item.kind === "node" ? [item.node.path] : []
     ) ?? [];
@@ -240,7 +240,7 @@ describe("local branch layout", () => {
         nodes,
         selectedPath: "2.md",
       }],
-    }, { width: 240 });
+    }, { strandExtent: 240 });
     const items = result.strands[0]?.items ?? [];
 
     assert.deepEqual(
@@ -251,14 +251,14 @@ describe("local branch layout", () => {
   });
 
   test("expands exactly the activated omitted run into horizontal overflow", () => {
-    const compact = layoutLocalBranchModel(model, { width: 310 });
+    const compact = layoutLocalBranchModel(model, { strandExtent: 310 });
     const gap = compact.strands[0]?.items.find((item) => item.kind === "gap");
     assert.notEqual(gap, undefined);
     if (gap === undefined) {
       return;
     }
     const expanded = layoutLocalBranchModel(model, {
-      width: 310,
+      strandExtent: 310,
       expandedGapIds: new Set([gap.id]),
     });
     assert.equal(expanded.contentWidth > expanded.viewportWidth, true);
@@ -270,8 +270,26 @@ describe("local branch layout", () => {
 
   test("returns identical geometry for identical inputs", () => {
     assert.deepEqual(
-      layoutLocalBranchModel(model, { width: 640 }),
-      layoutLocalBranchModel(model, { width: 640 }),
+      layoutLocalBranchModel(model, { strandExtent: 640 }),
+      layoutLocalBranchModel(model, { strandExtent: 640 }),
     );
   });
+});
+
+test("left placement transposes strand positions and grows columns leftward", () => {
+  const branched = { ...model, strands: [...model.strands, { ...model.strands[0]!, id: "departure", role: "departure" as const }] };
+  const below = layoutLocalBranchModel(branched, { strandExtent: 640 });
+  const left = layoutLocalBranchModel(branched, { strandExtent: 640, placement: "left" });
+  assert.equal(left.contentWidth, below.height);
+  assert.equal(left.height, below.contentWidth);
+  assert.equal(left.nodeRadius, below.nodeRadius);
+  for (let row = 0; row < below.strands.length; row++) {
+    const source = below.strands[row]!;
+    const target = left.strands[row]!;
+    source.items.forEach((item, index) => {
+      assert.equal(target.items[index]?.x, below.height - item.y);
+      assert.equal(target.items[index]?.y, item.x);
+    });
+  }
+  assert.ok(left.strands[1]!.items[0]!.x < left.strands[0]!.items[0]!.x);
 });

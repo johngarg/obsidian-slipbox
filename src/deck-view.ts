@@ -1,3 +1,10 @@
+import { deckAxis, deckCardDimensions } from "./deck-axis.js";
+import { deckRenderWindow, deckRenderedIndices } from "./deck-render-window.js";
+import { DeckTransition } from "./deck-transition.js";
+import { DeckWheelController } from "./deck-wheel.js";
+import { resolvedDeckKeybindings } from "./settings.js";
+import { deckHeaderDragIntent } from "./pointer-drag.js";
+import type { DeckGeometry } from "./deck-motion.js";
 import {
   Component,
   ItemView,
@@ -52,7 +59,7 @@ import {
 } from "./local-branch-model.js";
 import { LocalBranchViewController } from "./local-branch-view.js";
 import { cardHeaderTitle } from "./card-title.js";
-import { setCardTooltip } from "./card-tooltip.js";
+import { setCardTooltip, clearCardTooltip } from "./card-tooltip.js";
 import {
   renderedLinkAction,
   resolveFiledCardLink,
@@ -134,7 +141,6 @@ import {
   resolveDeckEscapeAction,
   shouldFinishInlineEditFromPointerDown,
   shouldBeginDeckPan,
-  shouldNavigateDeckFromWheel,
   type InlineEditRefreshGuard,
 } from "./inline-edit-interactions.js";
 import {
@@ -175,6 +181,7 @@ import {
 import {
   deckTopForPileAnchor,
   type DeckPositionMode,
+  deckAnchorCenterY,
 } from "./workspace-layout.js";
 import {
   BookmarksModal,
@@ -252,6 +259,10 @@ export class DeckView extends ItemView {
   private renderedCards: HTMLElement[] = [];
   private renderComponents = new Map<string, Component>();
   private cardScrollPositions = new Map<string, number>();
+  private readonly drawerTransition = new DeckTransition();
+  private readonly wheelController = new DeckWheelController();
+  private drawerFrame: number | null = null;
+  private readonly cardHeaderControllers = new Map<HTMLElement, CardHeaderButtonController>();
   private pointerLastX: number | null = null;
   private pointerLastY: number | null = null;
   private suppressDeckCardClickUntil = 0;
@@ -308,7 +319,7 @@ export class DeckView extends ItemView {
       isMacOS: Platform.isMacOS,
       isActive: () => this.app.workspace.getActiveViewOfType(DeckView) === this,
       isFilingInputFocused: () => this.isFilingInputFocused,
-      bindings: () => this.plugin.settings.deckKeybindings,
+      bindings: () => resolvedDeckKeybindings(this.plugin.settings),
       lastEvent: () => this.app.lastEvent,
       canRun: (action) => this.canRunAction(action),
       run: (action) => this.runAction(action),
@@ -360,6 +371,8 @@ export class DeckView extends ItemView {
     this.localBranchView = new LocalBranchViewController({
       activeDocument: this.contentEl.ownerDocument,
       canShowView: () => this.canShowLocalBranchView(),
+      placement: () => this.plugin.settings.branchViewPlacement,
+      orientation: () => this.plugin.settings.deckOrientation,
       showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       setIcon,
@@ -564,6 +577,10 @@ export class DeckView extends ItemView {
     this.positioningRetriesRemaining = 0;
     this.rememberScrollPositions();
     this.unloadRenderComponents();
+    if (this.drawerFrame !== null) this.contentEl.win.cancelAnimationFrame(this.drawerFrame);
+    this.drawerFrame = null;
+    this.drawerTransition.reset();
+    this.wheelController.reset();
     this.filingSession.reset();
     this.deckViewport.reset();
     this.viewedCardSession.reset();
@@ -1585,6 +1602,7 @@ export class DeckView extends ItemView {
 
   handleCardSpreadChanged(): void {
     this.positionCards();
+    this.queueRenderWindowRefresh();
     if (this.stageEl !== null) {
       this.renderBookmarkEdgeTabs(this.stageEl);
     }
@@ -2176,8 +2194,7 @@ export class DeckView extends ItemView {
   }
 
   private canShowLocalBranchView(): boolean {
-    return this.plugin.settings.showLocalBranchView &&
-      (
+    return (
         this.plugin.settings.inferAddressBranches ||
         this.plugin.settings.explicitBranchLinks
       );
@@ -2352,6 +2369,7 @@ export class DeckView extends ItemView {
     }
     this.cancelViewportCentering();
     const previousAnchor = this.deckViewport.anchorPath;
+    this.beginDrawerTransition();
     this.deckViewport.navigate(path, this.plugin.index.snapshot.filed);
     this.followViewportAnchor(previousAnchor);
     const restoreFilingInputFocus = this.isFilingInputFocused;
@@ -2443,6 +2461,10 @@ export class DeckView extends ItemView {
     ) {
       this.clearViewedCardDom();
     }
+    if (this.drawerFrame !== null) this.contentEl.win.cancelAnimationFrame(this.drawerFrame);
+    this.drawerFrame = null;
+    this.drawerTransition.reset();
+    this.wheelController.reset();
     this.unloadRenderComponents();
     this.cardFooters.clear();
     this.cardSignatures.clear();
@@ -2460,6 +2482,8 @@ export class DeckView extends ItemView {
     this.viewedCardEl = null;
     this.viewedCardBodyEl = null;
     this.viewedFilingEditor = null;
+    this.contentEl.dataset.deckOrientation = this.plugin.settings.deckOrientation;
+    this.contentEl.dataset.deckStackModel = this.plugin.settings.deckStackModel;
     this.contentEl.dataset.mainCardSize = this.plugin.settings.mainCardSize;
     this.contentEl.dataset.deskCardSize = this.plugin.settings.deskCardSize;
     this.applyDeckPositionMode();
@@ -2529,17 +2553,9 @@ export class DeckView extends ItemView {
       return;
     }
 
-    const deckVersion = ++this.deckRenderVersion;
+    const deckVersion = this.deckRenderVersion;
     this.rememberScrollPositions();
-    this.unloadRenderComponents();
-    this.cardFooters.clear();
-    this.cardSignatures.clear();
-    this.clearCardHeaderButtonControllers();
-    this.deckCardsEl?.remove();
-    this.renderedCards = [];
-
-    const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
-    space.prepend(deckCards);
+    const deckCards = this.deckCardsEl ?? space.createDiv({ cls: "slipbox-deck-cards" });
     this.deckCardsEl = deckCards;
     const filed = this.plugin.index.snapshot.filed;
     if (filed.length === 0) {
@@ -2587,6 +2603,7 @@ export class DeckView extends ItemView {
   }
 
   private reconcileDeckMap(): void {
+    this.deckMapController?.setOrientation(this.plugin.settings.deckOrientation);
     this.deckMapController?.reconcile(
       this.deckMapCards(),
       this.deckViewport.anchorPath,
@@ -2729,22 +2746,47 @@ export class DeckView extends ItemView {
   ): Promise<void> {
     const renderedWindow = this.deckViewport.recordRenderedWindow(
       filed,
-      this.plugin.settings.cardSpread,
+      this.deckGeometry(),
     );
     if (renderedWindow === null) {
       return;
     }
-    const { start, end } = renderedWindow;
+    const indices = deckRenderedIndices(filed.length, this.deckGeometry());
+    const wanted = new Set(indices.map((index) => filed[index]?.path));
+    const transitioning = this.drawerTransition.active(this.contentEl.win.performance.now(), VIEWPORT_CENTER_DURATION_MS);
+    this.renderedCards = this.renderedCards.filter((element) => {
+      const path = element.dataset.path ?? "";
+      if (wanted.has(path) || element.hasClass("is-dragging-to-desk") || transitioning) return true;
+      this.renderComponents.get(path)?.unload();
+      this.renderComponents.delete(path);
+      this.cardFooters.removeCard(element);
+      this.cardSignatures.removeCard(element);
+      const controller = this.cardHeaderControllers.get(element);
+      controller?.disconnect();
+      if (controller !== undefined) this.cardHeaderButtonControllers.delete(controller);
+      this.cardHeaderControllers.delete(element);
+      clearCardTooltip(element);
+      element.remove();
+      return false;
+    });
+    this.drawerTransition.retain(new Set(this.renderedCards.map((card) => card.dataset.path ?? "")));
+    const mounted = new Map(this.renderedCards.map((card) => [card.dataset.path, card]));
     const jobs: Promise<void>[] = [];
 
     const focusDisplayIndex = activeIndex;
 
-    for (let filedIndex = start; filedIndex <= end; filedIndex += 1) {
+    for (const filedIndex of indices) {
       const card = filed[filedIndex];
       if (card === undefined) {
         continue;
       }
 
+      const existing = mounted.get(card.path);
+      if (existing !== undefined) {
+        existing.dataset.index = String(filedIndex);
+        existing.dataset.filedIndex = String(filedIndex);
+        continue;
+      }
       const cardEl = stage.createDiv({ cls: "slipbox-card" });
       cardEl.dataset.index = String(filedIndex);
       cardEl.dataset.filedIndex = String(filedIndex);
@@ -2771,7 +2813,7 @@ export class DeckView extends ItemView {
       setCardTooltip(cardEl, cardLabel, false);
       setCardStackOrder(
         cardEl,
-        cardStackOrder(filedIndex, focusDisplayIndex),
+        cardStackOrder(filedIndex, focusDisplayIndex, this.plugin.settings.deckStackModel),
       );
       this.renderedCards.push(cardEl);
 
@@ -2822,7 +2864,7 @@ export class DeckView extends ItemView {
         });
       }
       const cardActions = addressRow.createDiv({ cls: "slipbox-card-actions" });
-      this.cardHeaderButtonControllers.add(renderCardHeaderButtons({
+      const headerController = renderCardHeaderButtons({
         container: cardActions,
         context: {
           surface: "deck",
@@ -2838,7 +2880,9 @@ export class DeckView extends ItemView {
         showTooltips: this.plugin.settings.showTooltips,
         tooltipPlacement: "bottom",
         run: (action) => this.runCardAction(action, card.path, "deck"),
-      }));
+      });
+      this.cardHeaderButtonControllers.add(headerController);
+      this.cardHeaderControllers.set(cardEl, headerController);
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
       configureRenderedCardBody(
@@ -2932,22 +2976,42 @@ export class DeckView extends ItemView {
           if (!header.isConnected || !cardEl.isConnected) {
             return;
           }
+          let intent: "desk" | "pan" = "desk";
+          const origin = { x: this.spaceOffsetX, y: this.spaceOffsetY };
           beginThresholdPointerDrag({
             captureTarget: header,
             pointerId,
             startX,
             startY,
             threshold: DECK_CARD_DRAG_THRESHOLD_PX,
-            onDragStart: () => {
+            onDragStart: (dx, dy) => {
+              intent = deckHeaderDragIntent(this.plugin.settings.deckOrientation === "vertical", dx, dy);
               this.cancelViewportCentering();
               this.cancelSpaceRecentering();
+              if (intent === "pan") {
+                this.stageEl?.addClass("is-dragging");
+                return;
+              }
+              this.spaceEl?.append(cardEl);
               cardEl.addClass("is-dragging-to-desk");
             },
             onDragMove: (moveEvent, dx, dy) => {
+              if (intent === "pan") {
+                this.spaceOffsetX = origin.x + dx;
+                this.spaceOffsetY = origin.y + dy;
+                this.applySpaceOffset();
+                return;
+              }
               cardEl.style.translate = `${dx}px ${dy}px`;
               this.updateDeckCardDropCue(moveEvent, cardEl);
             },
             onDrop: (upEvent) => {
+              this.stageEl?.removeClass("is-dragging");
+              if (intent === "pan") {
+                this.suppressDeckCardClickUntil = upEvent.win.performance.now() + DECK_CARD_CLICK_SUPPRESSION_MS;
+                if (this.stageEl !== null) this.renderBookmarkEdgeTabs(this.stageEl);
+                return;
+              }
               this.suppressDeckCardClickUntil = upEvent.win.performance.now() +
                 DECK_CARD_CLICK_SUPPRESSION_MS;
               const result = this.deckCardDropResult(
@@ -3066,6 +3130,8 @@ export class DeckView extends ItemView {
   }
 
   private clearDeckCardDrag(card: HTMLElement): void {
+    this.stageEl?.removeClass("is-dragging");
+    if (card.parentElement === this.spaceEl) this.deckCardsEl?.append(card);
     card.removeClass("is-dragging-to-desk");
     card.setCssProps({ translate: "" });
     this.clearDeckCardDropCues();
@@ -3414,6 +3480,7 @@ export class DeckView extends ItemView {
       controller.disconnect();
     }
     this.cardHeaderButtonControllers.clear();
+    this.cardHeaderControllers.clear();
   }
 
   private clearViewedCardHeaderButtonController(): void {
@@ -3681,14 +3748,13 @@ export class DeckView extends ItemView {
     bookmarkedPaths = this.bookmarkedPaths(),
   ): void {
     stage.querySelectorAll<HTMLElement>(".slipbox-bookmark-edge-tab")
-      .forEach((tab) => tab.remove());
+      .forEach((tab) => { clearCardTooltip(tab); tab.remove(); });
     const anchorPath = this.deckViewport.anchorPath;
     if (anchorPath === null || bookmarkedPaths.size === 0) {
       return;
     }
-    const filed = this.plugin.index.snapshot.filed;
     const activeIndex = this.plugin.index.filedIndexForPath(anchorPath);
-    const cardWidth = this.renderedCards[0]?.offsetWidth ?? 0;
+    const cardWidth = this.deckGeometry().cardWidth;
     if (activeIndex < 0 || cardWidth <= 0) {
       return;
     }
@@ -3696,16 +3762,10 @@ export class DeckView extends ItemView {
       const index = this.plugin.index.filedIndexForPath(path);
       return index < 0 ? [] : [index];
     });
-    const targets = bookmarkEdgeTargets(
-      bookmarkIndices,
-      this.deckViewport.position(filed) -
-        this.spaceOffsetX / this.cardStep(),
-      this.cardStep(),
-      stage.clientWidth,
-      cardWidth,
-    );
-
-    for (const direction of ["left", "right"] as const) {
+    const targets = bookmarkEdgeTargets(bookmarkIndices, this.deckGeometry());
+    const filed = this.plugin.index.snapshot.filed;
+    const vertical = this.plugin.settings.deckOrientation === "vertical";
+    for (const direction of ["before", "after"] as const) {
       const index = targets[direction];
       const card = index === null ? undefined : filed[index];
       if (card === undefined) {
@@ -3713,7 +3773,7 @@ export class DeckView extends ItemView {
       }
       const tab = stage.createEl("button", {
         cls: `slipbox-bookmark-edge-tab is-${direction}`,
-        text: `${direction === "left" ? "◀" : "▶"} ${card.address}`,
+        text: `${direction === "before" ? (vertical ? "▲" : "◀") : (vertical ? "▼" : "▶")} ${card.address}`,
         attr: {
           type: "button",
         },
@@ -3737,16 +3797,19 @@ export class DeckView extends ItemView {
     stage.addEventListener(
       "wheel",
       (event) => {
-        if (!shouldNavigateDeckFromWheel(event, this.inlineEdit?.textarea ?? null)) {
-          return;
-        }
+        const result = this.wheelController.route(event, {
+          orientation: this.plugin.settings.deckOrientation,
+          policy: this.plugin.settings.wheelOverCardBody,
+          allowCardScrolling: this.plugin.settings.allowCardScrolling,
+          anchor: this.renderedCards.find((card) => card.dataset.path === this.deckViewport.anchorPath) ?? null,
+          editor: this.inlineEdit?.textarea ?? null,
+          paneExtent: this.deckGeometry().paneExtent,
+          now: this.contentEl.win.performance.now(),
+        });
+        if (!result.consume) return;
         event.preventDefault();
-        const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 18 : 1;
-        const delta = event.deltaX * scale;
-        void this.runAfterInlineEditing(
-          "horizontal-wheel",
-          () => this.moveViewportByPixels(delta),
-        );
+        if (result.delta === 0) return;
+        void this.runAfterInlineEditing("deck-wheel", () => this.moveViewportByPixels(result.delta));
       },
       { passive: false },
     );
@@ -3813,6 +3876,7 @@ export class DeckView extends ItemView {
     }
     this.spaceEl.style.transform =
       `translate(${this.spaceOffsetX}px, ${this.spaceOffsetY}px)`;
+    this.queueRenderWindowRefresh();
   }
 
   private recenterSpace(): void {
@@ -3859,7 +3923,8 @@ export class DeckView extends ItemView {
     const nextPosition = this.deckViewport.position(cards) +
       deltaPixels / step;
     const previousAnchor = this.deckViewport.anchorPath;
-    this.deckViewport.panTo(nextPosition, cards);
+    const changed = this.deckViewport.panTo(nextPosition, cards);
+    if (changed) this.beginDrawerTransition();
     this.followViewportAnchor(previousAnchor);
     this.positionCards();
     this.updateActiveUi();
@@ -3874,6 +3939,7 @@ export class DeckView extends ItemView {
     if (!this.deckViewport.moveBy(delta, cards)) {
       return;
     }
+    this.beginDrawerTransition();
     this.followViewportAnchor(previousAnchor);
     const targetIndex = this.plugin.index.filedIndexForPath(
       this.deckViewport.anchorPath,
@@ -3913,6 +3979,13 @@ export class DeckView extends ItemView {
   ): void {
     const targetPosition = activeIndex;
     const cards = this.plugin.index.snapshot.filed;
+    if (this.plugin.settings.deckStackModel === "drawer") {
+      this.deckViewport.placeAt(targetPosition, cards);
+      this.positionCards();
+      this.updateActiveUi();
+      this.queueRenderWindowRefresh();
+      return;
+    }
     const startPosition = this.deckViewport.position(cards);
     this.cancelViewportCentering();
 
@@ -4015,6 +4088,10 @@ export class DeckView extends ItemView {
   }
 
   private selectCardWithoutMoving(path: string): void {
+    if (this.plugin.settings.deckStackModel === "drawer") {
+      if (path !== this.deckViewport.anchorPath) void this.navigateToPath(path);
+      return;
+    }
     this.cancelViewportCentering();
     const previousAnchor = this.deckViewport.anchorPath;
     if (!this.deckViewport.selectWithoutMoving(
@@ -4038,40 +4115,56 @@ export class DeckView extends ItemView {
       return this.updatePileAnchorFromDeck();
     }
 
-    const step = this.cardStep();
+    const geometry = this.deckGeometry();
+    const axis = deckAxis(geometry.orientation);
+    const step = axis.extent(geometry.cardWidth, geometry.cardHeight) * geometry.spread;
     if (step <= 0) {
       return false;
     }
     const focusDisplayIndex = activeIndex;
-    const viewportPosition = this.deckViewport.position(
-      this.plugin.index.snapshot.filed,
-    );
+    const centre = `${geometry.anchorCenterY}px`;
+    const style = this.deckCardsEl?.style;
+    if (style?.getPropertyValue("--slipbox-deck-center") !== centre) {
+      style?.setProperty("--slipbox-deck-center", centre);
+    }
+    const now = this.contentEl.win.performance.now();
 
     for (const card of this.renderedCards) {
       const index = Number(card.dataset.index ?? "-1");
       const isActive = card.dataset.path === anchorPath;
       card.toggleClass("is-deck-anchor", isActive);
+      this.updateCardHeaderPlacement(card, index, activeIndex);
       card.toggleClass(
         "is-card-focused",
         this.cardFocus?.surface === "deck" &&
         card.dataset.path === this.cardFocus.path,
       );
-      setCardStackOrder(card, cardStackOrder(index, focusDisplayIndex));
-      const motion = cardMotionStyle(
-        index,
-        viewportPosition,
-        step,
-        isActive,
-        focusDisplayIndex,
-      );
+      setCardStackOrder(card, cardStackOrder(index, focusDisplayIndex, this.plugin.settings.deckStackModel));
+      const target = cardMotionStyle({ ...geometry, cardIndex: index });
+      const motion = this.plugin.settings.deckStackModel === "drawer"
+        ? this.drawerTransition.pose(card.dataset.path ?? "", target,
+          now, VIEWPORT_CENTER_DURATION_MS)
+        : target;
+      const { x, y } = axis.screen(motion.along, motion.across);
       card.style.transform =
-        `translate(-50%, -50%) translateX(${motion.translateX}px) scale(${motion.scale})`;
+        `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
       setCardMotionOpacity(card, motion.opacity);
     }
     return this.updatePileAnchorFromDeck();
   }
 
+  private updateCardHeaderPlacement(card: HTMLElement, index: number, anchorIndex: number): void {
+    const settings = this.plugin.settings;
+    card.toggleClass("has-bottom-header",
+      settings.fanHeadersAtBottom &&
+      settings.deckOrientation === "vertical" &&
+      settings.deckStackModel === "fan" &&
+      index > anchorIndex,
+    );
+  }
+
   private updatePileAnchorFromDeck(): boolean {
+    if (this.plugin.settings.deckOrientation === "vertical") return true;
     const space = this.spaceEl;
     const anchorPath = this.deckViewport.anchorPath;
     const activeCard = anchorPath === null
@@ -4128,6 +4221,7 @@ export class DeckView extends ItemView {
 
   private flushScheduledCardPositioning(): void {
     this.positioningFrame = null;
+    this.queueRenderWindowRefresh();
     const positioned = this.positionCards();
     if (positioned) {
       this.positioningRetriesRemaining = 0;
@@ -4164,12 +4258,13 @@ export class DeckView extends ItemView {
     for (const card of this.renderedCards) {
       const filedIndex = Number(card.dataset.filedIndex ?? "-1");
       card.toggleClass("is-deck-anchor", filedIndex === activeIndex);
+      this.updateCardHeaderPlacement(card, filedIndex, activeIndex);
       card.toggleClass(
         "is-card-focused",
         this.cardFocus?.surface === "deck" &&
         card.dataset.path === this.cardFocus.path,
       );
-      setCardStackOrder(card, cardStackOrder(filedIndex, activeIndex));
+      setCardStackOrder(card, cardStackOrder(filedIndex, activeIndex, this.plugin.settings.deckStackModel));
       this.cardFooters.setInteractive(card, filedIndex === activeIndex);
       this.cardSignatures.setInteractive(card, filedIndex === activeIndex);
     }
@@ -4246,17 +4341,15 @@ export class DeckView extends ItemView {
       this.renderRefreshDeferred = true;
       return;
     }
-    if (
-      this.renderRefreshPending ||
-      this.pointerLastX !== null
-    ) {
+    if (this.renderRefreshPending) {
       return;
     }
-    if (!this.deckViewport.needsRenderWindowRefresh(
-      this.plugin.index.snapshot.filed,
-    )) {
-      return;
-    }
+    const desired = deckRenderWindow(this.plugin.index.snapshot.filed.length, this.deckGeometry());
+    const previous = this.deckViewport.snapshot.renderedWindow;
+    const wanted = new Set(deckRenderedIndices(this.plugin.index.snapshot.filed.length, this.deckGeometry()));
+    const hasSurplus = !this.drawerTransition.active(this.contentEl.win.performance.now(), VIEWPORT_CENTER_DURATION_MS) &&
+      this.renderedCards.some((card) => !wanted.has(Number(card.dataset.index)));
+    if (desired?.start === previous?.start && desired?.end === previous?.end && !hasSurplus) return;
 
     if (this.renderRefreshRunning) {
       this.renderRefreshQueued = true;
@@ -4279,12 +4372,49 @@ export class DeckView extends ItemView {
     });
   }
 
+  private deckGeometry(): DeckGeometry & { readonly anchorCenterY: number } {
+    const settings = this.plugin.settings;
+    const { width, height } = deckCardDimensions(settings.mainCardSize);
+    const axis = deckAxis(settings.deckOrientation);
+    const stage = this.stageEl;
+    const stageWidth = stage?.clientWidth ?? 0;
+    const stageHeight = stage?.clientHeight ?? 0;
+    const mode = this.deckViewport.positionModeOverride ?? this.plugin.startupDeckPositionMode;
+    const anchorCenterY = deckAnchorCenterY(stageHeight, height, settings.deckOrientation, mode);
+    return {
+      cardWidth: width, cardHeight: height,
+      anchorIndex: this.plugin.index.filedIndexForPath(this.deckViewport.anchorPath),
+      viewportPosition: this.deckViewport.position(this.plugin.index.snapshot.filed),
+      spread: settings.cardSpread, model: settings.deckStackModel,
+      orientation: settings.deckOrientation, tilt: settings.cardTilt,
+      paneExtent: axis.extent(stageWidth, stageHeight),
+      anchorCenterY,
+      anchorCoordinate: settings.deckOrientation === "vertical" ? anchorCenterY : stageWidth / 2,
+      panOffset: axis.point(this.spaceOffsetX, this.spaceOffsetY),
+    };
+  }
+
   private cardStep(): number {
-    const firstCard = this.renderedCards[0];
-    if (firstCard === undefined) {
-      return 1;
-    }
-    return firstCard.offsetWidth * this.plugin.settings.cardSpread;
+    const geometry = this.deckGeometry();
+    return deckAxis(geometry.orientation).extent(geometry.cardWidth, geometry.cardHeight) * geometry.spread;
+  }
+
+  private beginDrawerTransition(): void {
+    if (this.plugin.settings.deckStackModel !== "drawer") return;
+    const win = this.contentEl.win;
+    if (win.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    this.drawerTransition.begin(win.performance.now());
+    if (this.drawerFrame !== null) win.cancelAnimationFrame(this.drawerFrame);
+    const advance = (): void => {
+      this.drawerFrame = null;
+      this.positionCards();
+      if (this.drawerTransition.active(win.performance.now(), VIEWPORT_CENTER_DURATION_MS)) {
+        this.drawerFrame = win.requestAnimationFrame(advance);
+      } else {
+        this.queueRenderWindowRefresh();
+      }
+    };
+    this.drawerFrame = win.requestAnimationFrame(advance);
   }
 
   private rememberScrollPositions(): void {

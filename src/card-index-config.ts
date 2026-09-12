@@ -59,7 +59,15 @@ function nonPresentationSettingsEqual(
   left: SlipboxSettings,
   right: SlipboxSettings,
 ): boolean {
-  return left.titleSource === right.titleSource &&
+  return left.deckOrientation === right.deckOrientation &&
+    left.deckStackModel === right.deckStackModel &&
+    left.fanHeadersAtBottom === right.fanHeadersAtBottom &&
+    left.cardTilt === right.cardTilt &&
+    left.branchViewPlacement === right.branchViewPlacement &&
+    left.wheelOverCardBody === right.wheelOverCardBody &&
+    left.navigationKeyOverrides["previous-card"] === right.navigationKeyOverrides["previous-card"] &&
+    left.navigationKeyOverrides["next-card"] === right.navigationKeyOverrides["next-card"] &&
+    left.titleSource === right.titleSource &&
     left.titleProperty === right.titleProperty &&
     left.mainCardSize === right.mainCardSize &&
     left.deskCardSize === right.deskCardSize &&

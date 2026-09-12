@@ -6,6 +6,12 @@ import {
   type DeckViewportCards,
 } from "../src/deck-viewport.js";
 
+import type { DeckGeometry } from "../src/deck-motion.js";
+function geometry(anchorIndex: number, spread = 1): DeckGeometry {
+  return { anchorIndex, viewportPosition: anchorIndex, spread, cardWidth: 100, cardHeight: 100,
+    orientation: "horizontal", model: "fan", tilt: 0, paneExtent: 100, anchorCoordinate: 50, panOffset: 0 };
+}
+
 function cards(...paths: string[]): DeckViewportCards {
   return paths.map((path) => ({ path }));
 }
@@ -40,7 +46,7 @@ describe("DeckViewport", () => {
 
     viewport.setPositionMode("bottom");
     assert.equal(viewport.snapshot.positionModeOverride, "bottom");
-    viewport.recordRenderedWindow(TEN_CARDS, 1);
+    viewport.recordRenderedWindow(TEN_CARDS, geometry(0));
     viewport.reset();
     assert.deepEqual(viewport.snapshot, {
       anchorPath: null,
@@ -176,26 +182,26 @@ describe("DeckViewport", () => {
     const viewport = new DeckViewport();
     viewport.navigate("10.md", deck);
 
-    assert.deepEqual(viewport.recordRenderedWindow(deck, 1), {
+    assert.deepEqual(viewport.recordRenderedWindow(deck, geometry(Number(viewport.anchorPath?.split(".")[0]))), {
       start: 7,
       end: 13,
     });
-    assert.deepEqual(viewport.recordRenderedWindow(deck, 0.2), {
+    assert.deepEqual(viewport.recordRenderedWindow(deck, geometry(10, 0.2)), {
       start: 3,
       end: 17,
     });
-    assert.deepEqual(viewport.recordRenderedWindow(deck, 0.05), {
-      start: 2,
-      end: 18,
+    assert.deepEqual(viewport.recordRenderedWindow(deck, geometry(10, 0.05)), {
+      start: 0,
+      end: 23,
     });
 
     viewport.navigate("0.md", deck);
-    assert.deepEqual(viewport.recordRenderedWindow(deck, 1), {
+    assert.deepEqual(viewport.recordRenderedWindow(deck, geometry(Number(viewport.anchorPath?.split(".")[0]))), {
       start: 0,
       end: 3,
     });
     viewport.navigate("23.md", deck);
-    assert.deepEqual(viewport.recordRenderedWindow(deck, 1), {
+    assert.deepEqual(viewport.recordRenderedWindow(deck, geometry(Number(viewport.anchorPath?.split(".")[0]))), {
       start: 20,
       end: 23,
     });
@@ -206,7 +212,7 @@ describe("DeckViewport", () => {
     const deck = cards(...paths);
     const viewport = new DeckViewport();
     viewport.navigate("10.md", deck);
-    viewport.recordRenderedWindow(deck, 1);
+    viewport.recordRenderedWindow(deck, geometry(Number(viewport.anchorPath?.split(".")[0])));
 
     assert.equal(viewport.needsRenderWindowRefresh(deck), false);
     viewport.placeAt(9, deck);

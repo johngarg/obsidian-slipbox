@@ -1,3 +1,5 @@
+import { deckRenderWindow } from "./deck-render-window.js";
+import type { DeckGeometry } from "./deck-motion.js";
 import {
   activeIndexForViewport,
   clampViewportPosition,
@@ -190,22 +192,14 @@ export class DeckViewport {
 
   recordRenderedWindow(
     cards: DeckViewportCards,
-    cardSpread: number,
+    geometry: DeckGeometry,
   ): DeckRenderWindow | null {
     const anchorIndex = cardIndex(cards, this.anchor);
     if (anchorIndex < 0 || cards.length === 0) {
       this.renderedWindow = null;
       return null;
     }
-    const viewportIndex = Math.round(anchorIndex + this.offset);
-    const radius = Math.min(
-      8,
-      Math.max(3, Math.ceil(1 / cardSpread) + 2),
-    );
-    this.renderedWindow = {
-      start: Math.max(0, viewportIndex - radius),
-      end: Math.min(cards.length - 1, viewportIndex + radius),
-    };
+    this.renderedWindow = deckRenderWindow(cards.length, geometry);
     return this.renderedWindow;
   }
 

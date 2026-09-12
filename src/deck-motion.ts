@@ -1,5 +1,10 @@
+import type { DeckOrientation, DeckStackModel } from "./settings.js";
+import { deckAxis } from "./deck-axis.js";
+
 export interface CardMotionStyle {
-  readonly translateX: number;
+  readonly along: number;
+  readonly across: number;
+  readonly rotation: number;
   readonly scale: number;
   readonly opacity: number;
 }
@@ -21,15 +26,17 @@ export const DEFAULT_ACTIVE_HYSTERESIS = 0.06;
 export function cardStackOrder(
   cardIndex: number,
   activeIndex: number,
+  model: DeckStackModel = "fan",
 ): number {
+  if (model === "drawer") return cardIndex + 1;
   return cardIndex === activeIndex
     ? 220
     : 100 - Math.abs(cardIndex - activeIndex);
 }
 
 export interface BookmarkEdgeTargets {
-  readonly left: number | null;
-  readonly right: number | null;
+  readonly before: number | null;
+  readonly after: number | null;
 }
 
 /** Select the closest bookmark before or after the active Deck position. */
@@ -64,38 +71,34 @@ export function stationarySelectionOffset(
 }
 
 /** Select the nearest off-screen bookmark on each side of the Deck. */
+export interface DeckGeometry extends Omit<CardMotionOptions, "cardIndex"> {
+  readonly paneExtent: number;
+  readonly anchorCoordinate: number;
+  readonly panOffset: number;
+}
+
+/** A clipped bookmark remains reachable even when overlapping cards obscure it. */
 export function bookmarkEdgeTargets(
-  bookmarkIndices: readonly number[],
-  viewportPosition: number,
-  cardStep: number,
-  stageWidth: number,
-  cardWidth: number,
+  bookmarkIndices: readonly number[], geometry: DeckGeometry,
 ): BookmarkEdgeTargets {
-  if (cardStep <= 0 || stageWidth <= 0 || cardWidth <= 0) {
-    return { left: null, right: null };
-  }
-
-  // Overlap can hide a clipped card even while much of its surface remains in
-  // the viewport. Show the bookmark target once the card is no longer fully
-  // contained by the stage.
-  const visibleLimit = Math.max(0, (stageWidth - cardWidth) / 2);
-  let left: number | null = null;
-  let leftX = Number.NEGATIVE_INFINITY;
-  let right: number | null = null;
-  let rightX = Number.POSITIVE_INFINITY;
-
-  for (const index of bookmarkIndices) {
-    const x = (index - viewportPosition) * cardStep;
-    if (x < -visibleLimit && x > leftX) {
-      left = index;
-      leftX = x;
-    } else if (x > visibleLimit && x < rightX) {
-      right = index;
-      rightX = x;
+  if (!(geometry.spread > 0) || geometry.paneExtent <= 0) return { before: null, after: null };
+  let before: number | null = null;
+  let after: number | null = null;
+  let beforeCentre = -Infinity;
+  let afterCentre = Infinity;
+  for (const cardIndex of bookmarkIndices) {
+    const options = { ...geometry, cardIndex };
+    const motion = cardMotionStyle(options);
+    const centre = geometry.anchorCoordinate + geometry.panOffset + motion.along;
+    const half = cardFootprint(options, motion);
+    if (centre - half < 0 && centre > beforeCentre) {
+      before = cardIndex; beforeCentre = centre;
+    }
+    if (centre + half > geometry.paneExtent && centre < afterCentre) {
+      after = cardIndex; afterCentre = centre;
     }
   }
-
-  return { left, right };
+  return { before, after };
 }
 
 /** Keep the continuous Deck position between its first and last cards. */
@@ -154,21 +157,53 @@ export function activeIndexForViewport(
  * Translation follows the continuous viewport, while scale and opacity may be
  * anchored to a separately selected card during discrete keyboard navigation.
  */
-export function cardMotionStyle(
-  cardIndex: number,
-  viewportPosition: number,
-  cardStep: number,
-  isActive = false,
-  focusPosition = viewportPosition,
-): CardMotionStyle {
-  const safeStep = Math.max(cardStep, 1);
-  const focusDistance = Math.abs(cardIndex - focusPosition);
-  const distanceScale = Math.max(0.86, 1 - focusDistance * 0.035);
+export interface CardMotionOptions {
+  readonly cardIndex: number;
+  readonly anchorIndex: number;
+  readonly viewportPosition: number;
+  readonly cardWidth: number;
+  readonly cardHeight: number;
+  readonly spread: number;
+  readonly orientation: DeckOrientation;
+  readonly model: DeckStackModel;
+  readonly tilt: number;
+}
+
+export const DRAWER_GAP = 12;
+
+export function cardJitter(index: number, salt: number): number {
+  const value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+  return (value - Math.floor(value)) * 2 - 1;
+}
+
+export function cardMotionStyle(options: CardMotionOptions): CardMotionStyle {
+  const { cardIndex, anchorIndex, viewportPosition, model, orientation, tilt } = options;
+  const extent = deckAxis(orientation).extent(options.cardWidth, options.cardHeight);
+  const step = Math.max(1, extent * options.spread);
+  const d = cardIndex - anchorIndex;
+  const isActive = d === 0;
+  const distance = Math.abs(d);
+  const along = (cardIndex - viewportPosition) * step +
+    (model === "drawer" && d > 0 ? extent + DRAWER_GAP - step : 0);
+  const distanceScale = Math.max(0.86, 1 - distance * 0.035);
   return {
-    translateX: (cardIndex - viewportPosition) * safeStep,
-    scale: isActive ? Math.max(0.98, distanceScale) : distanceScale,
-    opacity: isActive ? 1 : Math.max(0.42, 1 - focusDistance * 0.13),
+    along,
+    across: isActive ? 0 : cardJitter(cardIndex, 2) * tilt * 16,
+    rotation: isActive ? 0 : cardJitter(cardIndex, 1) * tilt,
+    scale: model === "drawer" || orientation === "vertical" ? 1
+      : isActive ? Math.max(0.98, distanceScale) : distanceScale,
+    opacity: isActive ? 1 : model === "drawer" ? Math.max(0.45, 1 - distance * 0.08)
+      : Math.max(0.42, 1 - distance * 0.13),
   };
+}
+
+/** Half of the rotated footprint along the Deck axis. */
+export function cardFootprint(options: CardMotionOptions, motion = cardMotionStyle(options)): number {
+  const axis = deckAxis(options.orientation);
+  const along = axis.extent(options.cardWidth, options.cardHeight);
+  const across = axis.extent(options.cardHeight, options.cardWidth);
+  const angle = Math.abs(motion.rotation) * Math.PI / 180;
+  return (along * Math.cos(angle) + across * Math.sin(angle)) * motion.scale / 2;
 }
 
 /** Use a selected card's index as the centred discrete viewport target. */

@@ -6,14 +6,57 @@ initial public beta.
 
 ## [Unreleased]
 
+### Added
+
+- Optional bottom headers for cards below the anchor in vertical Fan, making
+  their addresses and titles readable in the overlapping stack.
+
+- Vertical Deck orientation, independent Drawer/Fan stacking and deterministic
+  card tilt. Drawer is the new default and opens a reading gap in filing order.
+- Left Branch View placement, with full-size branch columns reachable by workspace
+  panning, and a vertical Deck map and bookmark edge controls.
+- Body-first vertical wheel navigation with boundary resistance, plus a setting
+  to browse the Deck directly. Vertical header drags pan; sideways drags pull cards
+  onto the Desk.
+- Orientation-aware default arrow keys that preserve customized shortcuts.
+
 ### Changed
 
+- Deck cards now keep fixed Small/Medium/Large dimensions (720 × 480,
+  840 × 560, and 960 × 640 px), including in narrow panes. Pan to reach content
+  outside the pane; viewed cards and Desk piles retain their existing sizing.
+- Lowered minimum card spread to 0.10 and made card rendering follow the visible
+  geometry instead of a fixed neighbour limit.
 - Relicensed Slipbox Desk from 0BSD to the MIT License.
 
 ### Fixed
 
+- Centred vertical Deck map bookmark, active, colour, and Desk markers on the rail.
+
+- Kept `zt` and `zb` positioning inside the pane by accounting for the fixed card
+  height. In panes shorter than a card, the requested top or bottom edge remains
+  visible without resizing the card.
+
+- Restored smooth Deck scrolling after the Fan flicker fix by caching moving
+  card surfaces while retaining the background scroll-layer protection.
+
+- Kept native scrolling on the anchor card only and contained painting within
+  card frames to address Fan artifacts where background scroll layers covered
+  the focused card. Background cards retain their body scroll positions.
+
 - Kept branch annotation fitting independent of card tilt and scale, preventing
   labels from flickering between their text and an overflow count.
+
+- Raised the experimental minimum Deck spread to 0.10 to limit rendering load
+  from densely overlapping cards. Saved smaller values are clamped on load.
+
+- Corrected vertical bookmark tab corners to face the top and bottom pane edges.
+
+- Stacked vertical Branch View controls beside the focused card’s top-left corner,
+  with the toggle first and direction icons adapted to vertical navigation.
+
+- Avoided Obsidian tooltip errors when hovering SVG Branch View controls while
+  retaining their accessible labels.
 
 ## [0.15.0] - 2026-08-31
 

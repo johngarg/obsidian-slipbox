@@ -21,6 +21,7 @@
 .view-content.slipbox-deck-view {
   --slipbox-card-radius: 10px;
   --slipbox-main-card-width: min(58%, 840px);
+  --slipbox-fixed-deck-width: 840px;
   --slipbox-desk-card-width: min(360px, 36cqw);
   --slipbox-desk-pile-height: min(258px, calc(24cqw + 18px));
   container-type: inline-size;
@@ -31,10 +32,12 @@
 
 .slipbox-deck-view[data-main-card-size="small"] {
   --slipbox-main-card-width: min(50%, 720px);
+  --slipbox-fixed-deck-width: 720px;
 }
 
 .slipbox-deck-view[data-main-card-size="large"] {
   --slipbox-main-card-width: min(66%, 960px);
+  --slipbox-fixed-deck-width: 960px;
 }
 
 .slipbox-deck-view[data-desk-card-size="small"] {
@@ -300,6 +303,8 @@
 }
 
 .slipbox-deck-cards {
+  isolation: isolate;
+  z-index: 200;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -961,12 +966,13 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   position: absolute;
   top: var(--slipbox-deck-center);
   left: 50%;
-  width: var(--slipbox-main-card-width);
-  max-height: var(--slipbox-deck-max-height);
+  box-sizing: border-box;
+  width: var(--slipbox-fixed-deck-width);
+  height: calc(var(--slipbox-fixed-deck-width) * 2 / 3);
+  max-height: none;
   aspect-ratio: 3 / 2;
   transform: translate(-50%, -50%);
   transform-origin: center;
-  will-change: transform, opacity;
   display: flex;
   flex-direction: column;
   overflow: visible;
@@ -980,6 +986,11 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   pointer-events: auto;
   z-index: var(--slipbox-card-z-index, auto);
   opacity: var(--slipbox-card-opacity, 1);
+}
+
+/* Cache moving card surfaces without giving background bodies native scroll layers. */
+.slipbox-deck-cards > .slipbox-card {
+  will-change: transform;
 }
 
 .slipbox-card.can-drag-to-desk .slipbox-card-address-row {
@@ -999,6 +1010,8 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 }
 
 .slipbox-card-frame {
+  /* Keep scrollable descendants in the card’s paint and stacking boundary. */
+  contain: paint;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -1068,6 +1081,12 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   padding: 8px 15px 7px;
   border-bottom: 1px solid var(--background-modifier-border);
   background: var(--slipbox-card-chrome-background);
+}
+
+.slipbox-card.has-bottom-header > .slipbox-card-frame > .slipbox-card-address-row {
+  order: 1;
+  border-top: 1px solid var(--background-modifier-border);
+  border-bottom: 0;
 }
 
 .slipbox-card.is-bookmarked .slipbox-card-address-row {
@@ -1734,6 +1753,7 @@ button.slipbox-local-branch-toggle svg {
   top: 50%;
   left: 50%;
   width: var(--slipbox-main-card-width);
+  height: auto;
   max-height: calc(100% - 54px);
   z-index: 1;
   pointer-events: auto;
@@ -1949,6 +1969,11 @@ button.slipbox-card-backlink-overflow:disabled {
   user-select: none;
 }
 
+.slipbox-deck-cards .slipbox-card:not(.is-deck-anchor) .slipbox-card-scroll:not(.is-card-scroll-clipped) {
+  /* Background cards keep their scroll offset without independent native scroll layers. */
+  overflow: hidden;
+}
+
 .slipbox-render-error {
   color: var(--text-error);
 }
@@ -1968,12 +1993,12 @@ button.slipbox-card-backlink-overflow:disabled {
   transform: translateY(-50%);
 }
 
-.slipbox-bookmark-edge-tab.is-left {
+.slipbox-bookmark-edge-tab.is-before {
   left: 0;
   border-radius: 0 6px 6px 0;
 }
 
-.slipbox-bookmark-edge-tab.is-right {
+.slipbox-bookmark-edge-tab.is-after {
   right: 0;
   border-radius: 6px 0 0 6px;
 }
@@ -2446,4 +2471,108 @@ button.slipbox-card-color-choice.is-no-color::after {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Deck axis changes geometry, never card dimensions. */
+.slipbox-deck-view[data-deck-orientation="vertical"] { --slipbox-deck-center: 78%; }
+.slipbox-deck-view[data-deck-orientation="vertical"].is-deck-centered-position { --slipbox-deck-center: 50%; }
+.slipbox-deck-view[data-deck-orientation="vertical"].is-deck-top-position { --slipbox-deck-center: 22%; }
+
+.slipbox-deck-view[data-deck-orientation="vertical"] .slipbox-desk-piles {
+  top: 24px;
+  right: 24px;
+  left: auto;
+  transform: none;
+}
+
+.slipbox-deck-view[data-deck-orientation="vertical"] .slipbox-bookmark-edge-tab {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+.slipbox-deck-view[data-deck-orientation="vertical"] .slipbox-bookmark-edge-tab.is-before {
+  top: 12px;
+  bottom: auto;
+  border-radius: 0 0 6px 6px;
+}
+.slipbox-deck-view[data-deck-orientation="vertical"] .slipbox-bookmark-edge-tab.is-after {
+  bottom: 12px;
+  top: auto;
+  border-radius: 6px 6px 0 0;
+}
+
+.slipbox-local-branch-view[data-placement="left"] {
+  top: 50%;
+  left: auto;
+  right: calc(100% + 12px);
+  translate: 0 calc(-1 * var(--slipbox-branch-active-y, 50%));
+}
+.slipbox-local-branch-view[data-placement="left"] .slipbox-local-branch-scroller {
+  padding-top: 0;
+  flex: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.slipbox-deck-map[data-orientation="vertical"] {
+  justify-self: end;
+  align-self: stretch;
+  width: 36px;
+  height: auto;
+  min-height: 0;
+}
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-rail { inset: 18px 0; }
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-track {
+  inset: 0 auto 0 26px;
+  width: 2px;
+  height: auto;
+}
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-landmark,
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-section {
+  top: calc(var(--slipbox-deck-map-position) * 100%);
+  left: 27px;
+}
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-landmark-layer {
+  /* Keep the centring translation in screen coordinates when rotating the mark. */
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-section { height: 0; }
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-section-divider {
+  width: 11px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+}
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-section-label {
+  top: 0;
+  left: auto;
+  right: 10px;
+  transform: translateY(-50%);
+}
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-readout {
+  top: calc(var(--slipbox-deck-map-position) * 100%);
+  left: auto;
+  right: 38px;
+  transform: translateY(-50%);
+}
+
+/* Keep vertical controls beside the card, independently of diagram expansion. */
+.slipbox-local-branch-view[data-orientation="vertical"] .slipbox-local-branch-header {
+  top: calc(-1 * var(--slipbox-branch-owner-height) - 8px);
+  right: calc(50% + var(--slipbox-branch-owner-width) / 2 + 12px);
+  height: auto;
+  flex-direction: column;
+}
+
+.slipbox-local-branch-view[data-orientation="vertical"] .slipbox-local-branch-toolbar {
+  flex-direction: column;
+}
+
+.slipbox-local-branch-view[data-orientation="vertical"][data-placement="left"] {
+  right: calc(100% + 48px);
+}
+
+.slipbox-local-branch-view[data-orientation="vertical"][data-placement="left"] .slipbox-local-branch-header {
+  top: calc(var(--slipbox-branch-active-y, 50%) - var(--slipbox-branch-owner-height) / 2);
+  right: -36px;
 }

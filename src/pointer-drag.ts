@@ -4,7 +4,7 @@ export interface ThresholdPointerDragOptions {
   readonly startX: number;
   readonly startY: number;
   readonly threshold: number;
-  readonly onDragStart: () => void;
+  readonly onDragStart: (deltaX: number, deltaY: number) => void;
   readonly onDragMove: (
     event: PointerEvent,
     deltaX: number,
@@ -102,7 +102,7 @@ export function beginThresholdPointerDrag(
         return;
       }
       dragging = true;
-      options.onDragStart();
+      options.onDragStart(deltaX, deltaY);
     }
     event.preventDefault();
     options.onDragMove(event, deltaX, deltaY);
@@ -132,4 +132,9 @@ export function beginThresholdPointerDrag(
   document.addEventListener("pointermove", move);
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);
+}
+
+/** Resolve intent once after crossing the drag threshold. Ties pan the workspace. */
+export function deckHeaderDragIntent(vertical: boolean, deltaX: number, deltaY: number): "desk" | "pan" {
+  return vertical && Math.abs(deltaY) >= Math.abs(deltaX) ? "pan" : "desk";
 }

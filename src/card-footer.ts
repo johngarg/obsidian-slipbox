@@ -155,6 +155,16 @@ export class CardFooterManager {
     this.layoutTimer = ownerWindow.setTimeout(() => this.flushLayout(), 120);
   }
 
+  removeCard(card: HTMLElement): void {
+    for (const entry of this.entries) {
+      if (!card.contains(entry.footer)) continue;
+      if (this.overflowEntry === entry) this.closeOverflowMenu();
+      this.resizeObserver?.unobserve(entry.footer);
+      this.entries.delete(entry);
+      this.entriesByFooter.delete(entry.footer);
+    }
+  }
+
   clear(): void {
     this.closeOverflowMenu();
     this.resizeObserver?.disconnect();

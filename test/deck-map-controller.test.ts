@@ -249,3 +249,17 @@ describe("Deck-map controller", () => {
     assert.deepEqual(value.navigated, []);
   });
 });
+
+test("vertical map picks along height and uses vertical accessible keyboard navigation", () => {
+  const value = subject(100);
+  value.controller.setOrientation("vertical");
+  value.controller.reconcile(cards(5), "0.md", new Set(), { start: 0, end: 4 });
+  assert.equal(value.controller.rootElement.getAttribute("aria-orientation"), "vertical");
+  value.controller.rootElement.dispatchEvent(new value.window.MouseEvent("click", { clientX: 0, clientY: 22, bubbles: true }) as unknown as Event);
+  assert.deepEqual(value.navigated, ["4.md"]);
+  value.controller.rootElement.dispatchEvent(new value.window.KeyboardEvent("keydown", { key: "ArrowDown" }) as unknown as Event);
+  value.controller.rootElement.dispatchEvent(new value.window.KeyboardEvent("keydown", { key: "ArrowUp" }) as unknown as Event);
+  value.controller.rootElement.dispatchEvent(new value.window.KeyboardEvent("keydown", { key: "ArrowLeft" }) as unknown as Event);
+  assert.deepEqual(value.actions, ["next-card", "previous-card"]);
+  value.controller.dispose();
+});

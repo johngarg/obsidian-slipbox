@@ -1,3 +1,5 @@
+import { deckAxis } from "./deck-axis.js";
+import type { DeckOrientation } from "./settings.js";
 import { DeckMapRenderer } from "./deck-map-renderer.js";
 import {
   bucketDeckMapLandmarks,
@@ -47,6 +49,7 @@ export class DeckMapController {
   private landmarksByPath = new Map<string, DeckMapLandmark>();
   private renderedLandmarks: readonly DeckMapRenderableLandmark[] = [];
   private railWidth = 0;
+  private orientation: DeckOrientation = "horizontal";
   private devicePixelRatio = 1;
   private currentReadoutKey: string | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -74,7 +77,7 @@ export class DeckMapController {
     if (ResizeObserverConstructor !== null) {
       const observer = new ResizeObserverConstructor((entries) => {
         const physicalWidth = entries[0]?.devicePixelContentBoxSize?.[0]
-          ?.inlineSize;
+          ?.[this.orientation === "vertical" ? "blockSize" : "inlineSize"];
         this.refreshLayout(physicalWidth);
       });
       this.resizeObserver = observer;
@@ -154,12 +157,25 @@ export class DeckMapController {
     }
   }
 
+  setOrientation(orientation: DeckOrientation): void {
+    this.orientation = orientation;
+    this.renderer.setOrientation(orientation);
+    this.clearReadout();
+    this.refreshLayout();
+  }
+
+  private axisBounds(): { start: number; extent: number } {
+    const bounds = this.renderer.railElement.getBoundingClientRect();
+    const axis = deckAxis(this.orientation);
+    return { start: axis.point(bounds.left, bounds.top), extent: axis.extent(bounds.width, bounds.height) };
+  }
+
   refreshLayout(physicalPixelWidth?: number): void {
     if (this.disposed) {
       return;
     }
     const bounds = this.renderer.railElement.getBoundingClientRect();
-    this.railWidth = Math.max(0, bounds.width);
+    this.railWidth = Math.max(0, deckAxis(this.orientation).extent(bounds.width, bounds.height));
     this.devicePixelRatio =
       physicalPixelWidth !== undefined &&
         Number.isFinite(physicalPixelWidth) &&
@@ -279,19 +295,19 @@ export class DeckMapController {
       this.clearReadout();
       return;
     }
-    const bounds = this.renderer.railElement.getBoundingClientRect();
-    const offset = event.clientX - bounds.left;
-    const index = deckMapIndexAtOffset(offset, bounds.width, this.cards.length);
+    const bounds = this.axisBounds();
+    const offset = deckAxis(this.orientation).point(event.clientX, event.clientY) - bounds.start;
+    const index = deckMapIndexAtOffset(offset, bounds.extent, this.cards.length);
     const card = index === null ? undefined : this.cards[index];
     if (index === null || card === undefined) {
       this.clearReadout();
       return;
     }
-    const normalized = bounds.width <= 0
+    const normalized = bounds.extent <= 0
       ? 0
-      : Math.max(0, Math.min(1, offset / bounds.width));
+      : Math.max(0, Math.min(1, offset / bounds.extent));
     const physicalWidth = deckMapPhysicalPixelWidth(
-      bounds.width,
+      bounds.extent,
       this.devicePixelRatio,
     );
     const bucket = deckMapPhysicalPixelBucket(normalized, physicalWidth);
@@ -313,10 +329,10 @@ export class DeckMapController {
   };
 
   private readonly handleClick = (event: MouseEvent): void => {
-    const bounds = this.renderer.railElement.getBoundingClientRect();
+    const bounds = this.axisBounds();
     const index = deckMapIndexAtOffset(
-      event.clientX - bounds.left,
-      bounds.width,
+      deckAxis(this.orientation).point(event.clientX, event.clientY) - bounds.start,
+      bounds.extent,
       this.cards.length,
     );
     const target = index === null ? undefined : this.cards[index];
@@ -330,9 +346,9 @@ export class DeckMapController {
   };
 
   private readonly handleKeydown = (event: KeyboardEvent): void => {
-    const action: DeckMapKeyboardAction | null = event.key === "ArrowLeft"
+    const action: DeckMapKeyboardAction | null = event.key === deckAxis(this.orientation).previousKey
       ? "previous-card"
-      : event.key === "ArrowRight"
+      : event.key === deckAxis(this.orientation).nextKey
         ? "next-card"
         : event.key === "Home"
           ? "first-card"

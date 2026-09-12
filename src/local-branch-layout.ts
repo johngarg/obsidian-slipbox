@@ -33,6 +33,8 @@ export interface LocalBranchLayoutStrand {
 
 export interface LocalBranchLayout {
   readonly viewportWidth: number;
+  readonly viewportHeight: number;
+  readonly placement: "below" | "left";
   readonly contentWidth: number;
   readonly height: number;
   readonly nodeRadius: number;
@@ -40,7 +42,8 @@ export interface LocalBranchLayout {
 }
 
 export interface LocalBranchLayoutOptions {
-  readonly width: number;
+  readonly strandExtent: number;
+  readonly placement?: "below" | "left";
   readonly expandedGapIds?: ReadonlySet<string>;
 }
 
@@ -56,7 +59,7 @@ export function layoutLocalBranchModel(
   model: LocalBranchModel,
   options: LocalBranchLayoutOptions,
 ): LocalBranchLayout {
-  const viewportWidth = Math.max(240, Math.min(900, options.width));
+  const viewportWidth = Math.max(240, Math.min(900, options.strandExtent));
   const budget = Math.max(
     3,
     Math.floor((viewportWidth - PADDING_X * 2) / SLOT_WIDTH),
@@ -112,13 +115,20 @@ export function layoutLocalBranchModel(
     baseContentWidth,
     rightmostItemX + PADDING_X + SLOT_WIDTH / 2,
   );
+  const crossExtent = PADDING_Y * 2 + NODE_RADIUS * 2 + Math.max(0, strands.length - 1) * ROW_HEIGHT;
+  if (options.placement === "left") {
+    return {
+      viewportWidth: crossExtent, viewportHeight: viewportWidth,
+      contentWidth: crossExtent, height: contentWidth, nodeRadius: NODE_RADIUS,
+      placement: "left",
+      strands: strands.map((strand) => ({ ...strand,
+        items: strand.items.map((item) => ({ ...item, x: crossExtent - item.y, y: item.x })),
+      })),
+    };
+  }
   return {
-    viewportWidth,
-    contentWidth,
-    height: PADDING_Y * 2 + NODE_RADIUS * 2 +
-      Math.max(0, strands.length - 1) * ROW_HEIGHT,
-    nodeRadius: NODE_RADIUS,
-    strands,
+    viewportWidth, viewportHeight: crossExtent, contentWidth, height: crossExtent,
+    placement: "below", nodeRadius: NODE_RADIUS, strands,
   };
 }
 

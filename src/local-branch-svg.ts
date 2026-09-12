@@ -11,10 +11,13 @@ import type {
   LocalBranchTarget,
 } from "./local-branch-types.js";
 
+let svgLabelSequence = 0;
+
 export interface LocalBranchSvgOptions {
   readonly parent: HTMLElement;
   readonly model: LocalBranchModel;
-  readonly width: number;
+  readonly strandExtent: number;
+  readonly placement?: "below" | "left";
   readonly expandedGapIds: ReadonlySet<string>;
   readonly expandedDepartureId: string | null;
   readonly showTooltips: boolean;
@@ -69,7 +72,8 @@ class LocalBranchSvgRenderer {
     scroller.className = "slipbox-local-branch-scroller";
     this.options.parent.append(scroller);
     const layout = layoutLocalBranchModel(this.options.model, {
-      width: this.options.width,
+      strandExtent: this.options.strandExtent,
+      placement: this.options.placement ?? "below",
       expandedGapIds: this.options.expandedGapIds,
     });
     const svg = this.svg("svg");
@@ -78,7 +82,7 @@ class LocalBranchSvgRenderer {
     svg.setAttribute("height", String(layout.height));
     svg.setAttribute("viewBox", `0 0 ${layout.contentWidth} ${layout.height}`);
     svg.setAttribute("role", "group");
-    svg.setAttribute("aria-label", "Local branch diagram");
+    this.labelSvg(svg, "Local branch diagram");
     scroller.append(svg);
 
     const edges = this.svg("g");
@@ -112,7 +116,14 @@ class LocalBranchSvgRenderer {
       this.options.model.activePath,
       "current",
     );
-    if (active !== null && layout.contentWidth > layout.viewportWidth) {
+    if (this.options.placement === "left") {
+      this.options.parent.style.width = `${layout.contentWidth}px`;
+      scroller.style.height = `${layout.viewportHeight}px`;
+      const scrollTop = active === null ? 0 : Math.max(0, Math.min(layout.height - layout.viewportHeight, active.y - layout.viewportHeight / 2));
+      scroller.scrollTop = scrollTop;
+      this.options.parent.style.setProperty("--slipbox-branch-active-y", `${active === null ? layout.viewportHeight / 2 : active.y - scrollTop}px`);
+    }
+    if (this.options.placement !== "left" && active !== null && layout.contentWidth > layout.viewportWidth) {
       scroller.scrollLeft = Math.max(0, active.x - layout.viewportWidth / 2);
     }
   }
@@ -264,7 +275,7 @@ class LocalBranchSvgRenderer {
       ? `, duplicate ${node.duplicateIndex + 1} of ${node.duplicateCount}`
       : "";
     const label = `${node.address} · ${node.title}${duplicate}; ${node.path}`;
-    group.setAttribute("aria-label", label);
+    this.labelSvg(group, label);
     const circle = this.svg("circle");
     circle.setAttribute("cx", String(item.x));
     circle.setAttribute("cy", String(item.y));
@@ -344,15 +355,17 @@ class LocalBranchSvgRenderer {
     const label = `${departures.length} hidden branch${
       departures.length === 1 ? "" : "es"
     } from ${item.node.address}: ${types}`;
-    group.setAttribute("aria-label", label);
+    this.labelSvg(group, label);
     const line = this.svg("line");
     const verticalDirection = row.strand.role === "higher" ? -1 : 1;
     const radiusOffset = radius * DIAGONAL_COMPONENT;
     const stubOffset = BRANCH_STUB_LENGTH * DIAGONAL_COMPONENT;
-    const startX = item.x + radiusOffset;
-    const startY = item.y + verticalDirection * radiusOffset;
-    const endX = startX + stubOffset;
-    const endY = startY + verticalDirection * stubOffset;
+    const dx = this.options.placement === "left" ? -verticalDirection : 1;
+    const dy = this.options.placement === "left" ? 1 : verticalDirection;
+    const startX = item.x + dx * radiusOffset;
+    const startY = item.y + dy * radiusOffset;
+    const endX = startX + dx * stubOffset;
+    const endY = startY + dy * stubOffset;
     line.setAttribute("x1", String(startX));
     line.setAttribute("y1", String(startY));
     line.setAttribute("x2", String(endX));
@@ -366,15 +379,15 @@ class LocalBranchSvgRenderer {
     const hitEndOffset = (
       radius + BRANCH_STUB_LENGTH + BRANCH_STUB_HIT_EXTENSION
     ) * DIAGONAL_COMPONENT;
-    hit.setAttribute("x1", String(item.x + hitStartOffset));
+    hit.setAttribute("x1", String(item.x + dx * hitStartOffset));
     hit.setAttribute(
       "y1",
-      String(item.y + verticalDirection * hitStartOffset),
+      String(item.y + dy * hitStartOffset),
     );
-    hit.setAttribute("x2", String(item.x + hitEndOffset));
+    hit.setAttribute("x2", String(item.x + dx * hitEndOffset));
     hit.setAttribute(
       "y2",
-      String(item.y + verticalDirection * hitEndOffset),
+      String(item.y + dy * hitEndOffset),
     );
     hit.setAttribute("stroke-linecap", "butt");
     group.append(line, hit);
@@ -397,7 +410,7 @@ class LocalBranchSvgRenderer {
     group.setAttribute("role", "button");
     group.setAttribute("tabindex", "0");
     group.setAttribute("data-focus-id", `gap:${id}`);
-    group.setAttribute("aria-label", `Show ${count} omitted cards`);
+    this.labelSvg(group, `Show ${count} omitted cards`);
     const hit = this.svg("rect");
     hit.setAttribute("x", String(x - 27));
     hit.setAttribute("y", String(y - 15));
@@ -479,6 +492,15 @@ class LocalBranchSvgRenderer {
       (candidate): candidate is LocalBranchLayoutNode =>
         candidate.kind === "node" && candidate.node.path === path,
     ) ?? null;
+  }
+
+  /** Obsidian treats aria-label as an HTML tooltip target; SVG needs a reference. */
+  private labelSvg(parent: SVGElement, label: string): void {
+    const description = this.svg("desc");
+    description.id = `slipbox-branch-svg-label-${++svgLabelSequence}`;
+    description.textContent = label;
+    parent.append(description);
+    parent.setAttribute("aria-labelledby", description.id);
   }
 
   private appendTitle(parent: SVGElement, label: string): void {

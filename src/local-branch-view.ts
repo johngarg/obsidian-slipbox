@@ -1,3 +1,4 @@
+import type { BranchViewPlacement, DeckOrientation } from "./settings.js";
 import { renderLocalBranchSvg } from "./local-branch-svg.js";
 import { localBranchDomWindow } from "./local-branch-dom.js";
 import { setCardTooltip } from "./card-tooltip.js";
@@ -14,6 +15,8 @@ import type {
 
 export interface LocalBranchViewEnvironment {
   readonly activeDocument: Document;
+  readonly placement?: () => BranchViewPlacement;
+  readonly orientation?: () => DeckOrientation;
   readonly canShowView: () => boolean;
   readonly showTooltips: () => boolean;
   readonly previewLinksOnHover: () => boolean;
@@ -57,36 +60,43 @@ const MOVEMENTS: readonly {
   readonly movement: LocalBranchMovement;
   readonly label: string;
   readonly icon: string;
+  readonly verticalIcon: string;
 }[] = [
   {
     movement: "backward",
     label: "Move backward on strand",
     icon: "arrow-left",
+    verticalIcon: "arrow-up",
   },
   {
     movement: "forward",
     label: "Move forward on strand",
     icon: "arrow-right",
+    verticalIcon: "arrow-down",
   },
   {
     movement: "beginning",
     label: "Move to strand beginning",
     icon: "chevrons-left",
+    verticalIcon: "chevrons-up",
   },
   {
     movement: "inferred",
     label: "Enter inserted branch",
     icon: "git-fork",
+    verticalIcon: "git-fork",
   },
   {
     movement: "explicit",
     label: "Enter supplementary branch",
     icon: "corner-down-right",
+    verticalIcon: "corner-left-down",
   },
   {
     movement: "higher",
     label: "Move to higher strand",
     icon: "corner-up-left",
+    verticalIcon: "corner-left-up",
   },
 ];
 
@@ -115,6 +125,7 @@ export class LocalBranchViewController {
     const activeChanged = path !== this.path;
     const ownerChanged = owner !== this.owner;
     const stageChanged = stage !== this.stage;
+    if (!activeChanged && !ownerChanged && !stageChanged) return;
     if (activeChanged) {
       this.expandedGapIds.clear();
       this.expandedDepartureId = null;
@@ -228,14 +239,22 @@ export class LocalBranchViewController {
   ): void {
     const focusedId = this.focusedControlId();
     const width = this.availableWidth();
+    this.root.dataset.placement = this.resolvedPlacement();
+    this.root.dataset.orientation = this.environment.orientation?.() ?? "horizontal";
+    this.root.style.setProperty("--slipbox-branch-owner-width", `${this.ownerWidth()}px`);
+    this.root.style.setProperty("--slipbox-branch-owner-height", `${this.owner?.offsetHeight ?? 0}px`);
     this.root.style.width = `${width}px`;
     this.root.replaceChildren(this.rootLabel);
     const header = element(this.root, "div", "slipbox-local-branch-header");
-    header.style.right = `${Math.max(0, (width - this.ownerWidth()) / 2)}px`;
+    if (this.environment.orientation?.() !== "vertical") {
+      header.style.right = `${Math.max(0, (width - this.ownerWidth()) / 2)}px`;
+    }
+    const vertical = this.environment.orientation?.() === "vertical";
+    if (vertical) this.renderVisibilityControl(header);
     if (model !== null && this.isViewVisible()) {
       this.renderToolbar(header, model);
     }
-    this.renderVisibilityControl(header);
+    if (!vertical) this.renderVisibilityControl(header);
     if (model !== null && this.isViewVisible()) {
       this.renderGraph(model);
     }
@@ -245,7 +264,8 @@ export class LocalBranchViewController {
         ".slipbox-local-branch-scroller",
       );
       if (scroller !== null) {
-        scroller.scrollLeft = preservedScrollLeft;
+        if (this.resolvedPlacement() === "left") scroller.scrollTop = preservedScrollLeft;
+        else scroller.scrollLeft = preservedScrollLeft;
       }
     }
   }
@@ -273,8 +293,12 @@ export class LocalBranchViewController {
   private renderToolbar(parent: HTMLElement, model: LocalBranchModel): void {
     const toolbar = element(parent, "div", "slipbox-local-branch-toolbar");
     toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-orientation", this.environment.orientation?.() ?? "horizontal");
     appendHiddenLabel(toolbar, "Branch navigation");
-    for (const definition of MOVEMENTS) {
+    const movements = this.environment.orientation?.() === "vertical"
+      ? [...MOVEMENTS].reverse()
+      : MOVEMENTS;
+    for (const definition of movements) {
       const slot = element(toolbar, "div", "slipbox-local-branch-control-slot");
       slot.dataset.movement = definition.movement;
       slot.append(this.navigationButton(definition, model));
@@ -296,7 +320,9 @@ export class LocalBranchViewController {
     button.disabled = targets.length === 0;
     button.dataset.focusId = `movement:${definition.movement}`;
     this.labelControl(button, definition.label);
-    this.environment.setIcon(button, definition.icon);
+    this.environment.setIcon(button, this.environment.orientation?.() === "vertical"
+      ? definition.verticalIcon
+      : definition.icon);
     if (targets.length > 0) {
       this.configureButton(button, () =>
         this.activateMovement(definition.movement, targets));
@@ -308,7 +334,8 @@ export class LocalBranchViewController {
     renderLocalBranchSvg({
       parent: this.root,
       model,
-      width: this.availableWidth(),
+      strandExtent: this.availableWidth(),
+      placement: this.resolvedPlacement(),
       expandedGapIds: this.expandedGapIds,
       expandedDepartureId: this.expandedDepartureId,
       showTooltips: this.environment.showTooltips(),
@@ -323,7 +350,7 @@ export class LocalBranchViewController {
       expandGap: (id) => {
         const scrollLeft = this.root.querySelector<HTMLElement>(
           ".slipbox-local-branch-scroller",
-        )?.scrollLeft ?? 0;
+        )?.[this.resolvedPlacement() === "left" ? "scrollTop" : "scrollLeft"] ?? 0;
         this.expandedGapIds = new Set([id]);
         this.render(model, scrollLeft);
       },
@@ -375,7 +402,7 @@ export class LocalBranchViewController {
 
   private isViewVisible(): boolean {
     return this.environment.canShowView() &&
-      (this.visibilityOverride ?? true);
+      (this.visibilityOverride ?? this.environment.placement?.() !== "hidden");
   }
 
   private ownerWidth(): number {
@@ -386,7 +413,16 @@ export class LocalBranchViewController {
     return owner.offsetWidth || owner.clientWidth || DEFAULT_WIDTH;
   }
 
+  private resolvedPlacement(): "left" | "below" {
+    const placement = this.environment.placement?.() ?? "auto";
+    if (placement === "left" || placement === "below") return placement;
+    return this.environment.orientation?.() === "vertical" ? "left" : "below";
+  }
+
   private availableWidth(): number {
+    if (this.resolvedPlacement() === "left") {
+      return Math.max(240, Math.min(900, (this.stage?.clientHeight || 720) - STAGE_INSET));
+    }
     const ownerWidth = this.ownerWidth();
     const stage = this.stage;
     const stageWidth = stage === null

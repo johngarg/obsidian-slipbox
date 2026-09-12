@@ -15,6 +15,8 @@ import { setTextSettingValidity } from "./setting-validation.js";
 import {
   SLIPBOX_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
+  resolvedDeckKeybindings,
+  defaultNavigationBindings,
   DEFAULT_SETTINGS,
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
@@ -91,9 +93,24 @@ export class SlipboxSettingTab extends PluginSettingTab {
             "Show an ordinal rail with section labels, a prominent active cursor, accent bookmark ticks, subdued colour ticks, and sparse Desk marks.",
             (setting) => this.renderShowDeckMap(setting),
           ),
+          this.definition("Deck orientation", "Choose the direction of the card sequence.",
+            (setting) => this.renderLayoutChoice(setting, "deckOrientation", { horizontal: "Horizontal", vertical: "Vertical" })),
+          this.definition("Stacking model", "Drawer opens a reading gap; Fan lifts the anchor above its neighbours.",
+            (setting) => this.renderLayoutChoice(setting, "deckStackModel", { drawer: "Drawer", fan: "Fan" })),
+          this.definition("Show lower Fan headers at bottom",
+            "In vertical Fan, move headers to the bottom of cards below the anchor. Headers return to the top when selected or moved above the anchor.",
+            (setting) => { setting.addToggle((toggle) => { toggle
+              .setValue(this.slipbox.settings.fanHeadersAtBottom)
+              .onChange((fanHeadersAtBottom) => void this.save({ ...this.slipbox.settings, fanHeadersAtBottom })); }); }),
+          this.definition("Card tilt", "Deterministic card rotation in degrees. The anchor stays straight.",
+            (setting) => { setting.addSlider((slider) => { slider.setLimits(0, 5, 0.1)
+              .setValue(this.slipbox.settings.cardTilt)
+              .onChange((cardTilt) => void this.save({ ...this.slipbox.settings, cardTilt })); }); }),
+          this.definition("Wheel over card body", "Choose whether vertical wheel gestures read the body first or browse the Deck.",
+            (setting) => this.renderLayoutChoice(setting, "wheelOverCardBody", { "body-first": "Body first", deck: "Deck" })),
           this.definition(
             "Card spread",
-            "Set the visual separation between neighbouring Deck cards.",
+            "Separation as a fraction of card width horizontally or card height vertically.",
             (setting) => this.renderCardSpread(setting),
           ),
         ],
@@ -119,8 +136,8 @@ export class SlipboxSettingTab extends PluginSettingTab {
         heading: "Branch presentation",
         items: [
           this.definition(
-            "Show local Branch View",
-            "Show archive-style local branch navigation beneath the active Deck card. When off, its control rail and toggle action are unavailable.",
+            "Branch View placement",
+            "Automatic places branches below a horizontal Deck or to the left of a vertical Deck. Pan to explore columns extending offscreen.",
             (setting) => this.renderShowLocalBranchView(setting),
           ),
           this.definition(
@@ -146,7 +163,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         items: [
           this.definition(
             "Main card size",
-            "Maximum Deck-card width: small 720 px, medium 840 px, or large 960 px.",
+            "Fixed Deck dimensions: small 720 × 480 px, medium 840 × 560 px, or large 960 × 640 px. Pan to see content outside the pane.",
             (setting) => this.renderMainCardSize(setting),
           ),
           this.definition(
@@ -343,19 +360,18 @@ export class SlipboxSettingTab extends PluginSettingTab {
   }
 
   private renderShowLocalBranchView(setting: Setting): void {
-    const disabled =
-      !this.slipbox.settings.inferAddressBranches &&
-      !this.slipbox.settings.explicitBranchLinks;
-    setting.setDisabled(disabled);
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.showLocalBranchView)
-        .setDisabled(disabled)
-        .onChange((showLocalBranchView) => void this.save({
-          ...this.slipbox.settings,
-          showLocalBranchView,
-        }));
+    this.renderLayoutChoice(setting, "branchViewPlacement", {
+      auto: "Automatic", left: "Left", below: "Below", hidden: "Hidden",
     });
+  }
+
+  private renderLayoutChoice<K extends "deckOrientation" | "deckStackModel" | "branchViewPlacement" | "wheelOverCardBody">(
+    setting: Setting, key: K, choices: Record<SlipboxSettings[K], string>,
+  ): void {
+    setting.addDropdown((dropdown) => dropdown.addOptions(choices)
+      .setValue(this.slipbox.settings[key])
+      .onChange((value) => void this.save({ ...this.slipbox.settings, [key]: value })
+        .then(() => this.updatePreservingScroll())));
   }
 
   private renderTitleProperty(setting: Setting): void {
@@ -706,6 +722,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
       void this.save({
         ...this.slipbox.settings,
         deckKeybindings: DEFAULT_DECK_KEYBINDINGS,
+        navigationKeyOverrides: { "previous-card": false, "next-card": false },
       }).then(() => this.updatePreservingScroll());
     });
   }
@@ -717,7 +734,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
     const { id: action, label } = definition;
     setting.settingEl.addClass("slipbox-shortcut-setting");
     const bindings = setting.controlEl.createDiv({ cls: "slipbox-shortcut-bindings" });
-    for (const bindingValue of this.slipbox.settings.deckKeybindings[action]) {
+    for (const bindingValue of resolvedDeckKeybindings(this.slipbox.settings)[action]) {
       const chip = bindings.createEl("button", {
         cls: "slipbox-shortcut-chip",
         attr: {
@@ -731,9 +748,11 @@ export class SlipboxSettingTab extends PluginSettingTab {
         const signature = keyBindingSignature(bindingValue);
         void this.save({
           ...this.slipbox.settings,
+          navigationKeyOverrides: { ...this.slipbox.settings.navigationKeyOverrides,
+            ...(action === "previous-card" || action === "next-card" ? { [action]: true } : {}) },
           deckKeybindings: {
-            ...this.slipbox.settings.deckKeybindings,
-            [action]: this.slipbox.settings.deckKeybindings[action].filter(
+            ...resolvedDeckKeybindings(this.slipbox.settings),
+            [action]: resolvedDeckKeybindings(this.slipbox.settings)[action].filter(
               (candidate) => keyBindingSignature(candidate) !== signature,
             ),
           },
@@ -766,7 +785,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
         }
         const candidate = this.bindingFromEvent(event);
         const conflict = keyBindingConflict(
-          this.slipbox.settings.deckKeybindings,
+          resolvedDeckKeybindings(this.slipbox.settings),
           action,
           candidate,
         );
@@ -778,7 +797,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           return;
         }
         if (
-          this.slipbox.settings.deckKeybindings[action].some(
+          resolvedDeckKeybindings(this.slipbox.settings)[action].some(
             (bindingValue) =>
               keyBindingSignature(bindingValue) === keyBindingSignature(candidate),
           )
@@ -789,10 +808,12 @@ export class SlipboxSettingTab extends PluginSettingTab {
         finish();
         void this.save({
           ...this.slipbox.settings,
+          navigationKeyOverrides: { ...this.slipbox.settings.navigationKeyOverrides,
+            ...(action === "previous-card" || action === "next-card" ? { [action]: true } : {}) },
           deckKeybindings: {
-            ...this.slipbox.settings.deckKeybindings,
+            ...resolvedDeckKeybindings(this.slipbox.settings),
             [action]: [
-              ...this.slipbox.settings.deckKeybindings[action],
+              ...resolvedDeckKeybindings(this.slipbox.settings)[action],
               candidate,
             ],
           },
@@ -813,10 +834,12 @@ export class SlipboxSettingTab extends PluginSettingTab {
       attr: { type: "button", "aria-label": `Reset ${label} shortcuts` },
     });
     reset.addEventListener("click", () => {
-      const defaults = definition.defaultBindings;
+      const defaults = action === "previous-card" || action === "next-card"
+        ? defaultNavigationBindings(action, this.slipbox.settings.deckOrientation)
+        : definition.defaultBindings;
       for (const bindingValue of defaults) {
         const conflict = keyBindingConflict(
-          this.slipbox.settings.deckKeybindings,
+          resolvedDeckKeybindings(this.slipbox.settings),
           action,
           bindingValue,
         );
@@ -832,8 +855,10 @@ export class SlipboxSettingTab extends PluginSettingTab {
       }
       void this.save({
         ...this.slipbox.settings,
+        navigationKeyOverrides: { ...this.slipbox.settings.navigationKeyOverrides,
+          ...(action === "previous-card" || action === "next-card" ? { [action]: false } : {}) },
         deckKeybindings: {
-          ...this.slipbox.settings.deckKeybindings,
+          ...resolvedDeckKeybindings(this.slipbox.settings),
           [action]: defaults,
         },
       }).then(() => this.updatePreservingScroll());

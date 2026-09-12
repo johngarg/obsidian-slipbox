@@ -33,7 +33,10 @@ test. Record unexpected warnings or errors under Findings.
 - [ ] Navigate the Deck with pointer, horizontal scrolling, and keyboard controls.
 - [ ] With and without Desk piles, confirm `zz` centres the Deck at 50%, `zb`
   positions it near the bottom, and `zt` positions it near the top with space
-  visible below.
+  visible below. When a fixed card fits in the pane, both its header and footer
+  remain inside the pane after either command, including after resizing. In a
+  pane shorter than the card, `zt` exposes the header and `zb` the footer. Check
+  all card sizes in both orientations and stacking models.
 - [ ] Reopen the view with an automatic unfiled-card pile and confirm it starts
   at `zb`; remove that pile, reopen, and confirm it starts at `zz`.
 - [ ] Create an untitled card and a titled card.
@@ -159,3 +162,54 @@ console output, and a screenshot when useful.
 - [ ] Fail: one or more blocking findings remain.
 
 Tester notes:
+
+## Vertical Deck and layout matrix
+
+- [ ] Exercise Horizontal/Vertical × Drawer/Fan at spreads 0.10, 0.58, and 1.12,
+  with tilt 0 and 5, using both a small card set and the large development corpus.
+- [ ] Check all three card sizes in full-width and narrow split panes. Resizing,
+  browsing, and `zt`/`zz`/`zb` must preserve card dimensions. Pan to reach clipped content.
+- [ ] In overlapping untilted vertical Drawer, both sides expose header edges.
+  Wide spacing and tilt may expose body/footer content legitimately.
+- [ ] Click neighbours, jump with the map/bookmarks, hold navigation keys, and
+  reverse wheel direction mid-transition. Drawer must not flash or abruptly jump
+  its reading gap. Fan keeps stationary click selection.
+- [ ] Pan far along and across the Deck at minimum spread. Visible context must
+  fill in while dragging, without an artificial 24-neighbour boundary.
+- [ ] Open a long card: scroll to both body boundaries, continue into the Deck,
+  reverse direction, and retry after a pause. Test Body first, Deck, and disabled
+  body scrolling. Editor and Branch View wheels must remain contained.
+- [ ] Drag a vertical card header vertically to pan and sideways to create a Desk
+  pile. Check cancellation, short clicks, double clicks, and existing pile drops.
+- [ ] Verify vertical map hover/click, Up/Down, Home/End, and bookmark edge tabs.
+  Pan the workspace and confirm offscreen bookmark targets update.
+- [ ] In the vertical Deck map, confirm bookmark, active, colour, Desk, and
+  clustered marks share the rail’s horizontal centre with the section notches.
+  Switch back to horizontal and confirm the marks remain centred on its rail.
+- [ ] Explore Left Branch View in a split: pan to every departure column, expand
+  omitted runs and hidden branches, scroll long strands, and activate nodes by
+  pointer and keyboard. Text stays upright and node/stub hit areas stay distinct.
+- [ ] Check Auto, Left, Below, Hidden, and the session visibility command in both
+  Deck orientations. Verify legacy hidden settings remain hidden after upgrade.
+- [ ] Switch orientation repeatedly: default arrows follow it, `j`/`k` stay the
+  same, custom/disabled bindings stay fixed, and reset restores automatic arrows.
+- [ ] Repeat representative interactions in light/dark themes and with reduced
+  motion. Verify edits save, filing/bookmarks work, and Desk/viewed cards retain
+  their own sizes and interactions. Watch the developer console for errors.
+
+### Fan painting regression
+
+- [ ] In vertical Fan at spread 0.10 and tilt 5, browse forward and backward,
+  including large jumps, then hover the card header, body, and workspace. The
+  anchor remains fully painted; no rectangular sections show neighboring cards.
+- [ ] With a large Deck at spread 0.10, scroll continuously in both Fan and
+  Drawer. Movement remains smooth, including while the focused card changes;
+  the painting fix must not cause the whole stack to repaint on every step.
+- [ ] Scroll a long anchor body, select a neighboring card, and return. Body
+  scrolling still works and the previous scroll position is preserved.
+
+- [ ] Enable **Show lower Fan headers at bottom** in vertical Fan. Lower cards
+  expose their address/title strips at the bottom; selecting one returns its
+  header to the top immediately. Check wheel navigation in both directions,
+  clicks, header controls/dragging, and preserved body scroll positions. Disable
+  the option or switch to horizontal/Drawer and confirm all headers return to top.

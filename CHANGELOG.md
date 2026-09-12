@@ -31,6 +31,9 @@ initial public beta.
 
 ### Fixed
 
+- Deck scrolling batches motion into animation frames and reuses unchanged
+  bookmark controls, avoiding redundant card styling and layout work.
+
 - Sustained Drawer scrolling now releases off-screen cards during transitions,
   preventing rendering work from growing with the distance browsed.
 

@@ -22,6 +22,7 @@ export default defineConfig(
       },
       parserOptions: {
         projectService: {
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 9,
           allowDefaultProject: [
             "eslint.config.mjs",
             "manifest.json",

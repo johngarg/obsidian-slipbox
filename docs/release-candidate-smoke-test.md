@@ -213,3 +213,20 @@ Tester notes:
   header to the top immediately. Check wheel navigation in both directions,
   clicks, header controls/dragging, and preserved body scroll positions. Disable
   the option or switch to horizontal/Drawer and confirm all headers return to top.
+
+
+### Sustained scrolling performance
+
+- [ ] Follow [the scrolling comparison protocol](deck-scroll-performance.md) for
+  both Drawer and Fan. Record input travel as well as timing; measure builds
+  separately from compilation and test execution.
+- [ ] Continue and reverse a dense Drawer gesture for at least 40 seconds.
+  Mounted-card and transition-pose counts should remain bounded by the visible
+  window and transient overlap, rather than grow with every card passed.
+- [ ] Focus a bookmark edge button and scroll without changing its target. The
+  same button should keep focus and its action; changed targets must update.
+- [ ] Rebuild, resize and close the Deck during pending animation/render work.
+  No detached card should receive later updates and the replacement view must
+  remain usable.
+- [ ] Replace the filed snapshot through an index refresh, rename/delete the
+  anchor, and reorder cards. Navigation must resolve the anchor's new index.

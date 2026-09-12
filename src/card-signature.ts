@@ -308,14 +308,15 @@ export class CardSignatureManager {
     if (entry.metadata.hidden || entry.content.clientWidth <= 0) {
       return;
     }
+    // Compare layout widths: screen bounds include the card’s rotation and scale.
     const fit = fitMeasuredBacklinkPrefix(
       entry.content.clientWidth,
-      entry.measureItems.map((item) => item.getBoundingClientRect().width),
+      entry.measureItems.map((item) => item.offsetWidth),
       entry.branches.length,
-      entry.measureSeparator.getBoundingClientRect().width,
+      entry.measureSeparator.offsetWidth,
       (hiddenCount) => {
         entry.measureOverflow.textContent = `+${hiddenCount}`;
-        return entry.measureOverflow.getBoundingClientRect().width;
+        return entry.measureOverflow.offsetWidth;
       },
     );
     const fitKey = `${fit.visibleCount}:${fit.hiddenCount}`;
@@ -332,7 +333,7 @@ export class CardSignatureManager {
       return;
     }
     const width = Math.ceil(Math.max(
-      entry.intrinsicSizer.getBoundingClientRect().width,
+      entry.intrinsicSizer.offsetWidth,
       entry.intrinsicSizer.scrollWidth,
     ));
     if (width <= 0 || width === entry.intrinsicWidth) {

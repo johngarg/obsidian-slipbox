@@ -10,6 +10,11 @@ initial public beta.
 
 - Relicensed Slipbox Desk from 0BSD to the MIT License.
 
+### Fixed
+
+- Kept branch annotation fitting independent of card tilt and scale, preventing
+  labels from flickering between their text and an overflow count.
+
 ## [0.15.0] - 2026-08-31
 
 ### Changed

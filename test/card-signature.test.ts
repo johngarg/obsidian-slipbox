@@ -174,9 +174,9 @@ describe("card branch signatures", () => {
     );
     assert.notEqual(signature, null);
     assert.notEqual(sizer, null);
-    Object.defineProperty(sizer, "getBoundingClientRect", {
+    Object.defineProperty(sizer, "offsetWidth", {
       configurable: true,
-      value: () => ({ width: 86.2 } as DOMRect),
+      value: 87,
     });
     subject.manager.layoutNow();
     assert.equal(
@@ -194,6 +194,30 @@ describe("card branch signatures", () => {
       ),
       "",
     );
+  });
+
+  test("keeps a fitting annotation stable under changing screen transforms", () => {
+    const subject = fixture([branch("a")]);
+    const content = subject.parent.querySelector<HTMLElement>(".slipbox-card-signature-content")!;
+    const label = subject.parent.querySelector<HTMLElement>(".slipbox-card-signature-measure .slipbox-card-branch-label")!;
+    const sizer = subject.parent.querySelector<HTMLElement>(".slipbox-card-signature-intrinsic-sizer")!;
+    const signature = subject.parent.querySelector<HTMLElement>(".slipbox-card-signature")!;
+    Object.defineProperty(content, "clientWidth", { value: 8 });
+    Object.defineProperty(label, "offsetWidth", { value: 8 });
+    Object.defineProperty(sizer, "offsetWidth", { value: 87 });
+    let screenWidth = 8;
+    Object.defineProperty(label, "getBoundingClientRect", {
+      value: () => ({ width: screenWidth } as DOMRect),
+    });
+    Object.defineProperty(sizer, "getBoundingClientRect", {
+      value: () => ({ width: 87 + screenWidth } as DOMRect),
+    });
+    for (const width of [8, 10, 7, 10, 8]) {
+      screenWidth = width;
+      subject.manager.layoutNow();
+      assert.equal(content.textContent, "a");
+      assert.equal(signature.style.getPropertyValue("--slipbox-card-signature-intrinsic-width"), "87px");
+    }
   });
 
   test("previews independently but gates activation by link-following policy", () => {
@@ -278,15 +302,15 @@ describe("card branch signatures", () => {
       ".slipbox-card-branch-overflow",
     );
     for (const [index, label] of Array.from(measuredLabels).entries()) {
-      Object.defineProperty(label, "getBoundingClientRect", {
-        value: () => ({ width: index === 0 ? 80 : 10 } as DOMRect),
+      Object.defineProperty(label, "offsetWidth", {
+        value: index === 0 ? 80 : 10,
       });
     }
-    Object.defineProperty(measuredSeparator, "getBoundingClientRect", {
-      value: () => ({ width: 3 } as DOMRect),
+    Object.defineProperty(measuredSeparator, "offsetWidth", {
+      value: 3,
     });
-    Object.defineProperty(measuredOverflow, "getBoundingClientRect", {
-      value: () => ({ width: 12 } as DOMRect),
+    Object.defineProperty(measuredOverflow, "offsetWidth", {
+      value: 12,
     });
 
     subject.manager.layoutNow();

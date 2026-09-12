@@ -16,7 +16,7 @@ export interface DeckViewportCard {
   readonly path: string;
 }
 
-/** Ordered card records read for one operation and never retained. */
+/** Immutable ordered snapshot; cached identity is held only weakly. */
 export type DeckViewportCards = readonly DeckViewportCard[];
 
 export interface DeckRenderWindow {
@@ -39,6 +39,32 @@ export class DeckViewport {
   private offset = 0;
   private mode: DeckPositionMode | null = null;
   private renderedWindow: DeckRenderWindow | null = null;
+  private cachedCards: WeakRef<DeckViewportCards> | null = null;
+  private cachedPath: string | null = null;
+  private cachedIndex = -1;
+
+  private anchorIndex(cards: DeckViewportCards): number {
+    if (this.cachedCards?.deref() === cards && this.cachedPath === this.anchor) {
+      return this.cachedIndex;
+    }
+    const index = cardIndex(cards, this.anchor);
+    this.cacheIndex(cards, index);
+    return index;
+  }
+
+  private cacheIndex(cards: DeckViewportCards, index: number): void {
+    if (this.cachedCards?.deref() !== cards) {
+      this.cachedCards = new WeakRef(cards);
+    }
+    this.cachedPath = this.anchor;
+    this.cachedIndex = index;
+  }
+
+  private invalidateIndex(): void {
+    this.cachedCards = null;
+    this.cachedPath = null;
+    this.cachedIndex = -1;
+  }
 
   get snapshot(): DeckViewportSnapshot {
     return {
@@ -58,15 +84,16 @@ export class DeckViewport {
   }
 
   position(cards: DeckViewportCards): number {
-    const anchorIndex = cardIndex(cards, this.anchor);
+    const anchorIndex = this.anchorIndex(cards);
     return anchorIndex < 0 ? 0 : anchorIndex + this.offset;
   }
 
   reconcile(cards: DeckViewportCards, resetPosition: boolean): boolean {
     const previousAnchor = this.anchor;
-    const anchorIndex = cardIndex(cards, this.anchor);
+    const anchorIndex = this.anchorIndex(cards);
     if (anchorIndex < 0) {
       this.anchor = cards[0]?.path ?? null;
+      this.cacheIndex(cards, this.anchor === null ? -1 : 0);
       this.offset = 0;
       if (this.anchor === null) {
         this.renderedWindow = null;
@@ -87,11 +114,13 @@ export class DeckViewport {
   }
 
   navigate(path: string, cards: DeckViewportCards): boolean {
-    if (cardIndex(cards, path) < 0) {
+    const index = path === this.anchor ? this.anchorIndex(cards) : cardIndex(cards, path);
+    if (index < 0) {
       return false;
     }
     const changed = this.anchor !== path;
     this.anchor = path;
+    this.cacheIndex(cards, index);
     this.offset = 0;
     return changed;
   }
@@ -101,7 +130,15 @@ export class DeckViewport {
     if (targetIndex < 0) {
       return false;
     }
-    const previousIndex = cardIndex(cards, this.anchor);
+    return this.selectIndexWithoutMoving(targetIndex, cards);
+  }
+
+  private selectIndexWithoutMoving(targetIndex: number, cards: DeckViewportCards): boolean {
+    const path = cards[targetIndex]?.path;
+    if (path === undefined) {
+      return false;
+    }
+    const previousIndex = this.anchorIndex(cards);
     const changed = this.anchor !== path;
     this.offset = stationarySelectionOffset(
       previousIndex,
@@ -109,11 +146,12 @@ export class DeckViewport {
       this.offset,
     );
     this.anchor = path;
+    this.cacheIndex(cards, targetIndex);
     return changed;
   }
 
   moveBy(delta: number, cards: DeckViewportCards): boolean {
-    const anchorIndex = cardIndex(cards, this.anchor);
+    const anchorIndex = this.anchorIndex(cards);
     const targetIndex = deckIndexByDelta(
       anchorIndex,
       delta,
@@ -121,12 +159,12 @@ export class DeckViewport {
     );
     const target = cards[targetIndex];
     return target !== undefined && target.path !== this.anchor
-      ? this.selectWithoutMoving(target.path, cards)
+      ? this.selectIndexWithoutMoving(targetIndex, cards)
       : false;
   }
 
   panTo(position: number, cards: DeckViewportCards): boolean {
-    const previousIndex = cardIndex(cards, this.anchor);
+    const previousIndex = this.anchorIndex(cards);
     if (previousIndex < 0) {
       return false;
     }
@@ -145,12 +183,13 @@ export class DeckViewport {
     }
     const changed = anchor.path !== this.anchor;
     this.anchor = anchor.path;
+    this.cacheIndex(cards, anchorIndex);
     this.offset = viewportPosition - anchorIndex;
     return changed;
   }
 
   placeAt(position: number, cards: DeckViewportCards): void {
-    const anchorIndex = cardIndex(cards, this.anchor);
+    const anchorIndex = this.anchorIndex(cards);
     if (anchorIndex < 0) {
       this.offset = 0;
       return;
@@ -162,7 +201,7 @@ export class DeckViewport {
   }
 
   centre(cards: DeckViewportCards): void {
-    this.placeAt(cardIndex(cards, this.anchor), cards);
+    this.placeAt(this.anchorIndex(cards), cards);
   }
 
   renamePath(oldPath: string, newPath: string): boolean {
@@ -174,6 +213,7 @@ export class DeckViewport {
       return false;
     }
     this.anchor = renamed;
+    this.invalidateIndex();
     return true;
   }
 
@@ -182,6 +222,7 @@ export class DeckViewport {
       return false;
     }
     this.anchor = null;
+    this.invalidateIndex();
     this.offset = 0;
     return true;
   }
@@ -194,7 +235,7 @@ export class DeckViewport {
     cards: DeckViewportCards,
     geometry: DeckGeometry,
   ): DeckRenderWindow | null {
-    const anchorIndex = cardIndex(cards, this.anchor);
+    const anchorIndex = this.anchorIndex(cards);
     if (anchorIndex < 0 || cards.length === 0) {
       this.renderedWindow = null;
       return null;
@@ -205,7 +246,7 @@ export class DeckViewport {
 
   needsRenderWindowRefresh(cards: DeckViewportCards): boolean {
     const rendered = this.renderedWindow;
-    const anchorIndex = cardIndex(cards, this.anchor);
+    const anchorIndex = this.anchorIndex(cards);
     if (rendered === null || anchorIndex < 0) {
       return false;
     }
@@ -221,6 +262,7 @@ export class DeckViewport {
 
   reset(): void {
     this.anchor = null;
+    this.invalidateIndex();
     this.offset = 0;
     this.mode = null;
     this.renderedWindow = null;

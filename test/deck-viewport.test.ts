@@ -223,3 +223,53 @@ describe("DeckViewport", () => {
     assert.equal(viewport.needsRenderWindowRefresh(deck), true);
   });
 });
+
+
+describe("DeckViewport anchor cache", () => {
+  test("reuses known indices through continuous and discrete navigation", () => {
+    const deck = Array.from({ length: 10000 }, (_, index) => ({ path: `${index}.md` }));
+    let scans = 0;
+    const findIndex = deck.findIndex.bind(deck);
+    deck.findIndex = (predicate, thisArg) => {
+      scans++;
+      return findIndex(predicate, thisArg);
+    };
+    const viewport = new DeckViewport();
+    viewport.navigate("9000.md", deck);
+    for (let step = 0; step < 1000; step++) {
+      viewport.panTo(viewport.position(deck) + (step < 500 ? 0.1 : -0.1), deck);
+      viewport.placeAt(viewport.position(deck), deck);
+      viewport.recordRenderedWindow(deck, geometry(viewport.position(deck)));
+      viewport.needsRenderWindowRefresh(deck);
+    }
+    assert.ok(Math.abs(viewport.position(deck) - 9000) < 1e-6);
+    viewport.moveBy(2, deck);
+    viewport.centre(deck);
+    assert.equal(viewport.position(deck), 9002);
+    assert.equal(scans, 1);
+  });
+
+  test("resolves new snapshot order and path changes without stale indices", () => {
+    const viewport = new DeckViewport();
+    const original = cards("a.md", "b.md", "c.md");
+    viewport.navigate("b.md", original);
+    assert.equal(viewport.position(original), 1);
+    const reordered = cards("c.md", "a.md", "b.md");
+    assert.equal(viewport.position(reordered), 2);
+    assert.equal(viewport.position(original), 1);
+    viewport.renamePath("b.md", "renamed.md");
+    assert.equal(viewport.position(original), 0);
+    const renamed = cards("renamed.md", "a.md", "c.md");
+    assert.equal(viewport.position(renamed), 0);
+    viewport.deletePath("renamed.md");
+    viewport.reconcile(reordered, false);
+    assert.equal(viewport.anchorPath, "c.md");
+    assert.equal(viewport.position(reordered), 0);
+    viewport.reset();
+    viewport.reconcile(original, false);
+    assert.equal(viewport.anchorPath, "a.md");
+    assert.equal(viewport.position(original), 0);
+    viewport.reconcile([], false);
+    assert.equal(viewport.anchorPath, null);
+  });
+});

@@ -31,6 +31,8 @@ initial public beta.
 
 ### Fixed
 
+- Avoid repeated card-list scans during Deck scrolling in large vaults.
+
 - Deck scrolling batches motion into animation frames and reuses unchanged
   bookmark controls, avoiding redundant card styling and layout work.
 

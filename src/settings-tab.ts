@@ -704,10 +704,13 @@ export class SlipboxSettingTab extends PluginSettingTab {
     return [
       {
         name: heading,
-        render: (setting) => setting.setHeading(),
+        render: (setting): void => {
+          setting.setHeading();
+        },
       },
       ...cardHeaderButtonDefinitionsForSurface(surface).map((definition) => ({
-        name: definition.settingLabel,
+        // Render-only rows use their names as reconciliation keys across the tab.
+        name: `${definition.settingLabel} (${heading})`,
         render: (setting: Setting) => {
           setting.addToggle((toggle) => {
             toggle

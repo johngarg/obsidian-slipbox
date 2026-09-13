@@ -38,6 +38,9 @@ initial public beta.
 
 ### Fixed
 
+- Fix duplicate settings-row names and cleanup errors when refreshing or closing
+  the settings screen.
+
 - Avoid repeated card-list scans during Deck scrolling in large vaults.
 
 - Deck scrolling batches motion into animation frames and reuses unchanged

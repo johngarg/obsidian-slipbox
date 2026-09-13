@@ -37,8 +37,25 @@ test. Record unexpected warnings or errors under Findings.
   remain inside the pane after either command, including after resizing. In a
   pane shorter than the card, `zt` exposes the header and `zb` the footer. Check
   all card sizes in both orientations and stacking models.
-- [ ] Reopen the view with an automatic unfiled-card pile and confirm it starts
-  at `zb`; remove that pile, reopen, and confirm it starts at `zz`.
+- [ ] Reopen Drawer with and without an automatic unfiled-card pile and confirm
+  centred default alignment along the Deck axis. Horizontal Drawer retains the
+  pile-dependent vertical alignment; Fan retains its previous startup alignment.
+- [ ] In both Drawer orientations, pan both axes and click another card, then pan
+  again and click the same card. Confirm only sequence-axis pan resets, with a
+  single smooth selection/gap/return animation and no initial snap. Repeat with
+  explicit `zt` / `zb` and `zh` / `zl`, including an oversized card in a short pane.
+- [ ] Interrupt the return with another click, a wheel gesture, background pan,
+  or header drag. Confirm continuity from the displayed position, no repeated
+  recentering during gestures, and no return from the click after a drag/cancel.
+  Check controls, links, editing, double-clicks and stationary Fan selection.
+- [ ] With reduced motion, confirm the complete return is immediate. During normal
+  motion after large pans, check cards entering and leaving the pane for popping,
+  premature removal or blank gaps. Body scroll positions and perpendicular Desk
+  arrangement must survive. Confirm surplus cards are released after settling.
+- [ ] Before any development reload, preserve session-only Desk state and view
+  state; do not reload over an active edit. Restore and compare piles, positions,
+  expansion and ID sequence, settings, both alignment overrides, anchor/offset,
+  pan, focus, viewed-card state, body scrolls and Branch View state afterward.
 - [ ] Create an untitled card and a titled card.
 - [ ] File an unfiled card at a new address and confirm its Markdown frontmatter.
 - [ ] Put a filed card on the Desk, expand and collapse its pile, and drag it.

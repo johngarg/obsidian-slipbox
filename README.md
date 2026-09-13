@@ -68,8 +68,15 @@ Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicogra
 Choose **Deck orientation** (horizontal or vertical) and **Stacking model**
 (Drawer or Fan) independently. Horizontal Drawer is the default, including when
 upgrading. Drawer keeps cards in filing order and opens a 12 px reading gap
-following the anchor. Selecting a card brings it to the anchor position. Fan
-keeps the selected card above its neighbours and retains stationary selection.
+following the anchor. An ordinary card click brings the chosen card back to its
+reading position, even when it is already selected: vertical Drawer clears vertical
+workspace pan, while horizontal Drawer clears horizontal pan. The other axis keeps
+its pan and alignment. Explicit `zt` / `zb` or `zh` / `zl` choices are respected;
+without a choice, Drawer starts centred along its sequence, including with Desk piles.
+Selection, the reading gap, and pan return animate together and respect reduced motion.
+Wheel browsing and pointer panning remain continuous; controls, links, editing,
+double-clicks, and clicks generated after a drag do not request another return.
+Fan keeps the selected card above its neighbours and retains stationary selection.
 
 Deck cards have fixed dimensions: Small 720 × 480 px, Medium 840 × 560 px,
 and Large 960 × 640 px. Resizing the pane or positioning the Deck does not resize

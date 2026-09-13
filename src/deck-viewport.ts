@@ -1,4 +1,4 @@
-import { deckRenderWindow } from "./deck-render-window.js";
+import { deckRenderWindow, type DeckRenderTransition } from "./deck-render-window.js";
 import type { DeckGeometry } from "./deck-motion.js";
 import {
   activeIndexForViewport,
@@ -246,13 +246,14 @@ export class DeckViewport {
   recordRenderedWindow(
     cards: DeckViewportCards,
     geometry: DeckGeometry,
+    transition?: DeckRenderTransition,
   ): DeckRenderWindow | null {
     const anchorIndex = this.anchorIndex(cards);
     if (anchorIndex < 0 || cards.length === 0) {
       this.renderedWindow = null;
       return null;
     }
-    this.renderedWindow = deckRenderWindow(cards.length, geometry);
+    this.renderedWindow = deckRenderWindow(cards.length, geometry, transition);
     return this.renderedWindow;
   }
 

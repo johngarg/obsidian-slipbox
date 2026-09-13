@@ -8,6 +8,7 @@ import { Window } from 'happy-dom';
 
 const output = await build({ stdin: { contents: `
   export { DeckView } from './src/deck-view.ts';
+  export { DeckTransition } from './src/deck-transition.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { default as SlipboxPlugin } from './src/main.ts';
   export { DEFAULT_SETTINGS, normalizeSettings, resolvedDeckKeybindings } from './src/settings.ts';
@@ -21,7 +22,7 @@ const obsidian = new Proxy({ Notice: class { constructor(message) { notices.push
 runInNewContext('(function(require, module, exports) {' + output.outputFiles[0].text + '\n})')(
   name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports,
 );
-const { DeckView, DeckViewport, SlipboxPlugin, DEFAULT_SETTINGS, normalizeSettings, resolvedDeckKeybindings } = module.exports;
+const { DeckView, DeckViewport, DeckTransition, SlipboxPlugin, DEFAULT_SETTINGS, normalizeSettings, resolvedDeckKeybindings } = module.exports;
 const css = readFileSync('styles.css', 'utf8');
 
 function subject(orientation = 'vertical', model = 'fan') {
@@ -39,7 +40,7 @@ function subject(orientation = 'vertical', model = 'fan') {
   const view = Object.create(DeckView.prototype);
   Object.assign(view, {
     stageEl: stage, contentEl: stage, spaceEl: space, spaceRecenteringTimer: null,
-    deckViewport: new DeckViewport(), renderedCards: [], viewportCenteringFrame: null,
+    deckViewport: new DeckViewport(), drawerTransition: new DeckTransition(), renderedCards: [], viewportCenteringFrame: null,
     spaceOffsetX: 70, spaceOffsetY: 90, inlineEdit: null, inlineEditStarting: false, cardFocus: null,
     viewedFilingEditor: null, deskRenderer: { filingInput: null },
     plugin: { settings: { ...DEFAULT_SETTINGS, deckOrientation: orientation, deckStackModel: model },

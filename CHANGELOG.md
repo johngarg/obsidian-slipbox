@@ -29,6 +29,11 @@ initial public beta.
 
 ### Changed
 
+- Ordinary Drawer card clicks return the selected card to its chosen reading
+  position, including after panning the already focused card. Selection, reading-gap
+  movement and pan reset animate together along the Deck axis, preserving the
+  perpendicular arrangement. Drawer defaults to centred reading alignment along
+  its sequence; explicit positioning commands remain in effect.
 - Deck cards now keep fixed Small/Medium/Large dimensions (720 × 480,
   840 × 560, and 960 × 640 px), including in narrow panes. Pan to reach content
   outside the pane; viewed cards and Desk piles retain their existing sizing.

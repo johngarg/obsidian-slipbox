@@ -1,4 +1,4 @@
-import type { DeckOrientation } from "./settings.js";
+import type { DeckOrientation, DeckStackModel } from "./settings.js";
 
 export type DeckPositionMode = "top" | "centered" | "bottom";
 export type HorizontalDeckPositionMode = "left" | "centered" | "right";
@@ -7,6 +7,16 @@ export type DeckPositionTarget = DeckPositionMode | HorizontalDeckPositionMode;
 export interface DeckPositionAxes {
   readonly x: boolean;
   readonly y: boolean;
+}
+
+/** Drawer defaults to the middle of its sequence, without choosing either axis. */
+export function resolvedDeckVerticalPosition(
+  orientation: DeckOrientation,
+  model: DeckStackModel,
+  override: DeckPositionMode | null,
+  startupMode: DeckPositionMode,
+): DeckPositionMode {
+  return override ?? (orientation === "vertical" && model === "drawer" ? "centered" : startupMode);
 }
 
 /** Positioning one axis must leave the other axis's alignment and pan intact. */

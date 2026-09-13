@@ -352,9 +352,11 @@ describe("DeckShortcutController", () => {
     ]);
   });
 
-  test("runs zt, zz, and zb as pending Deck position commands", async () => {
+  test("runs all five pending Deck position commands", async () => {
     const subject = createSubject();
     const expected = [
+      ["h", "left"],
+      ["l", "right"],
       ["t", "top"],
       ["z", "centered"],
       ["b", "bottom"],
@@ -372,11 +374,7 @@ describe("DeckShortcutController", () => {
       });
       assert.equal(subject.controller.hasPendingCommand, false);
     }
-    assert.deepEqual(subject.runs, [
-      "position-deck",
-      "position-deck",
-      "position-deck",
-    ]);
+    assert.deepEqual(subject.runs, expected.map(() => "position-deck"));
   });
 
   test("keeps invalid pile input pending and completes corrected input", () => {

@@ -1,4 +1,4 @@
-import type { DeckPositionMode } from "./workspace-layout.js";
+import type { DeckPositionTarget } from "./deck-position.js";
 
 export interface AddressedDeckCard {
   readonly address: string;
@@ -13,7 +13,7 @@ export type PendingDeckCommand =
 
 export type PendingDeckCommandCompletion =
   | { readonly kind: "address"; readonly initial: string }
-  | { readonly kind: "position"; readonly mode: DeckPositionMode }
+  | { readonly kind: "position"; readonly mode: DeckPositionTarget }
   | { readonly kind: "pile"; readonly digits: string };
 
 export type PendingDeckCommandStep =
@@ -116,13 +116,10 @@ export function advancePendingDeckCommand(
   }
 
   if (state.kind === "position") {
-    const mode = key === "z"
-      ? "centered"
-      : key === "t"
-        ? "top"
-        : key === "b"
-          ? "bottom"
-          : null;
+    const positions: Partial<Record<string, DeckPositionTarget>> = {
+      z: "centered", h: "left", l: "right", t: "top", b: "bottom",
+    };
+    const mode = positions[key] ?? null;
     if (mode === null) {
       return {
         consumed: true,

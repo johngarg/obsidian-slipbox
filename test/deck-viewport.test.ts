@@ -9,7 +9,7 @@ import {
 import type { DeckGeometry } from "../src/deck-motion.js";
 function geometry(anchorIndex: number, spread = 1): DeckGeometry {
   return { anchorIndex, viewportPosition: anchorIndex, spread, cardWidth: 100, cardHeight: 100,
-    orientation: "horizontal", model: "fan", tilt: 0, paneExtent: 100, anchorCoordinate: 50, panOffset: 0 };
+    orientation: "horizontal", model: "fan", splay: 0, fadeStrength: 1, paneExtent: 100, anchorCoordinate: 50, panOffset: 0 };
 }
 
 function cards(...paths: string[]): DeckViewportCards {
@@ -36,6 +36,7 @@ describe("DeckViewport", () => {
       anchorPath: null,
       anchorOffset: 0,
       positionModeOverride: null,
+      horizontalPositionModeOverride: null,
       renderedWindow: null,
     });
 
@@ -52,6 +53,7 @@ describe("DeckViewport", () => {
       anchorPath: null,
       anchorOffset: 0,
       positionModeOverride: null,
+      horizontalPositionModeOverride: null,
       renderedWindow: null,
     });
   });
@@ -272,4 +274,23 @@ describe("DeckViewport anchor cache", () => {
     viewport.reconcile([], false);
     assert.equal(viewport.anchorPath, null);
   });
+});
+
+
+test("position overrides compose independently and centred resets both", () => {
+  const viewport = new DeckViewport();
+  viewport.setPositionMode("top");
+  viewport.setPositionMode("left");
+  assert.equal(viewport.positionModeOverride, "top");
+  assert.equal(viewport.horizontalPositionModeOverride, "left");
+  viewport.setPositionMode("right");
+  viewport.setPositionMode("bottom");
+  assert.equal(viewport.horizontalPositionModeOverride, "right");
+  assert.equal(viewport.positionModeOverride, "bottom");
+  viewport.setPositionMode("centered");
+  assert.equal(viewport.positionModeOverride, "centered");
+  assert.equal(viewport.horizontalPositionModeOverride, "centered");
+  viewport.reset();
+  assert.equal(viewport.positionModeOverride, null);
+  assert.equal(viewport.horizontalPositionModeOverride, null);
 });

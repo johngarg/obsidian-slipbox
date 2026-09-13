@@ -387,8 +387,10 @@ describe("Deck action availability", () => {
     assert.equal(prefix?.repeatable, false);
 
     for (const [id, label] of [
+      ["position-deck-left", "Position Deck near left"],
+      ["position-deck-right", "Position Deck near right"],
       ["position-deck-top", "Position Deck near top"],
-      ["centre-card", "Centre Deck vertically"],
+      ["centre-card", "Centre Deck"],
       ["position-deck-bottom", "Position Deck near bottom"],
     ] as const) {
       const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
@@ -433,4 +435,17 @@ describe("Deck action availability", () => {
     assert.equal(deskToggleLabel(false), "Put on Desk");
     assert.equal(deskToggleLabel(true), "Return from Desk");
   });
+});
+
+
+test("orientation is an unbound view action available without an anchor", () => {
+  const definition = SLIPBOX_ACTION_DEFINITIONS.find(({ id }) => id === "toggle-deck-orientation");
+  assert.equal(definition?.commandId, "toggle-deck-orientation");
+  assert.equal(definition?.commandName, "Toggle Deck orientation");
+  assert.equal(definition?.scope, "active-view");
+  assert.equal(definition?.target, "view");
+  assert.equal(definition?.repeatable, false);
+  assert.deepEqual(definition?.defaultBindings, []);
+  assert.equal(canRunDeckAction("toggle-deck-orientation", { ...READY, hasActiveCard: false }), true);
+  assert.equal(SLIPBOX_ACTION_DEFINITIONS.find(({ id }) => id === "centre-card")?.commandId, "centre-active-card");
 });

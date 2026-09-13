@@ -27,7 +27,6 @@ export default defineConfig(
             "eslint.config.mjs",
             "manifest.json",
             "scripts/*.mjs",
-            "test/*.mjs",
             "version-bump.mjs",
           ],
         },

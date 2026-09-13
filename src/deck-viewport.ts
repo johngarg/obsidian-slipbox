@@ -10,7 +10,7 @@ import {
   pathIsAtOrBelow,
   renamePathReference,
 } from "./path-reference.js";
-import type { DeckPositionMode } from "./workspace-layout.js";
+import type { DeckPositionMode, DeckPositionTarget, HorizontalDeckPositionMode } from "./deck-position.js";
 
 export interface DeckViewportCard {
   readonly path: string;
@@ -28,6 +28,7 @@ export interface DeckViewportSnapshot {
   readonly anchorPath: string | null;
   readonly anchorOffset: number;
   readonly positionModeOverride: DeckPositionMode | null;
+  readonly horizontalPositionModeOverride: HorizontalDeckPositionMode | null;
   readonly renderedWindow: DeckRenderWindow | null;
 }
 
@@ -38,6 +39,7 @@ export class DeckViewport {
   private anchor: string | null = null;
   private offset = 0;
   private mode: DeckPositionMode | null = null;
+  private horizontalMode: HorizontalDeckPositionMode | null = null;
   private renderedWindow: DeckRenderWindow | null = null;
   private cachedCards: WeakRef<DeckViewportCards> | null = null;
   private cachedPath: string | null = null;
@@ -71,6 +73,7 @@ export class DeckViewport {
       anchorPath: this.anchor,
       anchorOffset: this.offset,
       positionModeOverride: this.mode,
+      horizontalPositionModeOverride: this.horizontalMode,
       renderedWindow: this.renderedWindow,
     };
   }
@@ -81,6 +84,10 @@ export class DeckViewport {
 
   get positionModeOverride(): DeckPositionMode | null {
     return this.mode;
+  }
+
+  get horizontalPositionModeOverride(): HorizontalDeckPositionMode | null {
+    return this.horizontalMode;
   }
 
   position(cards: DeckViewportCards): number {
@@ -227,8 +234,13 @@ export class DeckViewport {
     return true;
   }
 
-  setPositionMode(mode: DeckPositionMode): void {
-    this.mode = mode;
+  setPositionMode(target: DeckPositionTarget): void {
+    if (target === "left" || target === "right" || target === "centered") {
+      this.horizontalMode = target;
+    }
+    if (target === "top" || target === "bottom" || target === "centered") {
+      this.mode = target;
+    }
   }
 
   recordRenderedWindow(
@@ -265,6 +277,7 @@ export class DeckViewport {
     this.invalidateIndex();
     this.offset = 0;
     this.mode = null;
+    this.horizontalMode = null;
     this.renderedWindow = null;
   }
 }

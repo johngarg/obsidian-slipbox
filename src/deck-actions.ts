@@ -79,6 +79,8 @@ export function canRunDeckAction(
     case "forward-ten-cards":
     case "backward-ten-cards":
       return context.hasActiveCard;
+    case "position-deck-left":
+    case "position-deck-right":
     case "position-deck":
     case "position-deck-top":
     case "centre-card":
@@ -140,6 +142,7 @@ export function canRunDeckAction(
     case "cancel-filing":
       return context.filing;
     case "bookmarks":
+    case "toggle-deck-orientation":
     case "toggle-deck-map":
       return true;
   }

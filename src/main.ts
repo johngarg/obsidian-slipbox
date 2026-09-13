@@ -1,3 +1,4 @@
+import type { DeckPositionMode } from "./deck-position.js";
 import {
   Notice,
   Plugin,
@@ -53,7 +54,6 @@ import { CanvasBridge } from "./canvas-bridge.js";
 import { DeskCanvasService } from "./desk-canvas-service.js";
 import {
   deckPositionModeForPileCount,
-  type DeckPositionMode,
 } from "./workspace-layout.js";
 import { splitNoteBody } from "./note-body.js";
 import { CardIndexRuntime } from "./card-index-runtime.js";
@@ -267,6 +267,13 @@ export default class SlipboxPlugin extends Plugin {
       throw new Error("Obsidian did not create the Slipbox Desk view");
     }
     return leaf.view;
+  }
+
+  async toggleDeckOrientation(): Promise<void> {
+    await this.updateSettings({
+      ...this.settings,
+      deckOrientation: this.settings.deckOrientation === "horizontal" ? "vertical" : "horizontal",
+    });
   }
 
   setCardSpread(value: number): void {

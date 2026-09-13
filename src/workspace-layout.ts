@@ -1,33 +1,7 @@
-import type { DeckOrientation } from "./settings.js";
+import type { DeckPositionMode } from "./deck-position.js";
 
 const DEFAULT_PILE_HORIZONTAL_STEP_PERCENT = 6;
 const DEFAULT_PILE_VERTICAL_STEP_PX = 36;
-
-export type DeckPositionMode = "top" | "centered" | "bottom";
-
-/** Keep the fixed card inside the pane, or expose the requested edge if it cannot fit. */
-export function deckAnchorCenterY(
-  paneHeight: number,
-  cardHeight: number,
-  orientation: DeckOrientation,
-  mode: DeckPositionMode,
-): number {
-  if (!Number.isFinite(paneHeight) || !Number.isFinite(cardHeight) ||
-      paneHeight <= 0 || cardHeight <= 0) return 0;
-  if (mode === "centered") return paneHeight / 2;
-
-  const halfHeight = cardHeight / 2;
-  const inset = 12;
-  if (cardHeight > paneHeight) {
-    return mode === "top" ? halfHeight + inset : paneHeight - halfHeight - inset;
-  }
-
-  const margin = Math.min(inset, (paneHeight - cardHeight) / 2);
-  const topPercent = orientation === "vertical" ? 22 : 33;
-  const fraction = (mode === "top" ? topPercent : 100 - topPercent) / 100;
-  return Math.max(halfHeight + margin,
-    Math.min(paneHeight - halfHeight - margin, paneHeight * fraction));
-}
 
 /** Start near the bottom when the reconstructed unfiled-card pile exists. */
 export function deckPositionModeForPileCount(

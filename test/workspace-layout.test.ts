@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  deckAnchorCenterY,
   deckPositionModeForPileCount,
   deckTopForPileAnchor,
   defaultPilePosition,
@@ -32,46 +31,5 @@ describe("size-aware pile anchor", () => {
     assert.equal(deckTopForPileAnchor(448, 0), null);
     assert.equal(deckTopForPileAnchor(Number.NaN, 500), null);
     assert.equal(deckTopForPileAnchor(448, Number.POSITIVE_INFINITY), null);
-  });
-});
-
-
-describe("fixed card positioning", () => {
-  test("preserves the preferred positions when the card fits there", () => {
-    for (const orientation of ["horizontal", "vertical"] as const) {
-      const top = orientation === "vertical" ? 440 : 660;
-      assert.equal(deckAnchorCenterY(2000, 560, orientation, "top"), top);
-      assert.equal(deckAnchorCenterY(2000, 560, orientation, "centered"), 1000);
-      assert.equal(deckAnchorCenterY(2000, 560, orientation, "bottom"), 2000 - top);
-    }
-  });
-
-  test("keeps all fixed sizes fully visible while resizing the pane", () => {
-    for (const orientation of ["horizontal", "vertical"] as const)
-      for (const cardHeight of [480, 560, 640])
-        for (const paneHeight of [cardHeight, cardHeight + 1, cardHeight + 24, 800, 1200]) {
-          const positions = (["top", "centered", "bottom"] as const).map(mode =>
-            deckAnchorCenterY(paneHeight, cardHeight, orientation, mode));
-          for (const y of positions) {
-            assert.ok(y - cardHeight / 2 >= 0);
-            assert.ok(y + cardHeight / 2 <= paneHeight);
-          }
-          assert.ok(positions[0]! <= positions[1]! && positions[1]! <= positions[2]!);
-        }
-    assert.equal(deckAnchorCenterY(800, 560, "vertical", "top"), 292);
-    assert.equal(deckAnchorCenterY(800, 560, "vertical", "bottom"), 508);
-  });
-
-  test("exposes the requested edge when the fixed card is taller than the pane", () => {
-    for (const orientation of ["horizontal", "vertical"] as const) {
-      assert.equal(deckAnchorCenterY(400, 560, orientation, "top") - 280, 12);
-      assert.equal(deckAnchorCenterY(400, 560, orientation, "bottom") + 280, 388);
-      assert.equal(deckAnchorCenterY(400, 560, orientation, "centered"), 200);
-    }
-  });
-
-  test("handles unavailable pane measurements", () => {
-    assert.equal(deckAnchorCenterY(0, 560, "vertical", "top"), 0);
-    assert.equal(deckAnchorCenterY(Number.NaN, 560, "vertical", "bottom"), 0);
   });
 });

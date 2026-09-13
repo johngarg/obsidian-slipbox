@@ -77,15 +77,22 @@ cards. Drag empty workspace to pan in either direction and reach offscreen
 content. Viewed cards and Desk piles retain their own sizing behavior.
 
 Enable **Show lower Fan headers at bottom** to place the address, title, and
-header controls at the bottom of cards below the anchor in vertical Fan. They
-return to the top as soon as the card becomes the anchor or moves above it.
+header controls at the bottom of cards below the anchor in vertical Fan, replacing
+the ordinary backlink footer. The top header and normal footer return as soon as
+the card becomes the anchor or moves above it.
 This option is off by default and does not affect Drawer or horizontal layouts.
 
 **Card spread** runs from 0.10 to 1.12 and measures separation as a fraction of
-card width horizontally or card height vertically. **Card tilt** adds up to
-5 degrees of deterministic rotation to neighbours; the anchor stays straight.
-A spread near 0.46 and tilt near 2.4 produces a loose stack. No card-count setting
-is needed: the rendered window follows pane geometry and panning.
+card width horizontally or card height vertically. **Card splay** runs from 0 to 5
+and adds stable rotation and sideways offsets to neighbours; the focused card
+stays straight. A spread near 0.46 and splay near 2.4 produces a loose stack.
+No card-count setting is needed: the rendered window follows pane geometry and panning.
+
+**Card fading** controls how quickly Deck cards fade with distance from the
+focused card: 0 keeps every card opaque, 1 preserves the default strength, and
+2 doubles the fade rate. Drawer fades by 8 percentage points per card down to
+45% opacity at default strength; Fan fades by 13 points down to 42%. The focused
+card's target opacity is always 100%.
 
 In vertical orientation, wheel gestures browse the Deck. With **Wheel over card
 body: Body first**, long anchor bodies scroll first, followed by a short boundary
@@ -94,10 +101,19 @@ and Branch View scrolling remain independent. Vertical header drags pan the
 workspace; sideways header drags pull cards onto the Desk. Horizontal header
 drags retain their existing behavior.
 
-`zt`, `zz`, and `zb` prefer 22%, 50%, and 78% of pane height in vertical mode.
-Top and bottom positions move inward as needed to keep the fixed card inside the
-pane with a small margin. If the pane is shorter than the card, `zt` exposes its
-header and `zb` its footer; pan to reach the rest.
+Use `zh` / `zl` to position the Deck near the left / right, and `zt` / `zb` for
+the top / bottom. Each changes only its own axis, including resetting pan on that
+axis. Commands compose: `zt` followed by `zh` places the Deck near the top-left.
+`zz` centres both axes and clears workspace pan and the offset along the sequence.
+Positions prefer 22% / 50% / 78% along the card sequence and 33% / 50% / 67%
+across it, moving inward as needed to keep the fixed card inside the pane with a
+small margin. When the card exceeds the pane, the requested edge stays visible;
+pan to reach the rest.
+
+**Toggle Deck orientation** switches the saved orientation for all open Slipbox
+views. It preserves the selected card, body scroll positions, workspace pan,
+alignment and offset along the sequence. It has no default shortcut; assign one
+in Deck keybindings or Obsidian Hotkeys, or use the command palette.
 Default arrows follow the orientation: Left/Right horizontally, Up/Down
 vertically; `k`/`j` always mean previous/next. Existing bindings matching the old
 defaults are treated as automatic on upgrade. Custom and disabled bindings are
@@ -171,7 +187,8 @@ There are some actions that are very quick to do in the real world, but take tim
 | `Space` | Expand or collapse the focused pile |
 | `m` | Toggle the focused Deck card's bookmark |
 | `O` | Toggle the Deck map |
-| `zt` / `zz` / `zb` | Position the Deck near the top, centred, or near the bottom |
+| `zh` / `zl` / `zt` / `zb` | Position the Deck near the left, right, top, or bottom |
+| `zz` | Centre the Deck on both axes and reset pan |
 | `y` | Copy a link to the focused card |
 | `o` | Open the focused card as a Markdown note |
 

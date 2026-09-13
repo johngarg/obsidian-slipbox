@@ -498,7 +498,7 @@ export class DeckShortcutController {
     if (this.pendingCommand.kind === "address") {
       instruction = "Find from start: type an address initial · Esc to cancel";
     } else if (this.pendingCommand.kind === "position") {
-      instruction = "Position Deck: z centre · t top · b bottom · Esc to cancel";
+      instruction = "Position Deck: z centre · h left · l right · t top · b bottom · Esc to cancel";
     } else if (this.pendingCommand.kind === "pile") {
       const digits = this.pendingCommand.digits === ""
         ? "…"

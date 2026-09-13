@@ -166,11 +166,11 @@ Tester notes:
 ## Vertical Deck and layout matrix
 
 - [ ] Exercise Horizontal/Vertical × Drawer/Fan at spreads 0.10, 0.58, and 1.12,
-  with tilt 0 and 5, using both a small card set and the large development corpus.
+  with splay 0 and 5, using both a small card set and the large development corpus.
 - [ ] Check all three card sizes in full-width and narrow split panes. Resizing,
   browsing, and `zt`/`zz`/`zb` must preserve card dimensions. Pan to reach clipped content.
 - [ ] In overlapping untilted vertical Drawer, both sides expose header edges.
-  Wide spacing and tilt may expose body/footer content legitimately.
+  Wide spacing and splay may expose body/footer content legitimately.
 - [ ] Click neighbours, jump with the map/bookmarks, hold navigation keys, and
   reverse wheel direction mid-transition. Drawer must not flash or abruptly jump
   its reading gap. Fan keeps stationary click selection.
@@ -199,7 +199,7 @@ Tester notes:
 
 ### Fan painting regression
 
-- [ ] In vertical Fan at spread 0.10 and tilt 5, browse forward and backward,
+- [ ] In vertical Fan at spread 0.10 and splay 5, browse forward and backward,
   including large jumps, then hover the card header, body, and workspace. The
   anchor remains fully painted; no rectangular sections show neighboring cards.
 - [ ] With a large Deck at spread 0.10, scroll continuously in both Fan and
@@ -209,8 +209,8 @@ Tester notes:
   scrolling still works and the previous scroll position is preserved.
 
 - [ ] Enable **Show lower Fan headers at bottom** in vertical Fan. Lower cards
-  expose their address/title strips at the bottom; selecting one returns its
-  header to the top immediately. Check wheel navigation in both directions,
+  expose their address/title strips at the bottom in place of the regular footer;
+  selecting one restores its top header and normal footer immediately. Check wheel navigation in both directions,
   clicks, header controls/dragging, and preserved body scroll positions. Disable
   the option or switch to horizontal/Drawer and confirm all headers return to top.
 
@@ -230,3 +230,27 @@ Tester notes:
   remain usable.
 - [ ] Replace the filed snapshot through an index refresh, rename/delete the
   anchor, and reorder cards. Navigation must resolve the anchor's new index.
+
+
+### Deck positioning and appearance refinements
+
+- [ ] Exercise `zh`, `zl`, `zt`, `zb`, and `zz`, plus their command-palette actions,
+  in both orientations and models. Left/right preserve vertical pan and alignment;
+  top/bottom preserve horizontal pan and alignment. `zz` clears both axes and the
+  continuous viewport offset. Combine commands to reach corners.
+- [ ] Resize through panes wider/narrower and taller/shorter than every card size.
+  Requested edges remain visible, bookmarks remain reachable, and visible cards
+  are not culled prematurely after left/right positioning.
+- [ ] Toggle orientation through the palette and a custom shortcut, including an
+  empty Deck and multiple views. Anchor, focus, fractional viewport position,
+  pan, alignments, body scroll and custom/disabled bindings survive round trips.
+  Automatic arrows, map and Branch View follow orientation. A failed edit save
+  prevents the command; pending motion cannot paint into a rebuilt stage.
+- [ ] Card spread retains its name and values. Card splay controls both rotation
+  and transverse offsets; the focused card stays straight. Card fading at 0,
+  0.5, 1 and 2 changes opacity without changing geometry, with the default model
+  floors preserved. Settings take effect immediately and persist after reload.
+- [ ] Lower Fan headers replace the footer with no leftover footer space. Select
+  lower cards, navigate past them, disable the setting and switch layout; normal
+  headers and footers return. Repeat with backlinks disabled and long scrolled
+  bodies. Card DOM identity remains stable through selection changes.

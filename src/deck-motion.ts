@@ -168,7 +168,8 @@ export interface CardMotionOptions {
   readonly spread: number;
   readonly orientation: DeckOrientation;
   readonly model: DeckStackModel;
-  readonly tilt: number;
+  readonly splay: number;
+  readonly fadeStrength: number;
 }
 
 export const DRAWER_GAP = 12;
@@ -179,7 +180,7 @@ export function cardJitter(index: number, salt: number): number {
 }
 
 export function cardMotionStyle(options: CardMotionOptions): CardMotionStyle {
-  const { cardIndex, anchorIndex, viewportPosition, model, orientation, tilt } = options;
+  const { cardIndex, anchorIndex, viewportPosition, model, orientation, splay, fadeStrength } = options;
   const extent = deckAxis(orientation).extent(options.cardWidth, options.cardHeight);
   const step = Math.max(1, extent * options.spread);
   const d = cardIndex - anchorIndex;
@@ -188,14 +189,15 @@ export function cardMotionStyle(options: CardMotionOptions): CardMotionStyle {
   const along = (cardIndex - viewportPosition) * step +
     (model === "drawer" && d > 0 ? extent + DRAWER_GAP - step : 0);
   const distanceScale = Math.max(0.86, 1 - distance * 0.035);
+  const fadeRate = model === "drawer" ? 0.08 : 0.13;
+  const minimumOpacity = model === "drawer" ? 0.45 : 0.42;
   return {
     along,
-    across: isActive ? 0 : cardJitter(cardIndex, 2) * tilt * 16,
-    rotation: isActive ? 0 : cardJitter(cardIndex, 1) * tilt,
+    across: isActive ? 0 : cardJitter(cardIndex, 2) * splay * 16,
+    rotation: isActive ? 0 : cardJitter(cardIndex, 1) * splay,
     scale: model === "drawer" || orientation === "vertical" ? 1
       : isActive ? Math.max(0.98, distanceScale) : distanceScale,
-    opacity: isActive ? 1 : model === "drawer" ? Math.max(0.45, 1 - distance * 0.08)
-      : Math.max(0.42, 1 - distance * 0.13),
+    opacity: Math.max(minimumOpacity, 1 - distance * fadeRate * fadeStrength),
   };
 }
 

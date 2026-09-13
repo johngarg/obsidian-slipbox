@@ -19,7 +19,7 @@ import {
 
 const geometry: DeckGeometry = {
   cardWidth: 100, cardHeight: 100, anchorIndex: 4, viewportPosition: 4,
-  spread: 1, orientation: "horizontal", model: "fan", tilt: 0,
+  spread: 1, orientation: "horizontal", model: "fan", splay: 0, fadeStrength: 1,
   paneExtent: 300, anchorCoordinate: 150, panOffset: 0,
 };
 
@@ -149,8 +149,8 @@ describe("free Deck motion", () => {
     }
   });
 
-  test("tilt survives anchor changes and vertical Fan never scales", () => {
-    const tilted = { ...geometry, tilt: 5, orientation: "vertical" as const, cardIndex: 9 };
+  test("splay survives anchor changes and vertical Fan never scales", () => {
+    const tilted = { ...geometry, splay: 5, orientation: "vertical" as const, cardIndex: 9 };
     const first = cardMotionStyle(tilted);
     const second = cardMotionStyle({ ...tilted, anchorIndex: 5 });
     assert.equal(first.rotation, second.rotation);
@@ -179,4 +179,27 @@ describe("free Deck motion", () => {
     active = deckIndexByDelta(active, 10, 40);
     assert.equal(active, 32);
   });
+});
+
+
+test("fading scales distance attenuation without changing geometry or model floors", () => {
+  for (const orientation of ["horizontal", "vertical"] as const) {
+    for (const model of ["drawer", "fan"] as const) {
+      const rate = model === "drawer" ? 0.08 : 0.13;
+      const floor = model === "drawer" ? 0.45 : 0.42;
+      for (const fadeStrength of [0, 0.5, 1, 2]) {
+        const options = { ...geometry, orientation, model, fadeStrength };
+        assert.equal(cardMotionStyle({ ...options, cardIndex: 4 }).opacity, 1);
+        for (const distance of [1, 2, 10, 100]) {
+          const before = cardMotionStyle({ ...options, cardIndex: 4 - distance });
+          const after = cardMotionStyle({ ...options, cardIndex: 4 + distance });
+          const expected = Math.max(floor, 1 - distance * rate * fadeStrength);
+          assert.equal(before.opacity, expected);
+          assert.equal(after.opacity, expected);
+          const baseline = cardMotionStyle({ ...options, fadeStrength: 1, cardIndex: 4 + distance });
+          assert.deepEqual({ ...after, opacity: baseline.opacity }, baseline);
+        }
+      }
+    }
+  }
 });

@@ -35,7 +35,7 @@ function subject(model = 'drawer') {
     stageEl: stage, contentEl: stage, renderedCards: [], inlineEdit: null,
     deckViewport: new DeckViewport(), wheelController: new DeckWheelController(), drawerTransition: new DeckTransition(),
     plugin: { settings: { deckOrientation: 'vertical', deckStackModel: model, mainCardSize: 'medium', cardSpread: 0.1,
-      cardTilt: 0, wheelOverCardBody: 'deck', allowCardScrolling: true },
+      cardSplay: 0, cardFadeStrength: 1, wheelOverCardBody: 'deck', allowCardScrolling: true },
       index: { snapshot: { filed: cards }, filedIndexForPath: path => cards.findIndex(card => card.path === path) },
       startupDeckPositionMode: 'centered', bookmarks: { items: [] } },
     spaceOffsetX: 0, spaceOffsetY: 0, pointerLastX: null, viewportCenteringFrame: null,

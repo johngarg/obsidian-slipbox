@@ -10,8 +10,8 @@ export function deckRenderedIndices(count: number, geometry: DeckGeometry): read
   const transverse = axis.extent(geometry.cardHeight, geometry.cardWidth);
   const step = extent * geometry.spread;
   if (!(step > 0)) return [geometry.anchorIndex];
-  // Conservative rotation bound includes every possible deterministic tilt.
-  const half = (extent + transverse * Math.sin(geometry.tilt * Math.PI / 180)) / 2;
+  // Conservative rotation bound includes every possible deterministic splay.
+  const half = (extent + transverse * Math.sin(geometry.splay * Math.PI / 180)) / 2;
   const origin = geometry.anchorCoordinate + geometry.panOffset;
   const ranges: Array<readonly [number, number, number]> = geometry.model === "drawer"
     ? [[0, geometry.anchorIndex, 0], [geometry.anchorIndex + 1, count - 1, extent + DRAWER_GAP - step]]

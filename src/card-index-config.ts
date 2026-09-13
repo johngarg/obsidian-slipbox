@@ -62,7 +62,8 @@ function nonPresentationSettingsEqual(
   return left.deckOrientation === right.deckOrientation &&
     left.deckStackModel === right.deckStackModel &&
     left.fanHeadersAtBottom === right.fanHeadersAtBottom &&
-    left.cardTilt === right.cardTilt &&
+    left.cardSplay === right.cardSplay &&
+    left.cardFadeStrength === right.cardFadeStrength &&
     left.branchViewPlacement === right.branchViewPlacement &&
     left.wheelOverCardBody === right.wheelOverCardBody &&
     left.navigationKeyOverrides["previous-card"] === right.navigationKeyOverrides["previous-card"] &&

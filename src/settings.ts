@@ -71,6 +71,9 @@ export type SlipboxAction =
   | "next-bookmark"
   | "forward-ten-cards"
   | "backward-ten-cards"
+  | "toggle-deck-orientation"
+  | "position-deck-left"
+  | "position-deck-right"
   | "position-deck"
   | "position-deck-top"
   | "centre-card"
@@ -203,9 +206,27 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
     defaultBindings: [binding("]")],
   },
   {
+    id: "toggle-deck-orientation",
+    label: "Toggle Deck orientation",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "position-deck-left",
+    label: "Position Deck near left",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
+    id: "position-deck-right",
+    label: "Position Deck near right",
+    repeatable: false,
+    defaultBindings: [],
+  },
+  {
     id: "position-deck",
-    label: "Position Deck vertically…",
-    description: "Type z to centre, t for the top, or b for the bottom.",
+    label: "Position Deck…",
+    description: "Type z to centre, h for left, l for right, t for top, or b for bottom.",
     repeatable: false,
     defaultBindings: [binding("z")],
   },
@@ -217,7 +238,7 @@ const BASE_ACTION_DEFINITIONS: readonly Omit<
   },
   {
     id: "centre-card",
-    label: "Centre Deck vertically",
+    label: "Centre Deck",
     repeatable: false,
     defaultBindings: [],
   },
@@ -452,6 +473,7 @@ const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
 const GLOBAL_ACTIONS = new Set<SlipboxAction>(["bookmarks", "problems"]);
 
 const VIEW_ACTIONS = new Set<SlipboxAction>([
+  "toggle-deck-orientation",
   "toggle-local-branch-view",
   "toggle-deck-map",
   "confirm-filing",
@@ -487,7 +509,8 @@ export interface SlipboxSettings {
   readonly deckOrientation: DeckOrientation;
   readonly deckStackModel: DeckStackModel;
   readonly fanHeadersAtBottom: boolean;
-  readonly cardTilt: number;
+  readonly cardSplay: number;
+  readonly cardFadeStrength: number;
   readonly branchViewPlacement: BranchViewPlacement;
   readonly wheelOverCardBody: "body-first" | "deck";
   readonly navigationKeyOverrides: Readonly<Record<NavigationAction, boolean>>;
@@ -578,7 +601,8 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
   deckOrientation: "horizontal",
   deckStackModel: "drawer",
   fanHeadersAtBottom: false,
-  cardTilt: 0,
+  cardSplay: 0,
+  cardFadeStrength: 1,
   branchViewPlacement: "auto",
   wheelOverCardBody: "body-first",
   navigationKeyOverrides: { "previous-card": false, "next-card": false },
@@ -932,8 +956,10 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
     deckOrientation: source.deckOrientation === "vertical" ? "vertical" : "horizontal",
     deckStackModel: source.deckStackModel === "fan" ? "fan" : "drawer",
     fanHeadersAtBottom: source.fanHeadersAtBottom === true,
-    cardTilt: typeof source.cardTilt === "number" && Number.isFinite(source.cardTilt)
-      ? Math.max(0, Math.min(5, source.cardTilt)) : 0,
+    cardSplay: typeof source.cardSplay === "number" && Number.isFinite(source.cardSplay)
+      ? Math.max(0, Math.min(5, source.cardSplay)) : 0,
+    cardFadeStrength: typeof source.cardFadeStrength === "number" && Number.isFinite(source.cardFadeStrength)
+      ? Math.max(0, Math.min(2, source.cardFadeStrength)) : DEFAULT_SETTINGS.cardFadeStrength,
     branchViewPlacement: normalizeBranchViewPlacement(source),
     wheelOverCardBody: source.wheelOverCardBody === "deck" ? "deck" : "body-first",
     navigationKeyOverrides: normalizeNavigationOverrides(source),

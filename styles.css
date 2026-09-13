@@ -990,6 +990,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 
 /* Cache moving card surfaces without giving background bodies native scroll layers. */
 .slipbox-deck-cards > .slipbox-card {
+  left: var(--slipbox-deck-center-x, 50%);
   will-change: transform;
 }
 
@@ -1081,6 +1082,11 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   padding: 8px 15px 7px;
   border-bottom: 1px solid var(--background-modifier-border);
   background: var(--slipbox-card-chrome-background);
+}
+
+/* The lower identity strip replaces the normal footer without remounting either. */
+.slipbox-deck-cards > .slipbox-card.has-bottom-header > .slipbox-card-frame > .slipbox-card-footer {
+  display: none;
 }
 
 .slipbox-card.has-bottom-header > .slipbox-card-frame > .slipbox-card-address-row {

@@ -95,17 +95,23 @@ export class SlipboxSettingTab extends PluginSettingTab {
           ),
           this.definition("Deck orientation", "Choose the direction of the card sequence.",
             (setting) => this.renderLayoutChoice(setting, "deckOrientation", { horizontal: "Horizontal", vertical: "Vertical" })),
-          this.definition("Stacking model", "Drawer opens a reading gap; Fan lifts the anchor above its neighbours.",
+          this.definition("Stacking model", "Drawer opens a gap around the focused card; Fan brings the focused card in front of its neighbours.",
             (setting) => this.renderLayoutChoice(setting, "deckStackModel", { drawer: "Drawer", fan: "Fan" })),
-          this.definition("Show lower Fan headers at bottom",
-            "In vertical Fan, move headers to the bottom of cards below the anchor. Headers return to the top when selected or moved above the anchor.",
-            (setting) => { setting.addToggle((toggle) => { toggle
-              .setValue(this.slipbox.settings.fanHeadersAtBottom)
-              .onChange((fanHeadersAtBottom) => void this.save({ ...this.slipbox.settings, fanHeadersAtBottom })); }); }),
-          this.definition("Card tilt", "Deterministic card rotation in degrees. The anchor stays straight.",
-            (setting) => { setting.addSlider((slider) => { slider.setLimits(0, 5, 0.1)
-              .setValue(this.slipbox.settings.cardTilt)
-              .onChange((cardTilt) => void this.save({ ...this.slipbox.settings, cardTilt })); }); }),
+          this.definition(
+            "Show lower Fan headers at bottom",
+            "In vertical Fan, replace the footer with the header on cards below the focused card. Normal headers and footers return when selected or moved above it.",
+            (setting) => this.renderFanHeadersAtBottom(setting),
+          ),
+          this.definition(
+            "Card splay",
+            "Rotate and offset neighbouring cards. The focused card stays straight.",
+            (setting) => this.renderDeckAmount(setting, "cardSplay", 5),
+          ),
+          this.definition(
+            "Card fading",
+            "Fade cards with distance from the focused card. 0 disables fading; 1 uses the default strength; 2 doubles it.",
+            (setting) => this.renderDeckAmount(setting, "cardFadeStrength", 2),
+          ),
           this.definition("Wheel over card body", "Choose whether vertical wheel gestures read the body first or browse the Deck.",
             (setting) => this.renderLayoutChoice(setting, "wheelOverCardBody", { "body-first": "Body first", deck: "Deck" })),
           this.definition(
@@ -515,6 +521,25 @@ export class SlipboxSettingTab extends PluginSettingTab {
           allowCardScrolling: value,
         }));
     });
+  }
+
+  private renderFanHeadersAtBottom(setting: Setting): void {
+    setting.addToggle((toggle) => toggle
+      .setValue(this.slipbox.settings.fanHeadersAtBottom)
+      .onChange((fanHeadersAtBottom) => void this.save({
+        ...this.slipbox.settings, fanHeadersAtBottom,
+      })));
+  }
+
+  private renderDeckAmount(
+    setting: Setting,
+    field: "cardSplay" | "cardFadeStrength",
+    maximum: number,
+  ): void {
+    setting.addSlider((slider) => slider
+      .setLimits(0, maximum, 0.1)
+      .setValue(this.slipbox.settings[field])
+      .onChange((value) => void this.save({ ...this.slipbox.settings, [field]: value })));
   }
 
   private renderCardSpread(setting: Setting): void {

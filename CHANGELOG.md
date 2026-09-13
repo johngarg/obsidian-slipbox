@@ -8,11 +8,18 @@ initial public beta.
 
 ### Added
 
+- Toggle Deck orientation from the command palette or a configurable Deck shortcut,
+  preserving browsing position and custom navigation bindings.
+- Position the Deck near the left and right with `zh` and `zl`. Directional
+  positioning now preserves the other axis; `zz` centres both axes and resets pan.
+- Adjustable Card fading, from fully opaque cards to twice the default fade rate.
+
 - Optional bottom headers for cards below the anchor in vertical Fan, making
-  their addresses and titles readable in the overlapping stack.
+  their addresses and titles readable in the overlapping stack. Bottom headers
+  replace the ordinary backlink footer.
 
 - Vertical Deck orientation, independent Drawer/Fan stacking and deterministic
-  card tilt. Drawer is the new default and opens a reading gap in filing order.
+  card splay. Drawer is the new default and opens a reading gap in filing order.
 - Left Branch View placement, with full-size branch columns reachable by workspace
   panning, and a vertical Deck map and bookmark edge controls.
 - Body-first vertical wheel navigation with boundary resistance, plus a setting
@@ -52,7 +59,7 @@ initial public beta.
   card frames to address Fan artifacts where background scroll layers covered
   the focused card. Background cards retain their body scroll positions.
 
-- Kept branch annotation fitting independent of card tilt and scale, preventing
+- Kept branch annotation fitting independent of card splay and scale, preventing
   labels from flickering between their text and an overflow count.
 
 - Raised the experimental minimum Deck spread to 0.10 to limit rendering load

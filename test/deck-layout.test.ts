@@ -6,7 +6,7 @@ import { deckRenderWindow, deckRenderedIndices, deckTransitionIntersects } from 
 import { DeckTransition } from "../src/deck-transition.js";
 
 const geometry: DeckGeometry = { cardWidth: 840, cardHeight: 560, anchorIndex: 100,
-  viewportPosition: 100, spread: 0.02, orientation: "vertical", model: "drawer", tilt: 5,
+  viewportPosition: 100, spread: 0.02, orientation: "vertical", model: "drawer", splay: 5, fadeStrength: 1,
   paneExtent: 1800, anchorCoordinate: 900, panOffset: 0 };
 
 test("fixed card sizes and axis mapping", () => {
@@ -20,9 +20,9 @@ test("culling contains every intersecting rotated footprint at every layout extr
   for (const orientation of ["horizontal", "vertical"] as const)
     for (const model of ["drawer", "fan"] as const)
       for (const spread of [0.02, 0.58, 1.12])
-        for (const tilt of [0, 5])
+        for (const splay of [0, 5])
           for (const panOffset of [-3000, 0, 3000]) {
-            const options = { ...geometry, orientation, model, spread, tilt, panOffset };
+            const options = { ...geometry, orientation, model, spread, splay, panOffset };
             const window = deckRenderWindow(300, options);
             assert.ok(window);
             assert.ok(window.start <= 100 && window.end >= 100);
@@ -43,7 +43,7 @@ test("culling contains every intersecting rotated footprint at every layout extr
 });
 
 test("bookmarks use Drawer gap and spatial pan", () => {
-  const options = { ...geometry, tilt: 0, paneExtent: 800, anchorCoordinate: 400 };
+  const options = { ...geometry, splay: 0, paneExtent: 800, anchorCoordinate: 400 };
   assert.equal(bookmarkEdgeTargets([99, 101], options).after, 101);
   assert.equal(bookmarkEdgeTargets([99], { ...options, panOffset: -500 }).before, 99);
 });
@@ -80,7 +80,7 @@ test("spatial panning can put an earlier bookmark at the after edge", () => {
 // These tests use the same retention predicate as DeckView, with a deterministic clock.
 test("continuous Drawer browsing bounds mounted cards before the gesture ends", () => {
   for (const orientation of ["horizontal", "vertical"] as const) {
-    for (const tilt of [0, 5]) {
+    for (const splay of [0, 5]) {
       const transition = new DeckTransition();
       let mounted = new Set<number>();
       let peak = 0;
@@ -88,7 +88,7 @@ test("continuous Drawer browsing bounds mounted cards before the gesture ends", 
         const now = frame * (1000 / 60);
         const position = 300 + (frame < 1200 ? frame : 2400 - frame) / 6;
         const anchorIndex = Math.round(position);
-        const options = { ...geometry, orientation, tilt, spread: 0.1,
+        const options = { ...geometry, orientation, splay, spread: 0.1,
           paneExtent: 800, anchorCoordinate: 400, anchorIndex, viewportPosition: position };
         if (frame > 0 && frame % 6 === 0) transition.begin(now);
         const wanted = new Set(deckRenderedIndices(10000, options));

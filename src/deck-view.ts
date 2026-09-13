@@ -180,11 +180,15 @@ import {
   type PileFocusLocation,
   type PileNavigationDirection,
 } from "./pile-navigation.js";
+import { deckTopForPileAnchor } from "./workspace-layout.js";
 import {
-  deckTopForPileAnchor,
-  type DeckPositionMode,
+  deckAnchorCenterX,
   deckAnchorCenterY,
-} from "./workspace-layout.js";
+  deckPositionAxes,
+  type DeckPositionAxes,
+  type DeckPositionMode,
+  type DeckPositionTarget,
+} from "./deck-position.js";
 import {
   BookmarksModal,
   promptForLocalBranchDeparture,
@@ -204,6 +208,7 @@ export interface DeckViewHost extends DeskViewHost {
   readonly indexRuntime: CardIndexRuntime;
   readonly startupDeckPositionMode: DeckPositionMode;
   setCardSpread(value: number): void;
+  toggleDeckOrientation(): Promise<void>;
   showIssues(): Promise<void>;
 }
 
@@ -1354,6 +1359,18 @@ export class DeckView extends ItemView {
         break;
       case "backward-ten-cards":
         this.moveBy(-10);
+        break;
+      case "toggle-deck-orientation":
+        void this.plugin.toggleDeckOrientation().catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          new Notice(`Could not save Slipbox Desk settings: ${message}`);
+        });
+        break;
+      case "position-deck-left":
+        this.positionDeck("left");
+        break;
+      case "position-deck-right":
+        this.positionDeck("right");
         break;
       case "position-deck":
         this.shortcutController.beginPositionCommand();
@@ -3884,16 +3901,18 @@ export class DeckView extends ItemView {
     this.queueRenderWindowRefresh();
   }
 
-  private recenterSpace(): void {
+  private recenterSpace(axes: DeckPositionAxes): void {
     const space = this.spaceEl;
     const shouldAnimate =
-      space !== null && (this.spaceOffsetX !== 0 || this.spaceOffsetY !== 0);
+      space !== null &&
+      !space.win.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      ((axes.x && this.spaceOffsetX !== 0) || (axes.y && this.spaceOffsetY !== 0));
     this.cancelSpaceRecentering();
     if (shouldAnimate) {
       space.addClass("is-recentering");
     }
-    this.spaceOffsetX = 0;
-    this.spaceOffsetY = 0;
+    if (axes.x) this.spaceOffsetX = 0;
+    if (axes.y) this.spaceOffsetY = 0;
     this.applySpaceOffset();
     if (!shouldAnimate) {
       return;
@@ -3951,10 +3970,18 @@ export class DeckView extends ItemView {
     this.centerViewportOnActive(targetIndex, true);
   }
 
-  private positionDeck(mode: DeckPositionMode): void {
+  private positionDeck(mode: DeckPositionTarget): void {
     this.deckViewport.setPositionMode(mode);
     this.applyDeckPositionMode();
-    this.recenterSpace();
+    const axes = deckPositionAxes(mode);
+    this.recenterSpace(axes);
+    const alongSequence = this.plugin.settings.deckOrientation === "horizontal" ? axes.x : axes.y;
+    if (!alongSequence) {
+      this.positionCards();
+      if (this.stageEl !== null) this.renderBookmarkEdgeTabs(this.stageEl);
+      this.queueRenderWindowRefresh();
+      return;
+    }
     const anchorPath = this.deckViewport.anchorPath;
     if (anchorPath === null) {
       new Notice("There is no Deck anchor to position.");
@@ -4122,9 +4149,13 @@ export class DeckView extends ItemView {
       return false;
     }
     const centre = `${geometry.anchorCenterY}px`;
+    const centreX = `${geometry.anchorCenterX}px`;
     const style = this.deckCardsEl?.style;
     if (style?.getPropertyValue("--slipbox-deck-center") !== centre) {
       style?.setProperty("--slipbox-deck-center", centre);
+    }
+    if (style?.getPropertyValue("--slipbox-deck-center-x") !== centreX) {
+      style?.setProperty("--slipbox-deck-center-x", centreX);
     }
     const now = this.contentEl.win.performance.now();
 
@@ -4369,7 +4400,7 @@ export class DeckView extends ItemView {
     });
   }
 
-  private deckGeometry(): DeckGeometry & { readonly anchorCenterY: number } {
+  private deckGeometry(): DeckGeometry & { readonly anchorCenterX: number; readonly anchorCenterY: number } {
     const settings = this.plugin.settings;
     const { width, height } = deckCardDimensions(settings.mainCardSize);
     const axis = deckAxis(settings.deckOrientation);
@@ -4378,15 +4409,18 @@ export class DeckView extends ItemView {
     const stageHeight = stage?.clientHeight ?? 0;
     const mode = this.deckViewport.positionModeOverride ?? this.plugin.startupDeckPositionMode;
     const anchorCenterY = deckAnchorCenterY(stageHeight, height, settings.deckOrientation, mode);
+    const horizontalMode = this.deckViewport.horizontalPositionModeOverride ?? "centered";
+    const anchorCenterX = deckAnchorCenterX(stageWidth, width, settings.deckOrientation, horizontalMode);
     return {
       cardWidth: width, cardHeight: height,
       anchorIndex: this.plugin.index.filedIndexForPath(this.deckViewport.anchorPath),
       viewportPosition: this.deckViewport.position(this.plugin.index.snapshot.filed),
       spread: settings.cardSpread, model: settings.deckStackModel,
-      orientation: settings.deckOrientation, tilt: settings.cardTilt,
+      orientation: settings.deckOrientation, splay: settings.cardSplay,
+      fadeStrength: settings.cardFadeStrength,
       paneExtent: axis.extent(stageWidth, stageHeight),
-      anchorCenterY,
-      anchorCoordinate: settings.deckOrientation === "vertical" ? anchorCenterY : stageWidth / 2,
+      anchorCenterX, anchorCenterY,
+      anchorCoordinate: axis.point(anchorCenterX, anchorCenterY),
       panOffset: axis.point(this.spaceOffsetX, this.spaceOffsetY),
     };
   }

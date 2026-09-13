@@ -22,8 +22,9 @@ function cards(count: number, onDesk = false): DeckMapCard[] {
   }));
 }
 
-function subject(width = 100) {
+function subject(width = 100, configure?: (window: Window) => void) {
   const window = new Window();
+  configure?.(window);
   const document = window.document as unknown as Document;
   Object.assign(window, {
     createDiv: () => document.createElementNS(
@@ -262,4 +263,70 @@ test("vertical map picks along height and uses vertical accessible keyboard navi
   value.controller.rootElement.dispatchEvent(new value.window.KeyboardEvent("keydown", { key: "ArrowLeft" }) as unknown as Event);
   assert.deepEqual(value.actions, ["next-card", "previous-card"]);
   value.controller.dispose();
+});
+
+
+test("vertical map clears a resizing status bar and keeps navigation on the shortened rail", () => {
+  const observed = new Set<Element>();
+  let resize: (() => void) | undefined;
+  const value = subject(100, (window) => {
+    Object.defineProperty(window, "ResizeObserver", { value: class {
+      constructor(callback: ResizeObserverCallback) {
+        resize = () => callback([], this);
+      }
+      observe(element: Element): void { observed.add(element); }
+      unobserve(element: Element): void { observed.delete(element); }
+      disconnect(): void { observed.clear(); }
+    } });
+  });
+  const { controller, container, window } = value;
+  let paneRight = 1000;
+  let barHeight = 40;
+  const rect = (left: number, top: number, width: number, height: number): DOMRect => ({
+    left, top, width, height, right: left + width, bottom: top + height,
+    x: left, y: top, toJSON: () => ({}),
+  });
+  container.getBoundingClientRect = () => rect(0, 100, paneRight, 800);
+  controller.rootElement.getBoundingClientRect = () => rect(paneRight - 36, 100, 36, 800);
+  const bar = (container.ownerDocument.win as unknown as ObsidianTestWindow).createDiv();
+  bar.className = "status-bar";
+  bar.getBoundingClientRect = () => rect(900, 900 - barHeight, 100, barHeight);
+  container.ownerDocument.body.append(bar);
+  const inset = (): number => Number.parseFloat(controller.rootElement.style.getPropertyValue("--slipbox-deck-map-inset"));
+  const rail = controller.rootElement.querySelector<HTMLElement>(".slipbox-deck-map-rail");
+  assert.ok(rail);
+  rail.getBoundingClientRect = () => rect(paneRight - 36, 100 + inset(), 36, 800 - 2 * inset());
+
+  controller.setOrientation("vertical");
+  controller.reconcile(cards(5), "2.md", new Set(), { start: 0, end: 4 });
+  assert.equal(inset(), 52);
+  assert.ok(observed.has(bar));
+  assert.ok(observed.has(container));
+  assert.ok(observed.has(rail));
+
+  barHeight = 80;
+  assert.ok(resize);
+  resize();
+  assert.equal(inset(), 92);
+  const bounds = rail.getBoundingClientRect();
+  assert.equal(bounds.top - 100, 900 - bounds.bottom);
+  assert.equal(bar.getBoundingClientRect().top - bounds.bottom, 12);
+  for (const clientY of [bounds.top, bounds.bottom]) {
+    controller.rootElement.dispatchEvent(new window.MouseEvent("click", { clientY, bubbles: true }) as unknown as Event);
+  }
+  assert.deepEqual(value.navigated, ["0.md", "4.md"]);
+  controller.rootElement.dispatchEvent(new window.PointerEvent("pointermove", { clientY: bounds.bottom, bubbles: true }) as unknown as Event);
+  const readout = controller.rootElement.querySelector<HTMLElement>(".slipbox-deck-map-readout");
+  assert.equal(readout?.textContent, "E · Card 4");
+
+  // A status bar outside this split pane must not consume its vertical space.
+  paneRight = 800;
+  resize();
+  assert.equal(inset(), 36);
+  paneRight = 1000;
+  barHeight = 0;
+  resize();
+  assert.equal(inset(), 36);
+  controller.dispose();
+  assert.equal(observed.size, 0);
 });

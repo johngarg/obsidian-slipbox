@@ -2524,11 +2524,12 @@ button.slipbox-card-color-choice.is-no-color::after {
 .slipbox-deck-map[data-orientation="vertical"] {
   justify-self: end;
   align-self: stretch;
+  margin-block: var(--slipbox-deck-map-inset, 36px);
   width: 36px;
   height: auto;
   min-height: 0;
 }
-.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-rail { inset: 18px 0; }
+.slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-rail { inset: 0; }
 .slipbox-deck-map[data-orientation="vertical"] .slipbox-deck-map-track {
   inset: 0 auto 0 26px;
   width: 2px;
@@ -2559,6 +2560,7 @@ button.slipbox-card-color-choice.is-no-color::after {
   top: calc(var(--slipbox-deck-map-position) * 100%);
   left: auto;
   right: 38px;
+  max-width: min(520px, calc(100cqw - 48px));
   transform: translateY(-50%);
 }
 

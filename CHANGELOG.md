@@ -38,6 +38,9 @@ initial public beta.
 
 ### Fixed
 
+- Centre the vertical Deck map with matching end margins that clear the status
+  bar, keeping its hover readout and click targets aligned.
+
 - Fix duplicate settings-row names and cleanup errors when refreshing or closing
   the settings screen.
 

@@ -1,3 +1,4 @@
+import { verticalDeckMapInset } from "./deck-map-layout.js";
 import { deckAxis } from "./deck-axis.js";
 import type { DeckOrientation } from "./settings.js";
 import { DeckMapRenderer } from "./deck-map-renderer.js";
@@ -53,10 +54,11 @@ export class DeckMapController {
   private devicePixelRatio = 1;
   private currentReadoutKey: string | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private statusBar: HTMLElement | null = null;
   private disposed = false;
 
   constructor(
-    container: HTMLElement,
+    private readonly container: HTMLElement,
     private readonly environment: DeckMapControllerEnvironment,
   ) {
     this.rootElement = container.ownerDocument.createElementNS(
@@ -76,11 +78,13 @@ export class DeckMapController {
     const ResizeObserverConstructor = deckMapResizeObserver(ownerWindow);
     if (ResizeObserverConstructor !== null) {
       const observer = new ResizeObserverConstructor((entries) => {
-        const physicalWidth = entries[0]?.devicePixelContentBoxSize?.[0]
+        const railEntry = entries.find((entry) => entry.target === this.renderer.railElement);
+        const physicalWidth = railEntry?.devicePixelContentBoxSize?.[0]
           ?.[this.orientation === "vertical" ? "blockSize" : "inlineSize"];
         this.refreshLayout(physicalWidth);
       });
       this.resizeObserver = observer;
+      observer.observe(container);
       try {
         observer.observe(this.renderer.railElement, {
           box: "device-pixel-content-box",
@@ -174,6 +178,7 @@ export class DeckMapController {
     if (this.disposed) {
       return;
     }
+    if (this.refreshMapInsets()) physicalPixelWidth = undefined;
     const bounds = this.renderer.railElement.getBoundingClientRect();
     this.railWidth = Math.max(0, deckAxis(this.orientation).extent(bounds.width, bounds.height));
     this.devicePixelRatio =
@@ -202,6 +207,7 @@ export class DeckMapController {
     this.disposed = true;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.statusBar = null;
     this.ownerWindow?.removeEventListener("resize", this.handleResize);
     this.rootElement.removeEventListener("pointerdown", this.handlePointerDown);
     this.rootElement.removeEventListener("pointermove", this.handlePointerMove);
@@ -213,6 +219,28 @@ export class DeckMapController {
     this.cards = [];
     this.cardIndexByPath.clear();
     this.landmarksByPath.clear();
+  }
+
+  private refreshMapInsets(): boolean {
+    const statusBar = this.container.ownerDocument.querySelector<HTMLElement>(".status-bar");
+    if (statusBar !== this.statusBar) {
+      if (this.statusBar !== null) this.resizeObserver?.unobserve(this.statusBar);
+      this.statusBar = statusBar;
+      if (statusBar !== null) this.resizeObserver?.observe(statusBar);
+    }
+    if (this.orientation !== "vertical") return false;
+
+    const pane = this.container.getBoundingClientRect();
+    const inset = verticalDeckMapInset(
+      pane,
+      this.rootElement.getBoundingClientRect(),
+      statusBar?.getBoundingClientRect() ?? null,
+    );
+    const style = this.rootElement.style;
+    const value = `${inset}px`;
+    const changed = style.getPropertyValue("--slipbox-deck-map-inset") !== value;
+    if (changed) style.setProperty("--slipbox-deck-map-inset", value);
+    return changed;
   }
 
   private get ownerWindow(): Window | null {

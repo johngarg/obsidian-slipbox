@@ -1,0 +1,46 @@
+/* Slipbox Desk custom styling: fixed 480 × 288 CSS-pixel cards.
+   See ../custom-card-styling.md. Enable as a separate Obsidian CSS snippet. */
+.view-content.slipbox-deck-view {
+  --slipbox-deck-card-width: 480px;
+  --slipbox-viewed-card-width: 480px;
+  --slipbox-viewed-card-max-height: none;
+  --slipbox-desk-card-width: min(300px, 32cqw);
+  --slipbox-card-aspect-ratio: calc(5 / 3);
+  --slipbox-card-radius: 2px;
+  --slipbox-card-paper-color: #fffdf5;
+  --slipbox-card-chrome-color: #f6f2e6;
+  --slipbox-card-text-color: #292b32;
+  --slipbox-card-padding-x: 20px;
+  --slipbox-card-padding-y: 12px;
+  --slipbox-card-font-size: 16px;
+  --slipbox-card-line-height: 24px;
+  --slipbox-card-paper-image: repeating-linear-gradient(
+    to bottom, transparent 0 23px, rgb(83 139 177 / 0.24) 23px 24px
+  );
+}
+
+.theme-dark .view-content.slipbox-deck-view {
+  --slipbox-card-paper-color: #272925;
+  --slipbox-card-chrome-color: #30332d;
+  --slipbox-card-text-color: #ecebdd;
+  --slipbox-card-paper-image: repeating-linear-gradient(
+    to bottom, transparent 0 23px, rgb(135 174 189 / 0.25) 23px 24px
+  );
+}
+
+/* Keep Desk previews compact while sharing the paper and card shape. */
+.view-content.slipbox-deck-view .slipbox-desk-card {
+  --slipbox-card-padding-x: 10px;
+  --slipbox-card-padding-y: 6px;
+  --slipbox-card-font-size: 12px;
+  --slipbox-card-line-height: 24px;
+}
+
+/* Responsive variant: uncomment to fit card width to the pane.
+   This deliberately gives up a constant physical size and may still clip
+   vertically in a short pane. Use the Viewed height cap if preferred.
+.view-content.slipbox-deck-view {
+  --slipbox-deck-card-width: min(480px, max(1px, calc(100cqw - 32px)));
+  --slipbox-viewed-card-width: min(480px, max(1px, calc(100cqw - 32px)));
+}
+*/

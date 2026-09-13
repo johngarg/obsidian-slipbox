@@ -87,11 +87,11 @@ describe("community scanner CSS compatibility", () => {
     assert.match(styles, /\[data-desk-card-size="small"\]/u);
     assert.match(
       styles,
-      /--slipbox-desk-card-width:\s*min\(/u,
+      /var\(--slipbox-desk-card-width,\s*var\(--_slipbox-default-desk-width\)\)/u,
     );
     assert.match(
       styles,
-      /--slipbox-desk-pile-height:\s*min\(/u,
+      /var\(--slipbox-desk-pile-height,\s*calc\(/u,
     );
   });
 

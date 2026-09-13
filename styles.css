@@ -19,11 +19,12 @@
 }
 
 .view-content.slipbox-deck-view {
-  --slipbox-card-radius: 10px;
-  --slipbox-main-card-width: min(58%, 840px);
-  --slipbox-fixed-deck-width: 840px;
-  --slipbox-desk-card-width: min(360px, 36cqw);
-  --slipbox-desk-pile-height: min(258px, calc(24cqw + 18px));
+  --_slipbox-default-viewed-width: min(58%, 840px);
+  --_slipbox-default-deck-width: 840px;
+  --_slipbox-default-desk-width: min(360px, 36cqw);
+  --_slipbox-desk-width: var(--slipbox-desk-card-width, var(--_slipbox-default-desk-width));
+  --_slipbox-desk-height: calc(var(--_slipbox-desk-width) / var(--slipbox-card-aspect-ratio, 1.5));
+  --_slipbox-pile-height: var(--slipbox-desk-pile-height, calc(var(--_slipbox-desk-height) + 18px));
   container-type: inline-size;
   height: 100%;
   padding: 0;
@@ -31,23 +32,21 @@
 }
 
 .slipbox-deck-view[data-main-card-size="small"] {
-  --slipbox-main-card-width: min(50%, 720px);
-  --slipbox-fixed-deck-width: 720px;
+  --_slipbox-default-viewed-width: min(50%, 720px);
+  --_slipbox-default-deck-width: 720px;
 }
 
 .slipbox-deck-view[data-main-card-size="large"] {
-  --slipbox-main-card-width: min(66%, 960px);
-  --slipbox-fixed-deck-width: 960px;
+  --_slipbox-default-viewed-width: min(66%, 960px);
+  --_slipbox-default-deck-width: 960px;
 }
 
 .slipbox-deck-view[data-desk-card-size="small"] {
-  --slipbox-desk-card-width: min(280px, 30cqw);
-  --slipbox-desk-pile-height: min(205px, calc(20cqw + 18px));
+  --_slipbox-default-desk-width: min(280px, 30cqw);
 }
 
 .slipbox-deck-view[data-desk-card-size="large"] {
-  --slipbox-desk-card-width: min(440px, 42cqw);
-  --slipbox-desk-pile-height: min(312px, calc(28cqw + 18px));
+  --_slipbox-default-desk-width: min(440px, 42cqw);
 }
 
 .slipbox-deck-shell {
@@ -324,8 +323,8 @@
   position: absolute;
   top: calc(var(--slipbox-deck-top) - var(--slipbox-pile-deck-gap));
   left: 50%;
-  width: calc(var(--slipbox-desk-card-width) + 16px);
-  height: var(--slipbox-desk-pile-height);
+  width: calc(var(--_slipbox-desk-width) + 16px);
+  height: var(--_slipbox-pile-height);
   overflow: visible;
   pointer-events: none;
   transform: translate(-50%, -100%);
@@ -337,7 +336,7 @@
   left: calc(50% + var(--slipbox-pile-x, 0px));
   z-index: 230;
   box-sizing: border-box;
-  height: var(--slipbox-desk-pile-height);
+  height: var(--_slipbox-pile-height);
   min-width: 0;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -348,22 +347,23 @@
 }
 
 .slipbox-desk-pile.is-collapsed {
-  width: calc(var(--slipbox-desk-card-width) + 16px);
-  height: var(--slipbox-desk-pile-height);
+  width: calc(var(--_slipbox-desk-width) + 16px);
+  height: var(--_slipbox-pile-height);
   padding: 2px 8px 6px;
   cursor: pointer;
 }
 
 .slipbox-desk-stack-layer {
+  box-sizing: border-box;
   position: absolute;
   top: 2px;
   left: 50%;
   z-index: calc(8 - var(--slipbox-stack-depth));
-  width: var(--slipbox-desk-card-width);
-  aspect-ratio: 3 / 2;
+  width: var(--_slipbox-desk-width);
+  aspect-ratio: var(--slipbox-card-aspect-ratio, 1.5);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 7px;
-  background: var(--background-primary);
+  border-radius: var(--slipbox-card-radius, 7px);
+  background: var(--slipbox-card-paper-color, var(--background-primary));
   box-shadow: 0 5px 14px rgb(0 0 0 / 0.12);
   pointer-events: none;
   transform:
@@ -507,7 +507,7 @@ button.slipbox-desk-pile-cycle svg {
 }
 
 .slipbox-desk-pile.is-collapsed .slipbox-desk-sequence {
-  width: var(--slipbox-desk-card-width);
+  width: var(--_slipbox-desk-width);
   margin: 0 auto;
 }
 
@@ -522,7 +522,7 @@ button.slipbox-desk-pile-cycle svg {
 .slipbox-desk-card {
   --slipbox-card-color-tint-strength: 5%;
   --slipbox-card-bookmark-tint-strength: 10%;
-  --slipbox-card-chrome-background: var(--background-primary-alt);
+  --slipbox-card-chrome-background: var(--slipbox-card-chrome-color, var(--background-primary-alt));
 }
 
 .theme-dark .slipbox-card,
@@ -568,22 +568,23 @@ button.slipbox-desk-pile-cycle svg {
   --slipbox-card-chrome-background: color-mix(
     in oklch,
     var(--slipbox-card-tone) var(--slipbox-card-color-tint-strength),
-    var(--background-primary-alt)
+    var(--slipbox-card-chrome-color, var(--background-primary-alt))
   );
 }
 
 .slipbox-desk-card {
+  box-sizing: border-box;
   position: relative;
   display: flex;
-  flex: 0 0 var(--slipbox-desk-card-width);
-  width: var(--slipbox-desk-card-width);
-  aspect-ratio: 3 / 2;
+  flex: 0 0 var(--_slipbox-desk-width);
+  width: var(--_slipbox-desk-width);
+  aspect-ratio: var(--slipbox-card-aspect-ratio, 1.5);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--background-modifier-border);
-  border-radius: 7px;
+  border-radius: var(--slipbox-card-radius, 7px);
   outline: none;
-  background: var(--background-primary);
+  background: var(--slipbox-card-paper-color, var(--background-primary));
   box-shadow: 0 7px 20px rgb(0 0 0 / 0.16);
   transform: rotate(var(--slipbox-desk-card-tilt, -0.45deg));
   transform-origin: center;
@@ -591,10 +592,11 @@ button.slipbox-desk-pile-cycle svg {
 }
 
 .slipbox-desk-card-shell {
+  box-sizing: border-box;
   position: relative;
-  flex: 0 0 var(--slipbox-desk-card-width);
-  width: var(--slipbox-desk-card-width);
-  aspect-ratio: 3 / 2;
+  flex: 0 0 var(--_slipbox-desk-width);
+  width: var(--_slipbox-desk-width);
+  aspect-ratio: var(--slipbox-card-aspect-ratio, 1.5);
   overflow: visible;
 }
 
@@ -642,8 +644,8 @@ button.slipbox-desk-pile-cycle svg {
 }
 
 .slipbox-desk-pile.is-expanded .slipbox-desk-card {
-  flex-basis: var(--slipbox-desk-card-width);
-  width: var(--slipbox-desk-card-width);
+  flex-basis: var(--_slipbox-desk-width);
+  width: var(--_slipbox-desk-width);
   transform: rotate(var(--slipbox-desk-card-tilt, 0deg));
 }
 
@@ -657,7 +659,7 @@ button.slipbox-desk-pile-cycle svg {
   background: color-mix(
     in srgb,
     var(--background-secondary) 82%,
-    var(--background-primary)
+    var(--slipbox-card-paper-color, var(--background-primary))
   );
   box-shadow: 0 5px 14px rgb(0 0 0 / 0.08);
   cursor: pointer;
@@ -892,14 +894,17 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 }
 
 .slipbox-desk-card-preview {
+  background-color: var(--slipbox-card-paper-color, var(--background-primary));
+  background-image: var(--slipbox-card-paper-image, none);
+  background-attachment: local;
   flex: 1;
   min-height: 0;
-  padding: 7px 9px;
+  padding: var(--slipbox-card-padding-y, 7px) var(--slipbox-card-padding-x, 9px);
   overflow: hidden;
-  color: var(--text-normal);
+  color: var(--slipbox-card-text-color, var(--text-normal));
   font-family: var(--font-text);
-  font-size: 0.65rem;
-  line-height: 1.3;
+  font-size: var(--slipbox-card-font-size, 0.65rem);
+  line-height: var(--slipbox-card-line-height, 1.3);
   pointer-events: auto;
   user-select: text;
   cursor: text;
@@ -962,26 +967,42 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   cursor: grabbing;
 }
 
+/* The probe and Deck cards must resolve the same untransformed border box. */
+.slipbox-card,
+.slipbox-deck-size-probe {
+  box-sizing: border-box;
+  width: var(--slipbox-deck-card-width, var(--slipbox-fixed-deck-width, var(--_slipbox-default-deck-width)));
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: var(--slipbox-card-aspect-ratio, 1.5);
+}
+
+.slipbox-deck-size-probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: 0;
+  border: 0;
+}
+
 .slipbox-card {
   position: absolute;
   top: var(--slipbox-deck-center);
   left: 50%;
-  box-sizing: border-box;
-  width: var(--slipbox-fixed-deck-width);
-  height: calc(var(--slipbox-fixed-deck-width) * 2 / 3);
-  max-height: none;
-  aspect-ratio: 3 / 2;
   transform: translate(-50%, -50%);
   transform-origin: center;
   display: flex;
   flex-direction: column;
   overflow: visible;
   border: 1px solid var(--background-modifier-border);
-  border-radius: var(--slipbox-card-radius);
+  border-radius: var(--slipbox-card-radius, 10px);
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.12),
     0 12px 36px rgb(0 0 0 / 0.12);
-  background: var(--background-primary);
+  background: var(--slipbox-card-paper-color, var(--background-primary));
   cursor: pointer;
   pointer-events: auto;
   z-index: var(--slipbox-card-z-index, auto);
@@ -1018,8 +1039,8 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border-radius: calc(var(--slipbox-card-radius) - 1px);
-  background: var(--background-primary);
+  border-radius: calc(var(--slipbox-card-radius, 10px) - 1px);
+  background: var(--slipbox-card-paper-color, var(--background-primary));
 }
 
 .slipbox-card.is-deck-anchor {
@@ -1044,7 +1065,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   position: absolute;
   inset: 0;
   z-index: 3;
-  border-radius: calc(var(--slipbox-card-radius) - 1px);
+  border-radius: calc(var(--slipbox-card-radius, 10px) - 1px);
   background: rgb(0 0 0 / 0.12);
   content: "";
   pointer-events: none;
@@ -1061,7 +1082,7 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   background: color-mix(
     in srgb,
     var(--background-secondary) 82%,
-    var(--background-primary)
+    var(--slipbox-card-paper-color, var(--background-primary))
   );
   box-shadow: 0 7px 22px rgb(0 0 0 / 0.08);
   cursor: pointer;
@@ -1642,15 +1663,19 @@ button.slipbox-local-branch-toggle svg {
 }
 
 .slipbox-card-scroll {
+  background-color: var(--slipbox-card-paper-color, var(--background-primary));
+  background-image: var(--slipbox-card-paper-image, none);
+  background-attachment: local;
   flex: 1;
   min-height: 0;
-  padding: clamp(20px, 3.2vw, 42px) clamp(22px, 4vw, 58px);
+  padding: var(--slipbox-card-padding-y, clamp(20px, 3.2vw, 42px)) var(--slipbox-card-padding-x, clamp(22px, 4vw, 58px));
   overflow: auto;
   overscroll-behavior: contain;
+  color: var(--slipbox-card-text-color, var(--text-normal));
   font-family: var(--font-text);
-  font-size: var(--font-text-size);
+  font-size: var(--slipbox-card-font-size, var(--font-text-size));
   font-weight: var(--font-normal);
-  line-height: var(--line-height-normal);
+  line-height: var(--slipbox-card-line-height, var(--line-height-normal));
   user-select: text;
   cursor: text;
   scrollbar-gutter: stable;
@@ -1695,19 +1720,21 @@ button.slipbox-local-branch-toggle svg {
 }
 
 .slipbox-inline-editor {
+  background-color: var(--slipbox-card-paper-color, var(--background-primary));
+  background-image: var(--slipbox-card-paper-image, none);
+  background-attachment: local;
   display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
   margin: 0;
-  padding: clamp(20px, 3.2vw, 42px) clamp(22px, 4vw, 58px);
+  padding: var(--slipbox-card-padding-y, clamp(20px, 3.2vw, 42px)) var(--slipbox-card-padding-x, clamp(22px, 4vw, 58px));
   resize: none;
   overflow: auto;
   border: 0;
   border-radius: 0;
   outline: none;
-  color: var(--text-normal);
-  background: var(--background-primary);
+  color: var(--slipbox-card-text-color, var(--text-normal));
   box-shadow: none;
   font-family: inherit;
   font-size: inherit;
@@ -1758,9 +1785,9 @@ button.slipbox-local-branch-toggle svg {
 .slipbox-card.slipbox-viewed-card {
   top: 50%;
   left: 50%;
-  width: var(--slipbox-main-card-width);
+  width: var(--slipbox-viewed-card-width, var(--slipbox-main-card-width, var(--_slipbox-default-viewed-width)));
   height: auto;
-  max-height: calc(100% - 54px);
+  max-height: var(--slipbox-viewed-card-max-height, calc(100% - 54px));
   z-index: 1;
   pointer-events: auto;
   cursor: default;
@@ -1848,7 +1875,7 @@ a.slipbox-explicit-branch-link:focus-visible {
   overflow: hidden;
   border-top: 1px solid var(--background-modifier-border);
   color: var(--text-muted);
-  background: var(--background-primary-alt);
+  background: var(--slipbox-card-chrome-color, var(--background-primary-alt));
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   font-variant-numeric: tabular-nums;
@@ -2328,15 +2355,15 @@ button.slipbox-card-color-choice.is-no-color::after {
 
 @media (max-width: 850px) {
   .slipbox-deck-view {
-    --slipbox-main-card-width: 68%;
+    --_slipbox-default-viewed-width: 68%;
   }
 
   .slipbox-deck-view[data-main-card-size="small"] {
-    --slipbox-main-card-width: 60%;
+    --_slipbox-default-viewed-width: 60%;
   }
 
   .slipbox-deck-view[data-main-card-size="large"] {
-    --slipbox-main-card-width: 76%;
+    --_slipbox-default-viewed-width: 76%;
   }
 
 }

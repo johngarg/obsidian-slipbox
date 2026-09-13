@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 
 // Exercise the real view's wheel-to-frame wiring without requiring Obsidian's UI.
 const output = await build({ stdin: { contents: `
+  export { CardDimensionsController } from './src/card-dimensions.ts';
   export { DeckView } from './src/deck-view.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { DeckFrameScheduler } from './src/deck-frame.ts';
@@ -19,7 +20,7 @@ const obsidian = new Proxy({}, { get: () => class {} });
 runInNewContext('(function(require, module, exports) {' + output.outputFiles[0].text + '\n})')(
   name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports,
 );
-const { DeckView, DeckViewport, DeckFrameScheduler, DeckTransition, DeckWheelController } = module.exports;
+const { CardDimensionsController, DeckView, DeckViewport, DeckFrameScheduler, DeckTransition, DeckWheelController } = module.exports;
 
 function subject(model = 'drawer') {
   const window = new Window();
@@ -122,4 +123,26 @@ test('selection interactivity updates even when focus already updated the anchor
   DeckView.prototype.updateActiveUi.call(view);
   assert.equal(interactive.length, 2);
   view.deckFrames.cancel();
+});
+
+
+test('steady wheel input uses cached fractional CSS dimensions without reading layout', () => {
+  const value = subject('fan');
+  const stage = value.view.stageEl;
+  stage.createDiv = () => { const element = stage.ownerDocument.createElement('div'); stage.append(element); return element; };
+  let reads = 0;
+  const dimensions = new CardDimensionsController({width:840,height:560}, {
+    requestLayout() {}, changed() {}, measure() { reads++; return {width:480.5,height:288.25}; },
+  });
+  dimensions.mount(stage);
+  value.view.cardDimensions = dimensions;
+  assert.equal(reads, 1);
+  for (let n = 0; n < 100; n++) {
+    value.wheel(0.28825); value.frame();
+    value.wheel(-0.28825); value.frame();
+  }
+  assert.equal(reads, 1);
+  assert.ok(Math.abs(value.view.deckViewport.position(value.cards) - 4) < 1e-10);
+  assert.equal(value.view.cardStep(), 288.25 * 0.1);
+  dimensions.dispose(); value.view.deckFrames.cancel();
 });

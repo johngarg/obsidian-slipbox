@@ -13,6 +13,7 @@ export function deckAxis(orientation: DeckOrientation) {
   };
 }
 
+/** Initialization fallback until the mounted CSS sizing probe is measurable. */
 export function deckCardDimensions(size: CardSize): { width: number; height: number } {
   const width = size === "small" ? 720 : size === "large" ? 960 : 840;
   return { width, height: width * 2 / 3 };

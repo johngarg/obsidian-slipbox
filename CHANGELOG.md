@@ -8,6 +8,10 @@ initial public beta.
 
 ### Added
 
+- Supported CSS properties for fixed or responsive card sizes, shared card shape,
+  paper and typography, with a ruled index-card example. Deck spacing and visibility
+  follow custom dimensions, and reading and editing share the chosen appearance.
+
 - Toggle Deck orientation from the command palette or a configurable Deck shortcut,
   preserving browsing position and custom navigation bindings.
 - Position the Deck near the left and right with `zh` and `zl`. Directional
@@ -29,7 +33,7 @@ initial public beta.
 
 ### Changed
 
-- Deck cards now keep fixed Small/Medium/Large dimensions (720 × 480,
+- Deck cards now default to fixed Small/Medium/Large dimensions (720 × 480,
   840 × 560, and 960 × 640 px), including in narrow panes. Pan to reach content
   outside the pane; viewed cards and Desk piles retain their existing sizing.
 - Lowered minimum card spread to 0.10 and made card rendering follow the visible
@@ -37,6 +41,8 @@ initial public beta.
 - Relicensed Slipbox Desk from 0BSD to the MIT License.
 
 ### Fixed
+
+- Branch View updates its owner geometry after card-height-only changes.
 
 - Centre the vertical Deck map with matching end margins that clear the status
   bar, keeping its hover readout and click targets aligned.

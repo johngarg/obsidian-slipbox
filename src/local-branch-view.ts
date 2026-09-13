@@ -112,7 +112,7 @@ export class LocalBranchViewController {
   private expandedGapIds = new Set<string>();
   private expandedDepartureId: string | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private lastWidth = 0;
+  private lastSize = "";
 
   constructor(private readonly environment: LocalBranchViewEnvironment) {
     this.root = localBranchDomWindow(environment.activeDocument)
@@ -221,13 +221,10 @@ export class LocalBranchViewController {
       return;
     }
     this.resizeObserver = new ownerWindow.ResizeObserver(() => {
-      const width = this.availableWidth();
-      if (Math.abs(width - this.lastWidth) < 1) {
-        return;
-      }
-      this.lastWidth = width;
-      this.expandedGapIds.clear();
-      this.render(this.model);
+      if (this.layoutSize() === this.lastSize) return;
+      const scroller = this.root.querySelector<HTMLElement>(".slipbox-local-branch-scroller");
+      const scroll = scroller?.[this.resolvedPlacement() === "left" ? "scrollTop" : "scrollLeft"] ?? 0;
+      this.render(this.model, scroll);
     });
     this.resizeObserver.observe(owner);
     this.resizeObserver.observe(stage);
@@ -237,6 +234,7 @@ export class LocalBranchViewController {
     model: LocalBranchModel | null,
     preservedScrollLeft: number | null = null,
   ): void {
+    this.lastSize = this.layoutSize();
     const focusedId = this.focusedControlId();
     const width = this.availableWidth();
     this.root.dataset.placement = this.resolvedPlacement();
@@ -417,6 +415,11 @@ export class LocalBranchViewController {
     const placement = this.environment.placement?.() ?? "auto";
     if (placement === "left" || placement === "below") return placement;
     return this.environment.orientation?.() === "vertical" ? "left" : "below";
+  }
+
+  private layoutSize(): string {
+    return [this.availableWidth(), this.ownerWidth(), this.owner?.offsetHeight ?? 0,
+      this.stage?.clientHeight ?? 0].join(":");
   }
 
   private availableWidth(): number {

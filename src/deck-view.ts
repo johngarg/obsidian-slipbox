@@ -1,3 +1,4 @@
+import { CardDimensionsController } from "./card-dimensions.js";
 import { deckAxis, deckCardDimensions } from "./deck-axis.js";
 import { deckRenderWindow, deckRenderedIndices, deckTransitionIntersects } from "./deck-render-window.js";
 import { DeckFrameScheduler } from "./deck-frame.js";
@@ -292,6 +293,7 @@ export class DeckView extends ItemView {
   private deckShellEl: HTMLElement | null = null;
   private deckMapController: DeckMapController | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private cardDimensions: CardDimensionsController | null = null;
   private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private viewedCardHeaderButtonController: CardHeaderButtonController | null = null;
   private positioningFrame: number | null = null;
@@ -454,6 +456,7 @@ export class DeckView extends ItemView {
     });
     this.registerEvent(
       this.app.workspace.on("css-change", () => {
+        this.cardDimensions?.invalidate();
         this.cardFooters.scheduleLayout();
         this.viewedCardFooter.scheduleLayout();
         this.cardSignatures.scheduleLayout();
@@ -584,6 +587,8 @@ export class DeckView extends ItemView {
     this.clearCardHeaderButtonControllers();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.cardDimensions?.dispose();
+    this.cardDimensions = null;
     if (this.positioningFrame !== null) {
       this.contentEl.win.cancelAnimationFrame(this.positioningFrame);
       this.positioningFrame = null;
@@ -592,6 +597,11 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.deckFrames.cancel();
+    if (this.positioningFrame !== null) {
+      this.contentEl.win.cancelAnimationFrame(this.positioningFrame);
+      this.positioningFrame = null;
+    }
+    this.positioningRetriesRemaining = 0;
     this.cancelRenderWindowRefresh();
     this.bookmarkEdgeTabs.clear();
     this.drawerTransition.reset();
@@ -622,6 +632,7 @@ export class DeckView extends ItemView {
   }
 
   override onResize(): void {
+    this.cardDimensions?.invalidate();
     this.scheduleCardPositioning();
     this.cardFooters.scheduleLayout();
     this.viewedCardFooter.scheduleLayout();
@@ -2495,6 +2506,11 @@ export class DeckView extends ItemView {
       this.clearViewedCardDom();
     }
     this.deckFrames.cancel();
+    if (this.positioningFrame !== null) {
+      this.contentEl.win.cancelAnimationFrame(this.positioningFrame);
+      this.positioningFrame = null;
+    }
+    this.positioningRetriesRemaining = 0;
     this.cancelRenderWindowRefresh();
     this.bookmarkEdgeTabs.clear();
     this.drawerTransition.reset();
@@ -2508,6 +2524,7 @@ export class DeckView extends ItemView {
     this.viewedCardSignature.clear();
     this.clearViewedCardHeaderButtonController();
     this.unloadViewedCardComponent();
+    this.cardDimensions?.dispose();
     this.stageEl?.remove();
     this.stageEl = null;
     this.spaceEl = null;
@@ -2528,6 +2545,15 @@ export class DeckView extends ItemView {
 
     const stage = shell.createDiv({ cls: "slipbox-deck-stage" });
     this.stageEl = stage;
+    const dimensions = this.cardDimensions?.snapshot ?? deckCardDimensions(this.plugin.settings.mainCardSize);
+    this.cardDimensions = new CardDimensionsController(dimensions, {
+      requestLayout: () => this.scheduleCardPositioning(),
+      changed: () => {
+        this.drawerTransition.reset();
+        this.wheelController.reset();
+      },
+    });
+    this.cardDimensions.mount(stage);
     this.attachBrowsingEvents(stage);
     const space = stage.createDiv({ cls: "slipbox-space" });
     this.spaceEl = space;
@@ -4221,6 +4247,7 @@ export class DeckView extends ItemView {
       return;
     }
     const resizeObserver = new ownerWindow.ResizeObserver(() => {
+      this.cardDimensions?.invalidate();
       this.scheduleCardPositioning();
       this.updateDeckMapSectionLabels();
     });
@@ -4245,6 +4272,7 @@ export class DeckView extends ItemView {
 
   private flushScheduledCardPositioning(): void {
     this.positioningFrame = null;
+    this.cardDimensions?.flush();
     this.queueRenderWindowRefresh();
     const positioned = this.positionCards();
     if (positioned) {
@@ -4402,7 +4430,7 @@ export class DeckView extends ItemView {
 
   private deckGeometry(): DeckGeometry & { readonly anchorCenterX: number; readonly anchorCenterY: number } {
     const settings = this.plugin.settings;
-    const { width, height } = deckCardDimensions(settings.mainCardSize);
+    const { width, height } = this.cardDimensions?.snapshot ?? deckCardDimensions(settings.mainCardSize);
     const axis = deckAxis(settings.deckOrientation);
     const stage = this.stageEl;
     const stageWidth = stage?.clientWidth ?? 0;
@@ -4436,7 +4464,7 @@ export class DeckView extends ItemView {
 
   private cardStep(): number {
     const settings = this.plugin.settings;
-    const { width, height } = deckCardDimensions(settings.mainCardSize);
+    const { width, height } = this.cardDimensions?.snapshot ?? deckCardDimensions(settings.mainCardSize);
     return deckAxis(settings.deckOrientation).extent(width, height) * settings.cardSpread;
   }
 
@@ -4450,6 +4478,7 @@ export class DeckView extends ItemView {
 
   private flushDeckMotion(activeUiChanged: boolean): boolean {
     if (this.stageEl === null || !this.stageEl.isConnected) return false;
+    this.cardDimensions?.flush();
     const geometry = this.deckGeometry();
     if (activeUiChanged) this.updateActiveUi(geometry);
     else this.renderBookmarkEdgeTabs(this.stageEl, this.bookmarkedPaths(), geometry);

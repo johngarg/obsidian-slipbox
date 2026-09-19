@@ -3,7 +3,7 @@ import { deckRenderWindow, deckRenderedIndices, deckTransitionIntersects } from 
 import { DeckFrameScheduler } from "./deck-frame.js";
 import { DeckBookmarkTabs, type DeckBookmarkTab } from "./deck-bookmark-tabs.js";
 import { DeckTransition, type DeckSelectionMotion } from "./deck-transition.js";
-import { DeckWheelController } from "./deck-wheel.js";
+import { DeckWheelController, DECK_WHEEL_GESTURE_IDLE_MS } from "./deck-wheel.js";
 import { resolvedDeckKeybindings } from "./settings.js";
 import { deckHeaderDragIntent } from "./pointer-drag.js";
 import type { DeckGeometry } from "./deck-motion.js";
@@ -276,6 +276,7 @@ export class DeckView extends ItemView {
   private cardScrollPositions = new Map<string, number>();
   private readonly drawerTransition = new DeckTransition();
   private readonly wheelController = new DeckWheelController();
+  private wheelGestureTimer: number | null = null;
   private readonly deckFrames = new DeckFrameScheduler({
     request: (callback) => this.contentEl.win.requestAnimationFrame(callback),
     cancel: (handle) => this.contentEl.win.cancelAnimationFrame(handle),
@@ -602,7 +603,7 @@ export class DeckView extends ItemView {
     this.cancelRenderWindowRefresh();
     this.bookmarkEdgeTabs.clear();
     this.drawerTransition.reset();
-    this.wheelController.reset();
+    this.resetWheelGesture();
     this.filingSession.reset();
     this.deckViewport.reset();
     this.renderVersion++;
@@ -2509,7 +2510,7 @@ export class DeckView extends ItemView {
     this.cancelRenderWindowRefresh();
     this.bookmarkEdgeTabs.clear();
     this.drawerTransition.reset();
-    this.wheelController.reset();
+    this.resetWheelGesture();
     this.unloadRenderComponents();
     this.cardFooters.clear();
     this.cardSignatures.clear();
@@ -2800,7 +2801,7 @@ export class DeckView extends ItemView {
     const transitioning = this.drawerTransition.active(geometry.timestamp, VIEWPORT_CENTER_DURATION_MS);
     this.renderedCards = this.renderedCards.filter((element) => {
       const path = element.dataset.path ?? "";
-      if (wanted.has(path) || this.retainTransitionCard(element, geometry, transitioning)) return true;
+      if (wanted.has(path) || this.retainMountedCard(element, geometry, transitioning)) return true;
       this.renderComponents.get(path)?.unload();
       this.renderComponents.delete(path);
       this.cardFooters.removeCard(element);
@@ -3857,6 +3858,11 @@ export class DeckView extends ItemView {
         });
         if (!result.consume) return;
         event.preventDefault();
+        if (this.wheelGestureTimer !== null) this.contentEl.win.clearTimeout(this.wheelGestureTimer);
+        this.wheelGestureTimer = this.contentEl.win.setTimeout(() => {
+          this.resetWheelGesture();
+          this.queueRenderWindowRefresh();
+        }, DECK_WHEEL_GESTURE_IDLE_MS);
         if (result.delta === 0) return;
         void this.runAfterInlineEditing("deck-wheel", () => this.moveViewportByPixels(result.delta));
       },
@@ -3973,10 +3979,15 @@ export class DeckView extends ItemView {
       return;
     }
     const cards = this.plugin.index.snapshot.filed;
-    const nextPosition = this.deckViewport.position(cards) +
-      deltaPixels / step;
+    const previousPosition = this.deckViewport.position(cards);
+    const nextPosition = previousPosition + deltaPixels / step;
     const previousAnchor = this.deckViewport.anchorPath;
     const changed = this.deckViewport.panTo(nextPosition, cards);
+    if (this.plugin.settings.deckStackModel === "drawer") {
+      this.drawerTransition.scrollBy(
+        (this.deckViewport.position(cards) - previousPosition) * step,
+      );
+    }
     if (changed) this.beginDrawerTransition();
     this.followViewportAnchor(previousAnchor);
     this.deckFrames.request(changed);
@@ -4409,7 +4420,7 @@ export class DeckView extends ItemView {
     const wanted = new Set(deckRenderedIndices(this.plugin.index.snapshot.filed.length, geometry, transition));
     const transitioning = this.drawerTransition.active(geometry.timestamp, VIEWPORT_CENTER_DURATION_MS);
     const hasSurplus = this.renderedCards.some((card) =>
-      !wanted.has(Number(card.dataset.index)) && !this.retainTransitionCard(card, geometry, transitioning));
+      !wanted.has(Number(card.dataset.index)) && !this.retainMountedCard(card, geometry, transitioning));
     const mounted = new Set(this.renderedCards.map((card) => Number(card.dataset.index)));
     const hasMissing = [...wanted].some((index) => !mounted.has(index));
     if (desired?.start === previous?.start && desired?.end === previous?.end && !hasSurplus && !hasMissing) return;
@@ -4469,8 +4480,14 @@ export class DeckView extends ItemView {
     };
   }
 
-  private retainTransitionCard(card: HTMLElement, geometry: DeckGeometry, transitioning: boolean): boolean {
-    if (card.hasClass("is-dragging-to-desk")) return true;
+  private resetWheelGesture(): void {
+    this.wheelController.reset();
+    if (this.wheelGestureTimer !== null) this.contentEl.win.clearTimeout(this.wheelGestureTimer);
+    this.wheelGestureTimer = null;
+  }
+
+  private retainMountedCard(card: HTMLElement, geometry: DeckGeometry, transitioning: boolean): boolean {
+    if (card.hasClass("is-dragging-to-desk") || this.wheelController.retainsCard(card)) return true;
     if (!transitioning) return false;
     const displayed = this.drawerTransition.displayedPose(card.dataset.path ?? "");
     const pan = this.drawerTransition.panTarget;

@@ -32,8 +32,9 @@ function subject(model = 'drawer') {
   let sequence = 0;
   const view = Object.create(DeckView.prototype);
   Object.assign(view, {
-    stageEl: stage, contentEl: stage, renderedCards: [], inlineEdit: null,
-    deckViewport: new DeckViewport(), wheelController: new DeckWheelController(), drawerTransition: new DeckTransition(),
+    stageEl: stage, contentEl: stage, spaceEl: null, renderedCards: [], inlineEdit: null,
+    deckViewport: new DeckViewport(), wheelController: new DeckWheelController(), wheelGestureTimer: null,
+    drawerTransition: new DeckTransition(),
     plugin: { settings: { deckOrientation: 'vertical', deckStackModel: model, mainCardSize: 'medium', cardSpread: 0.1,
       cardSplay: 0, cardFadeStrength: 1, wheelOverCardBody: 'deck', allowCardScrolling: true },
       index: { snapshot: { filed: cards }, filedIndexForPath: path => cards.findIndex(card => card.path === path) },
@@ -54,12 +55,93 @@ function subject(model = 'drawer') {
   view.deckViewport.navigate('4.md', cards);
   view.attachBrowsingEvents(stage);
   return { view, calls, pending, cards,
-    wheel(deltaY) { const event = new window.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }); stage.dispatchEvent(event); return event; },
+    wheel(delta, target = stage) { const event = new window.WheelEvent('wheel', {
+      deltaX: view.plugin.settings.deckOrientation === 'horizontal' ? delta : 0,
+      deltaY: view.plugin.settings.deckOrientation === 'vertical' ? delta : 0,
+      bubbles: true, cancelable: true,
+    }); target.dispatchEvent(event); return event; },
     frame() { const jobs = [...pending.values()]; pending.clear(); jobs.forEach(job => job()); },
   };
 }
 
 for (const model of ['drawer', 'fan']) {
+  test(`${model}: retain only the gesture target until idle, then refresh the rendered window`, (t) => {
+    const value = subject(model);
+    const { view } = value;
+    const timers = new Map();
+    let sequence = 0;
+    t.mock.method(view.contentEl.win, 'setTimeout', (callback, delay) => {
+      assert.equal(delay, 180);
+      timers.set(++sequence, callback);
+      return sequence;
+    });
+    t.mock.method(view.contentEl.win, 'clearTimeout', handle => timers.delete(handle));
+    const card = view.stageEl.ownerDocument.createElement('article');
+    card.dataset.path = '4.md'; card.className = 'slipbox-card';
+    card.hasClass = name => card.classList.contains(name);
+    const body = card.appendChild(view.stageEl.ownerDocument.createElement('div'));
+    body.className = 'slipbox-card-scroll';
+    view.stageEl.append(card); view.renderedCards = [card];
+    const other = view.stageEl.ownerDocument.createElement('article');
+    other.hasClass = () => false;
+    value.wheel(56, body); value.wheel(56, body);
+    assert.equal(view.retainMountedCard(card, view.deckGeometry(), false), true);
+    assert.equal(view.retainMountedCard(other, view.deckGeometry(), false), false);
+    assert.equal(timers.size, 1);
+    [...timers.values()][0]();
+    assert.equal(view.retainMountedCard(card, view.deckGeometry(), false), false);
+    assert.equal(timers.size, 0);
+    assert.equal(value.calls.windows, 1);
+    // Header targets stay connected too, and a view reset cancels their timer.
+    value.wheel(56, card);
+    assert.equal(view.retainMountedCard(card, view.deckGeometry(), false), true);
+    view.resetWheelGesture();
+    assert.equal(view.retainMountedCard(card, view.deckGeometry(), false), false);
+    assert.equal(timers.size, 0);
+    view.deckFrames.cancel();
+  });
+
+  test(`${model}: a wheel transaction keeps browsing after its starting body loses focus`, () => {
+    for (const policy of ['body-first', 'deck']) {
+      const value = subject(model);
+      const { view } = value;
+      view.plugin.settings.wheelOverCardBody = policy;
+      view.renderedCards = value.cards.map(({ path }) => {
+        const card = view.stageEl.ownerDocument.createElement('article');
+        card.dataset.path = path;
+        const body = card.appendChild(view.stageEl.ownerDocument.createElement('div'));
+        body.className = 'slipbox-card-scroll';
+        view.stageEl.append(card);
+        return card;
+      });
+      const body = view.renderedCards[4].firstChild;
+      for (let i = 0; i < 8; i++) assert.equal(value.wheel(56, body).defaultPrevented, true);
+      assert.equal(view.deckViewport.position(value.cards), 12);
+      assert.equal(view.deckViewport.anchorPath, '12.md');
+      assert.equal(value.calls.gates, 8);
+      assert.equal(value.pending.size, 1);
+      view.deckFrames.cancel();
+    }
+  });
+
+  test(`${model}: boundary resistance forwards a large event's excess immediately`, () => {
+    const value = subject(model);
+    const { view } = value;
+    view.plugin.settings.wheelOverCardBody = 'body-first';
+    const card = view.stageEl.ownerDocument.createElement('article');
+    card.dataset.path = '4.md';
+    const body = card.appendChild(view.stageEl.ownerDocument.createElement('div'));
+    body.className = 'slipbox-card-scroll';
+    Object.defineProperties(body, { scrollHeight: { value: 1000 }, clientHeight: { value: 400 } });
+    body.scrollTop = 600;
+    view.stageEl.append(card);
+    view.renderedCards = [card];
+    value.wheel(320, body); value.wheel(16, body);
+    assert.ok(Math.abs(view.deckViewport.position(value.cards) - (4 + 288 / 56)) < 1e-9);
+    assert.equal(value.calls.gates, 2);
+    view.deckFrames.cancel();
+  });
+
   test(`${model}: actual wheel listener preserves ordered selection and paints one frame per burst`, () => {
     const value = subject(model);
     assert.equal(value.wheel(33.6).defaultPrevented, true);
@@ -83,6 +165,39 @@ for (const model of ['drawer', 'fan']) {
     assert.equal(value.calls.active, 0);
     assert.equal(value.calls.bookmarks, 1);
     value.view.deckFrames.cancel();
+  });
+}
+
+for (const orientation of ['vertical', 'horizontal']) {
+  test(`${orientation}: trackpad bursts translate the stack immediately through anchor changes and reversal`, (t) => {
+    const value = subject();
+    const { view } = value;
+    view.plugin.settings.deckOrientation = orientation;
+    // No elapsed animation time: direct gesture displacement must still appear
+    // on the next frame, even when every input restarts the reading-gap animation.
+    t.mock.method(view.contentEl.win.performance, 'now', () => 0);
+    const card = view.contentEl.ownerDocument.createElement('div');
+    card.dataset.index = '0'; card.dataset.path = '0.md';
+    view.renderedCards = [card];
+    view.positionCards = geometry => DeckView.prototype.positionCards.call(view, geometry);
+    view.positionCards();
+    const start = view.drawerTransition.displayedPose('0.md').along;
+    const step = view.cardStep();
+    value.wheel(step); value.wheel(step); value.wheel(-step / 2);
+    value.frame();
+    assert.equal(view.deckViewport.position(value.cards), 5.5);
+    assert.equal(view.drawerTransition.displayedPose('0.md').along, start - 1.5 * step);
+    // Small momentum events within one anchor must move the transition origin too.
+    value.wheel(step / 10); value.frame();
+    assert.ok(Math.abs(view.drawerTransition.displayedPose('0.md').along - (start - 1.6 * step)) < 1e-9);
+    // Only the accepted distance at the end of the deck translates the stack.
+    value.wheel(100000); value.frame();
+    assert.equal(view.deckViewport.position(value.cards), 19);
+    assert.ok(Math.abs(view.drawerTransition.displayedPose('0.md').along - (start - 15 * step)) < 1e-9);
+    value.wheel(-100000); value.frame();
+    assert.equal(view.deckViewport.position(value.cards), 0);
+    assert.ok(Math.abs(view.drawerTransition.displayedPose('0.md').along) < 1e-9);
+    view.deckFrames.cancel();
   });
 }
 

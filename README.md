@@ -103,8 +103,9 @@ card's target opacity is always 100%.
 
 In vertical orientation, wheel gestures browse the Deck. With **Wheel over card
 body: Body first**, long anchor bodies scroll first, followed by a short boundary
-resistance before browsing continues. **Deck** bypasses body scrolling. Editor
-and Branch View scrolling remain independent. Vertical header drags pan the
+resistance before browsing continues. Once a gesture starts moving cards, it
+continues browsing until you pause, even as the focused card changes. **Deck**
+bypasses body scrolling. Editor and Branch View scrolling remain independent. Vertical header drags pan the
 workspace; sideways header drags pull cards onto the Desk. Horizontal header
 drags retain their existing behavior.
 

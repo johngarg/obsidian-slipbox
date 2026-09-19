@@ -260,6 +260,35 @@ describe("card branch signatures", () => {
     assert.deepEqual(subject.activations, ["Parent.md", "Parent.md"]);
   });
 
+  test("only measures overflow after a fitting signature becomes too narrow", () => {
+    const subject = fixture([branch("a"), branch("b")]);
+    const content = subject.parent.querySelector<HTMLElement>(".slipbox-card-signature-content")!;
+    const measure = subject.parent.querySelector<HTMLElement>(".slipbox-card-signature-measure")!;
+    let width = 23;
+    let overflowReads = 0;
+    Object.defineProperty(content, "clientWidth", { get: () => width });
+    for (const item of Array.from(measure.querySelectorAll(".slipbox-card-branch-label"))) {
+      Object.defineProperty(item, "offsetWidth", { value: 10 });
+    }
+    Object.defineProperty(measure.querySelector(".slipbox-card-signature-separator"), "offsetWidth", { value: 3 });
+    Object.defineProperty(measure.querySelector(".slipbox-card-branch-overflow"), "offsetWidth", {
+      get: () => { overflowReads++; return 12; },
+    });
+    for (let frame = 0; frame < 5; frame++) subject.manager.layoutNow();
+    assert.equal(content.textContent, "a·b");
+    assert.equal(overflowReads, 0);
+    width = 12;
+    subject.manager.layoutNow();
+    assert.equal(content.textContent, "+2");
+    assert.ok(overflowReads > 0);
+    width = 23;
+    const readsBeforeExpansion = overflowReads;
+    subject.manager.layoutNow();
+    assert.equal(content.textContent, "a·b");
+    assert.equal(overflowReads, readsBeforeExpansion);
+    subject.manager.clear();
+  });
+
   test("retains visible but inert metadata until the card becomes active", () => {
     const subject = fixture([branch("a")], false);
     let button = subject.parent.querySelector<HTMLButtonElement>("button");

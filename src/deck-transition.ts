@@ -99,6 +99,20 @@ export class DeckTransition {
     this.panning = false;
   }
 
+  /** Wheel displacement follows the gesture; only changes to the stack still ease. */
+  scrollBy(pixels: number): void {
+    for (const poses of [this.origins, this.displayed]) {
+      for (const [path, pose] of poses) {
+        poses.set(path, { ...pose, along: pose.along - pixels });
+      }
+    }
+    // Direct manipulation interrupts a click's return to its reading position.
+    // Keep mounted poses, but stop seeding new cards from that old viewport.
+    this.selection = null;
+    this.sourceLayouts = [];
+    this.panning = false;
+  }
+
   rendering(now: number, duration: number): DeckRenderTransition | undefined {
     return this.selection !== null && this.active(now, duration)
       ? { source: this.selection.geometry, origins: this.sourceLayouts, progress: this.progress(now, duration) }

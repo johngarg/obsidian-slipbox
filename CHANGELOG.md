@@ -43,6 +43,14 @@ initial public beta.
 
 ### Fixed
 
+- Keep vertical trackpad gestures moving through focus changes in Fan and Drawer,
+  including when the starting card moves off screen. Card-body boundary resistance
+  now subtracts only 48 px instead of discarding an entire large scroll event.
+- Trackpad scrolling moves Drawer cards with the gesture instead of repeatedly
+  easing the whole deck toward a moving target. Reading-gap changes still animate.
+- Reduce fast Deck scrolling stalls by avoiding unnecessary overflow-button
+  measurements when card branch labels and backlinks already fit.
+
 - Centre the vertical Deck map with matching end margins that clear the status
   bar, keeping its hover readout and click targets aligned.
 

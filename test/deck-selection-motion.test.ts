@@ -37,6 +37,33 @@ test("retention uses distinct displayed and destination workspace origins", () =
   }
 });
 
+test("wheel displacement is immediate while the reading gap still eases", () => {
+  const transition = new DeckTransition();
+  const source = { ...geometry, anchorIndex: 400, viewportPosition: 400 };
+  const from = cardMotionStyle({ ...source, cardIndex: 401 });
+  const target = cardMotionStyle({ ...source, anchorIndex: 401, viewportPosition: 401, cardIndex: 401 });
+  transition.pose("401.md", from, 0, 180);
+  const step = source.cardHeight * source.spread;
+  transition.scrollBy(step);
+  transition.begin(10);
+  assert.equal(transition.pose("401.md", target, 10, 180).along, from.along - step);
+  const middle = transition.pose("401.md", target, 100, 180);
+  assert.ok(middle.along > target.along && middle.along < from.along - step);
+  assert.deepEqual(transition.pose("401.md", target, 190, 180), target);
+});
+
+test("wheel interruption drops a reading return's source layout and pending pan", () => {
+  const transition = new DeckTransition();
+  transition.begin(100, { from: { x: 12, y: 3000 }, to: { x: 12, y: 0 }, geometry });
+  const target = cardMotionStyle({ ...geometry, cardIndex: 390 });
+  const displayed = transition.pose("390.md", target, 110, 180, 390);
+  transition.scrollBy(30);
+  assert.equal(transition.displayedPose("390.md")?.along, displayed.along - 30);
+  assert.equal(transition.panTarget, null);
+  assert.equal(transition.rendering(110, 180), undefined);
+  assert.deepEqual(transition.pose("new.md", target, 110, 180, 390), target);
+});
+
 test("render-window inversion includes every interpolated footprint through pan and gap movement", () => {
   for (const orientation of ["vertical", "horizontal"] as const) {
     for (const spread of [0.1, 0.58, 1.12]) {

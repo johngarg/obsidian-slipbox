@@ -85,6 +85,14 @@ export function fitMeasuredBacklinkPrefix(
   const count = Number.isInteger(totalCount)
     ? Math.max(widths.length, totalCount)
     : widths.length;
+  // Most card headers and footers fit without an overflow button. Measuring
+  // hypothetical +N labels writes to the DOM and forces layout for every
+  // candidate, even when the final fit has no overflow at all.
+  const completeWidth = widths.reduce((sum, width, index) =>
+    sum + ((index > 0 ? separator : 0) + width), 0);
+  if (count === widths.length && completeWidth <= available) {
+    return { visibleCount: count, hiddenCount: 0 };
+  }
   let bestVisibleCount = 0;
   let prefixWidth = 0;
 

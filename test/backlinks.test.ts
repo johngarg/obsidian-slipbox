@@ -139,6 +139,18 @@ describe("backlink footer fitting", () => {
     });
   });
 
+  it("does not measure hypothetical overflow when all labels fit", () => {
+    const unexpectedMeasurement = (): number => {
+      assert.fail("A complete row must not trigger a DOM overflow measurement");
+    };
+    assert.deepEqual(fitBacklinkPrefix(34, [10, 10, 10], 2, unexpectedMeasurement), {
+      visibleCount: 3, hiddenCount: 0,
+    });
+    assert.deepEqual(fitBacklinkPrefix(0, [], 2, unexpectedMeasurement), {
+      visibleCount: 0, hiddenCount: 0,
+    });
+  });
+
   it("keeps the longest complete prefix with room for +N", () => {
     assert.deepEqual(fitBacklinkPrefix(26, [10, 10, 10], 2, overflow), {
       visibleCount: 1,

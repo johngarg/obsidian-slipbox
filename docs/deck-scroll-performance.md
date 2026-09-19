@@ -10,7 +10,19 @@ The scrolling changes have three independent responsibilities:
   snapshot weakly and resolve again when its identity or the anchor path changes.
 
 These changes preserve the wheel distance, anchor hysteresis, card dimensions,
-180 ms Drawer transition, and Fan paint containment/surface caching.
+180 ms Drawer reading-gap transition, and Fan paint containment/surface caching.
+Wheel displacement translates cached transition poses directly so repeated
+anchor changes cannot restart easing for the gesture itself. Keyboard and click
+navigation retain their existing animated positioning.
+
+Vertical wheel routing keeps a gesture with the Deck after browsing starts,
+including reversals, selection changes, and retargeting to the new anchor body.
+A 180 ms pause ends ownership, so a new gesture can scroll the focused body.
+Editor and Branch View input still takes precedence. Keep the event's card mounted
+while it owns the gesture; removing an off-screen target would prevent later
+events from reaching the stage. An idle timer releases it and refreshes the window.
+Body-first boundary resistance subtracts at most the remaining portion of 48 px
+and forwards any excess immediately, independent of the event's size.
 
 ## Repeatable live comparison
 
@@ -57,7 +69,32 @@ Deck-to-Desk dragging. Inspect painting with long bodies, tilt, and bottom Fan
 headers. Confirm that only the anchor body scrolls and that card-frame paint
 containment and transform surface caching remain enabled.
 
+Replay a continuous wheel sequence on the same initial card body, as well as
+retargeting each event to the current anchor. Test both wheel policies and both
+stack models, and travel far enough to move the initial card outside the normal
+rendered window. Verify total travel and that the retained card is removed after
+the idle timeout. At a long body's boundary, `[960, 16]`, `[48, 928]`, and
+`[24, 952]` must all move the Deck 928 px, in either direction. Check that native
+body scrolling resumes after a pause and that editor/Branch View input ends
+Deck ownership.
+
 For viewport scaling, time the same pan/read/place sequence at 1,000, 10,000 and
 70,000 cards. Record checksums as well as timings, and count full-array searches.
 The normal sequence should resolve the starting anchor once, then reuse known
 indices until the snapshot changes.
+
+## Card label fitting during fast scrolling
+
+Branch signatures and backlink footers share `fitMeasuredBacklinkPrefix`. Check
+the complete measured row before requesting any `+N` widths: each overflow-width
+callback changes a hidden label and reads its width, forcing synchronous layout.
+Even a one-label row otherwise pays for an overflow measurement on every layout
+pass. An unmeasured tail must still reserve an overflow button.
+
+The fitting tests verify that a complete row performs no overflow measurements,
+that narrowing and widening a signature restores the correct visible labels,
+and that truncated rows retain their longest complete prefix and exact hidden
+count. For live comparison, include the user's card size, splay and fade settings
+and a faster 30-card-per-second replay, in addition to the ten-card-per-second
+matrix above. Drain the asynchronous editing gate before checking travel at the
+end of each leg. Keep warm-up runs separate from scored repetitions.

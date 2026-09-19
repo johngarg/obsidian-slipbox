@@ -1,0 +1,109 @@
+/* Screenshot-style ruled cards for feat/custom-card-styling (e67d8ee).
+   Copy to <vault>/.obsidian/snippets/ and enable in Appearance.
+   Disable other card-style snippets while testing.
+
+   800 x 500 CSS px is a visual-test size, not a claim about physical size.
+   Change BOTH width values to calibrate against your real card. The screenshot
+   is approximately 8:5; for a 5 x 3 inch card use 480px and calc(5 / 3).
+   Enable "Show title in Slipbox Desk card headers"; disable
+   "Show lower Fan headers at bottom" to keep the heading above the rules.
+*/
+.view-content.slipbox-deck-view {
+  --slipbox-deck-card-width: 800px;
+  --slipbox-viewed-card-width: 800px;
+  --slipbox-viewed-card-max-height: none;
+  --slipbox-card-aspect-ratio: calc(8 / 5);
+}
+
+/* Covers Deck AND floating Viewed/editing cards. Desk keeps compact styling. */
+.view-content.slipbox-deck-view .slipbox-card {
+  --slipbox-card-radius: 4px;
+  --slipbox-card-paper-color: #fafafa;
+  --slipbox-card-chrome-color: #fafafa;
+  --slipbox-card-text-color: #202124;
+  --slipbox-card-padding-x: 16px;
+  --slipbox-card-padding-y: 0px;
+  --slipbox-card-font-size: 13px;
+  --slipbox-card-line-height: 24px;
+  --slipbox-card-paper-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 23px,
+    #72aaff 23px 24px
+  );
+
+  /* Keep the pale paper readable in either Obsidian theme. */
+  --text-normal: #202124;
+  --text-muted: #59616d;
+  --text-faint: #9399a2;
+  --text-accent: #145ac4;
+  --link-color: #145ac4;
+  --link-color-hover: #0c4093;
+  --bold-color: currentColor;
+  --italic-color: currentColor;
+  color-scheme: light;
+}
+
+/* Address and title share the bold, left-aligned heading. Actions stay usable. */
+.view-content.slipbox-deck-view .slipbox-card-address-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 56px;
+  padding: 12px 16px;
+  border-bottom-color: #72aaff;
+}
+
+.view-content.slipbox-deck-view .slipbox-card-header-identity {
+  grid-column: 1;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+}
+
+.view-content.slipbox-deck-view .slipbox-card-actions {
+  grid-column: 2;
+}
+
+.view-content.slipbox-deck-view :is(.slipbox-card-address, .slipbox-card-header-title) {
+  color: #202124;
+  font-family: var(--font-text);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: normal;
+  text-align: left;
+}
+
+/* Whole-line spacing keeps ordinary paragraphs, lists and small headings on
+   the ruling. Images, equations, callouts and tables do not snap to a grid.
+   Leave editing-container padding alone: the textarea owns its padding. */
+.view-content.slipbox-deck-view .slipbox-card-scroll.markdown-rendered {
+  --p-spacing: 24px;
+  --heading-spacing: 24px;
+  --list-spacing: 0px;
+}
+
+.view-content.slipbox-deck-view .slipbox-card-scroll.markdown-rendered :is(p, ul, ol) {
+  margin-block: 0 24px;
+}
+
+.view-content.slipbox-deck-view .slipbox-card-scroll.markdown-rendered li > :is(p, ul, ol) {
+  margin-block: 0;
+}
+
+.view-content.slipbox-deck-view .slipbox-card-scroll.markdown-rendered li {
+  margin-block: 0;
+}
+
+.view-content.slipbox-deck-view .slipbox-card-scroll.markdown-rendered :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 24px;
+  color: #202124;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+/* Obsidian renders footnotes inside the body; preserve the same line spacing. */
+.view-content.slipbox-deck-view .slipbox-card-scroll.markdown-rendered .footnotes {
+  margin-top: 24px;
+  border-top: 0;
+  font-size: 11px;
+  line-height: 24px;
+}

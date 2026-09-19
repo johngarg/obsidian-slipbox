@@ -17,12 +17,13 @@ test("fixed card sizes and axis mapping", () => {
 });
 
 test("culling contains every intersecting rotated footprint at every layout extreme", () => {
+  for (const dimensions of [{cardWidth:840,cardHeight:560}, {cardWidth:480,cardHeight:288}, {cardWidth:288,cardHeight:480}])
   for (const orientation of ["horizontal", "vertical"] as const)
     for (const model of ["drawer", "fan"] as const)
       for (const spread of [0.02, 0.58, 1.12])
         for (const splay of [0, 5])
           for (const panOffset of [-3000, 0, 3000]) {
-            const options = { ...geometry, orientation, model, spread, splay, panOffset };
+            const options = { ...geometry, ...dimensions, orientation, model, spread, splay, panOffset };
             const window = deckRenderWindow(300, options);
             assert.ok(window);
             assert.ok(window.start <= 100 && window.end >= 100);
@@ -109,8 +110,9 @@ test("continuous Drawer browsing bounds mounted cards before the gesture ends", 
 });
 
 test("transition retention covers intermediate motion and releases offscreen sweeps", () => {
+  for (const dimensions of [{cardWidth:840,cardHeight:560}, {cardWidth:480,cardHeight:288}, {cardWidth:288,cardHeight:480}])
   for (const orientation of ["horizontal", "vertical"] as const) {
-    const options = { ...geometry, orientation, paneExtent: 800, anchorCoordinate: 400, spread: 0.1 };
+    const options = { ...geometry, ...dimensions, orientation, paneExtent: 800, anchorCoordinate: 400, spread: 0.1 };
     const pose = { along: -1500, across: 0, rotation: -5, scale: 1, opacity: 1 };
     assert.equal(deckTransitionIntersects(options, pose, { ...pose, along: 1500, rotation: 5 }), true);
     assert.equal(deckTransitionIntersects(options, pose, { ...pose, along: -2000 }), false);
@@ -128,4 +130,18 @@ test("pruning transition state releases origins as well as displayed poses", () 
   assert.equal(transition.displayedPose("departed"), undefined);
   const target = { ...original, along: 2000 };
   assert.deepEqual(transition.pose("departed", target, 20, 180), target);
+});
+
+
+test("bookmark clipping follows custom portrait and landscape footprints on either axis", () => {
+  for (const orientation of ["horizontal", "vertical"] as const)
+    for (const model of ["drawer", "fan"] as const)
+      for (const dimensions of [{cardWidth:900,cardHeight:480}, {cardWidth:480,cardHeight:900}]) {
+        const options = { ...geometry, ...dimensions, orientation, model, splay: 0,
+          paneExtent: 800, anchorCoordinate: 400 };
+        const clipped = deckAxis(orientation).extent(dimensions.cardWidth, dimensions.cardHeight) > 800;
+        assert.deepEqual(bookmarkEdgeTargets([100], options), {
+          before: clipped ? 100 : null, after: clipped ? 100 : null,
+        });
+      }
 });

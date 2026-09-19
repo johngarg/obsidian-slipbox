@@ -8,6 +8,10 @@ initial public beta.
 
 ### Added
 
+- Supported CSS properties for fixed or responsive card sizes, shared card shape,
+  paper and typography, with a ruled index-card example. Deck spacing and visibility
+  follow custom dimensions, and reading and editing share the chosen appearance.
+
 - Toggle Deck orientation from the command palette or a configurable Deck shortcut,
   preserving browsing position and custom navigation bindings.
 - Position the Deck near the left and right with `zh` and `zl`. Directional
@@ -34,7 +38,7 @@ initial public beta.
   movement and pan reset animate together along the Deck axis, preserving the
   perpendicular arrangement. Drawer defaults to centred reading alignment along
   its sequence; explicit positioning commands remain in effect.
-- Deck cards now keep fixed Small/Medium/Large dimensions (720 × 480,
+- Deck cards now default to fixed Small/Medium/Large dimensions (720 × 480,
   840 × 560, and 960 × 640 px), including in narrow panes. Pan to reach content
   outside the pane; viewed cards and Desk piles retain their existing sizing.
 - Lowered minimum card spread to 0.10 and made card rendering follow the visible
@@ -50,6 +54,7 @@ initial public beta.
   easing the whole deck toward a moving target. Reading-gap changes still animate.
 - Reduce fast Deck scrolling stalls by avoiding unnecessary overflow-button
   measurements when card branch labels and backlinks already fit.
+- Branch View updates its owner geometry after card-height-only changes.
 
 - Centre the vertical Deck map with matching end margins that clear the status
   bar, keeping its hover readout and click targets aligned.

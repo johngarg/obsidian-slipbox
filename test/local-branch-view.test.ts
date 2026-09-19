@@ -769,3 +769,35 @@ test("SVG controls retain accessible labels without invoking Obsidian HTML toolt
   graph.querySelectorAll("[role='button']").forEach((control) => assert.ok(svgLabel(control).length > 0));
   subject.controller.disconnect();
 });
+
+
+test("height-only owner and stage changes reposition Branch View and retain graph scroll", () => {
+  const subject = fixture(MODEL, 520, 900, false, "left", "vertical");
+  subject.controller.detach();
+  let resize = () => {};
+  Object.assign(subject.window, { ResizeObserver: class {
+    constructor(callback: () => void) { resize = callback; }
+    observe() {} disconnect() {}
+  } });
+  let height = 288;
+  let stageHeight = 800;
+  Object.defineProperty(subject.first, "offsetHeight", { get: () => height });
+  Object.defineProperty(subject.stage, "clientHeight", { get: () => stageHeight });
+  subject.controller.attach(subject.first, "b.md", subject.stage);
+  const root = subject.first.querySelector<HTMLElement>(".slipbox-local-branch-view");
+  assert.ok(root);
+  const scroller = root.querySelector<HTMLElement>(".slipbox-local-branch-scroller");
+  assert.ok(scroller);
+  scroller.scrollTop = 37;
+  height = 480;
+  resize();
+  assert.equal(root.style.getPropertyValue("--slipbox-branch-owner-height"), "480px");
+  assert.equal(root.querySelector<HTMLElement>(".slipbox-local-branch-scroller")?.scrollTop, 37);
+  const viewportHeight = root.querySelector<HTMLElement>(".slipbox-local-branch-scroller")?.style.height;
+  stageHeight = 600;
+  resize();
+  assert.notEqual(root.querySelector<HTMLElement>(".slipbox-local-branch-scroller")?.style.height, viewportHeight);
+  assert.equal(root.querySelector<HTMLElement>(".slipbox-local-branch-scroller")?.scrollTop, 37);
+  subject.controller.detach();
+  void subject.window.happyDOM.abort();
+});

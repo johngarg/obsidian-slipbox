@@ -189,3 +189,30 @@ test('orientation persistence errors become a settings notice', async () => {
   assert.match(notices.at(-1), /disk full/);
   close();
 });
+
+for (const orientation of ['horizontal', 'vertical']) {
+  for (const model of ['drawer', 'fan']) {
+    test(`${orientation} ${model}: cached custom sizes drive geometry, steps and pile anchors`, () => {
+      const { view, cards, window, close } = subject(orientation, model);
+      const active = window.document.createElement('div');
+      active.dataset.path = '4.md'; active.dataset.index = '4';
+      view.renderedCards = [active];
+      view.deckCardsEl = window.document.createElement('div');
+      const before = JSON.stringify(view.deckViewport.snapshot);
+      for (const dimensions of [{width:480,height:288}, {width:288,height:480}, {width:480.5,height:288.25}]) {
+        view.cardDimensions = { snapshot: Object.freeze(dimensions) };
+        view.drawerTransition = new DeckTransition();
+        const geometry = view.deckGeometry();
+        assert.equal(geometry.cardWidth, dimensions.width);
+        assert.equal(geometry.cardHeight, dimensions.height);
+        assert.equal(view.cardStep(), (orientation === 'vertical' ? dimensions.height : dimensions.width) * view.plugin.settings.cardSpread);
+        DeckView.prototype.positionCards.call(view, geometry);
+        if (orientation === 'horizontal') assert.equal(view.spaceEl.style.getPropertyValue('--slipbox-deck-top'), `${geometry.anchorCenterY - dimensions.height / 2}px`);
+        assert.equal(JSON.stringify(view.deckViewport.snapshot), before);
+        assert.equal(view.deckViewport.position(cards), 3.5);
+        assert.equal(view.spaceOffsetX, 70); assert.equal(view.spaceOffsetY, 90);
+      }
+      close();
+    });
+  }
+}

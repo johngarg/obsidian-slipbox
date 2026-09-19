@@ -63,6 +63,12 @@ Any trimmed, nonempty, single-line string without control characters is a valid 
 
 Natural address ordering is the default, so `A/2` comes before `A/10`. Lexicographic ordering is also available. Duplicate addresses are allowed by default, but they can be optionally reported. Slipbox Desk never rewrites an existing address automatically.
 
+## Custom card styling
+
+Use [CSS snippets](docs/custom-card-styling.md) to customize paper, typography and
+fixed or responsive card sizes. A complete [ruled index-card example](docs/snippets/ruled-index-cards.css)
+covers Deck, Viewed and Desk cards.
+
 ## Deck layout
 
 Choose **Deck orientation** (horizontal or vertical) and **Stacking model**
@@ -78,7 +84,7 @@ Wheel browsing and pointer panning remain continuous; controls, links, editing,
 double-clicks, and clicks generated after a drag do not request another return.
 Fan keeps the selected card above its neighbours and retains stationary selection.
 
-Deck cards have fixed dimensions: Small 720 × 480 px, Medium 840 × 560 px,
+By default, Deck cards have fixed dimensions: Small 720 × 480 px, Medium 840 × 560 px,
 and Large 960 × 640 px. Resizing the pane or positioning the Deck does not resize
 cards. Drag empty workspace to pan in either direction and reach offscreen
 content. Viewed cards and Desk piles retain their own sizing behavior.

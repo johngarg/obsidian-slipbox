@@ -1,7 +1,7 @@
 # Custom card styling
 
 Slipbox supports CSS snippets for card dimensions, paper and typography. These
-hooks require the custom-card-styling update; they are not all present in 0.15.0.
+hooks are available in Slipbox Desk 0.16.0 and later.
 The default Small/Medium/Large presets and appearance apply when no overrides are
 set. No extra plugin or settings change is needed.
 

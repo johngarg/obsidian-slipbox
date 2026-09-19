@@ -6,6 +6,8 @@ initial public beta.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-19
+
 ### Added
 
 - Bring the Deck in front of all Desk piles or send it behind them from a Deck
@@ -98,9 +100,6 @@ initial public beta.
 
 - Kept branch annotation fitting independent of card splay and scale, preventing
   labels from flickering between their text and an overflow count.
-
-- Raised the experimental minimum Deck spread to 0.10 to limit rendering load
-  from densely overlapping cards. Saved smaller values are clamped on load.
 
 - Corrected vertical bookmark tab corners to face the top and bottom pane edges.
 
@@ -329,7 +328,8 @@ Initial public beta.
 - Improved default pile placement and kept the Deck stable as cards and piles
   are added or moved.
 
-[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.15.0...HEAD
+[Unreleased]: https://github.com/johngarg/obsidian-slipbox/compare/0.16.0...HEAD
+[0.16.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.15.0...0.16.0
 [0.15.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.14.0...0.15.0
 [0.14.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.13.0...0.14.0
 [0.13.0]: https://github.com/johngarg/obsidian-slipbox/compare/0.12.2...0.13.0

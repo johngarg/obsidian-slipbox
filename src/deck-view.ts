@@ -12,6 +12,7 @@ import {
   Component,
   ItemView,
   MarkdownRenderer,
+  type Menu,
   Notice,
   Platform,
   Scope,
@@ -271,6 +272,7 @@ export class DeckView extends ItemView {
   private stageEl: HTMLElement | null = null;
   private spaceEl: HTMLElement | null = null;
   private deckCardsEl: HTMLElement | null = null;
+  private deckInFront = false;
   private renderedCards: HTMLElement[] = [];
   private readonly deckInteractivity = new WeakMap<HTMLElement, boolean>();
   private renderComponents = new Map<string, Component>();
@@ -428,6 +430,7 @@ export class DeckView extends ItemView {
       },
     });
     this.deskRenderer = new DeskRenderer(this.app, this.plugin, {
+      addDeckOrderingMenuItems: (menu) => this.addDeckOrderingMenuItems(menu),
       jumpToFiledCard: (path) => this.jumpToPath(path),
       updateFilingInput: (value) => this.updateFilingInput(value),
       confirmFiling: () => void this.confirmFiling(),
@@ -1740,8 +1743,32 @@ export class DeckView extends ItemView {
       bookmarked: address !== null &&
         this.plugin.bookmarks.at(file.path) !== undefined,
       onDesk: this.plugin.deskService.contains(file.path),
+      ...(surface === "deck"
+        ? { addSurfaceItems: (menu: Menu) => this.addDeckOrderingMenuItems(menu) }
+        : {}),
       run: (action) => this.runAction(action),
     });
+  }
+
+  private addDeckOrderingMenuItems(menu: Menu): void {
+    for (const front of [true, false]) {
+      menu.addItem((item) => {
+        item
+          .setTitle(front ? "Bring Deck to front" : "Send Deck to back")
+          .setIcon(front ? "bring-to-front" : "send-to-back")
+          .setSection("slipbox-deck-order")
+          .setDisabled(this.deckInFront === front)
+          .onClick(() => this.runAfterInlineEditing("deck-layer-order", () => {
+            this.setDeckInFront(front);
+          }));
+      });
+    }
+  }
+
+  private setDeckInFront(front: boolean): void {
+    // This pane's ordering is session-only and never moves cards or Branch View.
+    this.deckInFront = front;
+    this.deckCardsEl?.toggleClass("is-in-front", front);
   }
 
   handleBookmarksChanged(): void {
@@ -2572,6 +2599,7 @@ export class DeckView extends ItemView {
     this.applySpaceOffset();
     const deckCards = space.createDiv({ cls: "slipbox-deck-cards" });
     this.deckCardsEl = deckCards;
+    this.setDeckInFront(this.deckInFront);
     const deskJob = this.deskRenderer.render(
       stage,
       space,
@@ -3080,6 +3108,7 @@ export class DeckView extends ItemView {
               }
               this.spaceEl?.append(cardEl);
               cardEl.addClass("is-dragging-to-desk");
+              this.localBranchView.updatePosition();
             },
             onDragMove: (moveEvent, dx, dy) => {
               if (intent === "pan") {
@@ -3220,6 +3249,7 @@ export class DeckView extends ItemView {
     if (card.parentElement === this.spaceEl) this.deckCardsEl?.append(card);
     card.removeClass("is-dragging-to-desk");
     card.setCssProps({ translate: "" });
+    this.localBranchView.updatePosition();
     this.clearDeckCardDropCues();
   }
 
@@ -4222,7 +4252,8 @@ export class DeckView extends ItemView {
     }
     const centre = `${geometry.anchorCenterY}px`;
     const centreX = `${geometry.anchorCenterX}px`;
-    const style = this.deckCardsEl?.style;
+    // Deck cards keep the same origin when a Desk drag reparents them into space.
+    const style = this.spaceEl?.style;
     if (style?.getPropertyValue("--slipbox-deck-center") !== centre) {
       style?.setProperty("--slipbox-deck-center", centre);
     }
@@ -4243,6 +4274,7 @@ export class DeckView extends ItemView {
         `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
       setCardMotionOpacity(card, motion.opacity);
     }
+    this.localBranchView.updatePosition();
     return this.updatePileAnchorFromDeck(geometry);
   }
 
@@ -4257,7 +4289,8 @@ export class DeckView extends ItemView {
   }
 
   private updatePileAnchorFromDeck(geometry = this.deckGeometry()): boolean {
-    if (this.plugin.settings.deckOrientation === "vertical") return true;
+    // Only the automatic-placement guide follows the Deck; stored piles stay put.
+    if (this.plugin.settings.deckOrientation === "vertical") return this.deskRenderer.positionPiles();
     const space = this.spaceEl;
     const anchorPath = this.deckViewport.anchorPath;
     const activeCard = anchorPath === null
@@ -4269,7 +4302,7 @@ export class DeckView extends ItemView {
       ".slipbox-deck-empty",
     ) ?? null;
     if (space === null || deckFootprint === null) {
-      return true;
+      return this.deskRenderer.positionPiles(false);
     }
     const deckTop = deckTopForPileAnchor(
       activeCard === null ? deckFootprint.offsetTop : geometry.anchorCenterY,
@@ -4282,7 +4315,7 @@ export class DeckView extends ItemView {
     if (space.style.getPropertyValue("--slipbox-deck-top") !== top) {
       space.style.setProperty("--slipbox-deck-top", top);
     }
-    return true;
+    return this.deskRenderer.positionPiles();
   }
 
   private observeDeckSize(): void {
@@ -4381,11 +4414,12 @@ export class DeckView extends ItemView {
         card.dataset.path === activePath && !card.hasClass("is-viewed-ghost")
       );
     const stage = this.stageEl;
-    if (activePath === null || owner === undefined || stage === null) {
+    const space = this.spaceEl;
+    if (activePath === null || owner === undefined || stage === null || space === null) {
       this.localBranchView.detach();
       return;
     }
-    this.localBranchView.attach(owner, activePath, stage);
+    this.localBranchView.attach(owner, activePath, stage, space);
   }
 
   private bookmarkedPaths(): Set<string> {

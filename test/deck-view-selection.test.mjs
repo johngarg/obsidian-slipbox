@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { build } from 'esbuild';
 import { Window } from 'happy-dom';
 
 const output = await build({ stdin: { contents: `
+  export { LocalBranchViewController } from './src/local-branch-view.ts';
   export { DeckView } from './src/deck-view.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { DeckTransition } from './src/deck-transition.ts';
@@ -20,17 +22,29 @@ const output = await build({ stdin: { contents: `
 const actualRequire = createRequire(import.meta.url);
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
+const stylesheet = readFileSync('styles.css', 'utf8');
 
 // Real navigation, mounting, retention, listeners and animation scheduling;
 // only host services and browser layout are substituted.
-async function subject(t, orientation = 'vertical', model = 'drawer') {
+async function subject(t, orientation = 'vertical', model = 'drawer', withStyles = false) {
   const window = new Window();
+  if (withStyles) {
+    const style = window.document.createElement('style');
+    style.textContent = stylesheet;
+    window.document.head.append(style);
+  }
   let now = 1000, reduced = false, sequence = 0;
   const pending = new Map(), calls = { actions: [], links: 0, gates: 0 };
   Object.defineProperty(window, 'performance', { value: { now: () => now } });
   window.matchMedia = () => ({ matches: reduced });
   window.requestAnimationFrame = callback => { pending.set(++sequence, callback); return sequence; };
   window.cancelAnimationFrame = id => pending.delete(id);
+  // Happy DOM lacks this CSSOM accessor; browsers reflect it into the declaration.
+  Object.defineProperty(window.CSSStyleDeclaration.prototype, 'translate', {
+    configurable: true,
+    get() { return this.getPropertyValue('translate'); },
+    set(value) { this.setProperty('translate', value); },
+  });
   Object.defineProperties(window.Node.prototype, {
     win: { configurable: true, get() { return this.ownerDocument?.defaultView ?? window; } },
     doc: { configurable: true, get() { return this.ownerDocument; } },
@@ -50,20 +64,23 @@ async function subject(t, orientation = 'vertical', model = 'drawer') {
   });
   const module = { exports: {} };
   const obsidian = new Proxy({ setIcon() {}, Notice: class {} }, { get: (target, key) => target[key] ?? class {} });
-  const globals = { HTMLElement: window.HTMLElement, Element: window.Element,
+  const globals = { HTMLElement: window.HTMLElement, Element: window.Element, CSS: window.CSS,
     DOMMatrixReadOnly: class { constructor(text) { const values = text.match(/matrix\((.*)\)/)[1].split(',').map(Number); this.m41 = values[4]; this.m42 = values[5]; } } };
   runInNewContext('(function(require, module, exports) {' + output.outputFiles[0].text + '\n})', globals)(
     name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports,
   );
   const { DeckView, DeckViewport, DeckTransition, DeckFrameScheduler, DeckWheelController, ViewedCardSession, DEFAULT_SETTINGS, attachRenderedLinkInteractions } = module.exports;
-  const stage = window.document.body.createDiv({ cls: 'slipbox-deck-stage' });
-  Object.defineProperties(stage, { clientWidth: { value: 1800 }, clientHeight: { value: 1200 } });
+  const content = window.document.body.createDiv({ cls: 'view-content slipbox-deck-view' });
+  Object.assign(content.dataset, { deckOrientation: orientation, deckStackModel: model, mainCardSize: 'medium' });
+  const stage = content.createDiv({ cls: 'slipbox-deck-stage' });
+  Object.defineProperties(stage, { clientWidth: { value: 1800, configurable: true }, clientHeight: { value: 1200, configurable: true } });
   const space = stage.createDiv({ cls: 'slipbox-space' });
   const deck = space.createDiv({ cls: 'slipbox-deck-cards' });
   const cards = Array.from({ length: 1000 }, (_, index) => ({ path: `${index}.md`, address: String(index), file: { path: `${index}.md`, basename: String(index) } }));
   const view = Object.create(DeckView.prototype);
   Object.assign(view, {
-    stageEl: stage, contentEl: stage, spaceEl: space, deckCardsEl: deck, renderedCards: [],
+    localBranchView: { updatePosition() {} },
+    stageEl: stage, contentEl: content, spaceEl: space, deckCardsEl: deck, renderedCards: [],
     deckViewport: new DeckViewport(), drawerTransition: new DeckTransition(), wheelController: new DeckWheelController(),
     viewedCardSession: new ViewedCardSession(), viewedCardEl: null, viewedFilingEditor: null,
     spaceOffsetX: 70, spaceOffsetY: 90, spaceRecenteringTimer: null, viewportCenteringFrame: null,
@@ -75,7 +92,7 @@ async function subject(t, orientation = 'vertical', model = 'drawer') {
     cardHeaderControllers: new Map(), cardHeaderButtonControllers: new Set(),
     cardFooters: { removeCard() {}, setInteractive() {} },
     cardSignatures: { render() {}, removeCard() {}, setInteractive() {} },
-    deskRenderer: { filingInput: null, beginCoveredDeskDrag: () => false },
+    deskRenderer: { filingInput: null, beginCoveredDeskDrag: () => false, positionPiles: () => true },
     plugin: { settings: { ...DEFAULT_SETTINGS, deckOrientation: orientation, deckStackModel: model, cardSpread: 0.1,
       showAutomaticBacklinks: false, showTooltips: false, wheelOverCardBody: 'deck', allowCardScrolling: true },
       index: { snapshot: { filed: cards }, filedIndexForPath: path => cards.findIndex(card => card.path === path), filedByPath: path => cards.find(card => card.path === path) },
@@ -107,6 +124,176 @@ async function subject(t, orientation = 'vertical', model = 'drawer') {
     click: async (target, options = {}) => { const event = new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, ...options }); target.dispatchEvent(event); await tick(); return event; },
     pointer(target, type, x, y) { target.dispatchEvent(new window.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y })); },
   };
+}
+
+// Keep the clock stationary while checking reparenting, independently of animation.
+async function prepareDeskDrag(s, modes = ['left', 'top']) {
+  const { view } = s;
+  s.reduced(true);
+  for (const mode of modes) view.positionDeck(mode);
+  view.spaceOffsetX = 70; view.spaceOffsetY = -90;
+  view.applySpaceOffset();
+  await view.refreshDeckCardWindow();
+  await s.frame(s.time());
+  return s.card(400);
+}
+
+function cardLayout(s, card) {
+  const style = s.window.getComputedStyle(card);
+  return { top: style.top, left: style.left, transform: style.transform, width: style.width, height: style.height };
+}
+
+async function startDeskDrag(s, card) {
+  const header = card.querySelector('.slipbox-card-address-row');
+  s.pointer(header, 'pointerdown', 20, 20);
+  await tick();
+  s.pointer(header, 'pointermove', 30, 22);
+  return header;
+}
+
+function assertDragCleared(s, card) {
+  assert.equal(card.parentElement, s.view.deckCardsEl);
+  assert.equal(card.classList.contains('is-dragging-to-desk'), false);
+  assert.equal(s.view.stageEl.classList.contains('is-dragging'), false);
+  assert.equal(card.style.translate, '');
+  assert.equal(s.view.stageEl.querySelector('.is-card-drop-target'), null);
+}
+
+for (const orientation of ['horizontal', 'vertical']) {
+  for (const model of ['drawer', 'fan']) {
+    for (const modes of [['left'], ['right'], ['top'], ['bottom'], ['centered'],
+      ['left', 'top'], ['left', 'bottom'], ['right', 'top'], ['right', 'bottom']]) {
+      test(`${orientation} ${model}: Desk drag preserves positioned coordinates after ${modes.join('/')}`, async t => {
+        const s = await subject(t, orientation, model, true);
+        const card = await prepareDeskDrag(s, modes);
+        s.window.document.elementsFromPoint = () => [];
+        const before = cardLayout(s, card);
+        assert.match(before.top, /px$/);
+        assert.match(before.left, /px$/);
+        const pan = s.view.spaceEl.style.transform;
+        const header = await startDeskDrag(s, card);
+        assert.equal(card.parentElement, s.view.spaceEl);
+        assert.deepEqual(cardLayout(s, card), before);
+        assert.equal(card.style.translate, '10px 2px');
+        assert.equal(s.view.spaceEl.style.transform, pan);
+        s.pointer(header, 'pointermove', 64, 31);
+        assert.equal(card.style.translate, '44px 11px');
+        assert.deepEqual(cardLayout(s, card), before);
+        s.pointer(header, 'pointercancel', 64, 31);
+        assertDragCleared(s, card);
+        assert.deepEqual(cardLayout(s, card), before);
+      });
+    }
+
+    for (const [size, width, height] of [['small', 720, 480], ['medium', 840, 560],
+      ['large', 960, 640], ['custom', 480.5, 288.25]]) {
+      test(`${orientation} ${model}: ${size} drag coordinates follow pane resize`, async t => {
+        const s = await subject(t, orientation, model, true), { view } = s;
+        view.cardDimensions = { snapshot: { width, height }, flush() {} };
+        if (size === 'custom') {
+          view.contentEl.style.setProperty('--slipbox-deck-card-width', `${width}px`);
+          view.contentEl.style.setProperty('--slipbox-card-aspect-ratio', String(width / height));
+        } else {
+          view.plugin.settings.mainCardSize = size;
+          view.contentEl.dataset.mainCardSize = size;
+        }
+        s.window.document.elementsFromPoint = () => [];
+        const card = await prepareDeskDrag(s, ['right', 'bottom']);
+        for (const [paneWidth, paneHeight] of [[1200, 800], [320, 240]]) {
+          Object.defineProperties(view.stageEl, { clientWidth: { value: paneWidth, configurable: true },
+            clientHeight: { value: paneHeight, configurable: true } });
+          view.positionCards();
+          const before = cardLayout(s, card), geometry = view.deckGeometry();
+          closeTo(parseFloat(before.width), width);
+          closeTo(parseFloat(before.left), geometry.anchorCenterX);
+          closeTo(parseFloat(before.top), geometry.anchorCenterY);
+          const header = await startDeskDrag(s, card);
+          assert.deepEqual(cardLayout(s, card), before);
+          // Resizing during the drag must update the same coordinates as the Deck.
+          Object.defineProperties(view.stageEl, { clientWidth: { value: paneWidth + 40, configurable: true },
+            clientHeight: { value: paneHeight + 30, configurable: true } });
+          view.positionCards();
+          const during = cardLayout(s, card);
+          closeTo(parseFloat(during.left), view.deckGeometry().anchorCenterX);
+          closeTo(parseFloat(during.top), view.deckGeometry().anchorCenterY);
+          assert.equal(during.width, before.width);
+          assert.equal(card.style.translate, '10px 2px');
+          s.pointer(header, 'pointercancel', 30, 22);
+          assertDragCleared(s, card);
+          assert.deepEqual(cardLayout(s, card), during);
+        }
+      });
+    }
+
+    for (const outcome of ['workspace', 'pile', 'invalid', 'cancel']) {
+      test(`${orientation} ${model}: Desk drag ${outcome} uses normal drop logic and clears presentation`, async t => {
+        const s = await subject(t, orientation, model, true), { view } = s;
+        const card = await prepareDeskDrag(s);
+        const pile = view.spaceEl.createDiv({ cls: 'slipbox-desk-pile is-collapsed' });
+        pile.dataset.pileId = 'existing';
+        const original = { piles: [{ id: 'existing', cards: [{ cardRef: '399.md', kind: 'filed' }],
+          position: { x: 12, y: 34 } }], expandedPileIds: [], unfiledPileId: null };
+        const replacements = [];
+        view.plugin.deskService.snapshot = original;
+        view.plugin.deskService.createPileId = () => 'new';
+        view.plugin.deskService.replace = async state => { replacements.push(state); view.plugin.deskService.snapshot = state; };
+        view.deskRenderer.positionDeckCardAtPoint = () => ({ x: -42, y: 65 });
+        s.window.document.elementsFromPoint = () => outcome === 'workspace' ? [view.stageEl]
+          : outcome === 'invalid' ? [card, view.stageEl] : [pile, view.stageEl];
+        const before = cardLayout(s, card);
+        const header = await startDeskDrag(s, card);
+        if (outcome === 'pile' || outcome === 'cancel') assert.equal(pile.classList.contains('is-card-drop-target'), true);
+        s.pointer(header, outcome === 'cancel' ? 'pointercancel' : 'pointerup', 30, 22);
+        await tick();
+        assertDragCleared(s, card);
+        assert.deepEqual(cardLayout(s, card), before);
+        assert.equal(header.hasPointerCapture(7), false);
+        if (outcome === 'workspace' || outcome === 'pile') {
+          assert.equal(replacements.length, 1);
+          const state = view.plugin.deskService.snapshot;
+          const destination = state.piles.find(p => p.id === (outcome === 'workspace' ? 'new' : 'existing'));
+          assert.deepEqual(Array.from(destination.cards, c => c.cardRef), outcome === 'workspace' ? ['400.md'] : ['399.md', '400.md']);
+          assert.equal(JSON.stringify(destination.position), JSON.stringify(outcome === 'workspace' ? { x: -42, y: 65 } : { x: 12, y: 34 }));
+        } else {
+          assert.equal(replacements.length, 0);
+          assert.equal(view.plugin.deskService.snapshot, original);
+        }
+      });
+    }
+
+    test(`${orientation} ${model}: movement below the drag threshold still permits a card click`, async t => {
+      const s = await subject(t, orientation, model, true), { view } = s;
+      await prepareDeskDrag(s);
+      const card = s.card(399), header = card.querySelector('.slipbox-card-address-row');
+      const before = cardLayout(s, card);
+      s.pointer(header, 'pointerdown', 20, 20); await tick();
+      s.pointer(header, 'pointermove', 22, 21); s.pointer(header, 'pointerup', 22, 21);
+      assertDragCleared(s, card);
+      assert.deepEqual(cardLayout(s, card), before);
+      assert.equal(header.hasPointerCapture(7), false);
+      await s.click(header);
+      assert.equal(view.deckViewport.anchorPath, '399.md');
+    });
+  }
+}
+
+for (const model of ['drawer', 'fan']) {
+  test(`vertical ${model}: predominantly vertical header movement pans without lifting the card`, async t => {
+    const s = await subject(t, 'vertical', model, true), { view } = s;
+    const card = await prepareDeskDrag(s), before = cardLayout(s, card);
+    const header = card.querySelector('.slipbox-card-address-row');
+    const position = view.deckViewport.position(s.cards);
+    s.pointer(header, 'pointerdown', 20, 20); await tick();
+    s.pointer(header, 'pointermove', 22, 60);
+    assert.equal(card.parentElement, view.deckCardsEl);
+    assert.equal(card.classList.contains('is-dragging-to-desk'), false);
+    assert.equal(card.style.translate, '');
+    assert.deepEqual(cardLayout(s, card), before);
+    assert.equal(view.spaceOffsetX, 72); assert.equal(view.spaceOffsetY, -50);
+    s.pointer(header, 'pointerup', 22, 60);
+    assertDragCleared(s, card);
+    assert.equal(view.deckViewport.position(s.cards), position);
+  });
 }
 
 for (const orientation of ['vertical', 'horizontal']) {
@@ -364,6 +551,48 @@ for (const orientation of ['vertical', 'horizontal']) {
         }
       }
       assert.ok(view.renderedCards.length < 65);
+    }
+  });
+}
+
+for (const orientation of ['horizontal', 'vertical']) for (const model of ['drawer', 'fan']) {
+  test(`${orientation} ${model}: Branch overlay follows real Deck motion and drag cleanup`, async t => {
+    const s = await subject(t, orientation, model, true), {view, window} = s;
+    const card = await prepareDeskDrag(s);
+    Object.assign(window, {
+      createEl: tag => window.document.createElement(tag),
+      createDiv: () => window.document.createElement('div'),
+      createSvg: tag => window.document.createElementNS('http://www.w3.org/2000/svg', tag),
+    });
+    const controller = new s.LocalBranchViewController({
+      activeDocument: window.document, canShowView: () => true, placement: () => 'auto', orientation: () => orientation,
+      showTooltips: () => false, previewLinksOnHover: () => false, setIcon() {},
+      modelForPath: path => ({activePath: path, activeAddress: path, expandedDepartureId: null, relationships: [],
+        strands: [{id:'current',role:'current',nodes:[{path,address:path,title:path,duplicateIndex:0,duplicateCount:1,departures:[]}],selectedPath:path,knownBeginning:true,knownEnd:true}],
+        navigation:{backward:[],forward:[],beginning:[],inferred:[],explicit:[],higher:[]}}),
+      chooseDeparture: async () => null, activate() {}, preview() {}, runAfterEditing: (_, action) => action(),
+    });
+    view.localBranchView = controller;
+    view.syncLocalBranchViewOwner = () => s.DeckView.prototype.syncLocalBranchViewOwner.call(view);
+    view.updateActiveUi();
+    t.after(() => controller.disconnect());
+    const layer = view.spaceEl.querySelector('.slipbox-local-branch-layer');
+    assert.ok(layer);
+    assert.equal(layer.style.transform, card.style.transform);
+    view.moveViewportByPixels(10);
+    await s.frame(s.time() + 40);
+    const owner = view.renderedCards.find(c => c.dataset.path === view.deckViewport.anchorPath);
+    assert.equal(layer.style.transform, owner.style.transform);
+    const branchRoot = layer.firstElementChild;
+    for (const end of ['pointercancel', 'pointerup']) {
+      window.document.elementsFromPoint = () => [];
+      const header = await startDeskDrag(s, owner);
+      assert.equal(layer.hidden, true);
+      s.pointer(header, end, 30, 22);
+      assertDragCleared(s, owner);
+      assert.equal(layer.hidden, false);
+      assert.equal(layer.firstElementChild, branchRoot);
+      assert.equal(layer.style.transform, owner.style.transform);
     }
   });
 }

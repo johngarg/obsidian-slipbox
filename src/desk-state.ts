@@ -18,6 +18,7 @@ export interface DeskPile {
 }
 
 export interface DeskPilePosition {
+  /** Pile centre in CSS pixels relative to the centre of the panned workspace. */
   readonly x: number;
   readonly y: number;
 }

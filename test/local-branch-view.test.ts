@@ -78,6 +78,11 @@ function fixture(
 ) {
   const htmlNamespace = "http://www.w3.org/1999/xhtml";
   const window = new Window();
+  Object.assign(window.HTMLElement.prototype, {
+    setCssProps(this: HTMLElement, props: Record<string, string>) {
+      for (const [name, value] of Object.entries(props)) this.style.setProperty(name, value);
+    },
+  });
   const document = window.document as unknown as Document;
   const createNamespacedElement = document.createElementNS.bind(document);
   Object.assign(window, {
@@ -94,7 +99,15 @@ function fixture(
   Object.defineProperty(first, "offsetWidth", { value: ownerWidth });
   Object.defineProperty(second, "offsetWidth", { value: ownerWidth });
   Object.defineProperty(stage, "clientWidth", { value: stageWidth });
-  stage.append(first, second);
+  stage.className = "slipbox-deck-stage";
+  const space = obsidianWindow.createDiv();
+  space.className = "slipbox-space";
+  const deck = obsidianWindow.createDiv();
+  deck.className = "slipbox-deck-cards";
+  first.className = second.className = "slipbox-card";
+  deck.append(first, second);
+  space.append(deck);
+  stage.append(space);
   document.body.append(stage);
   const activations: readonly string[][] = [];
   const previews: string[] = [];
@@ -131,13 +144,14 @@ function fixture(
     },
     runAfterEditing: (_reason, action) => void action(),
   });
-  controller.attach(first, "b.md", stage);
+  controller.attach(first, "b.md", stage, space);
   return {
     window,
     document,
     first,
     second,
     stage,
+    space,
     controller,
     activations,
     previews,
@@ -151,7 +165,7 @@ describe("local Branch View controller", () => {
     const ownerWidth = 548;
     const stageWidth = 900;
     const subject = fixture(MODEL, ownerWidth, stageWidth, false, "below", "horizontal");
-    const root = subject.first.querySelector<HTMLElement>(
+    const root = subject.space.querySelector<HTMLElement>(
       ".slipbox-local-branch-view",
     );
 
@@ -169,7 +183,7 @@ describe("local Branch View controller", () => {
 
   test("renders six stable movement slots with unavailable controls disabled", () => {
     const subject = fixture();
-    const root = subject.first.querySelector(".slipbox-local-branch-view");
+    const root = subject.space.querySelector(".slipbox-local-branch-view");
     assert.notEqual(root, null);
     assert.equal(root?.querySelectorAll(".slipbox-local-branch-control-slot").length, 6);
     assert.equal(root?.querySelectorAll("button.slipbox-local-branch-control").length, 6);
@@ -206,7 +220,7 @@ describe("local Branch View controller", () => {
 
   test("uses only the Obsidian tooltip on branch controls", () => {
     const subject = fixture(MODEL, 520, 900, true);
-    const button = subject.first.querySelector<HTMLElement>(
+    const button = subject.space.querySelector<HTMLElement>(
       "[data-movement='backward'] button",
     );
 
@@ -223,7 +237,7 @@ describe("local Branch View controller", () => {
     ] as const;
 
     for (const [selector, label] of containers) {
-      const container = subject.first.querySelector<HTMLElement>(selector);
+      const container = subject.space.querySelector<HTMLElement>(selector);
       const labelId = container?.getAttribute("aria-labelledby") ?? "";
       assert.equal(container?.getAttribute("aria-label"), null);
       assert.equal(container?.getAttribute("title"), null);
@@ -253,28 +267,29 @@ describe("local Branch View controller", () => {
         ],
       },
     });
-    const slot = subject.first.querySelector("[data-movement='explicit']");
+    const slot = subject.space.querySelector("[data-movement='explicit']");
 
     assert.equal(slot?.querySelectorAll("button").length, 1);
     slot?.querySelector<HTMLButtonElement>("button")?.click();
     assert.deepEqual(subject.activations, [["x.md", "y.md"]]);
   });
 
-  test("transfers one stable root between Deck owners", () => {
+  test("keeps one stable overlay when the Deck owner changes", () => {
     const subject = fixture();
-    const root = subject.first.querySelector(".slipbox-local-branch-view");
-    subject.controller.attach(subject.second, "c.md", subject.stage);
+    const root = subject.space.querySelector(".slipbox-local-branch-view");
+    subject.controller.attach(subject.second, "c.md", subject.stage, subject.space);
     assert.equal(subject.first.querySelector(".slipbox-local-branch-view"), null);
-    assert.equal(subject.second.querySelector(".slipbox-local-branch-view"), root);
+    assert.equal(subject.second.querySelector(".slipbox-local-branch-view"), null);
+    assert.equal(subject.space.querySelector(".slipbox-local-branch-view"), root);
     assert.equal(subject.document.querySelectorAll(".slipbox-local-branch-view").length, 1);
   });
 
   test("activates controls and exact graph nodes structurally", () => {
     const subject = fixture();
-    subject.first.querySelector<HTMLButtonElement>(
+    subject.space.querySelector<HTMLButtonElement>(
       "[data-movement='backward'] button",
     )?.click();
-    const node = subject.first.querySelector<SVGElement>(
+    const node = subject.space.querySelector<SVGElement>(
       "[data-focus-id='node:a.md']",
     );
     node?.dispatchEvent(new subject.window.MouseEvent("mouseover", {
@@ -289,7 +304,7 @@ describe("local Branch View controller", () => {
 
   test("supports keyboard node activation without visual tooltips", () => {
     const subject = fixture();
-    const node = subject.first.querySelector<SVGElement>(
+    const node = subject.space.querySelector<SVGElement>(
       "[data-focus-id='node:a.md']",
     );
     node?.dispatchEvent(new subject.window.KeyboardEvent("keydown", {
@@ -297,7 +312,7 @@ describe("local Branch View controller", () => {
       key: "Enter",
     }) as unknown as Event);
     assert.deepEqual(subject.activations, [["a.md"]]);
-    assert.equal(subject.first.querySelector("title"), null);
+    assert.equal(subject.space.querySelector("title"), null);
     assert.match(svgLabel(node), /a\.md/);
   });
 
@@ -324,11 +339,11 @@ describe("local Branch View controller", () => {
     });
 
     assert.notEqual(
-      subject.first.querySelector("line.slipbox-local-branch-edge.is-explicit"),
+      subject.space.querySelector("line.slipbox-local-branch-edge.is-explicit"),
       null,
     );
     assert.equal(
-      subject.first.querySelector("path.slipbox-local-branch-edge.is-explicit"),
+      subject.space.querySelector("path.slipbox-local-branch-edge.is-explicit"),
       null,
     );
   });
@@ -367,7 +382,7 @@ describe("local Branch View controller", () => {
       });
 
       assert.notEqual(
-        subject.first.querySelector(
+        subject.space.querySelector(
           `line.slipbox-local-branch-edge.is-${kind}`,
         ),
         null,
@@ -424,13 +439,13 @@ describe("local Branch View controller", () => {
         }],
       },
     });
-    const edge = subject.first.querySelector<SVGLineElement>(
+    const edge = subject.space.querySelector<SVGLineElement>(
       "line.slipbox-local-branch-edge.is-explicit",
     );
-    const sourceCircle = subject.first.querySelector<SVGCircleElement>(
+    const sourceCircle = subject.space.querySelector<SVGCircleElement>(
       "[data-focus-id='node:source.md'] circle",
     );
-    const targetCircle = subject.first.querySelector<SVGCircleElement>(
+    const targetCircle = subject.space.querySelector<SVGCircleElement>(
       "[data-focus-id='node:target.md'] circle",
     );
 
@@ -439,12 +454,12 @@ describe("local Branch View controller", () => {
     assert.equal(edge?.getAttribute("x2"), targetCircle?.getAttribute("cx"));
     assert.equal(edge?.getAttribute("y2"), targetCircle?.getAttribute("cy"));
     assert.equal(
-      subject.first.querySelector(
+      subject.space.querySelector(
         ".slipbox-local-branch-edge-label text",
       )?.textContent,
       "1/5",
     );
-    subject.first.querySelector<HTMLButtonElement>(
+    subject.space.querySelector<HTMLButtonElement>(
       "[data-movement='explicit'] button",
     )?.click();
     assert.deepEqual(subject.activations, [[target.path]]);
@@ -467,7 +482,7 @@ describe("local Branch View controller", () => {
       ["higher.md", -1],
       ["a.md", 1],
     ] as const) {
-      const line = subject.first.querySelector<SVGLineElement>(
+      const line = subject.space.querySelector<SVGLineElement>(
         `[data-focus-id='stub:${path}'] .slipbox-local-branch-stub-line`,
       );
       const deltaX = Number(line?.getAttribute("x2")) -
@@ -484,13 +499,13 @@ describe("local Branch View controller", () => {
 
   test("keeps the branch-stub hit target outside the node", () => {
     const subject = fixture();
-    const node = subject.first.querySelector<SVGCircleElement>(
+    const node = subject.space.querySelector<SVGCircleElement>(
       "[data-focus-id='node:a.md'] circle",
     );
-    const visual = subject.first.querySelector<SVGLineElement>(
+    const visual = subject.space.querySelector<SVGLineElement>(
       "[data-focus-id='stub:a.md'] .slipbox-local-branch-stub-line",
     );
-    const hit = subject.first.querySelector<SVGLineElement>(
+    const hit = subject.space.querySelector<SVGLineElement>(
       "[data-focus-id='stub:a.md'] .slipbox-local-branch-stub-hit",
     );
     const centerX = Number(node?.getAttribute("cx"));
@@ -521,7 +536,7 @@ describe("local Branch View controller", () => {
         selectedPath: path,
       }],
     });
-    const node = subject.first.querySelector<SVGElement>(
+    const node = subject.space.querySelector<SVGElement>(
       `[data-focus-id='node:${path}']`,
     );
     const spans = node === null
@@ -547,7 +562,7 @@ describe("local Branch View controller", () => {
         selectedPath: path,
       }],
     });
-    const node = subject.first.querySelector<SVGElement>(
+    const node = subject.space.querySelector<SVGElement>(
       `[data-focus-id='node:${path}']`,
     );
     const lines = node === null
@@ -573,7 +588,7 @@ describe("local Branch View controller", () => {
         selectedPath: "5.md",
       }],
     }, 240, 360);
-    const gap = subject.first.querySelector<SVGElement>(
+    const gap = subject.space.querySelector<SVGElement>(
       ".slipbox-local-branch-gap",
     );
     const focusId = gap?.getAttribute("data-focus-id") ?? "";
@@ -587,7 +602,7 @@ describe("local Branch View controller", () => {
       gap?.querySelector(".slipbox-local-branch-gap-ellipsis")?.textContent,
       "…",
     );
-    const compactScroller = subject.first.querySelector<HTMLElement>(
+    const compactScroller = subject.space.querySelector<HTMLElement>(
       ".slipbox-local-branch-scroller",
     );
     if (compactScroller !== null) {
@@ -598,13 +613,13 @@ describe("local Branch View controller", () => {
       key: "Enter",
     }) as unknown as Event);
     assert.equal(
-      subject.first.querySelector(`[data-focus-id='${focusId}']`),
+      subject.space.querySelector(`[data-focus-id='${focusId}']`),
       null,
     );
-    const graph = subject.first.querySelector<SVGElement>(
+    const graph = subject.space.querySelector<SVGElement>(
       ".slipbox-local-branch-graph",
     );
-    const expandedScroller = subject.first.querySelector<HTMLElement>(
+    const expandedScroller = subject.space.querySelector<HTMLElement>(
       ".slipbox-local-branch-scroller",
     );
     assert.equal(Number(graph?.getAttribute("width")) > 312, true);
@@ -633,7 +648,7 @@ describe("local Branch View controller", () => {
         nodes: [{ ...owner, departures: [first, second] }, branchNode("b.md", "1b")],
       }],
     });
-    const stub = subject.first.querySelector<SVGElement>(
+    const stub = subject.space.querySelector<SVGElement>(
       "[data-focus-id='stub:a.md']",
     );
     assert.match(svgLabel(stub), /inserted/);
@@ -644,7 +659,7 @@ describe("local Branch View controller", () => {
     await Promise.resolve();
     assert.deepEqual(subject.departureChoices, [[first.id, second.id]]);
     assert.equal(
-      subject.first.querySelector("[data-focus-id='stub:a.md']")
+      subject.space.querySelector("[data-focus-id='stub:a.md']")
         ?.classList.contains("is-expanded"),
       true,
     );
@@ -652,7 +667,7 @@ describe("local Branch View controller", () => {
 
   test("keeps one visibility override while the control rail changes owners", () => {
     const subject = fixture();
-    const toggle = subject.first.querySelector<HTMLButtonElement>(
+    const toggle = subject.space.querySelector<HTMLButtonElement>(
       ".slipbox-local-branch-toggle",
     );
 
@@ -664,22 +679,22 @@ describe("local Branch View controller", () => {
       "Hide Branch View",
     );
     toggle?.click();
-    assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
-    assert.equal(subject.first.querySelector(".slipbox-local-branch-toolbar"), null);
+    assert.equal(subject.space.querySelector(".slipbox-local-branch-graph"), null);
+    assert.equal(subject.space.querySelector(".slipbox-local-branch-toolbar"), null);
     assert.equal(
-      subject.first.querySelector(".slipbox-local-branch-view")?.getAttribute("hidden"),
+      subject.space.querySelector(".slipbox-local-branch-view")?.getAttribute("hidden"),
       null,
     );
-    subject.controller.attach(subject.second, "c.md", subject.stage);
-    assert.equal(subject.second.querySelector(".slipbox-local-branch-graph"), null);
+    subject.controller.attach(subject.second, "c.md", subject.stage, subject.space);
+    assert.equal(subject.space.querySelector(".slipbox-local-branch-graph"), null);
     assert.equal(
-      subject.second.querySelector(".slipbox-local-branch-toggle")
+      subject.space.querySelector(".slipbox-local-branch-toggle")
         ?.getAttribute("aria-pressed"),
       "false",
     );
     assert.equal(
       subject.document.getElementById(
-        subject.second.querySelector(".slipbox-local-branch-toggle")
+        subject.space.querySelector(".slipbox-local-branch-toggle")
           ?.getAttribute("aria-labelledby") ?? "",
       )?.textContent,
       "Show Branch View",
@@ -688,14 +703,14 @@ describe("local Branch View controller", () => {
 
   test("removes the controls while disabled and starts shown when re-enabled", () => {
     const subject = fixture();
-    subject.first.querySelector<HTMLButtonElement>(
+    subject.space.querySelector<HTMLButtonElement>(
       ".slipbox-local-branch-toggle",
     )?.click();
-    assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+    assert.equal(subject.space.querySelector(".slipbox-local-branch-graph"), null);
 
     subject.setAvailable(false);
     subject.controller.refresh();
-    const root = subject.first.querySelector<HTMLElement>(
+    const root = subject.space.querySelector<HTMLElement>(
       ".slipbox-local-branch-view",
     );
     assert.equal(root?.hidden, true);
@@ -704,9 +719,9 @@ describe("local Branch View controller", () => {
     subject.controller.toggleVisibility();
     subject.setAvailable(true);
     subject.controller.refresh();
-    assert.notEqual(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+    assert.notEqual(subject.space.querySelector(".slipbox-local-branch-graph"), null);
     assert.equal(
-      subject.first.querySelector(".slipbox-local-branch-toggle")
+      subject.space.querySelector(".slipbox-local-branch-toggle")
         ?.getAttribute("aria-pressed"),
       "true",
     );
@@ -716,7 +731,7 @@ describe("local Branch View controller", () => {
     const subject = fixture();
     subject.setAvailable(false);
     subject.controller.refresh();
-    const root = subject.first.querySelector<HTMLElement>(
+    const root = subject.space.querySelector<HTMLElement>(
       ".slipbox-local-branch-view",
     );
     assert.equal(root?.hidden, true);
@@ -729,7 +744,7 @@ describe("local Branch View controller", () => {
 
 test("left Branch View transforms stub hit targets with their visible lines", () => {
   const subject = fixture(MODEL, 840, 600, false, "left");
-  const root = subject.first.querySelector<HTMLElement>(".slipbox-local-branch-view");
+  const root = subject.space.querySelector<HTMLElement>(".slipbox-local-branch-view");
   assert.equal(root?.dataset.placement, "left");
   const line = root?.querySelector(".slipbox-local-branch-stub-line");
   const hit = root?.querySelector(".slipbox-local-branch-stub-hit");
@@ -744,7 +759,7 @@ test("left Branch View transforms stub hit targets with their visible lines", ()
   const scroller = root?.querySelector<HTMLElement>(".slipbox-local-branch-scroller");
   assert.ok(scroller);
   scroller.scrollTop = 30;
-  subject.controller.attach(subject.first, "b.md", subject.stage);
+  subject.controller.attach(subject.first, "b.md", subject.stage, subject.space);
   assert.equal(root?.querySelector(".slipbox-local-branch-scroller"), scroller);
   assert.equal(scroller.scrollTop, 30);
   subject.controller.disconnect();
@@ -752,16 +767,16 @@ test("left Branch View transforms stub hit targets with their visible lines", ()
 
 test("hidden placement can be temporarily shown using automatic orientation", () => {
   const subject = fixture(MODEL, 840, 600, false, "hidden");
-  assert.equal(subject.first.querySelector(".slipbox-local-branch-graph"), null);
+  assert.equal(subject.space.querySelector(".slipbox-local-branch-graph"), null);
   subject.controller.toggleVisibility();
-  assert.ok(subject.first.querySelector(".slipbox-local-branch-graph"));
-  assert.equal(subject.first.querySelector<HTMLElement>(".slipbox-local-branch-view")?.dataset.placement, "left");
+  assert.ok(subject.space.querySelector(".slipbox-local-branch-graph"));
+  assert.equal(subject.space.querySelector<HTMLElement>(".slipbox-local-branch-view")?.dataset.placement, "left");
   subject.controller.disconnect();
 });
 
 test("SVG controls retain accessible labels without invoking Obsidian HTML tooltips", () => {
   const subject = fixture(MODEL, 840, 600, false, "left");
-  const graph = subject.first.querySelector(".slipbox-local-branch-graph");
+  const graph = subject.space.querySelector(".slipbox-local-branch-graph");
   assert.ok(graph);
   assert.equal(graph.querySelector("[aria-label]"), null);
   assert.equal(graph.getAttribute("aria-label"), null);
@@ -783,8 +798,8 @@ test("height-only owner and stage changes reposition Branch View and retain grap
   let stageHeight = 800;
   Object.defineProperty(subject.first, "offsetHeight", { get: () => height });
   Object.defineProperty(subject.stage, "clientHeight", { get: () => stageHeight });
-  subject.controller.attach(subject.first, "b.md", subject.stage);
-  const root = subject.first.querySelector<HTMLElement>(".slipbox-local-branch-view");
+  subject.controller.attach(subject.first, "b.md", subject.stage, subject.space);
+  const root = subject.space.querySelector<HTMLElement>(".slipbox-local-branch-view");
   assert.ok(root);
   const scroller = root.querySelector<HTMLElement>(".slipbox-local-branch-scroller");
   assert.ok(scroller);
@@ -799,5 +814,71 @@ test("height-only owner and stage changes reposition Branch View and retain grap
   assert.notEqual(root.querySelector<HTMLElement>(".slipbox-local-branch-scroller")?.style.height, viewportHeight);
   assert.equal(root.querySelector<HTMLElement>(".slipbox-local-branch-scroller")?.scrollTop, 37);
   subject.controller.detach();
+  void subject.window.happyDOM.abort();
+});
+
+for (const orientation of ["horizontal", "vertical"] as const) {
+  for (const placement of ["below", "left"] as const) {
+    test(`${orientation} ${placement}: Branch View escapes card and Desk stacking contexts`, () => {
+      const subject = fixture(MODEL, 520, 900, false, placement, orientation);
+      const root = subject.stage.querySelector<HTMLElement>(".slipbox-local-branch-view");
+      assert.ok(root);
+      assert.equal(subject.first.contains(root), false);
+      assert.equal(root.parentElement?.className, "slipbox-local-branch-layer");
+      assert.equal(root.parentElement?.parentElement, subject.space);
+      subject.controller.disconnect();
+      assert.equal(subject.stage.querySelector(".slipbox-local-branch-layer"), null);
+      void subject.window.happyDOM.abort();
+    });
+  }
+}
+
+test("overlay tracks owner motion without layout reads, and survives drag cancellation", () => {
+  const subject = fixture();
+  const layer = subject.space.querySelector<HTMLElement>(".slipbox-local-branch-layer");
+  assert.ok(layer);
+  const root = layer.firstElementChild;
+  const failMeasurement = () => { throw new Error("Motion must not measure layout"); };
+  subject.first.getBoundingClientRect = failMeasurement;
+  Object.defineProperty(subject.first, "offsetHeight", { get: failMeasurement });
+  const control = layer.querySelector<HTMLElement>(".slipbox-local-branch-toggle");
+  control?.focus();
+  for (const transform of [
+    "translate(-50%, -50%) translate(12.25px, -37.5px) rotate(0.2deg) scale(0.97)",
+    "translate(-50%, -50%) translate(-70px, 100px) rotate(0deg) scale(1)",
+  ]) {
+    subject.first.style.transform = transform;
+    subject.controller.updatePosition();
+    assert.equal(layer.style.transform, transform);
+    assert.equal(layer.firstElementChild, root);
+    assert.equal(subject.document.activeElement, control);
+  }
+  subject.first.classList.add("is-dragging-to-desk");
+  subject.controller.updatePosition();
+  assert.equal(layer.hidden, true);
+  subject.first.classList.remove("is-dragging-to-desk");
+  subject.controller.updatePosition();
+  assert.equal(layer.hidden, false);
+  subject.controller.detach();
+  subject.controller.updatePosition();
+  assert.equal(layer.isConnected, false);
+  subject.controller.disconnect();
+  void subject.window.happyDOM.abort();
+});
+
+test("moving a Branch View to another pane leaves no stale overlay", () => {
+  const subject = fixture();
+  const layer = subject.space.querySelector(".slipbox-local-branch-layer");
+  const space = localBranchDomWindow(subject.document).createDiv();
+  const stage = localBranchDomWindow(subject.document).createDiv();
+  stage.append(space);
+  subject.document.body.append(stage);
+  space.append(subject.second);
+  subject.second.setCssProps({ transform: "translate(30px, 40px)" });
+  subject.controller.attach(subject.second, "c.md", stage, space);
+  assert.equal(subject.space.querySelector(".slipbox-local-branch-layer"), null);
+  assert.equal(space.querySelector(".slipbox-local-branch-layer"), layer);
+  assert.equal((layer as HTMLElement).style.transform, subject.second.style.transform);
+  subject.controller.disconnect();
   void subject.window.happyDOM.abort();
 });

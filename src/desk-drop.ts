@@ -99,7 +99,7 @@ export function deckCardDropTarget(
       return { kind: "pile", pile };
     }
     if (
-      element.closest(".slipbox-deck-map") !== null ||
+      element.closest(".slipbox-deck-map, .slipbox-local-branch-view") !== null ||
       element.closest(".slipbox-card") !== null
     ) {
       return null;

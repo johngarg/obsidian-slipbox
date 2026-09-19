@@ -89,6 +89,12 @@ and Large 960 × 640 px. Resizing the pane or positioning the Deck does not resi
 cards. Drag empty workspace to pan in either direction and reach offscreen
 content. Viewed cards and Desk piles retain their own sizing behavior.
 
+The Deck starts behind Desk piles. Right-click a Deck card or empty workspace
+and choose **Bring Deck to front** or **Send Deck to back** to move it above or
+below all piles. This applies to the current pane for the session and survives
+orientation changes and refreshes. Branch View and its controls stay above both;
+these actions do not move cards or change the order of Desk piles.
+
 Enable **Show lower Fan headers at bottom** to place the address, title, and
 header controls at the bottom of cards below the anchor in vertical Fan, replacing
 the ordinary backlink footer. The top header and normal footer return as soon as
@@ -128,6 +134,9 @@ pan to reach the rest.
 views. It preserves the selected card, body scroll positions, workspace pan,
 alignment and offset along the sequence. It has no default shortcut; assign one
 in Deck keybindings or Obsidian Hotkeys, or use the command palette.
+Existing Desk piles keep their positions, including piles you have not dragged.
+New automatic piles use the current orientation's initial layout. Resizing does
+not rearrange stored pile positions; pan to reach piles outside a smaller pane.
 Default arrows follow the orientation: Left/Right horizontally, Up/Down
 vertically; `k`/`j` always mean previous/next. Existing bindings matching the old
 defaults are treated as automatic on upgrade. Custom and disabled bindings are

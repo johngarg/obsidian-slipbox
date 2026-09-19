@@ -372,3 +372,21 @@ describe("Deck card drops", () => {
     assert.equal(result?.kind === "pile" ? result.pile : null, target.pile);
   });
 });
+
+test("detached Branch View remains an invalid Deck drop target above piles or workspace", () => {
+  const window = new Window();
+  const branch = div(window, "slipbox-local-branch-view");
+  const graph = div(window, "slipbox-local-branch-graph");
+  const node = div(window, "slipbox-local-branch-node");
+  node.setAttribute("role", "button");
+  branch.append(graph); graph.append(node);
+  const target = pile(window, "target");
+  const stage = div(window, "slipbox-deck-stage");
+  for (const element of [branch, graph, node]) {
+    assert.equal(deckCardDropTarget([element, branch, target.card, target.pile, stage]), null);
+    assert.equal(deckCardDropTarget([element, branch, stage]), null);
+  }
+  assert.deepEqual(deckCardDropTarget([target.card, target.pile, stage]), { kind: "pile", pile: target.pile });
+  assert.deepEqual(deckCardDropTarget([stage]), { kind: "workspace" });
+  void window.happyDOM.abort();
+});

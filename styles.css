@@ -309,7 +309,14 @@
   pointer-events: none;
 }
 
+/* Raise the Deck as a group; active drags and Branch View keep their own layers. */
+.slipbox-deck-cards.is-in-front {
+  z-index: 250;
+}
+
 .slipbox-desk {
+  /* Keep the entire Desk above the Deck by default, including its transformed pile anchor. */
+  z-index: 230;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -319,15 +326,31 @@
   z-index: 300;
 }
 
-.slipbox-desk-piles {
+.slipbox-desk-piles,
+.slipbox-desk-default-anchor {
   position: absolute;
-  top: calc(var(--slipbox-deck-top) - var(--slipbox-pile-deck-gap));
   left: 50%;
   width: calc(var(--_slipbox-desk-width) + 16px);
   height: var(--_slipbox-pile-height);
   overflow: visible;
   pointer-events: none;
+}
+
+/* Stored pile coordinates always use the workspace centre. */
+.slipbox-desk-piles {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* This guide is measured only when a new automatic pile needs its first position. */
+.slipbox-desk-default-anchor {
+  top: calc(var(--slipbox-deck-top) - var(--slipbox-pile-deck-gap));
   transform: translate(-50%, -100%);
+  visibility: hidden;
+}
+
+.slipbox-desk-pile.is-awaiting-position {
+  visibility: hidden;
 }
 
 .slipbox-desk-pile {
@@ -969,7 +992,8 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 
 /* The probe and Deck cards must resolve the same untransformed border box. */
 .slipbox-card,
-.slipbox-deck-size-probe {
+.slipbox-deck-size-probe,
+.slipbox-local-branch-layer {
   box-sizing: border-box;
   width: var(--slipbox-deck-card-width, var(--slipbox-fixed-deck-width, var(--_slipbox-default-deck-width)));
   height: auto;
@@ -1010,7 +1034,8 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
 }
 
 /* Cache moving card surfaces without giving background bodies native scroll layers. */
-.slipbox-deck-cards > .slipbox-card {
+.slipbox-deck-cards > .slipbox-card,
+.slipbox-space > .slipbox-card.is-dragging-to-desk {
   left: var(--slipbox-deck-center-x, 50%);
   will-change: transform;
 }
@@ -1278,6 +1303,22 @@ input[type="text"].slipbox-desk-filing-input.is-invalid:focus-visible {
   font-weight: var(--font-semibold);
 }
 
+/* Match the owner card's box and pose while keeping navigation above all workspace cards. */
+.slipbox-local-branch-layer {
+  position: absolute;
+  top: var(--slipbox-deck-center);
+  left: var(--slipbox-deck-center-x, 50%);
+  z-index: 310;
+  border: 1px solid transparent;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.slipbox-local-branch-layer[hidden] {
+  display: none;
+}
+
 .slipbox-local-branch-view {
   position: absolute;
   display: flex;
@@ -1503,10 +1544,6 @@ button.slipbox-local-branch-toggle svg {
 
 .slipbox-local-branch-stub.is-expanded .slipbox-local-branch-stub-line {
   stroke: var(--text-accent);
-}
-
-.slipbox-card.is-dragging-to-desk > .slipbox-local-branch-view {
-  display: none;
 }
 
 /* Viewed and Desk cards share the same empty-slot filing affordance. */
@@ -2511,7 +2548,7 @@ button.slipbox-card-color-choice.is-no-color::after {
 .slipbox-deck-view[data-deck-orientation="vertical"].is-deck-centered-position { --slipbox-deck-center: 50%; }
 .slipbox-deck-view[data-deck-orientation="vertical"].is-deck-top-position { --slipbox-deck-center: 22%; }
 
-.slipbox-deck-view[data-deck-orientation="vertical"] .slipbox-desk-piles {
+.slipbox-deck-view[data-deck-orientation="vertical"] .slipbox-desk-default-anchor {
   top: 24px;
   right: 24px;
   left: auto;

@@ -23,6 +23,7 @@ export interface CardContextMenuOptions {
   readonly title: string;
   readonly bookmarked: boolean;
   readonly onDesk: boolean;
+  addSurfaceItems?(menu: Menu): void;
   run(action: SlipboxAction): void;
 }
 
@@ -89,6 +90,8 @@ export function showCardContextMenu(options: CardContextMenuOptions): void {
     sectioned: true,
     run: (action) => options.run(action),
   });
+
+  options.addSurfaceItems?.(menu);
 
   // Preserve Obsidian's canonical file actions and third-party contributions.
   options.app.workspace.trigger(

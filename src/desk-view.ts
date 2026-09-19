@@ -72,7 +72,7 @@ import {
   attachRenderedLinkInteractions,
 } from "./rendered-link-interactions.js";
 import { applyRenderedBranchLinkOutlines } from "./rendered-branch-links.js";
-import { defaultPilePosition } from "./workspace-layout.js";
+import { automaticPileWorkspacePosition } from "./workspace-layout.js";
 
 const DRAG_THRESHOLD_PX = 5;
 const DESK_SINGLE_CLICK_DELAY_MS = 320;
@@ -87,6 +87,7 @@ export interface DeskViewHost {
 }
 
 export interface DeskViewActions {
+  addDeckOrderingMenuItems(menu: Menu): void;
   jumpToFiledCard(path: string): Promise<void>;
   updateFilingInput(value: string): void;
   confirmFiling(): void;
@@ -120,6 +121,8 @@ export class DeskRenderer {
   private previews = new Map<string, HTMLElement>();
   private rootEl: HTMLElement | null = null;
   private pilesAnchorEl: HTMLElement | null = null;
+  private defaultAnchorEl: HTMLElement | null = null;
+  private readonly unpositionedPiles = new Map<string, HTMLElement>();
   private workspaceEl: HTMLElement | null = null;
   private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private filingEditor: InlineFilingEditorElements | null = null;
@@ -167,6 +170,8 @@ export class DeskRenderer {
     this.previews.clear();
     this.rootEl = null;
     this.pilesAnchorEl = null;
+    this.defaultAnchorEl = null;
+    this.unpositionedPiles.clear();
     this.workspaceEl = null;
     this.filingEditor = null;
   }
@@ -301,6 +306,11 @@ export class DeskRenderer {
     );
     this.rootEl = deskEl;
 
+    this.defaultAnchorEl = deskEl.createDiv({
+      cls: "slipbox-desk-default-anchor",
+      attr: { "aria-hidden": "true" },
+    });
+
     const piles = deskEl.createDiv({
       cls: "slipbox-desk-piles",
     });
@@ -323,6 +333,46 @@ export class DeskRenderer {
       ));
     });
     await Promise.all(jobs);
+  }
+
+  /** Called after Deck geometry is settled; existing piles need no measurements. */
+  positionPiles(defaultPlacementReady = true): boolean {
+    if (this.unpositionedPiles.size === 0) return true;
+    const applyStoredPositions = () => {
+      const piles = new Map(this.plugin.deskService.snapshot.piles.map((pile) => [pile.id, pile]));
+      for (const [id, element] of this.unpositionedPiles) {
+        const pile = piles.get(id);
+        if (pile === undefined) {
+          this.unpositionedPiles.delete(id);
+        } else if (pile.position !== undefined) {
+          this.applyPilePosition(element, pile.position);
+          this.unpositionedPiles.delete(id);
+        }
+      }
+    };
+    applyStoredPositions();
+    if (this.unpositionedPiles.size === 0) return true;
+    const stage = this.workspaceEl, guide = this.defaultAnchorEl, anchor = this.pilesAnchorEl;
+    if (!defaultPlacementReady || stage === null || guide === null || anchor === null ||
+      !stage.isConnected || stage.clientWidth <= 0 || stage.clientHeight <= 0) return false;
+    const visibility = stage.win.getComputedStyle(stage).visibility;
+    if (visibility === "hidden" || visibility === "collapse") return false;
+    const guideBounds = guide.getBoundingClientRect(), anchorBounds = anchor.getBoundingClientRect();
+    const positions = new Map<string, DeskPilePosition>();
+    this.plugin.deskService.snapshot.piles.forEach((pile, index) => {
+      if (!this.unpositionedPiles.has(pile.id)) return;
+      const position = automaticPileWorkspacePosition(index, guideBounds, anchorBounds);
+      if (position !== null) positions.set(pile.id, position);
+    });
+    this.plugin.deskService.initializePilePositions(positions);
+    applyStoredPositions();
+    return this.unpositionedPiles.size === 0;
+  }
+
+  private applyPilePosition(element: HTMLElement, position: DeskPilePosition): void {
+    element.style.setProperty("--slipbox-pile-x", `${position.x}px`);
+    element.style.setProperty("--slipbox-pile-y", `${position.y}px`);
+    element.removeClass("is-awaiting-position");
   }
 
   private attachBackgroundMenu(stage: HTMLElement): void {
@@ -384,6 +434,8 @@ export class DeskRenderer {
           .setDisabled(!this.actions.canRunAction("return-all-filed-cards"))
           .onClick(() => this.actions.runAction("return-all-filed-cards"));
       });
+      menu.addSeparator();
+      this.actions.addDeckOrderingMenuItems(menu);
       menu.showAtMouseEvent(event);
     });
   }
@@ -413,14 +465,12 @@ export class DeskRenderer {
       { placement: "bottom", delay: 350 },
     );
     pileEl.tabIndex = expanded ? -1 : 0;
-    const renderedPosition = position ?? defaultPilePosition(pileIndex);
-    pileEl.style.setProperty(
-      "--slipbox-pile-x",
-      "xPercent" in renderedPosition
-        ? `${renderedPosition.xPercent}%`
-        : `${renderedPosition.x}px`,
-    );
-    pileEl.style.setProperty("--slipbox-pile-y", `${renderedPosition.y}px`);
+    if (position === null) {
+      pileEl.addClass("is-awaiting-position");
+      this.unpositionedPiles.set(pile.id, pileEl);
+    } else {
+      this.applyPilePosition(pileEl, position);
+    }
 
     pileEl.setAttr("role", expanded ? "group" : "button");
     pileEl.setAttr("aria-expanded", String(expanded));

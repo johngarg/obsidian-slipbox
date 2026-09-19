@@ -39,10 +39,11 @@ function subject(orientation = 'vertical', model = 'fan') {
   const cards = Array.from({ length: 20 }, (_, index) => ({ path: `${index}.md` }));
   const view = Object.create(DeckView.prototype);
   Object.assign(view, {
+    localBranchView: { updatePosition() {} },
     stageEl: stage, contentEl: stage, spaceEl: space, spaceRecenteringTimer: null,
     deckViewport: new DeckViewport(), drawerTransition: new DeckTransition(), renderedCards: [], viewportCenteringFrame: null,
     spaceOffsetX: 70, spaceOffsetY: 90, inlineEdit: null, inlineEditStarting: false, cardFocus: null,
-    viewedFilingEditor: null, deskRenderer: { filingInput: null },
+    viewedFilingEditor: null, deskRenderer: { filingInput: null, positionPiles: () => true },
     plugin: { settings: { ...DEFAULT_SETTINGS, deckOrientation: orientation, deckStackModel: model },
       index: { snapshot: { filed: cards }, filedIndexForPath: path => cards.findIndex(card => card.path === path) },
       startupDeckPositionMode: 'bottom' },
@@ -83,22 +84,31 @@ for (const orientation of ['horizontal', 'vertical']) {
 
 test('view geometry and CSS receive the same resolved horizontal anchor on resize', () => {
   const { view, window, close } = subject('horizontal');
+  const style = window.document.createElement('style'); style.textContent = css; window.document.head.append(style);
+  view.stageEl.className = 'view-content slipbox-deck-view';
+  view.spaceEl.className = 'slipbox-space';
   const card = window.document.createElement('div');
+  card.className = 'slipbox-card';
   card.dataset.index = '4';
   view.renderedCards = [card];
   view.deckCardsEl = window.document.createElement('div');
+  view.deckCardsEl.className = 'slipbox-deck-cards';
+  view.spaceEl.append(view.deckCardsEl); view.deckCardsEl.append(card);
   view.updatePileAnchorFromDeck = () => true;
   view.deckViewport.setPositionMode('left');
   let geometry = view.deckGeometry();
   assert.equal(geometry.anchorCenterX, 432);
   assert.equal(geometry.anchorCoordinate, geometry.anchorCenterX);
   DeckView.prototype.positionCards.call(view, geometry);
-  assert.equal(view.deckCardsEl.style.getPropertyValue('--slipbox-deck-center-x'), '432px');
+  assert.equal(window.getComputedStyle(card).left, '432px');
+  assert.equal(window.getComputedStyle(card).top, `${geometry.anchorCenterY}px`);
   Object.defineProperty(view.stageEl, 'clientWidth', { value: 600 });
   view.deckViewport.setPositionMode('right');
   geometry = view.deckGeometry();
   assert.equal(geometry.anchorCenterX + 420, 588);
   assert.equal(geometry.anchorCoordinate, geometry.anchorCenterX);
+  DeckView.prototype.positionCards.call(view, geometry);
+  assert.equal(window.getComputedStyle(card).left, `${geometry.anchorCenterX}px`);
   close();
 });
 

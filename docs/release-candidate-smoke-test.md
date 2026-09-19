@@ -263,6 +263,12 @@ Tester notes:
   pan, alignments, body scroll and custom/disabled bindings survive round trips.
   Automatic arrows, map and Branch View follow orientation. A failed edit save
   prevents the command; pending motion cannot paint into a rebuilt stage.
+- [ ] With positioned and untouched automatic Desk piles present, toggle orientation
+  repeatedly in both stacking models and multiple panes with different pan offsets.
+  Pile positions, contents, order, expansion and focus stay unchanged. New automatic
+  piles use the current layout once; later toggles, reordering and resizing do not
+  rewrite their positions. Recheck dragging, splitting, dropping onto existing piles,
+  background creation and cancellation after toggling.
 - [ ] Card spread retains its name and values. Card splay controls both rotation
   and transverse offsets; the focused card stays straight. Card fading at 0,
   0.5, 1 and 2 changes opacity without changing geometry, with the default model

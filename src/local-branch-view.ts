@@ -103,6 +103,7 @@ const MOVEMENTS: readonly {
 /** Owns one stable, transferable Branch View for a Deck view. */
 export class LocalBranchViewController {
   private readonly root: HTMLElement;
+  private readonly layer: HTMLElement;
   private readonly rootLabel: HTMLElement;
   private owner: HTMLElement | null = null;
   private stage: HTMLElement | null = null;
@@ -119,13 +120,16 @@ export class LocalBranchViewController {
       .createEl("section");
     this.root.className = "slipbox-local-branch-view";
     this.rootLabel = appendHiddenLabel(this.root, "Local branch view");
+    this.layer = localBranchDomWindow(environment.activeDocument).createDiv();
+    this.layer.className = "slipbox-local-branch-layer";
+    this.layer.append(this.root);
   }
 
-  attach(owner: HTMLElement, path: string, stage: HTMLElement): void {
+  attach(owner: HTMLElement, path: string, stage: HTMLElement, space: HTMLElement): void {
     const activeChanged = path !== this.path;
     const ownerChanged = owner !== this.owner;
     const stageChanged = stage !== this.stage;
-    if (!activeChanged && !ownerChanged && !stageChanged) return;
+    if (!activeChanged && !ownerChanged && !stageChanged && this.layer.parentElement === space) return;
     if (activeChanged) {
       this.expandedGapIds.clear();
       this.expandedDepartureId = null;
@@ -137,11 +141,20 @@ export class LocalBranchViewController {
     this.owner = owner;
     this.stage = stage;
     this.path = path;
-    if (this.root.parentElement !== owner) {
-      owner.append(this.root);
+    if (this.layer.parentElement !== space) {
+      space.append(this.layer);
     }
+    this.updatePosition();
     this.observe(owner, stage);
     this.refresh();
+  }
+
+  /** Share the owner's pose without measuring layout or inheriting its stacking context. */
+  updatePosition(): void {
+    const owner = this.owner;
+    if (owner === null) return;
+    this.layer.style.transform = owner.style.transform;
+    this.layer.hidden = owner.classList.contains("is-dragging-to-desk");
   }
 
   detach(): void {
@@ -151,7 +164,7 @@ export class LocalBranchViewController {
     this.model = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    this.root.remove();
+    this.layer.remove();
   }
 
   disconnect(): void {

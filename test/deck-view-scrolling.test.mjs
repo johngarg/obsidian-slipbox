@@ -33,9 +33,11 @@ function subject(model = 'drawer') {
   let sequence = 0;
   const view = Object.create(DeckView.prototype);
   Object.assign(view, {
+    localBranchView: { updatePosition() {} },
     stageEl: stage, contentEl: stage, spaceEl: null, renderedCards: [], inlineEdit: null,
     deckViewport: new DeckViewport(), wheelController: new DeckWheelController(), wheelGestureTimer: null,
     drawerTransition: new DeckTransition(),
+    deskRenderer: { positionPiles: () => true },
     plugin: { settings: { deckOrientation: 'vertical', deckStackModel: model, mainCardSize: 'medium', cardSpread: 0.1,
       cardSplay: 0, cardFadeStrength: 1, wheelOverCardBody: 'deck', allowCardScrolling: true },
       index: { snapshot: { filed: cards }, filedIndexForPath: path => cards.findIndex(card => card.path === path) },

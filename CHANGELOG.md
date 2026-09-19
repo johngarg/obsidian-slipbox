@@ -8,6 +8,10 @@ initial public beta.
 
 ### Added
 
+- Bring the Deck in front of all Desk piles or send it behind them from a Deck
+  card or workspace context menu. The choice lasts for the current pane's session;
+  the Deck starts behind piles, and Branch View stays above both.
+
 - Supported CSS properties for fixed or responsive card sizes, shared card shape,
   paper and typography, with a ruled index-card example. Deck spacing and visibility
   follow custom dimensions, and reading and editing share the chosen appearance.
@@ -46,6 +50,15 @@ initial public beta.
 - Relicensed Slipbox Desk from 0BSD to the MIT License.
 
 ### Fixed
+
+- Keep Desk piles above the Deck by default, and Branch View and its controls
+  above both card surfaces, so overlapping cards cannot hide navigation controls.
+
+- Keep existing Desk piles in place when switching Deck orientation, including
+  automatically placed piles and repeated switches between layouts.
+
+- Keep Deck cards under the pointer when starting a Desk drag after positioning
+  the Deck near an edge or corner.
 
 - Keep vertical trackpad gestures moving through focus changes in Fan and Drawer,
   including when the starting card moves off screen. Card-body boundary resistance

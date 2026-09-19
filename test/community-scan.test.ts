@@ -37,7 +37,7 @@ describe("community scanner CSS compatibility", () => {
     assert.doesNotMatch(styles, /:has\(/);
     assert.match(
       styles,
-      /\.slipbox-card\.is-dragging-to-desk\s*>\s*\.slipbox-local-branch-view/,
+      /\.slipbox-local-branch-layer\[hidden\]/,
     );
   });
 

@@ -31,6 +31,38 @@ function subject(available = true) {
 }
 
 describe("DeskService", () => {
+  test("initializes missing positions atomically and coalesces publication after layout", async () => {
+    const { service, publications } = subject();
+    let state = createPile(EMPTY_DESK, "a", [{cardRef:"A.md",kind:"filed"}]);
+    state = createPile(state, "b", [{cardRef:"B.md",kind:"filed"}]);
+    await service.replace(state);
+    service.initializePilePositions(new Map([["a", {x:12.25,y:-40.5}]]));
+    service.initializePilePositions(new Map([["b", {x:8,y:10}]]));
+    assert.equal(publications(), 1);
+    assert.deepEqual(service.snapshot.piles.map(pile=>pile.position), [{x:12.25,y:-40.5},{x:8,y:10}]);
+    await Promise.resolve();
+    assert.equal(publications(), 2);
+    const initialized = service.snapshot;
+    service.initializePilePositions(new Map([["a", {x:999,y:999}], ["missing", {x:0,y:0}]]));
+    assert.equal(service.snapshot, initialized);
+    await Promise.resolve();
+    assert.equal(publications(), 2);
+  });
+
+  test("rejects stale/deleted and invalid positions without publishing", async () => {
+    const { service, publications } = subject();
+    await service.replace(createPile(EMPTY_DESK, "a", [{cardRef:"A.md",kind:"filed"}]));
+    const initial = service.snapshot;
+    service.initializePilePositions(new Map([["a", {x:NaN,y:1}]]));
+    assert.equal(service.snapshot, initial);
+    service.removePath("A.md");
+    const removed = service.snapshot;
+    service.initializePilePositions(new Map([["a", {x:10,y:20}]]));
+    assert.equal(service.snapshot, removed);
+    await Promise.resolve();
+    assert.equal(publications(), 1);
+  });
+
   test("coordinates a fresh index publication before pulling a card", async () => {
     const { service, publications } = subject();
     await service.toggleFile(FILE);

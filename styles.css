@@ -1855,7 +1855,8 @@ button.slipbox-local-branch-toggle svg {
   transition: none;
 }
 
-.slipbox-card-scroll.markdown-rendered > :first-child {
+.slipbox-card-scroll.markdown-rendered > :first-child,
+.slipbox-viewed-card-content > :first-child {
   margin-top: 0;
 }
 
@@ -1868,7 +1869,8 @@ button.slipbox-local-branch-toggle svg {
   }
 }
 
-.slipbox-card-scroll.markdown-rendered > :last-child {
+.slipbox-card-scroll.markdown-rendered > :last-child,
+.slipbox-viewed-card-content > :last-child {
   margin-bottom: 0;
 }
 

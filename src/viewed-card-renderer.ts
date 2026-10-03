@@ -37,6 +37,7 @@ import {
 import {
   beginThresholdPointerDrag,
 } from "./pointer-drag.js";
+import { applyRenderedLinkAccessibility } from "./rendered-link-interactions.js";
 import {
   type SlipboxAction,
   type SlipboxSettings,
@@ -82,6 +83,7 @@ export class ViewedCardRenderer {
   bodyEl: HTMLElement | null = null;
   filingEditor: InlineFilingEditorElements | null = null;
   private component: Component | null = null;
+  private markdownEl: HTMLElement | null = null;
   private headerButtons: CardHeaderButtonController | null = null;
   readonly footers: CardFooterManager;
   readonly signatures: CardSignatureManager;
@@ -297,7 +299,7 @@ export class ViewedCardRenderer {
     file: TFile,
     target: HTMLElement,
   ): Promise<void> {
-    this.component?.unload();
+    this.unloadMarkdown();
     const component = new Component();
     component.load();
     this.component = component;
@@ -305,22 +307,37 @@ export class ViewedCardRenderer {
       const body = await this.environment.index.readBody(file);
       if (
         !this.environment.session.isViewing(file.path) ||
-        this.component !== component
+        this.component !== component ||
+        !target.isConnected
       ) {
         return;
       }
-      const rendered = target.cloneNode(false) as HTMLElement;
-      await MarkdownRenderer.render(
+      // Keep each render's container mounted: postprocessors can retain it or
+      // wait for visible content. Detaching it on unload isolates late writes.
+      target.empty();
+      const rendered = target.createDiv({ cls: "slipbox-viewed-card-content" });
+      this.markdownEl = rendered;
+      const rendering = MarkdownRenderer.render(
         this.environment.app,
         body,
         rendered,
         file.path,
         component,
       );
+      this.environment.links.attach(rendered, file.path, "rendered-link");
+      configureRenderedCardBody(
+        target,
+        this.environment.settings().allowCardScrolling,
+        this.environment.session.snapshot?.scrollTop ?? 0,
+      );
+      await rendering;
       if (this.component !== component || !target.isConnected) return;
-      target.replaceChildren(...Array.from(rendered.childNodes));
-      this.environment.links.outline(target, file);
-      this.environment.links.attach(target, file.path, "rendered-link");
+      this.environment.links.outline(rendered, file);
+      applyRenderedLinkAccessibility(
+        rendered,
+        this.environment.settings().followLinksFromCards,
+        this.environment.settings().showTooltips,
+      );
       configureRenderedCardBody(
         target,
         this.environment.settings().allowCardScrolling,
@@ -445,7 +462,10 @@ export class ViewedCardRenderer {
   }
 
   unloadMarkdown(): void {
-    this.component?.unload();
+    const component = this.component;
     this.component = null;
+    this.markdownEl?.remove();
+    this.markdownEl = null;
+    component?.unload();
   }
 }

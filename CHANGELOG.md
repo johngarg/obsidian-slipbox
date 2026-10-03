@@ -9,6 +9,8 @@ initial public beta.
 ### Fixed
 
 - Rejected bookmark additions no longer leave a card looking bookmarked.
+- Viewed cards preserve Markdown postprocessor interactions and updates, and
+  display rendered text while images and other asynchronous content load.
 
 ### Improved
 

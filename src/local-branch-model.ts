@@ -20,6 +20,7 @@ import type {
   LocalBranchStrandRole,
 } from "./local-branch-types.js";
 
+export { localBranchTargets } from "./local-branch-navigation.js";
 export type {
   LocalBranchCard,
   LocalBranchDeparture,
@@ -31,27 +32,11 @@ export type {
   LocalBranchProjectionInput,
   LocalBranchRelationship,
   LocalBranchStrand,
-  LocalBranchTarget,
+  LocalBranchTarget
 } from "./local-branch-types.js";
-export { localBranchTargets } from "./local-branch-navigation.js";
 
 interface PreparedLocalBranchModelInput extends LocalBranchModelInput {
   readonly strandFamilies: LocalBranchStrandFamilyIndex;
-}
-
-/** Build the complete local semantic projection before responsive omission. */
-export function buildLocalBranchModel(
-  input: LocalBranchModelInput,
-): LocalBranchModel | null {
-  const projector = new LocalBranchProjector({
-    cards: input.cards,
-    inferred: input.inferred,
-    explicit: input.explicit,
-  });
-  return projector.modelForPath(
-    input.activePath,
-    input.expandedDepartureId ?? null,
-  );
 }
 
 /** Reuses structural lookups and the most recent unexpanded local model. */

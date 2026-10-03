@@ -31,17 +31,6 @@ export interface DeskState {
   readonly unfiledPileId: string | null;
 }
 
-/**
- * A primary click selects a visible Desk card. Collapsed cards additionally
- * expand their pile; showing a filed card in the Deck is always an explicit
- * registered action.
- */
-export function deskCardPrimaryClickIntent(
-  expanded: boolean,
-): "focus-only" | "expand-pile" {
-  return expanded ? "focus-only" : "expand-pile";
-}
-
 export interface DeskStackJitter {
   readonly rotationDegrees: number;
   readonly offsetX: number;
@@ -53,13 +42,6 @@ export const EMPTY_DESK: DeskState = {
   expandedPileIds: [],
   unfiledPileId: null,
 };
-
-export function initialDeskFromUnfiled(
-  candidates: readonly DeskCardCandidate[],
-  pileId: string,
-): DeskState {
-  return reconcileDesk(EMPTY_DESK, candidates, pileId);
-}
 
 export function createPile(
   state: DeskState,
@@ -87,10 +69,6 @@ export function createPile(
     cards: unique,
   });
   return cleanDesk({ ...state, piles });
-}
-
-export function removeEmptyPiles(state: DeskState): DeskState {
-  return cleanDesk(state);
 }
 
 export function addUniqueCardToPile(

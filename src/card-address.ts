@@ -1,4 +1,4 @@
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+import { createHtmlElement } from "./dom.js";
 
 /** Accessible name for a card that has not been given an address yet. */
 export const UNFILED_ADDRESS_LABEL = "Unfiled";
@@ -23,7 +23,7 @@ export function renderCardAddress(
   parent: HTMLElement,
   { cls, address }: CardAddressOptions,
 ): HTMLSpanElement {
-  const element = parent.ownerDocument.createElementNS(HTML_NAMESPACE, "span");
+  const element = createHtmlElement(parent.ownerDocument, "span");
   element.className = address === null ? `${cls} is-unfiled-slot` : cls;
   if (address !== null) {
     element.textContent = address;

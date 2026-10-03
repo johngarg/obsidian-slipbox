@@ -1,4 +1,5 @@
 import { fnv1a } from "./hash.js";
+import { isRecord } from "./value-utils.js";
 
 export interface CanvasNode {
   readonly id: string;
@@ -160,10 +161,6 @@ function uniqueNonempty(values: readonly string[]): string[] {
     seen.add(value);
     return true;
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function finite(value: number | undefined, fallback: number): number {

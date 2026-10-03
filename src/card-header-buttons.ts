@@ -1,4 +1,5 @@
 import { Menu, setIcon } from "obsidian";
+import { getResizeObserver } from "./dom.js";
 
 import {
   cardHeaderVisibleActionCount,
@@ -6,15 +7,15 @@ import {
   type CardHeaderActionContext,
   type CardHeaderActionPresentation,
 } from "./card-header-actions.js";
-import type {
-  CardHeaderButtonSettings,
-  SlipboxAction,
-} from "./settings.js";
+import { setCardTooltip } from "./card-tooltip.js";
 import {
   preventPointerActivatedButtonFocus,
   releasePointerActivatedButtonFocus,
 } from "./pointer-button-focus.js";
-import { setCardTooltip } from "./card-tooltip.js";
+import type {
+  CardHeaderButtonSettings,
+  SlipboxAction,
+} from "./settings.js";
 
 export interface CardHeaderButtonRenderOptions {
   readonly container: HTMLElement;
@@ -34,7 +35,7 @@ interface RenderedAction {
 export class CardHeaderButtonController {
   private readonly rendered: readonly RenderedAction[];
   private readonly moreButton: HTMLButtonElement;
-  private readonly observer: ResizeObserver;
+  private readonly observer: ResizeObserver | null;
   private overflowed: readonly RenderedAction[] = [];
   private frame: number | null = null;
 
@@ -52,18 +53,18 @@ export class CardHeaderButtonController {
     if (ownerWindow === null) {
       throw new Error("Card-header controls require an attached document");
     }
-    this.observer = new ownerWindow.ResizeObserver(() =>
-      this.scheduleLayout());
-    this.observer.observe(options.container);
+    const Observer = getResizeObserver(ownerWindow);
+    this.observer = Observer === null ? null : new Observer(() => this.scheduleLayout());
+    this.observer?.observe(options.container);
     const parent = options.container.parentElement;
     if (parent !== null) {
-      this.observer.observe(parent);
+      this.observer?.observe(parent);
     }
     this.scheduleLayout();
   }
 
   disconnect(): void {
-    this.observer.disconnect();
+    this.observer?.disconnect();
     if (this.frame !== null) {
       this.options.container.win.cancelAnimationFrame(this.frame);
     }

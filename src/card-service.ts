@@ -6,6 +6,7 @@ import type {
   TFile,
   TFolder,
 } from "obsidian";
+import { errorMessage, isRecord } from "./value-utils.js";
 
 import { validateAddress } from "./address-order.js";
 import {
@@ -14,8 +15,8 @@ import {
   type CardColor,
 } from "./card-color.js";
 import { deleteCardWithConfirmation } from "./card-deletion.js";
-import type { CardIndex, FiledCard } from "./card-index.js";
 import type { CardIndexRuntime } from "./card-index-runtime.js";
+import type { CardIndex, FiledCard } from "./card-index.js";
 import {
   buildCardLinkSuggestions,
   type CardLinkSuggestion,
@@ -25,8 +26,8 @@ import {
   resolveCardDisplayTitle,
   resolveCardTitle,
 } from "./card-title.js";
-import type { DeskPilePosition } from "./desk-state.js";
 import type { DeskService } from "./desk-service.js";
+import type { DeskPilePosition } from "./desk-state.js";
 import type { MetadataCacheWaiter } from "./metadata-cache-waiter.js";
 import {
   newCardBasename,
@@ -337,12 +338,4 @@ export class CardService {
       })),
     );
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

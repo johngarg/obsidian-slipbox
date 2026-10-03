@@ -8,6 +8,7 @@ import {
   type PendingDeckCommand,
   type PendingDeckCommandCompletion,
 } from "./deck-commands.js";
+import { createHtmlElement } from "./dom.js";
 import {
   eventTargetsDeck,
   shouldSuspendDeckCommand,
@@ -18,23 +19,22 @@ import {
   formatKeyBinding,
   keyBindingFromKeyboardEvent,
   keyBindingSignature,
-  type SlipboxAction,
   type DeckKeyBinding,
+  type SlipboxAction,
   type SlipboxActionDefinition,
   type SlipboxSettings,
 } from "./settings.js";
 import {
+  ShortcutCommandTracker,
   arbitrateShortcut,
   classifyShortcutClaim,
   installEarlyShortcutObserver,
-  ShortcutCommandTracker,
 } from "./shortcut-arbitration.js";
 
 const COMMAND_FEEDBACK_DURATION_MS = 1_800;
 const COMMAND_DISPATCH_KEYUP_TIMEOUT_MS = 2_000;
 const CONFLICT_NOTICE_THROTTLE_MS = 5_000;
 const CONFLICT_NOTICE_DURATION_MS = 6_000;
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 const PENDING_COMMAND_ACTIONS = new Set<SlipboxAction>([
   "find-address-first",
@@ -221,23 +221,21 @@ export class DeckShortcutController {
   }
 
   beginAddressCommand(): void {
-    this.pendingCommandStartEvent = null;
-    this.clearPendingCommand();
-    this.pendingCommand = startAddressCommand();
-    this.updateStatus();
+    this.beginCommand(startAddressCommand);
   }
 
   beginPileCommand(): void {
-    this.pendingCommandStartEvent = null;
-    this.clearPendingCommand();
-    this.pendingCommand = startPileCommand();
-    this.updateStatus();
+    this.beginCommand(startPileCommand);
   }
 
   beginPositionCommand(): void {
+    this.beginCommand(startPositionCommand);
+  }
+
+  private beginCommand(start: () => PendingDeckCommand): void {
     this.pendingCommandStartEvent = null;
     this.clearPendingCommand();
-    this.pendingCommand = startPositionCommand();
+    this.pendingCommand = start();
     this.updateStatus();
   }
 
@@ -252,10 +250,7 @@ export class DeckShortcutController {
   }
 
   renderStatus(container: HTMLElement): void {
-    const status = container.ownerDocument.createElementNS(
-      HTML_NAMESPACE,
-      "div",
-    );
+    const status = createHtmlElement(container.ownerDocument, "div");
     status.className = "slipbox-pending-command-status";
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");

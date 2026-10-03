@@ -1,13 +1,12 @@
+import { bundleFixture, installDomShims, idleInlineEditor, deckDragFixture } from './helpers/view-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
-import { build } from 'esbuild';
 import { Window } from 'happy-dom';
 
-const output = await build({ stdin: { contents: `
+const load = await bundleFixture(`
   export { LocalBranchViewController } from './src/local-branch-view.ts';
+  export { DeckCardDragController } from './src/deck-card-drag.ts';
   export { DeckView } from './src/deck-view.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { DeckTransition } from './src/deck-transition.ts';
@@ -18,8 +17,7 @@ const output = await build({ stdin: { contents: `
   export { cardMotionStyle, cardFootprint } from './src/deck-motion.ts';
   export { deckRenderedIndices } from './src/deck-render-window.ts';
   export { attachRenderedLinkInteractions } from './src/rendered-link-interactions.ts';
-`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'cjs', platform: 'node', external: ['obsidian'] });
-const actualRequire = createRequire(import.meta.url);
+`);
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
 const stylesheet = readFileSync('styles.css', 'utf8');
@@ -39,37 +37,12 @@ async function subject(t, orientation = 'vertical', model = 'drawer', withStyles
   window.matchMedia = () => ({ matches: reduced });
   window.requestAnimationFrame = callback => { pending.set(++sequence, callback); return sequence; };
   window.cancelAnimationFrame = id => pending.delete(id);
-  // Happy DOM lacks this CSSOM accessor; browsers reflect it into the declaration.
-  Object.defineProperty(window.CSSStyleDeclaration.prototype, 'translate', {
-    configurable: true,
-    get() { return this.getPropertyValue('translate'); },
-    set(value) { this.setProperty('translate', value); },
-  });
-  Object.defineProperties(window.Node.prototype, {
-    win: { configurable: true, get() { return this.ownerDocument?.defaultView ?? window; } },
-    doc: { configurable: true, get() { return this.ownerDocument; } },
-    instanceOf: { configurable: true, value(Type) { return this instanceof Type; } },
-  });
-  Object.defineProperties(window.Event.prototype, {
-    win: { configurable: true, get: () => window }, targetNode: { configurable: true, get() { return this.target; } },
-  });
-  Object.assign(window.HTMLElement.prototype, {
-    addClass(name) { this.classList.add(name); }, removeClass(name) { this.classList.remove(name); },
-    toggleClass(name, on) { this.classList.toggle(name, on); }, hasClass(name) { return this.classList.contains(name); },
-    setAttr(name, value) { this.setAttribute(name, value); },
-    setCssProps(props) { for (const [name, value] of Object.entries(props)) this.style.setProperty(name, value); },
-    createEl(tag, options = {}) { const el = window.document.createElement(tag); el.className = options.cls ?? ''; el.textContent = options.text ?? ''; for (const [name, value] of Object.entries(options.attr ?? {})) el.setAttribute(name, value); this.append(el); return el; },
-    createDiv(options) { return this.createEl('div', options); }, createSpan(options) { return this.createEl('span', options); },
-    setPointerCapture(id) { this.capture = id; }, hasPointerCapture(id) { return this.capture === id; }, releasePointerCapture() { this.capture = null; },
-  });
-  const module = { exports: {} };
+  installDomShims(window);
   const obsidian = new Proxy({ setIcon() {}, Notice: class {} }, { get: (target, key) => target[key] ?? class {} });
   const globals = { HTMLElement: window.HTMLElement, Element: window.Element, CSS: window.CSS,
     DOMMatrixReadOnly: class { constructor(text) { const values = text.match(/matrix\((.*)\)/)[1].split(',').map(Number); this.m41 = values[4]; this.m42 = values[5]; } } };
-  runInNewContext('(function(require, module, exports) {' + output.outputFiles[0].text + '\n})', globals)(
-    name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports,
-  );
-  const { DeckView, DeckViewport, DeckTransition, DeckFrameScheduler, DeckWheelController, ViewedCardSession, DEFAULT_SETTINGS, attachRenderedLinkInteractions } = module.exports;
+  const exports = load(obsidian, globals);
+  const { DeckView, DeckViewport, DeckTransition, DeckFrameScheduler, DeckWheelController, ViewedCardSession, DEFAULT_SETTINGS, attachRenderedLinkInteractions } = exports;
   const content = window.document.body.createDiv({ cls: 'view-content slipbox-deck-view' });
   Object.assign(content.dataset, { deckOrientation: orientation, deckStackModel: model, mainCardSize: 'medium' });
   const stage = content.createDiv({ cls: 'slipbox-deck-stage' });
@@ -82,14 +55,14 @@ async function subject(t, orientation = 'vertical', model = 'drawer', withStyles
     localBranchView: { updatePosition() {} },
     stageEl: stage, contentEl: content, spaceEl: space, deckCardsEl: deck, renderedCards: [],
     deckViewport: new DeckViewport(), drawerTransition: new DeckTransition(), wheelController: new DeckWheelController(),
-    viewedCardSession: new ViewedCardSession(), viewedCardEl: null, viewedFilingEditor: null,
+    viewedCardSession: new ViewedCardSession(), viewedCard: {cardEl: null, filingEditor: null},
     spaceOffsetX: 70, spaceOffsetY: 90, spaceRecenteringTimer: null, viewportCenteringFrame: null,
-    pointerLastX: null, pointerLastY: null, suppressDeckCardClickUntil: 0,
-    inlineEdit: null, inlineEditStarting: false, filingSession: { isActive: false, snapshot: null },
+    pointerLastX: null, pointerLastY: null,
+    inlineEditor: idleInlineEditor(), filingSession: { isActive: false, snapshot: null },
     cardFocus: { surface: 'deck', path: '400.md' }, viewedFocusFromDeckNavigation: false,
     deckRenderVersion: 1, renderVersion: 1, renderRefreshFrame: null, renderRefreshPending: false, renderRefreshRunning: false, renderRefreshQueued: false,
     renderComponents: new Map(), cardScrollPositions: new Map(), deckInteractivity: new WeakMap(),
-    cardHeaderControllers: new Map(), cardHeaderButtonControllers: new Set(),
+    cardHeaderControllers: new Map(),
     cardFooters: { removeCard() {}, setInteractive() {} },
     cardSignatures: { render() {}, removeCard() {}, setInteractive() {} },
     deskRenderer: { filingInput: null, beginCoveredDeskDrag: () => false, positionPiles: () => true },
@@ -102,13 +75,14 @@ async function subject(t, orientation = 'vertical', model = 'drawer', withStyles
     },
     renderBookmarkEdgeTabs() {}, updateDeckMapActiveUi() {}, syncLocalBranchViewOwner() {},
     runCardAction(action) { calls.actions.push(action); },
-    runAfterInlineEditing(_reason, action) { calls.gates++; return Promise.resolve(action()).then(() => true); },
     async renderMarkdownCard(card, body) {
       body.createEl('p', { text: `Body ${card.path}` });
       body.createEl('a', { text: 'Link', attr: { href: 'example.md' } });
       attachRenderedLinkInteractions(body, { previewEnabled: false, followEnabled: true, showTooltips: false, preview() {}, follow() { calls.links++; } });
     },
   });
+  view.inlineEditor.runAfter = (_reason, action) => { calls.gates++; return Promise.resolve(action()).then(() => true); };
+  view.cardDrag = deckDragFixture(view, exports.DeckCardDragController);
   view.deckFrames = new DeckFrameScheduler({ request: cb => window.requestAnimationFrame(cb), cancel: id => window.cancelAnimationFrame(id), flush: changed => view.flushDeckMotion(changed) });
   view.deckViewport.navigate('400.md', cards);
   view.deckViewport.placeAt(399.75, cards);
@@ -117,8 +91,8 @@ async function subject(t, orientation = 'vertical', model = 'drawer', withStyles
   await view.refreshDeckCardWindow();
   const frame = async time => { now = time; const jobs = [...pending.values()]; pending.clear(); jobs.forEach(job => job(now)); await tick(); };
   await frame(now);
-  t.after(() => { view.deckFrames.cancel(); view.cancelRenderWindowRefresh(); view.cancelSpaceRecentering(); for (const controller of view.cardHeaderButtonControllers) controller.disconnect(); window.happyDOM.abort(); });
-  return { view, cards, window, calls, pending, frame, ...module.exports,
+  t.after(() => { view.deckFrames.cancel(); view.cancelRenderWindowRefresh(); view.cancelSpaceRecentering(); view.clearCardHeaderButtonControllers(); view.cardDrag.dispose(); window.happyDOM.abort(); });
+  return { view, cards, window, calls, pending, frame, ...exports,
     time: () => now, reduced: value => { reduced = value; },
     card: index => view.renderedCards.find(card => card.dataset.path === `${index}.md`),
     click: async (target, options = {}) => { const event = new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, ...options }); target.dispatchEvent(event); await tick(); return event; },
@@ -363,7 +337,7 @@ for (const orientation of ['vertical', 'horizontal']) {
     for (const option of [{ detail: 2 }, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) await s.click(card, option);
     card.addEventListener('click', event => event.preventDefault(), { capture: true, once: true }); await s.click(card);
     assert.equal(s.calls.gates, 0);
-    view.runAfterInlineEditing = () => Promise.resolve(false); await s.click(card);
+    view.inlineEditor.runAfter = () => Promise.resolve(false); await s.click(card);
     assert.equal(view.spaceOffsetX, 70); assert.equal(view.spaceOffsetY, 90);
     assert.equal(view.deckViewport.position(s.cards), 399.75);
   });
@@ -397,7 +371,7 @@ for (const orientation of ['vertical', 'horizontal']) {
   test(`${orientation}: header drag and cancellation suppress their generated selection click`, async t => {
     const s = await subject(t, orientation); const { view } = s;
     const card = s.card(400), header = card.querySelector('.slipbox-card-address-row');
-    view.updateDeckCardDropCue = () => {}; view.deckCardDropResult = () => null;
+    view.cardDrag.updateDropCue = () => {}; view.cardDrag.dropResult = () => null;
     await s.click(card); await s.frame(1060);
     s.pointer(header, 'pointerdown', 20, 20); await tick(); await s.frame(1070);
     const x = view.spaceOffsetX, y = view.spaceOffsetY;
@@ -498,7 +472,7 @@ test('the second click preserves double-click delivery without restarting motion
 test('window refresh fills a missing interior card even when the enclosing range is unchanged', async t => {
   const s = await subject(t); const { view } = s;
   const card = s.card(399), controller = view.cardHeaderControllers.get(card);
-  controller.disconnect(); view.cardHeaderButtonControllers.delete(controller); view.cardHeaderControllers.delete(card);
+  controller.disconnect(); view.cardHeaderControllers.delete(card);
   card.remove(); view.renderedCards = view.renderedCards.filter(item => item !== card);
   const range = view.deckViewport.snapshot.renderedWindow;
   view.queueRenderWindowRefresh(); await s.frame(1001);
@@ -594,5 +568,26 @@ for (const orientation of ['horizontal', 'vertical']) for (const model of ['draw
       assert.equal(layer.firstElementChild, branchRoot);
       assert.equal(layer.style.transform, owner.style.transform);
     }
+  });
+}
+
+for (const orientation of ['horizontal', 'vertical']) for (const model of ['drawer', 'fan']) {
+  for (const cancellation of ['release', 'dispose', 'remove', 'rejected']) test(orientation+' '+model+': pending drag '+cancellation+' cannot start after its editing gate', async t => {
+    const s=await subject(t,orientation,model),{view}=s,card=s.card(400),header=card.querySelector('.slipbox-card-address-row');
+    let openGate;
+    view.inlineEditor.runAfter=(_reason,action)=>new Promise(resolve=>{openGate=()=>{if(cancellation!=='rejected')action();resolve(cancellation!=='rejected');};});
+    s.pointer(header,'pointerdown',0,0);
+    if(cancellation==='release')s.pointer(header,'pointerup',0,0);
+    if(cancellation==='dispose')view.cardDrag.dispose();
+    if(cancellation==='remove')view.cardDrag.removeCard(card);
+    openGate();await tick();s.pointer(header,'pointermove',20,30);
+    assert.equal(card.classList.contains('is-dragging-to-desk'),false);assert.equal(header.hasPointerCapture(7),false);assert.equal(view.stageEl.classList.contains('is-dragging'),false);
+  });
+  test(orientation+' '+model+': disposal releases capture and removes drop presentation during dragging',async t=>{
+    const s=await subject(t,orientation,model),{view}=s,card=s.card(400),header=card.querySelector('.slipbox-card-address-row');
+    s.window.document.elementsFromPoint=()=>[view.stageEl];
+    s.pointer(header,'pointerdown',0,0);await tick();s.pointer(header,'pointermove',40,5);assert.equal(header.hasPointerCapture(7),true);
+    view.cardDrag.dispose();view.cardDrag.dispose();assert.equal(header.hasPointerCapture(7),false);assert.equal(card.parentElement,view.deckCardsEl);assert.equal(card.classList.contains('is-dragging-to-desk'),false);assert.equal(card.style.translate,'');
+    s.pointer(header,'pointerup',40,5);assert.equal(view.plugin.deskService.snapshot.piles.length,0);
   });
 }

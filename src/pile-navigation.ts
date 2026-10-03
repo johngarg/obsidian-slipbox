@@ -96,14 +96,6 @@ export function swapPileFocusTarget(
   return pileTarget(remembered ?? fallback);
 }
 
-/** Keep the last pile when focus returns to the Deck. */
-export function rememberPileFocus(
-  lastFocusedPileId: string | null,
-  target: PileFocusLocation,
-): string | null {
-  return target.surface === "desk" ? target.pileId : lastFocusedPileId;
-}
-
 /** Find the adjacent card in an expanded pile, wrapping at either end. */
 export function wrappedPileCardNeighbour(
   pile: NavigablePile,

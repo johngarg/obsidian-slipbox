@@ -1,8 +1,9 @@
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
 import { renderCardAddress } from "./card-address.js";
 import { setCardTooltip } from "./card-tooltip.js";
+import { createHtmlElement, getResizeObserver } from "./dom.js";
+import { MeasuredLayoutScheduler } from "./measured-layout-scheduler.js";
 
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const BRANCH_MEASUREMENT_LIMIT = 64;
 
 export interface CardSignatureBranch {
@@ -68,16 +69,21 @@ interface RenderedCardSignature {
 
 /** Keep canonical address DOM stable while independently refreshing branch metadata. */
 export class CardSignatureManager {
-  private readonly entries = new Set<RenderedCardSignature>();
   private readonly entriesBySignature = new Map<HTMLElement, RenderedCardSignature>();
   private resizeObserver: ResizeObserver | null = null;
   private ownerWindow: Window | null = null;
-  private layoutFrame: number | null = null;
-  private layoutTimer: number | null = null;
   private closeOverflow: (() => void) | null = null;
   private overflowEntry: RenderedCardSignature | null = null;
 
+  private readonly layoutScheduler = new MeasuredLayoutScheduler(() => {
+    for (const entry of this.entriesBySignature.values()) this.layout(entry);
+  });
+
   constructor(private readonly environment: CardSignatureEnvironment) {}
+
+  scheduleLayout(): void {
+    this.layoutScheduler.schedule(this.ownerWindow);
+  }
 
   render(
     parent: HTMLElement,
@@ -127,7 +133,6 @@ export class CardSignatureManager {
       intrinsicWidth: null,
       fitKey: null,
     };
-    this.entries.add(entry);
     this.entriesBySignature.set(signature, entry);
     this.configureLayout(signature, intrinsicSizer);
     this.populate(entry, this.environment.branchesForPath(options.path));
@@ -136,7 +141,7 @@ export class CardSignatureManager {
 
   /** Refresh branch-derived DOM without replacing the signature or address. */
   refreshBranches(): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entriesBySignature.values()) {
       const branches = this.environment.branchesForPath(entry.path);
       const shouldShow = this.environment.showBranchLabels() && branches.length > 0;
       if (
@@ -166,33 +171,17 @@ export class CardSignatureManager {
     }
   }
 
-  scheduleLayout(): void {
-    const ownerWindow = this.ownerWindow;
-    if (
-      ownerWindow === null ||
-      this.layoutFrame !== null ||
-      this.layoutTimer !== null
-    ) {
-      return;
-    }
-    this.layoutFrame = ownerWindow.requestAnimationFrame(() => {
-      this.flushLayout();
-    });
-    this.layoutTimer = ownerWindow.setTimeout(() => this.flushLayout(), 120);
-  }
-
   /** Flush a pending measured fit immediately when a synchronous layout is required. */
   layoutNow(): void {
-    this.flushLayout();
+    this.layoutScheduler.flushNow();
   }
 
   removeCard(card: HTMLElement): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entriesBySignature.values()) {
       if (!card.contains(entry.signature)) continue;
       if (this.overflowEntry === entry) this.closeOverflowMenu();
       this.resizeObserver?.unobserve(entry.signature);
       this.resizeObserver?.unobserve(entry.intrinsicSizer);
-      this.entries.delete(entry);
       this.entriesBySignature.delete(entry.signature);
     }
   }
@@ -201,17 +190,8 @@ export class CardSignatureManager {
     this.closeOverflowMenu();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    this.entries.clear();
     this.entriesBySignature.clear();
-    const ownerWindow = this.ownerWindow;
-    if (ownerWindow !== null && this.layoutFrame !== null) {
-      ownerWindow.cancelAnimationFrame(this.layoutFrame);
-    }
-    if (ownerWindow !== null && this.layoutTimer !== null) {
-      ownerWindow.clearTimeout(this.layoutTimer);
-    }
-    this.layoutFrame = null;
-    this.layoutTimer = null;
+    this.layoutScheduler.cancel();
     this.ownerWindow = null;
   }
 
@@ -223,16 +203,20 @@ export class CardSignatureManager {
     if (ownerWindow === null) {
       return;
     }
-    if (this.ownerWindow === null) {
+    if (this.ownerWindow !== ownerWindow) {
+      this.resizeObserver?.disconnect();
+      this.resizeObserver = null;
+      this.layoutScheduler.cancel();
       this.ownerWindow = ownerWindow;
     }
-    if (this.resizeObserver === null) {
-      this.resizeObserver = new ownerWindow.ResizeObserver(() => {
+    const Observer = getResizeObserver(ownerWindow);
+    if (this.resizeObserver === null && Observer !== null) {
+      this.resizeObserver = new Observer(() => {
         this.scheduleLayout();
       });
     }
-    this.resizeObserver.observe(signature);
-    this.resizeObserver.observe(intrinsicSizer);
+    this.resizeObserver?.observe(signature);
+    this.resizeObserver?.observe(intrinsicSizer);
   }
 
   private populate(
@@ -297,21 +281,6 @@ export class CardSignatureManager {
     });
     metadata.append(content);
     entry.intrinsicSizer.replaceChildren(address, metadata);
-  }
-
-  private flushLayout(): void {
-    const ownerWindow = this.ownerWindow;
-    if (ownerWindow !== null && this.layoutFrame !== null) {
-      ownerWindow.cancelAnimationFrame(this.layoutFrame);
-    }
-    if (ownerWindow !== null && this.layoutTimer !== null) {
-      ownerWindow.clearTimeout(this.layoutTimer);
-    }
-    this.layoutFrame = null;
-    this.layoutTimer = null;
-    for (const entry of this.entries) {
-      this.layout(entry);
-    }
   }
 
   private layout(entry: RenderedCardSignature): void {
@@ -543,16 +512,6 @@ export class CardSignatureManager {
     this.overflowEntry = null;
     close?.();
   }
-}
-
-function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
-  document: Document,
-  tag: K,
-): HTMLElementTagNameMap[K] {
-  return document.createElementNS(
-    HTML_NAMESPACE,
-    tag,
-  ) as HTMLElementTagNameMap[K];
 }
 
 function branchAccessibleLabel(branch: CardSignatureBranch): string {

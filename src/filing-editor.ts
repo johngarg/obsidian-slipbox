@@ -1,4 +1,6 @@
+import { isRecord } from "./value-utils.js";
 import { setCardTooltip } from "./card-tooltip.js";
+import { createHtmlElement } from "./dom.js";
 import type {
   FilingSessionSnapshot,
   FilingSourceSurface,
@@ -27,14 +29,6 @@ export interface InlineFilingEditorElements {
   readonly feedback: HTMLElement;
 }
 
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
-
-function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
-  document: Document,
-  tag: K,
-): HTMLElementTagNameMap[K] {
-  return document.createElementNS(HTML_NAMESPACE, tag) as HTMLElementTagNameMap[K];
-}
 
 export function attachUnfiledAddressFiling(
   address: HTMLElement,
@@ -72,7 +66,7 @@ export function shouldSuspendDeckShortcut(
   if (filingInputFocused) {
     return true;
   }
-  if (eventTarget === null || typeof eventTarget !== "object") {
+  if (!isRecord(eventTarget)) {
     return false;
   }
   const target = eventTarget as Partial<HTMLElement>;
@@ -92,10 +86,9 @@ export function eventTargetsDeck(
   eventTarget: EventTarget | null,
   deckRoot: HTMLElement,
 ): boolean {
-  return eventTarget !== null &&
-    typeof eventTarget === "object" &&
+  return isRecord(eventTarget) &&
     "nodeType" in eventTarget &&
-    deckRoot.contains(eventTarget as Node);
+    deckRoot.contains(eventTarget as unknown as Node);
 }
 
 /**

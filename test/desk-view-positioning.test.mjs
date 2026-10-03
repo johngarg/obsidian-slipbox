@@ -1,20 +1,18 @@
+import { bundleFixture, installDomShims, idleInlineEditor, deckDragFixture } from './helpers/view-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { runInNewContext } from 'node:vm';
-import { build } from 'esbuild';
 import { Window } from 'happy-dom';
 
-const output = await build({ stdin: { contents: `
+const load = await bundleFixture(`
   export { default as Plugin } from './src/main.ts';
+  export { DeckCardDragController } from './src/deck-card-drag.ts';
   export { DeckView } from './src/deck-view.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { DeskRenderer } from './src/desk-view.ts';
   export { DeskService } from './src/desk-service.ts';
   export { DEFAULT_SETTINGS } from './src/settings.ts';
-`, resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'cjs', external: ['obsidian'] });
-const actualRequire = createRequire(import.meta.url);
+`);
 const stylesheet = readFileSync('styles.css', 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -26,26 +24,7 @@ async function subject(t, { orientation = 'horizontal', model = 'drawer', positi
   let frameId = 0;
   window.requestAnimationFrame = cb => { frames.set(++frameId, cb); return frameId; };
   window.cancelAnimationFrame = id => frames.delete(id);
-  Object.defineProperty(window.CSSStyleDeclaration.prototype, 'translate', { configurable: true,
-    get() { return this.getPropertyValue('translate'); }, set(value) { this.setProperty('translate', value); } });
-  Object.defineProperties(window.Node.prototype, {
-    win: { configurable: true, get() { return this.ownerDocument?.defaultView ?? window; } },
-    doc: { configurable: true, get() { return this.ownerDocument; } },
-    instanceOf: { configurable: true, value(Type) { return this instanceof Type; } },
-  });
-  Object.defineProperties(window.Event.prototype, {
-    win: { configurable: true, get: () => window }, targetNode: { configurable: true, get() { return this.target; } },
-  });
-  Object.assign(window.HTMLElement.prototype, {
-    addClass(name) { this.classList.add(name); }, removeClass(name) { this.classList.remove(name); },
-    removeClasses(names) { this.classList.remove(...names); }, hasClass(name) { return this.classList.contains(name); },
-    toggleClass(name, on) { this.classList.toggle(name, on); }, setAttr(name, value) { this.setAttribute(name, value); },
-    setText(value) { this.textContent = value; },
-    setCssProps(props) { for (const [name, value] of Object.entries(props)) this.style.setProperty(name, value); },
-    createEl(tag, options = {}) { const el = doc.createElement(tag); el.className = options.cls ?? ''; el.textContent = options.text ?? ''; for (const [name, value] of Object.entries(options.attr ?? {})) el.setAttribute(name, value); this.append(el); return el; },
-    createDiv(options) { return this.createEl('div', options); }, createSpan(options) { return this.createEl('span', options); },
-    setPointerCapture(id) { this.capture = id; }, hasPointerCapture(id) { return this.capture === id; }, releasePointerCapture() { this.capture = null; },
-  });
+  installDomShims(window);
   class TFile { constructor(path) { this.path = path; this.basename = path.replace('.md', ''); this.extension = 'md'; } }
   class Menu {
     constructor() { this.items = []; menus.push(this); }
@@ -56,10 +35,8 @@ async function subject(t, { orientation = 'horizontal', model = 'drawer', positi
   }
   const obsidian = new Proxy({ TFile, Menu, setIcon() {}, Notice: class {}, Component: class { load() {} unload() {} },
     MarkdownRenderer: { async render(_app, body, el) { el.textContent = body; } } }, { get: (target, key) => target[key] ?? class {} });
-  const module = { exports: {} };
-  runInNewContext('(function(require,module,exports){' + output.outputFiles[0].text + '\n})', { HTMLElement: window.HTMLElement, Element: window.Element, CSS: window.CSS })(
-    name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports);
-  const { Plugin, DeckView, DeckViewport, DeskRenderer, DeskService, DEFAULT_SETTINGS } = module.exports;
+    const exports = load(obsidian, { HTMLElement: window.HTMLElement, Element: window.Element, CSS: window.CSS });
+  const { Plugin, DeckView, DeckViewport, DeskRenderer, DeskService, DEFAULT_SETTINGS } = exports;
   const files = ['A.md', 'B.md', 'C.md'].map(path => new TFile(path));
   const filed = files.map((file, index) => ({ file, path: file.path, address: String(index + 1) }));
   const style = doc.createElement('style'); style.textContent = stylesheet; doc.head.append(style);
@@ -79,8 +56,8 @@ async function subject(t, { orientation = 'horizontal', model = 'drawer', positi
     const content = doc.body.createDiv({cls:'view-content slipbox-deck-view'}), stage = content.createDiv({cls:'slipbox-deck-stage'}), space = stage.createDiv({cls:'slipbox-space'});
     const view = Object.create(DeckView.prototype);
     Object.assign(view, {localBranchView:{updatePosition(){}},plugin:p,contentEl:content,stageEl:stage,spaceEl:space,deckViewport:new DeckViewport(),
-      inlineEdit:null,inlineEditStarting:false,recentInlineEditRefresh:null,viewportCenteringFrame:null,
-      filingSession:{refresh(){},snapshot:null,isActive:false},cardScrollPositions:new Map(),viewedCardSession:{isViewing:()=>false,snapshot:null},viewedFilingEditor:null,
+      inlineEditor: idleInlineEditor(),viewportCenteringFrame:null,
+      filingSession:{refresh(){},snapshot:null,isActive:false},cardScrollPositions:new Map(),viewedCardSession:{isViewing:()=>false,snapshot:null},viewedCard: {cardEl: null, filingEditor: null},
       cardFocus:{surface:'desk',path:'A.md',pileId:'p0'},spaceOffsetX:pan[0],spaceOffsetY:pan[1]});
     view.deckViewport.navigate('A.md',filed);
     const actions = {addDeckOrderingMenuItems: menu => view.addDeckOrderingMenuItems(menu),runAfterEditing:async (_reason,action)=>{await action();return true;},isDeskCardFocused:(path,pileId)=>view.cardFocus?.path===path&&view.cardFocus?.pileId===pileId,
@@ -106,10 +83,11 @@ async function subject(t, { orientation = 'horizontal', model = 'drawer', positi
       view.installMeasurements();
       view.deskRenderer.positionPiles?.();
     };
+    view.cardDrag = deckDragFixture(view, exports.DeckCardDragController);
     views.push(view);await view.refresh();return view;
   }
   const view=await addView();await tick();
-  t.after(()=>{for(const v of views)v.deskRenderer.clear();window.happyDOM.abort();});
+  t.after(()=>{for(const v of views){v.deskRenderer.clear();v.cardDrag.dispose();}window.happyDOM.abort();});
   return {p,view,views,window,menus,notices,created,addView,
     pointer(target,type,x,y){target.dispatchEvent(new window.PointerEvent(type,{bubbles:true,cancelable:true,pointerId:7,button:0,buttons:type==='pointerup'?0:1,clientX:x,clientY:y}));},
     pile:(id='p0',v=view)=>[...v.spaceEl.querySelectorAll('.slipbox-desk-pile')].find(el=>el.dataset.pileId===id),
@@ -210,8 +188,8 @@ for(const orientation of ['horizontal','vertical']){
   test(`${orientation}: Deck header drop, background creation and splitting share the stable frame`,async t=>{
     const s=await subject(t,{orientation});await s.p.toggleDeckOrientation();
     const deck=s.view.spaceEl.createDiv({cls:'slipbox-deck-cards'}),card=deck.createDiv({cls:'slipbox-card'}),header=card.createDiv({cls:'slipbox-card-address-row'});
-    s.view.deckCardsEl=deck;s.view.runAfterInlineEditing=async(_reason,action)=>{await action();return true;};
-    s.view.attachDeckCardDragging(header,card,s.p.index.filedByPath('C.md'));
+    s.view.deckCardsEl=deck;s.view.inlineEditor.runAfter=async(_reason,action)=>{await action();return true;};
+    s.view.cardDrag.attach(header,card,s.p.index.filedByPath('C.md'));
     s.window.document.elementsFromPoint=()=>[s.view.stageEl];
     s.pointer(header,'pointerdown',20,20);await tick();s.pointer(header,'pointermove',30,20);s.pointer(header,'pointerup',90,100);await tick();
     assert.equal(card.parentElement,deck);assert.equal(card.style.translate,'');

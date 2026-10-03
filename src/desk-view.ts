@@ -1,37 +1,45 @@
-import {
-  Component,
-  MarkdownRenderer,
-  Menu,
-  TFile,
-  getLinkpath,
-  setIcon,
-  type App,
-} from "obsidian";
+import { findDeskCard } from "./dom.js";
+import { Component, MarkdownRenderer, Menu, TFile, setIcon, type App } from "obsidian";
+import { CardLinkPresenter } from "./card-link-presenter.js";
 
-import { addCardContextMenuItems } from "./card-context-menu.js";
 import type { BookmarkService } from "./bookmark-service.js";
+import { UNFILED_ADDRESS_LABEL } from "./card-address.js";
 import { applyCardColor } from "./card-color.js";
-import type { CardIndex } from "./card-index.js";
-import type { CardService } from "./card-service.js";
-import type { DeskCanvasService } from "./desk-canvas-service.js";
-import type { DeskService } from "./desk-service.js";
+import { addCardContextMenuItems } from "./card-context-menu.js";
 import {
   renderCardHeaderButtons,
   type CardHeaderButtonController,
 } from "./card-header-buttons.js";
-import {
-  renderedLinkAction,
-  resolveFiledCardLink,
-} from "./card-links.js";
-import { UNFILED_ADDRESS_LABEL } from "./card-address.js";
-import {
-  CardSignatureManager,
-  type CardSignatureBranch,
-} from "./card-signature.js";
+import type { CardIndex } from "./card-index.js";
+import type { CardService } from "./card-service.js";
 import { showCardSignatureOverflowMenu } from "./card-signature-overflow.js";
+import { CardSignatureManager } from "./card-signature.js";
 import { cardHeaderTitle } from "./card-title.js";
 import { setCardTooltip } from "./card-tooltip.js";
+import type { DeskCanvasService } from "./desk-canvas-service.js";
+import {
+  cardDropTargetPile,
+  coveredDeskDragTarget,
+  pileHeaderPositionAtWorkspacePoint,
+  pilePositionAtWorkspacePoint,
+} from "./desk-drop.js";
 import { isDeskCardFocusTarget } from "./desk-focus.js";
+import type { DeskService } from "./desk-service.js";
+import {
+  cardPosition,
+  cyclePileTopCard,
+  deskStackJitter,
+  insertionIndexForPoint,
+  mergePiles,
+  moveCardBetweenPiles,
+  movePileToOrdinalBoundary,
+  setPilePosition,
+  splitCardIntoNewPile,
+  type DeskCard,
+  type DeskPile,
+  type DeskPilePosition,
+  type DeskState,
+} from "./desk-state.js";
 import {
   attachUnfiledAddressFiling,
   filingEditorMatchesSource,
@@ -41,37 +49,12 @@ import {
 } from "./filing-editor.js";
 import type { FilingSessionSnapshot } from "./filing-session.js";
 import {
-  cardPosition,
-  cyclePileTopCard,
-  deskCardPrimaryClickIntent,
-  insertionIndexForPoint,
-  mergePiles,
-  moveCardBetweenPiles,
-  movePileToOrdinalBoundary,
-  setPilePosition,
-  splitCardIntoNewPile,
-  deskStackJitter,
-  type DeskCard,
-  type DeskPile,
-  type DeskPilePosition,
-  type DeskState,
-} from "./desk-state.js";
-import {
   beginPointerActionAfterGate,
   beginThresholdPointerDrag,
 } from "./pointer-drag.js";
-import {
-  cardDropTargetPile,
-  coveredDeskDragTarget,
-  pileHeaderPositionAtWorkspacePoint,
-  pilePositionAtWorkspacePoint,
-} from "./desk-drop.js";
-import type { SlipboxAction, SlipboxSettings } from "./settings.js";
-import {
-  applyRenderedLinkAccessibility,
-  attachRenderedLinkInteractions,
-} from "./rendered-link-interactions.js";
 import { applyRenderedBranchLinkOutlines } from "./rendered-branch-links.js";
+import { applyRenderedLinkAccessibility } from "./rendered-link-interactions.js";
+import type { SlipboxAction, SlipboxSettings } from "./settings.js";
 import { automaticPileWorkspacePosition } from "./workspace-layout.js";
 
 const DRAG_THRESHOLD_PX = 5;
@@ -131,17 +114,26 @@ export class DeskRenderer {
   private pendingCardClickWindow: Window | null = null;
   private readonly cardSignatures: CardSignatureManager;
 
+  private readonly links: CardLinkPresenter;
+
   constructor(
     private readonly app: App,
     private readonly plugin: DeskViewHost,
     private readonly actions: DeskViewActions,
   ) {
+    this.links = new CardLinkPresenter({
+      app: this.app, index: this.plugin.index, cards: this.plugin.cards,
+      settings: () => this.plugin.settings,
+      preview: (event, target, linktext, sourcePath) => this.actions.previewLink(event, target, linktext, sourcePath),
+      activate: (path) => this.actions.jumpToFiledCard(path),
+      runAfterEditing: (reason, action) => this.actions.runAfterEditing(reason, action),
+    });
     this.cardSignatures = new CardSignatureManager({
       showBranchLabels: () => this.plugin.settings.showBranchLabels,
       showTooltips: () => this.plugin.settings.showTooltips,
       previewLinksOnHover: () => this.plugin.settings.previewLinksOnHover,
       followLinksFromCards: () => this.plugin.settings.followLinksFromCards,
-      branchesForPath: (path) => this.cardSignatureBranches(path),
+      branchesForPath: (path) => this.links.branchesForPath(path),
       preview: (event, target, branch, targetPath) => {
         this.actions.previewLink(event, target, branch.linktext, targetPath);
       },
@@ -176,27 +168,8 @@ export class DeskRenderer {
     this.filingEditor = null;
   }
 
-  get isFilingInputFocused(): boolean {
-    const input = this.filingEditor?.input;
-    return input !== undefined && input.ownerDocument.activeElement === input;
-  }
-
   get filingInput(): HTMLInputElement | null {
     return this.filingEditor?.input ?? null;
-  }
-
-  focusFilingInput(): void {
-    const input = this.filingEditor?.input;
-    input?.win.requestAnimationFrame(() => this.focusFilingInputNow());
-  }
-
-  focusFilingInputNow(): void {
-    const input = this.filingEditor?.input;
-    if (input === undefined) {
-      return;
-    }
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
   }
 
   updateFilingState(state: FilingSessionSnapshot): void {
@@ -234,7 +207,7 @@ export class DeskRenderer {
         file.path,
         component,
       );
-      this.applyBranchLinkOutlines(preview, file);
+      this.links.outline(preview, file);
       applyRenderedLinkAccessibility(
         preview,
         this.plugin.settings.followLinksFromCards,
@@ -253,7 +226,7 @@ export class DeskRenderer {
     for (const [path, preview] of this.previews) {
       const file = this.plugin.index.fileAtPath(path);
       if (file instanceof TFile) {
-        this.applyBranchLinkOutlines(preview, file);
+        this.links.outline(preview, file);
       } else {
         applyRenderedBranchLinkOutlines(preview, {
           enabled: false,
@@ -265,22 +238,6 @@ export class DeskRenderer {
 
   scheduleBranchLayout(): void {
     this.cardSignatures.scheduleLayout();
-  }
-
-  private cardSignatureBranches(path: string): readonly CardSignatureBranch[] {
-    return this.plugin.index.incomingBranchesForPath(path).flatMap((branch) => {
-      const source = this.plugin.index.filedByPath(branch.sourcePath);
-      if (source === undefined) {
-        return [];
-      }
-      return [{
-        label: branch.label,
-        sourcePath: source.path,
-        sourceAddress: source.address,
-        sourceTitle: this.plugin.cards.title(source.file),
-        linktext: this.app.metadataCache.fileToLinktext(source.file, path),
-      }];
-    });
   }
 
   async render(
@@ -796,10 +753,7 @@ export class DeskRenderer {
         this.actions.focusViewedCard();
       });
       miniature.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
-        if (event.key === "Enter") {
+        if (event.key !== " ") {
           return;
         }
         event.preventDefault();
@@ -837,7 +791,7 @@ export class DeskRenderer {
       this.actions.focusDeskCard(card.cardRef, pile.id);
       this.actions.runAction("edit-card");
     });
-    this.attachPreviewLinkInteractions(preview, file.path);
+    this.links.attach(preview, file.path, "desk-rendered-link");
     const component = new Component();
     component.load();
     this.components.set(file.path, component);
@@ -851,7 +805,7 @@ export class DeskRenderer {
           file.path,
           component,
         );
-        this.applyBranchLinkOutlines(preview, file);
+        this.links.outline(preview, file);
         applyRenderedLinkAccessibility(
           preview,
           this.plugin.settings.followLinksFromCards,
@@ -881,7 +835,7 @@ export class DeskRenderer {
       ) {
         event.preventDefault();
         event.stopPropagation();
-        if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
+        if (!expanded) {
           this.scheduleCardClick(() => {
             void this.actions.runAfterEditing(
               "desk-expand-pile",
@@ -891,7 +845,7 @@ export class DeskRenderer {
         }
         return;
       }
-      if (deskCardPrimaryClickIntent(expanded) === "expand-pile") {
+      if (!expanded) {
         event.preventDefault();
         event.stopPropagation();
         void this.actions.runAfterEditing(
@@ -936,76 +890,6 @@ export class DeskRenderer {
         `${jitter.rotationDegrees}deg`,
       );
     });
-  }
-
-  private attachPreviewLinkInteractions(
-    preview: HTMLElement,
-    sourcePath: string,
-  ): void {
-    attachRenderedLinkInteractions(preview, {
-      previewEnabled: this.plugin.settings.previewLinksOnHover,
-      followEnabled: this.plugin.settings.followLinksFromCards,
-      showTooltips: this.plugin.settings.showTooltips,
-      preview: (event, link, linktext) => {
-        this.actions.previewLink(event, link, linktext, sourcePath);
-      },
-      follow: (event, link, linktext) => {
-        const internal = link.matches(".internal-link");
-        const newLeaf = event.metaKey || event.ctrlKey || event.button === 1;
-        void this.actions.runAfterEditing("desk-rendered-link", async () => {
-          const filed = internal
-            ? resolveFiledCardLink(getLinkpath(linktext), sourcePath, {
-                resolveFile: (path, source) =>
-                  this.app.metadataCache.getFirstLinkpathDest(path, source),
-                filedPathForFile: (file) =>
-                  this.plugin.index.filedByFile(file)?.path,
-                firstFiledPathAtAddress: (address) =>
-                  this.plugin.index.firstFiledAtAddress(address)?.path,
-              })
-            : undefined;
-          const action = renderedLinkAction(internal, newLeaf, linktext, filed);
-          if (action.kind === "card") {
-            await this.actions.jumpToFiledCard(action.path);
-          } else if (action.kind === "note") {
-            await this.app.workspace.openLinkText(
-              action.linktext,
-              sourcePath,
-              newLeaf,
-            );
-          } else {
-            link.win.open(link.href, "_blank", "noopener");
-          }
-        });
-      },
-    });
-  }
-
-  private applyBranchLinkOutlines(target: HTMLElement, file: TFile): void {
-    applyRenderedBranchLinkOutlines(target, {
-      enabled: this.plugin.settings.explicitBranchLinks,
-      outline: this.plugin.settings.outlineBranchLinks,
-      hideMarker: this.plugin.settings.hideBranchLinkMarkers,
-      links: this.app.metadataCache.getFileCache(file)?.links ?? [],
-      targetAddressForLink: (link) =>
-        this.filedAddressForRenderedLink(link, file.path),
-    });
-  }
-
-  private filedAddressForRenderedLink(
-    link: string,
-    sourcePath: string,
-  ): string | undefined {
-    const target = resolveFiledCardLink(getLinkpath(link), sourcePath, {
-      resolveFile: (path, source) =>
-        this.app.metadataCache.getFirstLinkpathDest(path, source),
-      filedPathForFile: (file) =>
-        this.plugin.index.filedByFile(file)?.path,
-      firstFiledPathAtAddress: (address) =>
-        this.plugin.index.firstFiledAtAddress(address)?.path,
-    });
-    return target === undefined
-      ? undefined
-      : this.plugin.index.filedByPath(target.path)?.address;
   }
 
   private showPileMenu(
@@ -1178,7 +1062,7 @@ export class DeskRenderer {
       return false;
     }
     const filed = this.plugin.index.filedByFile(file);
-    const position = cardPosition(this.plugin.deskService.snapshot, card.cardRef);
+    const position = this.plugin.deskService.positionOf(card.cardRef);
     const run = (action: SlipboxAction): void => {
       this.actions.focusDeskCard(card.cardRef, pileId);
       this.actions.runAction(action);
@@ -1579,10 +1463,7 @@ export class DeskRenderer {
       await this.plugin.deskService.replace(nextState);
       const ownerWindow = this.rootEl?.win;
       ownerWindow?.requestAnimationFrame(() => {
-        const escaped = CSS.escape(cardRef);
-        this.rootEl
-          ?.querySelector<HTMLElement>(`.slipbox-desk-card[data-card-ref="${escaped}"]`)
-          ?.focus({ preventScroll: true });
+        findDeskCard(this.rootEl, cardRef)?.focus({ preventScroll: true });
       });
     });
   }

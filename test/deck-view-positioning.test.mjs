@@ -1,28 +1,22 @@
+import { bundleFixture, idleInlineEditor } from './helpers/view-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
-import { build } from 'esbuild';
 import { Window } from 'happy-dom';
 
-const output = await build({ stdin: { contents: `
+const load = await bundleFixture(`
   export { DeckView } from './src/deck-view.ts';
   export { DeckTransition } from './src/deck-transition.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { default as SlipboxPlugin } from './src/main.ts';
   export { DEFAULT_SETTINGS, normalizeSettings, resolvedDeckKeybindings } from './src/settings.ts';
-`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'cjs', platform: 'node', external: ['obsidian'] });
-const module = { exports: {} };
-const actualRequire = createRequire(import.meta.url);
+`);
 const notices = [];
 const obsidian = new Proxy({ Notice: class { constructor(message) { notices.push(message); } } }, {
   get: (target, key) => target[key] ?? class {},
 });
-runInNewContext('(function(require, module, exports) {' + output.outputFiles[0].text + '\n})')(
-  name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports,
-);
-const { DeckView, DeckViewport, DeckTransition, SlipboxPlugin, DEFAULT_SETTINGS, normalizeSettings, resolvedDeckKeybindings } = module.exports;
+const exports = load(obsidian);
+const { DeckView, DeckViewport, DeckTransition, SlipboxPlugin, DEFAULT_SETTINGS, normalizeSettings, resolvedDeckKeybindings } = exports;
 const css = readFileSync('styles.css', 'utf8');
 
 function subject(orientation = 'vertical', model = 'fan') {
@@ -42,8 +36,8 @@ function subject(orientation = 'vertical', model = 'fan') {
     localBranchView: { updatePosition() {} },
     stageEl: stage, contentEl: stage, spaceEl: space, spaceRecenteringTimer: null,
     deckViewport: new DeckViewport(), drawerTransition: new DeckTransition(), renderedCards: [], viewportCenteringFrame: null,
-    spaceOffsetX: 70, spaceOffsetY: 90, inlineEdit: null, inlineEditStarting: false, cardFocus: null,
-    viewedFilingEditor: null, deskRenderer: { filingInput: null, positionPiles: () => true },
+    spaceOffsetX: 70, spaceOffsetY: 90, inlineEditor: idleInlineEditor(), cardFocus: null,
+    viewedCard: {cardEl: null, filingEditor: null}, deskRenderer: { filingInput: null, positionPiles: () => true },
     plugin: { settings: { ...DEFAULT_SETTINGS, deckOrientation: orientation, deckStackModel: model },
       index: { snapshot: { filed: cards }, filedIndexForPath: path => cards.findIndex(card => card.path === path) },
       startupDeckPositionMode: 'bottom' },
@@ -182,8 +176,8 @@ test('failed edit completion prevents the orientation action', async () => {
   const { view, close } = subject(); let toggles = 0;
   view.plugin.toggleDeckOrientation = async () => { toggles++; };
   view.canRunActionForTarget = () => true;
-  view.inlineEdit = {};
-  view.runAfterInlineEditing = async () => false;
+  view.inlineEditor.isEditing = true;
+  view.inlineEditor.runAfter = async () => false;
   view.runAction('toggle-deck-orientation');
   await Promise.resolve();
   assert.equal(toggles, 0);

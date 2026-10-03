@@ -1,5 +1,5 @@
+import { createHtmlElement } from "./dom.js";
 let settingErrorSequence = 0;
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 const directErrorChild = (control: HTMLElement): HTMLElement | null => {
   for (let index = 0; index < control.children.length; index += 1) {
@@ -22,7 +22,7 @@ export function setTextSettingValidity(
   setting.classList.toggle("is-invalid", !valid);
   let error = directErrorChild(control);
   if (!valid && error === null) {
-    error = control.ownerDocument.createElementNS(HTML_NAMESPACE, "div");
+    error = createHtmlElement(control.ownerDocument, "div");
     error.className = "slipbox-setting-error";
     error.id = `slipbox-setting-error-${++settingErrorSequence}`;
     error.setAttribute("aria-live", "polite");

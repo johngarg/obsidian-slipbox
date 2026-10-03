@@ -1,7 +1,7 @@
 import type { TooltipOptions } from "obsidian";
+import { createHtmlElement } from "./dom.js";
 
 let accessibleLabelSequence = 0;
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 export interface SlipboxTooltipOptions extends TooltipOptions {
   readonly accessibleLabel?: string;
@@ -40,10 +40,7 @@ const setHiddenLabel = (element: HTMLElement, label: string): void => {
   const id = labelIdFor(element);
   let hidden = element.ownerDocument.getElementById(id);
   if (hidden === null) {
-    hidden = element.ownerDocument.createElementNS(
-      HTML_NAMESPACE,
-      "span",
-    );
+    hidden = createHtmlElement(element.ownerDocument, "span");
     (element.parentElement ?? element).append(hidden);
     hidden.id = id;
     hidden.className = "slipbox-visually-hidden";

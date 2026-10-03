@@ -1,3 +1,4 @@
+import { getResizeObserver } from "./dom.js";
 export interface CardDimensions {
   readonly width: number;
   readonly height: number;
@@ -34,8 +35,9 @@ export class CardDimensionsController {
     this.probe = probe;
     const generation = this.generation;
     const ownerWindow = stage.ownerDocument.defaultView;
-    if (ownerWindow !== null) {
-      this.observer = new ownerWindow.ResizeObserver(() => {
+    const Observer = getResizeObserver(ownerWindow);
+    if (Observer !== null) {
+      this.observer = new Observer(() => {
         if (generation === this.generation) this.invalidate();
       });
       this.observer.observe(probe, { box: "border-box" });

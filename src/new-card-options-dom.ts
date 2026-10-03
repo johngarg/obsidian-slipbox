@@ -2,16 +2,9 @@ import {
   CARD_COLORS,
   type CardColor,
 } from "./card-color.js";
+import { createHtmlElement } from "./dom.js";
 import type { NewCardInput } from "./new-note.js";
 
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
-
-function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
-  document: Document,
-  tag: K,
-): HTMLElementTagNameMap[K] {
-  return document.createElementNS(HTML_NAMESPACE, tag) as HTMLElementTagNameMap[K];
-}
 
 export interface NewCardOptionsFormActions {
   readonly placeholder: string;

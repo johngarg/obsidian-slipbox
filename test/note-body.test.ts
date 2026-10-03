@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 
 import {
   NoteBodyConflictError,
-  replaceNoteBody,
   replaceNoteBodyIfUnchanged,
   splitNoteBody,
 } from "../src/note-body.js";
@@ -51,7 +50,7 @@ describe("exact note-body replacement", () => {
       assert.equal(parts.body, fixture.body);
 
       const replacement = "Replacement\n\n---\nStill body\n";
-      const updated = replaceNoteBody(source, fixture.prefix.length, replacement);
+      const updated = replaceNoteBodyIfUnchanged(source, fixture.prefix.length, fixture.body, replacement);
       assert.equal(updated, fixture.prefix + replacement);
       assert.equal(updated.slice(0, fixture.prefix.length), fixture.prefix);
       assert.deepEqual(

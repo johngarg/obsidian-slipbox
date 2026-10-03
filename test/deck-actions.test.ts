@@ -217,7 +217,6 @@ describe("Deck action availability", () => {
       assert.notEqual(definition, undefined);
       assert.equal(definition?.label, label);
       assert.deepEqual(definition?.defaultBindings, defaultBindings);
-      assert.equal(definition?.target, "deck-anchor");
       assert.equal(canRunDeckAction(id, READY), true);
       assert.equal(canRunDeckAction(id, {
         ...READY,
@@ -234,7 +233,6 @@ describe("Deck action availability", () => {
     assert.equal(definition?.label, "Toggle Branch View");
     assert.equal(definition?.commandId, "toggle-local-branch-view-visibility");
     assert.deepEqual(definition?.defaultBindings, [{ key: "b", modifiers: [] }]);
-    assert.equal(definition?.target, "view");
     assert.equal(canRunDeckAction("toggle-local-branch-view", READY), true);
     assert.equal(canRunDeckAction("toggle-local-branch-view", {
       ...READY,
@@ -281,7 +279,6 @@ describe("Deck action availability", () => {
       (definition) => definition.id === "toggle-desk-without-focus",
     );
     assert.deepEqual(backgroundToggle?.defaultBindings, []);
-    assert.equal(backgroundToggle?.target, "focused-card");
     assert.equal(canRunDeckAction("toggle-desk-without-focus", {
       ...READY,
       focusedSurface: "deck",
@@ -316,8 +313,6 @@ describe("Deck action availability", () => {
     assert.deepEqual(show?.defaultBindings, [{ key: "Enter", modifiers: [] }]);
     assert.deepEqual(edit?.defaultBindings, [{ key: "i", modifiers: [] }]);
     assert.equal(edit?.label, "Edit focused card on Desk");
-    assert.equal(show?.target, "focused-card");
-    assert.equal(show?.scope, "active-view");
     assert.equal(
       SLIPBOX_ACTION_DEFINITIONS.filter((definition) =>
         definition.defaultBindings.some((binding) => binding.key === "Enter")
@@ -383,7 +378,6 @@ describe("Deck action availability", () => {
       definition.id === "position-deck"
     );
     assert.deepEqual(prefix?.defaultBindings, [{ key: "z", modifiers: [] }]);
-    assert.equal(prefix?.target, "deck-anchor");
     assert.equal(prefix?.repeatable, false);
 
     for (const [id, label] of [
@@ -398,7 +392,6 @@ describe("Deck action availability", () => {
       );
       assert.equal(definition?.label, label);
       assert.deepEqual(definition?.defaultBindings, []);
-      assert.equal(definition?.target, "deck-anchor");
       assert.equal(canRunDeckAction(id, READY), true);
       assert.equal(canRunDeckAction(id, {
         ...READY,
@@ -442,8 +435,6 @@ test("orientation is an unbound view action available without an anchor", () => 
   const definition = SLIPBOX_ACTION_DEFINITIONS.find(({ id }) => id === "toggle-deck-orientation");
   assert.equal(definition?.commandId, "toggle-deck-orientation");
   assert.equal(definition?.commandName, "Toggle Deck orientation");
-  assert.equal(definition?.scope, "active-view");
-  assert.equal(definition?.target, "view");
   assert.equal(definition?.repeatable, false);
   assert.deepEqual(definition?.defaultBindings, []);
   assert.equal(canRunDeckAction("toggle-deck-orientation", { ...READY, hasActiveCard: false }), true);

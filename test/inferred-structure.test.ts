@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { buildInferredStructure } from "../src/inferred-structure.js";
 import { isInferredAddressAncestor } from "../src/address-order.js";
+import { buildInferredStructure } from "../src/inferred-structure.js";
 
 const cards = (addresses: readonly string[]) => addresses.map((address, index) => ({
   address,
@@ -83,9 +83,6 @@ describe("inferred address structure", () => {
     assert.deepEqual(index.orderedAddresses, ["2", "2a", "3"]);
     assert.equal(index.nodesByAddress.get("2")?.paths.length, 2);
     assert.equal(index.nodesByAddress.get("2")?.paths[0], "00-2.md");
-    assert.equal(index.nodesByAddress.get("2")?.firstDeckIndex, 0);
-    assert.equal(index.nodesByAddress.get("2")?.lastDeckIndex, 1);
-    assert.equal(index.nodesByAddress.get("2")?.subtreeEndDeckIndexExclusive, 3);
     assert.equal(index.nodesByAddress.get("2a")?.parentAddress, "2");
   });
 });

@@ -5,11 +5,13 @@ import {
   type TFile,
   type WorkspaceLeaf,
 } from "obsidian";
+import { getResizeObserver } from "./dom.js";
+import { MeasuredLayoutScheduler } from "./measured-layout-scheduler.js";
 
 import { fitMeasuredBacklinkPrefix } from "./backlinks.js";
+import type { FiledCard } from "./card-index.js";
 import { setCardTooltip } from "./card-tooltip.js";
 import { deskToggleLabel } from "./deck-actions.js";
-import type { FiledCard } from "./card-index.js";
 import {
   applyOwnedLinkAccessibility,
   renderedLinkPolicy,
@@ -53,22 +55,23 @@ interface RenderedFooter {
 
 const BACKLINK_MEASUREMENT_LIMIT = 64;
 
-type ResizeObserverWindow = Window & {
-  readonly ResizeObserver: typeof ResizeObserver;
-};
-
 /** Shared, view-agnostic renderer for the fixed card backlink footer. */
 export class CardFooterManager {
-  private readonly entries = new Set<RenderedFooter>();
   private readonly entriesByFooter = new Map<HTMLElement, RenderedFooter>();
   private resizeObserver: ResizeObserver | null = null;
-  private ownerWindow: ResizeObserverWindow | null = null;
-  private layoutFrame: number | null = null;
-  private layoutTimer: number | null = null;
+  private ownerWindow: Window | null = null;
   private overflowMenu: Menu | null = null;
   private overflowEntry: RenderedFooter | null = null;
 
+  private readonly layoutScheduler = new MeasuredLayoutScheduler(() => {
+    for (const entry of this.entriesByFooter.values()) this.layout(entry);
+  });
+
   constructor(private readonly environment: CardFooterEnvironment) {}
+
+  scheduleLayout(): void {
+    this.layoutScheduler.schedule(this.ownerWindow);
+  }
 
   render(parent: HTMLElement, options: CardFooterRenderOptions): HTMLElement {
     const footer = parent.createDiv({ cls: "slipbox-card-footer" });
@@ -86,8 +89,6 @@ export class CardFooterManager {
     };
 
     this.populate(entry, options.backlinks);
-
-    this.entries.add(entry);
     this.entriesByFooter.set(footer, entry);
     this.applyInteractiveState(entry);
     const ownerWindow = footer.ownerDocument.defaultView;
@@ -103,7 +104,7 @@ export class CardFooterManager {
   refreshBacklinks(
     backlinksForPath: (sourcePath: string) => readonly FiledCard[],
   ): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entriesByFooter.values()) {
       const backlinks = backlinksForPath(entry.sourcePath);
       if (
         entry.backlinks.length === backlinks.length &&
@@ -140,27 +141,11 @@ export class CardFooterManager {
     }
   }
 
-  scheduleLayout(): void {
-    const ownerWindow = this.ownerWindow;
-    if (
-      ownerWindow === null ||
-      this.layoutFrame !== null ||
-      this.layoutTimer !== null
-    ) {
-      return;
-    }
-    this.layoutFrame = ownerWindow.requestAnimationFrame(() => {
-      this.flushLayout();
-    });
-    this.layoutTimer = ownerWindow.setTimeout(() => this.flushLayout(), 120);
-  }
-
   removeCard(card: HTMLElement): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entriesByFooter.values()) {
       if (!card.contains(entry.footer)) continue;
       if (this.overflowEntry === entry) this.closeOverflowMenu();
       this.resizeObserver?.unobserve(entry.footer);
-      this.entries.delete(entry);
       this.entriesByFooter.delete(entry.footer);
     }
   }
@@ -168,16 +153,8 @@ export class CardFooterManager {
   clear(): void {
     this.closeOverflowMenu();
     this.resizeObserver?.disconnect();
-    this.entries.clear();
     this.entriesByFooter.clear();
-    if (this.ownerWindow !== null && this.layoutFrame !== null) {
-      this.ownerWindow.cancelAnimationFrame(this.layoutFrame);
-      this.layoutFrame = null;
-    }
-    if (this.ownerWindow !== null && this.layoutTimer !== null) {
-      this.ownerWindow.clearTimeout(this.layoutTimer);
-      this.layoutTimer = null;
-    }
+    this.layoutScheduler.cancel();
     this.resizeObserver = null;
     this.ownerWindow = null;
   }
@@ -230,39 +207,20 @@ export class CardFooterManager {
     this.applyInteractiveState(entry);
   }
 
-  private flushLayout(): void {
-    const ownerWindow = this.ownerWindow;
-    if (ownerWindow !== null && this.layoutFrame !== null) {
-      ownerWindow.cancelAnimationFrame(this.layoutFrame);
-      this.layoutFrame = null;
-    }
-    if (ownerWindow !== null && this.layoutTimer !== null) {
-      ownerWindow.clearTimeout(this.layoutTimer);
-      this.layoutTimer = null;
-    }
-    for (const entry of this.entries) {
-      this.layout(entry);
-    }
-  }
-
-  private ensureOwnerWindow(ownerWindow: ResizeObserverWindow): void {
+  private ensureOwnerWindow(ownerWindow: Window): void {
     if (this.ownerWindow === ownerWindow) {
       return;
     }
     this.resizeObserver?.disconnect();
-    if (this.ownerWindow !== null && this.layoutFrame !== null) {
-      this.ownerWindow.cancelAnimationFrame(this.layoutFrame);
-      this.layoutFrame = null;
-    }
-    if (this.ownerWindow !== null && this.layoutTimer !== null) {
-      this.ownerWindow.clearTimeout(this.layoutTimer);
-      this.layoutTimer = null;
-    }
+    this.resizeObserver = null;
+    this.layoutScheduler.cancel();
     this.ownerWindow = ownerWindow;
-    const resizeObserver = new ownerWindow.ResizeObserver(() =>
+    const Observer = getResizeObserver(ownerWindow);
+    if (Observer === null) return;
+    const resizeObserver = new Observer(() =>
       this.scheduleLayout());
     this.resizeObserver = resizeObserver;
-    for (const entry of this.entries) {
+    for (const entry of this.entriesByFooter.values()) {
       resizeObserver.observe(entry.footer);
     }
   }

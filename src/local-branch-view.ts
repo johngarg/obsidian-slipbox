@@ -1,17 +1,17 @@
-import type { BranchViewPlacement, DeckOrientation } from "./settings.js";
-import { renderLocalBranchSvg } from "./local-branch-svg.js";
-import { localBranchDomWindow } from "./local-branch-dom.js";
 import { setCardTooltip } from "./card-tooltip.js";
-import {
-  preventPointerActivatedButtonFocus,
-  releasePointerActivatedButtonFocus,
-} from "./pointer-button-focus.js";
+import { createHtmlElement, getResizeObserver } from "./dom.js";
+import { renderLocalBranchSvg } from "./local-branch-svg.js";
 import type {
   LocalBranchDeparture,
   LocalBranchModel,
   LocalBranchMovement,
   LocalBranchTarget,
 } from "./local-branch-types.js";
+import {
+  preventPointerActivatedButtonFocus,
+  releasePointerActivatedButtonFocus,
+} from "./pointer-button-focus.js";
+import type { BranchViewPlacement, DeckOrientation } from "./settings.js";
 
 export interface LocalBranchViewEnvironment {
   readonly activeDocument: Document;
@@ -116,11 +116,10 @@ export class LocalBranchViewController {
   private lastSize = "";
 
   constructor(private readonly environment: LocalBranchViewEnvironment) {
-    this.root = localBranchDomWindow(environment.activeDocument)
-      .createEl("section");
+    this.root = createHtmlElement(environment.activeDocument, "section");
     this.root.className = "slipbox-local-branch-view";
     this.rootLabel = appendHiddenLabel(this.root, "Local branch view");
-    this.layer = localBranchDomWindow(environment.activeDocument).createDiv();
+    this.layer = createHtmlElement(environment.activeDocument, "div");
     this.layer.className = "slipbox-local-branch-layer";
     this.layer.append(this.root);
   }
@@ -230,10 +229,11 @@ export class LocalBranchViewController {
       return;
     }
     const ownerWindow = owner.ownerDocument.defaultView;
-    if (ownerWindow === null || ownerWindow.ResizeObserver === undefined) {
+    const Observer = getResizeObserver(ownerWindow);
+    if (Observer === null) {
       return;
     }
-    this.resizeObserver = new ownerWindow.ResizeObserver(() => {
+    this.resizeObserver = new Observer(() => {
       if (this.layoutSize() === this.lastSize) return;
       const scroller = this.root.querySelector<HTMLElement>(".slipbox-local-branch-scroller");
       const scroll = scroller?.[this.resolvedPlacement() === "left" ? "scrollTop" : "scrollLeft"] ?? 0;
@@ -324,8 +324,7 @@ export class LocalBranchViewController {
       model.navigation[definition.movement]
         .flatMap((group) => group.targets),
     );
-    const button = localBranchDomWindow(this.root.ownerDocument)
-      .createEl("button");
+    const button = createHtmlElement(this.root.ownerDocument, "button");
     button.className = "clickable-icon slipbox-local-branch-control";
     button.type = "button";
     button.disabled = targets.length === 0;
@@ -494,7 +493,7 @@ function element<K extends keyof HTMLElementTagNameMap>(
   name: K,
   className: string,
 ): HTMLElementTagNameMap[K] {
-  const result = localBranchDomWindow(parent.ownerDocument).createEl(name);
+  const result = createHtmlElement(parent.ownerDocument, name);
   result.className = className;
   parent.append(result);
   return result;

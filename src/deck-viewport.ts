@@ -1,4 +1,3 @@
-import { deckRenderWindow, type DeckRenderTransition } from "./deck-render-window.js";
 import type { DeckGeometry } from "./deck-motion.js";
 import {
   activeIndexForViewport,
@@ -6,11 +5,16 @@ import {
   deckIndexByDelta,
   stationarySelectionOffset,
 } from "./deck-motion.js";
+import type {
+  DeckPositionMode,
+  DeckPositionTarget,
+  HorizontalDeckPositionMode,
+} from "./deck-position.js";
+import { deckRenderWindow, type DeckRenderTransition } from "./deck-render-window.js";
 import {
   pathIsAtOrBelow,
   renamePathReference,
 } from "./path-reference.js";
-import type { DeckPositionMode, DeckPositionTarget, HorizontalDeckPositionMode } from "./deck-position.js";
 
 export interface DeckViewportCard {
   readonly path: string;
@@ -32,7 +36,6 @@ export interface DeckViewportSnapshot {
   readonly renderedWindow: DeckRenderWindow | null;
 }
 
-const RENDER_EDGE_BUFFER = 2;
 
 /** Owns Deck navigation state without rendering or scheduling work. */
 export class DeckViewport {
@@ -207,10 +210,6 @@ export class DeckViewport {
     ) - anchorIndex;
   }
 
-  centre(cards: DeckViewportCards): void {
-    this.placeAt(this.anchorIndex(cards), cards);
-  }
-
   renamePath(oldPath: string, newPath: string): boolean {
     if (this.anchor === null) {
       return false;
@@ -255,22 +254,6 @@ export class DeckViewport {
     }
     this.renderedWindow = deckRenderWindow(cards.length, geometry, transition);
     return this.renderedWindow;
-  }
-
-  needsRenderWindowRefresh(cards: DeckViewportCards): boolean {
-    const rendered = this.renderedWindow;
-    const anchorIndex = this.anchorIndex(cards);
-    if (rendered === null || anchorIndex < 0) {
-      return false;
-    }
-    const viewportIndex = Math.round(anchorIndex + this.offset);
-    return (
-      rendered.start > 0 &&
-      viewportIndex <= rendered.start + RENDER_EDGE_BUFFER
-    ) || (
-      rendered.end < cards.length - 1 &&
-      viewportIndex >= rendered.end - RENDER_EDGE_BUFFER
-    );
   }
 
   reset(): void {

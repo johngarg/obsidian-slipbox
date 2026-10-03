@@ -8,6 +8,7 @@ import {
   normalizeSettings,
   type SlipboxSettings,
 } from "./settings.js";
+import { isRecord } from "./value-utils.js";
 
 export interface SlipboxPluginState {
   readonly bookmarks: readonly DeckBookmark[];
@@ -33,10 +34,6 @@ export const DEFAULT_DATA: SlipboxPluginData = {
   settings: DEFAULT_SETTINGS,
   state: DEFAULT_STATE,
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 export function normalizePluginState(value: unknown): SlipboxPluginState {
   return {

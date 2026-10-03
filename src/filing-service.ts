@@ -1,8 +1,9 @@
 import type { App, TFile } from "obsidian";
+import { errorMessage } from "./value-utils.js";
 
 import { validateAddress } from "./address-order.js";
-import type { CardIndex } from "./card-index.js";
 import type { CardIndexRuntime } from "./card-index-runtime.js";
+import type { CardIndex } from "./card-index.js";
 import type { CardService } from "./card-service.js";
 import type { DeskService } from "./desk-service.js";
 import {
@@ -179,8 +180,4 @@ export class FilingService {
       throw new Error("The source path no longer identifies the intended card");
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

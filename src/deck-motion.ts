@@ -1,5 +1,5 @@
-import type { DeckOrientation, DeckStackModel } from "./settings.js";
 import { deckAxis } from "./deck-axis.js";
+import type { DeckOrientation, DeckStackModel } from "./settings.js";
 
 export interface CardMotionStyle {
   readonly along: number;
@@ -208,14 +208,6 @@ export function cardFootprint(options: CardMotionOptions, motion = cardMotionSty
   const across = axis.extent(options.cardHeight, options.cardWidth);
   const angle = Math.abs(motion.rotation) * Math.PI / 180;
   return (along * Math.cos(angle) + across * Math.sin(angle)) * motion.scale / 2;
-}
-
-/** Use a selected card's index as the centred discrete viewport target. */
-export function centredViewportPosition(
-  targetIndex: number,
-  cardCount: number,
-): number {
-  return clampViewportPosition(targetIndex, cardCount);
 }
 
 /** Move an integral number of Deck positions and clamp at either boundary. */

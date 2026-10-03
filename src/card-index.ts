@@ -1,13 +1,6 @@
 import type { App, TFile } from "obsidian";
 import { getFrontMatterInfo, getLinkpath } from "obsidian";
 
-import {
-  buildFiledCardLookups,
-  cardMetadataRecord,
-  indexCardMetadata,
-  type CardMetadataIndex,
-  type FiledCardRecord,
-} from "./card-metadata.js";
 import { indexFiledBacklinks } from "./backlinks.js";
 import {
   EMPTY_EXPLICIT_BRANCH_INDEX,
@@ -15,19 +8,28 @@ import {
   type ExplicitBranch,
   type ExplicitBranchIndex,
 } from "./branch-links.js";
+import type { CardIndexConfig } from "./card-index-config.js";
+import { resolveFiledCardLink } from "./card-links.js";
+import {
+  buildFiledCardLookups,
+  cardMetadataRecord,
+  indexCardMetadata,
+  type CardMetadataIndex,
+  type FiledCardLookups,
+  type FiledCardRecord,
+} from "./card-metadata.js";
 import {
   EMPTY_INFERRED_STRUCTURE,
   buildInferredStructure,
   type InferredStructureIndex,
 } from "./inferred-structure.js";
-import { resolveFiledCardLink } from "./card-links.js";
-import type { CardIndexConfig } from "./card-index-config.js";
 
 export interface FiledCard extends FiledCardRecord {
   readonly file: TFile;
 }
 
 export interface VaultCardIndex extends CardMetadataIndex {
+  readonly lookups: FiledCardLookups<FiledCard>;
   readonly filed: readonly FiledCard[];
   readonly unfiled: readonly TFile[];
   readonly backlinksByTargetPath: ReadonlyMap<string, readonly FiledCard[]>;
@@ -36,6 +38,7 @@ export interface VaultCardIndex extends CardMetadataIndex {
 }
 
 const EMPTY_INDEX: VaultCardIndex = {
+  lookups: buildFiledCardLookups<FiledCard>([]),
   filed: [],
   unfiled: [],
   unfiledPaths: [],
@@ -52,9 +55,6 @@ const NO_BRANCHES: readonly ExplicitBranch[] = [];
 /** A lightweight, cache-backed index over all Markdown files in the vault. */
 export class CardIndex {
   private current: VaultCardIndex = EMPTY_INDEX;
-  private filedByPathMap = new Map<string, FiledCard>();
-  private filedIndexByPathMap = new Map<string, number>();
-  private filedByAddressMap = new Map<string, readonly FiledCard[]>();
 
   constructor(
     private readonly app: App,
@@ -105,8 +105,6 @@ export class CardIndex {
     );
 
     const lookups = buildFiledCardLookups(filed);
-    const filedByPath = new Map(lookups.byPath);
-    const filedByAddress = new Map(lookups.byAddress);
     const explicitBranches = config.explicitBranchLinks
       ? indexExplicitBranches(
         filed.map((card, deckIndex) => ({
@@ -123,9 +121,9 @@ export class CardIndex {
             {
               resolveFile: (linkPath, path) =>
                 this.app.metadataCache.getFirstLinkpathDest(linkPath, path),
-              filedPathForFile: (file) => filedByPath.get(file.path)?.path,
+              filedPathForFile: (file) => lookups.byPath.get(file.path)?.path,
               firstFiledPathAtAddress: (address) =>
-                filedByAddress.get(address)?.[0]?.path,
+                lookups.byAddress.get(address)?.[0]?.path,
             },
           )?.path,
         },
@@ -136,6 +134,7 @@ export class CardIndex {
       : EMPTY_INFERRED_STRUCTURE;
     return {
       ...indexed,
+      lookups,
       filed,
       unfiled,
       backlinksByTargetPath,
@@ -146,15 +145,11 @@ export class CardIndex {
 
   /** Replace the shared query snapshot as one atomic publication step. */
   publish(snapshot: VaultCardIndex): void {
-    const lookups = buildFiledCardLookups(snapshot.filed);
-    this.filedByPathMap = new Map(lookups.byPath);
-    this.filedIndexByPathMap = new Map(lookups.indexByPath);
-    this.filedByAddressMap = new Map(lookups.byAddress);
     this.current = snapshot;
   }
 
   filedByPath(path: string): FiledCard | undefined {
-    return this.filedByPathMap.get(path);
+    return this.current.lookups.byPath.get(path);
   }
 
   filedByFile(file: TFile): FiledCard | undefined {
@@ -162,7 +157,7 @@ export class CardIndex {
   }
 
   filedAtAddress(address: string): readonly FiledCard[] {
-    return this.filedByAddressMap.get(address) ?? NO_FILED_CARDS;
+    return this.current.lookups.byAddress.get(address) ?? NO_FILED_CARDS;
   }
 
   firstFiledAtAddress(address: string): FiledCard | undefined {
@@ -170,7 +165,7 @@ export class CardIndex {
   }
 
   filedIndexForPath(path: string | null): number {
-    return path === null ? -1 : this.filedIndexByPathMap.get(path) ?? -1;
+    return path === null ? -1 : this.current.lookups.indexByPath.get(path) ?? -1;
   }
 
   fileAtPath(path: string): TFile | undefined {
@@ -179,10 +174,6 @@ export class CardIndex {
 
   backlinksForPath(path: string): readonly FiledCard[] {
     return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
-  }
-
-  outgoingBranchesForPath(path: string): readonly ExplicitBranch[] {
-    return this.current.explicitBranches.outgoingBySourcePath.get(path) ?? NO_BRANCHES;
   }
 
   incomingBranchesForPath(path: string): readonly ExplicitBranch[] {

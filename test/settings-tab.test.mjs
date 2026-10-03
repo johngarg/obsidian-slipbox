@@ -78,3 +78,42 @@ test('header toggles with contextual names still update only their own card surf
     assert.deepEqual(host.settings.cardHeaderButtons, before);
   }
 });
+
+
+function control() {
+  return { value: undefined, disabled: undefined, change: undefined,
+    setValue(value) { this.value=value;return this; }, setDisabled(value) { this.disabled=value;return this; },
+    addOption() { return this; }, onChange(callback) { this.change=callback;return this; } };
+}
+
+test('simple toggles save explicit false without refreshing the settings page', async () => {
+  const {tab,host}=subject();let refreshes=0;tab.updatePreservingScroll=()=>refreshes++;
+  for(const key of ['showTitleInDeck','showTooltips','showDeckMap','restrictViewedCardPaste','previewLinksOnHover','followLinksFromCards','protectFiledCardText','showAutomaticBacklinks','allowCardScrolling','fanHeadersAtBottom']) {
+    const toggle=control(),before=structuredClone(host.settings);
+    tab.renderToggle({addToggle:callback=>callback(toggle)},key);assert.equal(toggle.value,before[key]);
+    toggle.change(false);await Promise.resolve();assert.deepEqual(host.settings,{...before,[key]:false});
+  }
+  assert.equal(refreshes,0);
+});
+
+test('card-size dropdowns use their own keys and keep invalid-value normalization', async () => {
+  const {tab,host}=subject();
+  for(const key of ['mainCardSize','deskCardSize']) {
+    const dropdown=control();tab.renderCardSize({addDropdown:callback=>callback(dropdown)},key);
+    for(const value of ['small','large','invalid']) {dropdown.change(value);await Promise.resolve();assert.equal(host.settings[key],value==='invalid'?'medium':value);}
+  }
+});
+
+test('branch dependency controls retain disabled state and settings refresh behaviour', async () => {
+  const {tab,host}=subject();let refreshes=0;tab.updatePreservingScroll=()=>refreshes++;
+  for(const enabled of [false,true]) {
+    host.settings={...host.settings,explicitBranchLinks:enabled};
+    for(const method of ['renderShowBranchLabels','renderOutlineBranchLinks','renderHideBranchLinkMarkers']) {
+      const toggle=control();let rowDisabled;
+      tab[method]({setDisabled:value=>rowDisabled=value,addToggle:callback=>callback(toggle)});
+      assert.equal(rowDisabled,!enabled);assert.equal(toggle.disabled,!enabled);
+    }
+  }
+  const toggle=control();tab.renderExplicitBranchLinks({addToggle:callback=>callback(toggle)});toggle.change(false);
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(refreshes,1);assert.equal(host.settings.explicitBranchLinks,false);
+});

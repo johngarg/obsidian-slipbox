@@ -1,12 +1,12 @@
+import { Window } from "happy-dom";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { Window } from "happy-dom";
 
+import { createHtmlElement } from "../src/dom.js";
 import type {
   LocalBranchModel,
   LocalBranchNode,
 } from "../src/local-branch-model.js";
-import { localBranchDomWindow } from "../src/local-branch-dom.js";
 import {
   localBranchTrayWidth,
   LocalBranchViewController,
@@ -92,17 +92,16 @@ function fixture(
       createNamespacedElement("http://www.w3.org/2000/svg", tag),
   });
   Object.defineProperty(document, "win", { value: window });
-  const obsidianWindow = localBranchDomWindow(document);
-  const first = obsidianWindow.createEl("article");
-  const second = obsidianWindow.createEl("article");
-  const stage = obsidianWindow.createDiv();
+  const first = createHtmlElement(document, "article");
+  const second = createHtmlElement(document, "article");
+  const stage = createHtmlElement(document, "div");
   Object.defineProperty(first, "offsetWidth", { value: ownerWidth });
   Object.defineProperty(second, "offsetWidth", { value: ownerWidth });
   Object.defineProperty(stage, "clientWidth", { value: stageWidth });
   stage.className = "slipbox-deck-stage";
-  const space = obsidianWindow.createDiv();
+  const space = createHtmlElement(document, "div");
   space.className = "slipbox-space";
-  const deck = obsidianWindow.createDiv();
+  const deck = createHtmlElement(document, "div");
   deck.className = "slipbox-deck-cards";
   first.className = second.className = "slipbox-card";
   deck.append(first, second);
@@ -869,8 +868,8 @@ test("overlay tracks owner motion without layout reads, and survives drag cancel
 test("moving a Branch View to another pane leaves no stale overlay", () => {
   const subject = fixture();
   const layer = subject.space.querySelector(".slipbox-local-branch-layer");
-  const space = localBranchDomWindow(subject.document).createDiv();
-  const stage = localBranchDomWindow(subject.document).createDiv();
+  const space = createHtmlElement(subject.document, "div");
+  const stage = createHtmlElement(subject.document, "div");
   stage.append(space);
   subject.document.body.append(stage);
   space.append(subject.second);

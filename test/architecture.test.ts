@@ -11,8 +11,14 @@ function source(name: string): string {
 
 describe("module architecture", () => {
   test("views and settings do not depend on the plugin lifecycle class", () => {
-    for (const name of ["deck-view.ts", "desk-view.ts", "settings-tab.ts"]) {
+    for (const name of ["deck-view.ts", "desk-view.ts", "settings-tab.ts", "viewed-card-renderer.ts", "deck-inline-editor.ts", "deck-card-drag.ts"]) {
       assert.doesNotMatch(source(name), /from ["']\.\/main(?:\.js)?["']/);
+    }
+  });
+
+  test("extracted components do not depend on DeckView", () => {
+    for (const name of ["viewed-card-renderer.ts", "deck-inline-editor.ts", "deck-card-drag.ts"]) {
+      assert.doesNotMatch(source(name), /from ["']\.\/deck-view(?:\.js)?["']/);
     }
   });
 

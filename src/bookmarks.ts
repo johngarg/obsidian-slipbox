@@ -2,14 +2,11 @@ import {
   pathIsAtOrBelow,
   renamePathReference,
 } from "./path-reference.js";
+import { isRecord } from "./value-utils.js";
 
 /** Current persisted bookmark identity. */
 export interface DeckBookmark {
   readonly path: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 /** Load valid path bookmarks and discard every other stored shape. */

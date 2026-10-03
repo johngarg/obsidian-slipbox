@@ -1,5 +1,6 @@
 import type { DeckOrdering } from "./address-order.js";
 import type { DuplicateAddressPolicy } from "./card-metadata.js";
+import { isRecord } from "./value-utils.js";
 
 export const SLIPBOX_DATA_SCHEMA_VERSION = 14;
 
@@ -115,9 +116,6 @@ export interface DeckKeyBinding {
   readonly key: string;
 }
 
-export type SlipboxActionScope = "active-view" | "global";
-export type SlipboxActionTarget = "deck-anchor" | "focused-card" | "view" | "global";
-
 export interface SlipboxActionDefinition {
   readonly id: SlipboxAction;
   readonly label: string;
@@ -126,8 +124,6 @@ export interface SlipboxActionDefinition {
   readonly defaultBindings: readonly DeckKeyBinding[];
   readonly commandId: string;
   readonly commandName: string;
-  readonly scope: SlipboxActionScope;
-  readonly target: SlipboxActionTarget;
 }
 
 const binding = (
@@ -137,7 +133,7 @@ const binding = (
 
 const BASE_ACTION_DEFINITIONS: readonly Omit<
   SlipboxActionDefinition,
-  "commandId" | "commandName" | "scope" | "target"
+  "commandId" | "commandName"
 >[] = [
   {
     id: "previous-card",
@@ -451,53 +447,11 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   problems: "show-card-problems",
 };
 
-const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
-  "open-note",
-  "copy-link",
-  "toggle-desk",
-  "toggle-desk-without-focus",
-  "toggle-bookmark",
-  "pull-into-pile",
-  "toggle-pile",
-  "previous-card-in-pile",
-  "next-card-in-pile",
-  "edit-card",
-  "show-card-in-deck",
-  "toggle-viewed-card",
-  "file-card",
-  "move-desk-card-left",
-  "move-desk-card-right",
-  "delete-card",
-]);
-
-const GLOBAL_ACTIONS = new Set<SlipboxAction>(["bookmarks", "problems"]);
-
-const VIEW_ACTIONS = new Set<SlipboxAction>([
-  "toggle-deck-orientation",
-  "toggle-local-branch-view",
-  "toggle-deck-map",
-  "confirm-filing",
-  "cancel-filing",
-  "collapse-all-piles",
-  "return-all-filed-cards",
-  "next-pile",
-  "previous-pile",
-  "swap-deck-pile",
-]);
-
 export const SLIPBOX_ACTION_DEFINITIONS: readonly SlipboxActionDefinition[] =
   BASE_ACTION_DEFINITIONS.map((definition) => ({
     ...definition,
     commandId: ACTION_COMMAND_IDS[definition.id] ?? definition.id,
     commandName: definition.label,
-    scope: GLOBAL_ACTIONS.has(definition.id) ? "global" : "active-view",
-    target: GLOBAL_ACTIONS.has(definition.id)
-      ? "global"
-      : FOCUSED_CARD_ACTIONS.has(definition.id)
-        ? "focused-card"
-        : VIEW_ACTIONS.has(definition.id)
-          ? "view"
-          : "deck-anchor",
   }));
 
 export type DeckOrientation = "horizontal" | "vertical";
@@ -637,10 +591,6 @@ export const DEFAULT_SETTINGS: SlipboxSettings = {
 
 const MODIFIER_ORDER: readonly KeyModifier[] = ["Mod", "Ctrl", "Meta", "Alt", "Shift"];
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export function normalizePropertyName(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() !== ""
     ? value.trim()
@@ -671,21 +621,6 @@ export function normalizeCardSpread(value: unknown): number {
     ? value
     : DEFAULT_CARD_SPREAD;
   return Math.min(MAX_CARD_SPREAD, Math.max(MIN_CARD_SPREAD, spread));
-}
-
-export function hasTitleAddressPropertyCollision(value: unknown): boolean {
-  if (!isRecord(value) || value.titleSource !== "frontmatter") {
-    return false;
-  }
-  const addressProperty = normalizePropertyName(
-    value.addressProperty,
-    DEFAULT_SETTINGS.addressProperty,
-  );
-  const titleProperty = normalizePropertyName(
-    value.titleProperty,
-    DEFAULT_SETTINGS.titleProperty,
-  );
-  return addressProperty === titleProperty;
 }
 
 export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
@@ -880,25 +815,15 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
     duplicateAddresses:
       source.duplicateAddresses === "problem" ? "problem" : "allowed",
     explicitBranchLinks:
-      typeof source.explicitBranchLinks === "boolean"
-        ? source.explicitBranchLinks
-        : DEFAULT_SETTINGS.explicitBranchLinks,
+      booleanSetting(source.explicitBranchLinks, DEFAULT_SETTINGS.explicitBranchLinks),
     outlineBranchLinks:
-      typeof source.outlineBranchLinks === "boolean"
-        ? source.outlineBranchLinks
-        : DEFAULT_SETTINGS.outlineBranchLinks,
+      booleanSetting(source.outlineBranchLinks, DEFAULT_SETTINGS.outlineBranchLinks),
     hideBranchLinkMarkers:
-      typeof source.hideBranchLinkMarkers === "boolean"
-        ? source.hideBranchLinkMarkers
-        : DEFAULT_SETTINGS.hideBranchLinkMarkers,
+      booleanSetting(source.hideBranchLinkMarkers, DEFAULT_SETTINGS.hideBranchLinkMarkers),
     showBranchLabels:
-      typeof source.showBranchLabels === "boolean"
-        ? source.showBranchLabels
-        : DEFAULT_SETTINGS.showBranchLabels,
+      booleanSetting(source.showBranchLabels, DEFAULT_SETTINGS.showBranchLabels),
     inferAddressBranches:
-      typeof source.inferAddressBranches === "boolean"
-        ? source.inferAddressBranches
-        : DEFAULT_SETTINGS.inferAddressBranches,
+      booleanSetting(source.inferAddressBranches, DEFAULT_SETTINGS.inferAddressBranches),
     showLocalBranchView:
       typeof source.showLocalBranchView === "boolean"
         ? source.showLocalBranchView
@@ -918,41 +843,23 @@ export function normalizeSettings(value: unknown): SlipboxSettings {
       DEFAULT_SETTINGS.newNoteTimestampFormat,
     ),
     showTitleInDeck:
-      typeof source.showTitleInDeck === "boolean"
-        ? source.showTitleInDeck
-        : DEFAULT_SETTINGS.showTitleInDeck,
+      booleanSetting(source.showTitleInDeck, DEFAULT_SETTINGS.showTitleInDeck),
     showTooltips:
-      typeof source.showTooltips === "boolean"
-        ? source.showTooltips
-        : DEFAULT_SETTINGS.showTooltips,
+      booleanSetting(source.showTooltips, DEFAULT_SETTINGS.showTooltips),
     showDeckMap:
-      typeof source.showDeckMap === "boolean"
-        ? source.showDeckMap
-        : DEFAULT_SETTINGS.showDeckMap,
+      booleanSetting(source.showDeckMap, DEFAULT_SETTINGS.showDeckMap),
     restrictViewedCardPaste:
-      typeof source.restrictViewedCardPaste === "boolean"
-        ? source.restrictViewedCardPaste
-        : DEFAULT_SETTINGS.restrictViewedCardPaste,
+      booleanSetting(source.restrictViewedCardPaste, DEFAULT_SETTINGS.restrictViewedCardPaste),
     previewLinksOnHover:
-      typeof source.previewLinksOnHover === "boolean"
-        ? source.previewLinksOnHover
-        : DEFAULT_SETTINGS.previewLinksOnHover,
+      booleanSetting(source.previewLinksOnHover, DEFAULT_SETTINGS.previewLinksOnHover),
     followLinksFromCards:
-      typeof source.followLinksFromCards === "boolean"
-        ? source.followLinksFromCards
-        : DEFAULT_SETTINGS.followLinksFromCards,
+      booleanSetting(source.followLinksFromCards, DEFAULT_SETTINGS.followLinksFromCards),
     protectFiledCardText:
-      typeof source.protectFiledCardText === "boolean"
-        ? source.protectFiledCardText
-        : DEFAULT_SETTINGS.protectFiledCardText,
+      booleanSetting(source.protectFiledCardText, DEFAULT_SETTINGS.protectFiledCardText),
     showAutomaticBacklinks:
-      typeof source.showAutomaticBacklinks === "boolean"
-        ? source.showAutomaticBacklinks
-        : DEFAULT_SETTINGS.showAutomaticBacklinks,
+      booleanSetting(source.showAutomaticBacklinks, DEFAULT_SETTINGS.showAutomaticBacklinks),
     allowCardScrolling:
-      typeof source.allowCardScrolling === "boolean"
-        ? source.allowCardScrolling
-        : DEFAULT_SETTINGS.allowCardScrolling,
+      booleanSetting(source.allowCardScrolling, DEFAULT_SETTINGS.allowCardScrolling),
     deckOrientation: source.deckOrientation === "vertical" ? "vertical" : "horizontal",
     deckStackModel: source.deckStackModel === "fan" ? "fan" : "drawer",
     fanHeadersAtBottom: source.fanHeadersAtBottom === true,
@@ -1037,4 +944,8 @@ function normalizeSettingsBindings(source: Record<string, unknown>): SlipboxSett
     if (!overrides[action]) delete bindings[action];
   }
   return normalizeDeckKeybindings(bindings);
+}
+
+function booleanSetting(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }

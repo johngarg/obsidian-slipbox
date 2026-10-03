@@ -1,6 +1,5 @@
-import { verticalDeckMapInset } from "./deck-map-layout.js";
 import { deckAxis } from "./deck-axis.js";
-import type { DeckOrientation } from "./settings.js";
+import { verticalDeckMapInset } from "./deck-map-layout.js";
 import { DeckMapRenderer } from "./deck-map-renderer.js";
 import {
   bucketDeckMapLandmarks,
@@ -21,8 +20,9 @@ import {
   type DeckMapSection,
   type DeckMapWindow,
 } from "./deck-map.js";
+import { createHtmlElement, getResizeObserver } from "./dom.js";
+import type { DeckOrientation } from "./settings.js";
 
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const SECTION_LABEL_SPACING = 18;
 
 export type DeckMapKeyboardAction =
@@ -61,10 +61,7 @@ export class DeckMapController {
     private readonly container: HTMLElement,
     private readonly environment: DeckMapControllerEnvironment,
   ) {
-    this.rootElement = container.ownerDocument.createElementNS(
-      HTML_NAMESPACE,
-      "div",
-    );
+    this.rootElement = createHtmlElement(container.ownerDocument, "div");
     container.append(this.rootElement);
     this.renderer = new DeckMapRenderer(this.rootElement);
     this.rootElement.addEventListener("pointerdown", this.handlePointerDown);
@@ -75,7 +72,7 @@ export class DeckMapController {
 
     const ownerWindow = this.ownerWindow;
     ownerWindow?.addEventListener("resize", this.handleResize);
-    const ResizeObserverConstructor = deckMapResizeObserver(ownerWindow);
+    const ResizeObserverConstructor = getResizeObserver(ownerWindow);
     if (ResizeObserverConstructor !== null) {
       const observer = new ResizeObserverConstructor((entries) => {
         const railEntry = entries.find((entry) => entry.target === this.renderer.railElement);
@@ -146,11 +143,6 @@ export class DeckMapController {
       }
     }
     this.reconcileLandmarks();
-    this.updateAria();
-  }
-
-  updateRenderedWindow(renderedWindow: DeckMapWindow | null): void {
-    this.renderedWindow = renderedWindow;
     this.updateAria();
   }
 
@@ -394,16 +386,4 @@ export class DeckMapController {
   private readonly handleResize = (): void => {
     this.refreshLayout();
   };
-}
-
-function deckMapResizeObserver(
-  ownerWindow: Window | null,
-): typeof ResizeObserver | null {
-  if (ownerWindow === null) {
-    return null;
-  }
-  const candidate: unknown = Reflect.get(ownerWindow, "ResizeObserver");
-  return typeof candidate === "function"
-    ? candidate as typeof ResizeObserver
-    : null;
 }

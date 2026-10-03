@@ -1,9 +1,11 @@
 import type { TFile } from "obsidian";
+import { errorMessage } from "./value-utils.js";
 
 import type { CardIndexRuntime } from "./card-index-runtime.js";
 import type { VaultCardIndex } from "./card-index.js";
 import {
   EMPTY_DESK,
+  cardPosition,
   clearFiledCardsFromDesk,
   clearFiledCardsFromPile,
   deskContains,
@@ -67,7 +69,7 @@ export class DeskService {
       this.positionRefreshPending = false;
       await this.environment.refreshViews();
     }).catch((error: unknown) => {
-      this.environment.notify(`Could not refresh Desk positions: ${error instanceof Error ? error.message : String(error)}`);
+      this.environment.notify(`Could not refresh Desk positions: ${errorMessage(error)}`);
     });
   }
 
@@ -90,28 +92,12 @@ export class DeskService {
     }
   }
 
-  async putFile(file: TFile): Promise<boolean> {
-    if (this.contains(file.path)) {
-      return true;
-    }
-    let available = false;
-    await this.environment.indexRuntime.refresh({
-      afterReconcile: () => {
-        available = this.environment.indexRuntime.index.filedByFile(file) !== undefined;
-        if (available) {
-          this.current = toggleFiledCard(
-            this.current,
-            { cardRef: file.path, kind: "filed" },
-            this.createPileId(),
-          );
-        }
-      },
-    });
-    if (!available) {
-      this.environment.notify("Only an available filed card can be put on the Desk.");
-      return false;
-    }
-    return this.contains(file.path);
+  positionOf(path: string) {
+    return cardPosition(this.current, path);
+  }
+
+  isPileExpanded(id: string): boolean {
+    return this.current.expandedPileIds.includes(id);
   }
 
   contains(path: string): boolean {

@@ -43,7 +43,7 @@ function subject(t) {
     Object.assign(v,{contentEl:content,stageEl:content.querySelector('.slipbox-deck-stage'),spaceEl:content.querySelector('.slipbox-space'),deckCardsEl:content.querySelector('.slipbox-deck-cards'),deckInFront:false,allow:true,
       app:{workspace:{trigger(name,menu){assert.equal(name,'file-menu');menu.addItem(i=>i.setTitle('Host file action'));}}},
       plugin:{cards:{title:()=> 'Example'},bookmarks:{at:()=>undefined},deskService:{contains:()=>false,snapshot:{piles:[{id:'p',position:{x:10.25,y:-40.5},cards:[{cardRef:'B.md',kind:'filed'}]}],expandedPileIds:['p']}}},
-      runAfterInlineEditing:async(reason,action)=>{gates.push(reason);if(!v.allow)return false;await action();return true;},runAction:action=>actions.push(action),
+      inlineEditor:{runAfter:async(reason,action)=>{gates.push(reason);if(!v.allow)return false;await action();return true;}},runAction:action=>actions.push(action),
     });
     const renderer=Object.create(DeskRenderer.prototype);
     Object.assign(renderer,{workspaceEl:v.stageEl,pilesAnchorEl:content.querySelector('.slipbox-desk-piles'),

@@ -1,26 +1,20 @@
+import { bundleFixture, idleInlineEditor } from './helpers/view-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRequire } from 'node:module';
-import { runInNewContext } from 'node:vm';
-import { build } from 'esbuild';
 import { Window } from 'happy-dom';
 
 // Exercise the real view's wheel-to-frame wiring without requiring Obsidian's UI.
-const output = await build({ stdin: { contents: `
+const load = await bundleFixture(`
   export { CardDimensionsController } from './src/card-dimensions.ts';
   export { DeckView } from './src/deck-view.ts';
   export { DeckViewport } from './src/deck-viewport.ts';
   export { DeckFrameScheduler } from './src/deck-frame.ts';
   export { DeckTransition } from './src/deck-transition.ts';
   export { DeckWheelController } from './src/deck-wheel.ts';
-`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'cjs', platform: 'node', external: ['obsidian'] });
-const module = { exports: {} };
-const actualRequire = createRequire(import.meta.url);
+`);
 const obsidian = new Proxy({}, { get: () => class {} });
-runInNewContext('(function(require, module, exports) {' + output.outputFiles[0].text + '\n})')(
-  name => name === 'obsidian' ? obsidian : actualRequire(name), module, module.exports,
-);
-const { CardDimensionsController, DeckView, DeckViewport, DeckFrameScheduler, DeckTransition, DeckWheelController } = module.exports;
+const exports = load(obsidian);
+const { CardDimensionsController, DeckView, DeckViewport, DeckFrameScheduler, DeckTransition, DeckWheelController } = exports;
 
 function subject(model = 'drawer') {
   const window = new Window();
@@ -34,7 +28,7 @@ function subject(model = 'drawer') {
   const view = Object.create(DeckView.prototype);
   Object.assign(view, {
     localBranchView: { updatePosition() {} },
-    stageEl: stage, contentEl: stage, spaceEl: null, renderedCards: [], inlineEdit: null,
+    stageEl: stage, contentEl: stage, spaceEl: null, renderedCards: [], inlineEditor: idleInlineEditor(),
     deckViewport: new DeckViewport(), wheelController: new DeckWheelController(), wheelGestureTimer: null,
     drawerTransition: new DeckTransition(),
     deskRenderer: { positionPiles: () => true },
@@ -48,8 +42,8 @@ function subject(model = 'drawer') {
     updateActiveUi: () => { calls.active++; },
     renderBookmarkEdgeTabs: () => { calls.bookmarks++; },
     queueRenderWindowRefresh: () => { calls.windows++; },
-    runAfterInlineEditing: (_reason, action) => { calls.gates++; action(); return Promise.resolve(true); },
   });
+  view.inlineEditor.runAfter = (_reason, action) => { calls.gates++; action(); return Promise.resolve(true); };
   view.deckFrames = new DeckFrameScheduler({
     request: callback => { pending.set(++sequence, callback); return sequence; },
     cancel: handle => pending.delete(handle),
@@ -206,7 +200,7 @@ for (const orientation of ['vertical', 'horizontal']) {
 
 test('a failed inline-edit gate prevents wheel movement and scheduling', () => {
   const value = subject();
-  value.view.runAfterInlineEditing = () => Promise.resolve(false);
+  value.view.inlineEditor.runAfter = () => Promise.resolve(false);
   value.wheel(80);
   assert.equal(value.view.deckViewport.anchorPath, '4.md');
   assert.equal(value.view.deckViewport.position(value.cards), 4);
@@ -228,7 +222,7 @@ test('selection interactivity updates even when focus already updated the anchor
   const interactive = [];
   view.renderedCards = cards;
   view.deckInteractivity = new WeakMap([[cards[0], true], [cards[1], false]]);
-  view.viewedCardEl = null;
+  view.viewedCard = {cardEl: null, filingEditor: null};
   view.cardFooters = { setInteractive: (card, active) => interactive.push([card.dataset.path, active]) };
   view.cardSignatures = { setInteractive() {} };
   view.syncLocalBranchViewOwner = () => {};

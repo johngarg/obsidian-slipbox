@@ -1,3 +1,4 @@
+import { isRecord } from "./value-utils.js";
 export interface FormattableTimestamp {
   format(pattern: string): string;
 }
@@ -7,7 +8,7 @@ function isTimestampFactory(value: unknown): value is () => unknown {
 }
 
 function isFormattableTimestamp(value: unknown): value is FormattableTimestamp {
-  return typeof value === "object" && value !== null &&
+  return isRecord(value) &&
     "format" in value && typeof value.format === "function";
 }
 

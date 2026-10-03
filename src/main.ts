@@ -1,4 +1,3 @@
-import type { DeckPositionMode } from "./deck-position.js";
 import {
   Notice,
   Plugin,
@@ -13,14 +12,29 @@ import {
   stringifyYaml,
   type WorkspaceLeaf,
 } from "obsidian";
+import type { DeckPositionMode } from "./deck-position.js";
+import { errorMessage } from "./value-utils.js";
 
 import { BookmarkService } from "./bookmark-service.js";
+import { CanvasBridge } from "./canvas-bridge.js";
+import {
+  cardIndexConfig,
+  settingsRefreshImpact,
+} from "./card-index-config.js";
+import { CardIndexRuntime } from "./card-index-runtime.js";
+import { CardIndex } from "./card-index.js";
+import { issueStatusSummary } from "./card-metadata.js";
+import { CardService } from "./card-service.js";
 import {
   DECK_VIEW_TYPE,
   DeckView,
   type DeckRefreshReason,
 } from "./deck-view.js";
-import { issueStatusSummary } from "./card-metadata.js";
+import { DeskCanvasService } from "./desk-canvas-service.js";
+import { DeskService } from "./desk-service.js";
+import { FilingService } from "./filing-service.js";
+import { InlineEditRegistry } from "./inline-edit-registry.js";
+import { MetadataCacheWaiter } from "./metadata-cache-waiter.js";
 import {
   IssuesModal,
   promptForCanvas,
@@ -28,44 +42,31 @@ import {
   promptForText,
 } from "./modals.js";
 import { promptForNewCardOptions } from "./new-card-modal.js";
-import {
-  DEFAULT_STATE,
-  loadPluginData,
-  type SlipboxPluginState,
-} from "./plugin-state.js";
-import {
-  DEFAULT_SETTINGS,
-  normalizeCardSpread,
-  SLIPBOX_DATA_SCHEMA_VERSION,
-  normalizeSettings,
-  SLIPBOX_ACTION_DEFINITIONS,
-  type SlipboxActionDefinition,
-  type SlipboxSettings,
-} from "./settings.js";
-import { SlipboxSettingTab } from "./settings-tab.js";
-import { CardIndex } from "./card-index.js";
-import {
-  cardIndexConfig,
-  settingsRefreshImpact,
-} from "./card-index-config.js";
-import { DeskService } from "./desk-service.js";
-import { formatCurrentTimestamp } from "./timestamp.js";
-import { CanvasBridge } from "./canvas-bridge.js";
-import { DeskCanvasService } from "./desk-canvas-service.js";
-import {
-  deckPositionModeForPileCount,
-} from "./workspace-layout.js";
 import { splitNoteBody } from "./note-body.js";
-import { CardIndexRuntime } from "./card-index-runtime.js";
 import {
   SerializedPluginDataWriter,
   type PluginDataWriteResult,
 } from "./plugin-data-writer.js";
 import type { SlipboxPluginData } from "./plugin-state.js";
-import { InlineEditRegistry } from "./inline-edit-registry.js";
-import { CardService } from "./card-service.js";
-import { FilingService } from "./filing-service.js";
-import { MetadataCacheWaiter } from "./metadata-cache-waiter.js";
+import {
+  DEFAULT_STATE,
+  loadPluginData,
+  type SlipboxPluginState,
+} from "./plugin-state.js";
+import { SlipboxSettingTab } from "./settings-tab.js";
+import {
+  DEFAULT_SETTINGS,
+  SLIPBOX_ACTION_DEFINITIONS,
+  SLIPBOX_DATA_SCHEMA_VERSION,
+  normalizeCardSpread,
+  normalizeSettings,
+  type SlipboxActionDefinition,
+  type SlipboxSettings,
+} from "./settings.js";
+import { formatCurrentTimestamp } from "./timestamp.js";
+import {
+  deckPositionModeForPileCount,
+} from "./workspace-layout.js";
 
 export default class SlipboxPlugin extends Plugin {
   state: SlipboxPluginState = DEFAULT_STATE;
@@ -282,10 +283,8 @@ export default class SlipboxPlugin extends Plugin {
       return;
     }
     this.settings = { ...this.settings, cardSpread };
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.handleCardSpreadChanged();
-      }
+    for (const view of this.deckViews()) {
+      view.handleCardSpreadChanged();
     }
     if (this.cardSpreadSaveTimer !== null) {
       window.clearTimeout(this.cardSpreadSaveTimer);
@@ -323,11 +322,9 @@ export default class SlipboxPlugin extends Plugin {
         await this.indexRuntime.refresh({ reason: impact });
         return;
       case "branch-presentation":
-        for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-          if (leaf.view instanceof DeckView) {
-            leaf.view.refreshBranchPresentation();
-          }
-        }
+        for (const view of this.deckViews()) {
+      view.refreshBranchPresentation();
+    }
         return;
       case "full":
         await this.refreshDeckViews();
@@ -536,10 +533,8 @@ export default class SlipboxPlugin extends Plugin {
    * survives later reconciliation.
    */
   private focusDeskCardInViews(path: string): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.focusDeskCardAtPath(path);
-      }
+    for (const view of this.deckViews()) {
+      view.focusDeskCardAtPath(path);
     }
   }
 
@@ -573,11 +568,7 @@ export default class SlipboxPlugin extends Plugin {
     );
     this.updateProblemStatusBarItem();
     await Promise.all(
-      this.app.workspace
-        .getLeavesOfType(DECK_VIEW_TYPE)
-        .flatMap((leaf) =>
-          leaf.view instanceof DeckView ? [leaf.view.refresh(reason)] : [],
-        ),
+      this.deckViews().map((view) => view.refresh(reason)),
     );
   }
 
@@ -585,11 +576,14 @@ export default class SlipboxPlugin extends Plugin {
     return this.startupDeckMode ?? "centered";
   }
 
+  private deckViews(): DeckView[] {
+    return this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)
+      .flatMap((leaf) => leaf.view instanceof DeckView ? [leaf.view] : []);
+  }
+
   private refreshBookmarkUi(): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.handleBookmarksChanged();
-      }
+    for (const view of this.deckViews()) {
+      view.handleBookmarksChanged();
     }
   }
 
@@ -604,10 +598,8 @@ export default class SlipboxPlugin extends Plugin {
   private handleDeletedFile(file: TAbstractFile): void {
     this.inlineEdits.handlePathDeletion(file.path);
     this.deskService.removePath(file.path);
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.handlePathDeletion(file.path);
-      }
+    for (const view of this.deckViews()) {
+      view.handlePathDeletion(file.path);
     }
     void this.bookmarks.handlePathDeletion(file.path);
     this.indexRuntime.queue();
@@ -616,17 +608,11 @@ export default class SlipboxPlugin extends Plugin {
   private handleRenamedFile(file: TAbstractFile, oldPath: string): void {
     this.inlineEdits.handlePathRename(oldPath, file.path);
     this.deskService.renamePath(oldPath, file.path);
-    for (const leaf of this.app.workspace.getLeavesOfType(DECK_VIEW_TYPE)) {
-      if (leaf.view instanceof DeckView) {
-        leaf.view.handlePathRename(oldPath, file.path);
-      }
+    for (const view of this.deckViews()) {
+      view.handlePathRename(oldPath, file.path);
     }
     void this.bookmarks.handlePathRename(oldPath, file.path);
     this.indexRuntime.queue();
   }
 
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

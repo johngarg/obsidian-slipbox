@@ -6,6 +6,15 @@ initial public beta.
 
 ## [Unreleased]
 
+### Fixed
+
+- Rejected bookmark additions no longer leave a card looking bookmarked.
+
+### Improved
+
+- Reuse card lookup maps within each index snapshot and avoid repeated Desk scans
+  when rebuilding the Deck map, reducing work in large vaults.
+
 ## [0.16.0] - 2026-09-19
 
 ### Added

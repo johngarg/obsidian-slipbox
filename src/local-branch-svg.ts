@@ -1,10 +1,10 @@
+import { createHtmlElement, createSvgElement } from "./dom.js";
 import {
   layoutLocalBranchModel,
   type LocalBranchLayout,
   type LocalBranchLayoutNode,
   type LocalBranchLayoutStrand,
 } from "./local-branch-layout.js";
-import { localBranchDomWindow } from "./local-branch-dom.js";
 import type {
   LocalBranchDeparture,
   LocalBranchModel,
@@ -68,7 +68,7 @@ class LocalBranchSvgRenderer {
   }
 
   render(): void {
-    const scroller = localBranchDomWindow(this.activeDocument).createDiv();
+    const scroller = createHtmlElement(this.activeDocument, "div");
     scroller.className = "slipbox-local-branch-scroller";
     this.options.parent.append(scroller);
     const layout = layoutLocalBranchModel(this.options.model, {
@@ -515,7 +515,7 @@ class LocalBranchSvgRenderer {
   private svg<K extends keyof SVGElementTagNameMap>(
     name: K,
   ): SVGElementTagNameMap[K] {
-    return localBranchDomWindow(this.activeDocument).createSvg(name);
+    return createSvgElement(this.activeDocument, name);
   }
 }
 

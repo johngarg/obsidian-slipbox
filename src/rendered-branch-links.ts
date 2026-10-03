@@ -1,4 +1,5 @@
 import type { LinkCache } from "obsidian";
+import { createHtmlElement } from "./dom.js";
 
 import {
   EXPLICIT_BRANCH_MARKER,
@@ -96,10 +97,7 @@ function hideLeadingMarker(anchor: HTMLAnchorElement): void {
   const range = anchor.ownerDocument.createRange();
   range.setStart(anchor, 0);
   range.setEnd(endNode, endOffset);
-  const markerElement = anchor.ownerDocument.createElementNS(
-    "http://www.w3.org/1999/xhtml",
-    "span",
-  );
+  const markerElement = createHtmlElement(anchor.ownerDocument, "span");
   markerElement.className = RENDERED_BRANCH_MARKER_CLASS;
   markerElement.hidden = true;
   markerElement.setAttribute("aria-hidden", "true");

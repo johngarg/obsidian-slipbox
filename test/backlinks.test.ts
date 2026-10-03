@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  fitBacklinkPrefix,
   fitMeasuredBacklinkPrefix,
   indexFiledBacklinks,
 } from "../src/backlinks.js";
@@ -133,7 +132,7 @@ describe("backlink footer fitting", () => {
   const overflow = (count: number): number => String(count).length * 6 + 8;
 
   it("shows every address when the complete row fits", () => {
-    assert.deepEqual(fitBacklinkPrefix(34, [10, 10, 10], 2, overflow), {
+    assert.deepEqual(fitMeasuredBacklinkPrefix(34, [10, 10, 10], [10, 10, 10].length, 2, overflow), {
       visibleCount: 3,
       hiddenCount: 0,
     });
@@ -143,23 +142,23 @@ describe("backlink footer fitting", () => {
     const unexpectedMeasurement = (): number => {
       assert.fail("A complete row must not trigger a DOM overflow measurement");
     };
-    assert.deepEqual(fitBacklinkPrefix(34, [10, 10, 10], 2, unexpectedMeasurement), {
+    assert.deepEqual(fitMeasuredBacklinkPrefix(34, [10, 10, 10], [10, 10, 10].length, 2, unexpectedMeasurement), {
       visibleCount: 3, hiddenCount: 0,
     });
-    assert.deepEqual(fitBacklinkPrefix(0, [], 2, unexpectedMeasurement), {
+    assert.deepEqual(fitMeasuredBacklinkPrefix(0, [], [].length, 2, unexpectedMeasurement), {
       visibleCount: 0, hiddenCount: 0,
     });
   });
 
   it("keeps the longest complete prefix with room for +N", () => {
-    assert.deepEqual(fitBacklinkPrefix(26, [10, 10, 10], 2, overflow), {
+    assert.deepEqual(fitMeasuredBacklinkPrefix(26, [10, 10, 10], [10, 10, 10].length, 2, overflow), {
       visibleCount: 1,
       hiddenCount: 2,
     });
   });
 
   it("shows only +N when no complete address fits", () => {
-    assert.deepEqual(fitBacklinkPrefix(14, [80, 90], 4, overflow), {
+    assert.deepEqual(fitMeasuredBacklinkPrefix(14, [80, 90], [80, 90].length, 4, overflow), {
       visibleCount: 0,
       hiddenCount: 2,
     });
@@ -167,18 +166,18 @@ describe("backlink footer fitting", () => {
 
   it("uses the measured width for multi-digit overflow counts", () => {
     assert.deepEqual(
-      fitBacklinkPrefix(39, [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], 2, overflow),
+      fitMeasuredBacklinkPrefix(39, [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10].length, 2, overflow),
       { visibleCount: 2, hiddenCount: 9 },
     );
     assert.deepEqual(
-      fitBacklinkPrefix(39, [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], 2, overflow),
+      fitMeasuredBacklinkPrefix(39, [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10].length, 2, overflow),
       { visibleCount: 1, hiddenCount: 11 },
     );
   });
 
   it("partitions varied addresses into complete, unique ordered runs", () => {
     const addresses = ["4/7", "18/2a", "44/123456789abcdef", "91/4c"];
-    const fit = fitBacklinkPrefix(45, [12, 20, 92, 22], 3, overflow);
+    const fit = fitMeasuredBacklinkPrefix(45, [12, 20, 92, 22], [12, 20, 92, 22].length, 3, overflow);
     const shown = addresses.slice(0, fit.visibleCount);
     const omitted = addresses.slice(fit.visibleCount);
 

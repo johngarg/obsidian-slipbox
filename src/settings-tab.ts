@@ -5,30 +5,31 @@ import {
   PluginSettingTab,
   Setting,
   TFolder,
+  type Plugin,
   type SettingDefinition,
   type SettingDefinitionItem,
-  type Plugin,
 } from "obsidian";
+import { errorMessage } from "./value-utils.js";
 
 import { cardHeaderButtonDefinitionsForSurface } from "./card-header-actions.js";
 import { setTextSettingValidity } from "./setting-validation.js";
 import {
-  SLIPBOX_ACTION_DEFINITIONS,
   DEFAULT_DECK_KEYBINDINGS,
-  resolvedDeckKeybindings,
-  defaultNavigationBindings,
   DEFAULT_SETTINGS,
   MAX_CARD_SPREAD,
   MIN_CARD_SPREAD,
+  SLIPBOX_ACTION_DEFINITIONS,
+  defaultNavigationBindings,
   formatKeyBinding,
-  keyBindingFromKeyboardEvent,
   keyBindingConflict,
+  keyBindingFromKeyboardEvent,
   keyBindingSignature,
   metadataPropertyError,
   normalizeCardSize,
+  resolvedDeckKeybindings,
   type CardButtonSurface,
-  type SlipboxActionDefinition,
   type DeckKeyBinding,
+  type SlipboxActionDefinition,
   type SlipboxSettings,
 } from "./settings.js";
 
@@ -81,17 +82,17 @@ export class SlipboxSettingTab extends PluginSettingTab {
           this.definition(
             "Show title in Slipbox Desk card headers",
             "Show resolved titles beside addresses in Deck and Desk card headers.",
-            (setting) => this.renderShowTitle(setting),
+            (setting) => this.renderToggle(setting, "showTitleInDeck"),
           ),
           this.definition(
             "Show tooltips",
             "Show descriptive tooltips throughout the Slipbox view when controls are hovered or receive keyboard focus. Accessible labels remain available.",
-            (setting) => this.renderShowTooltips(setting),
+            (setting) => this.renderToggle(setting, "showTooltips"),
           ),
           this.definition(
             "Show Deck map",
             "Show an ordinal rail with section labels, a prominent active cursor, accent bookmark ticks, subdued colour ticks, and sparse Desk marks.",
-            (setting) => this.renderShowDeckMap(setting),
+            (setting) => this.renderToggle(setting, "showDeckMap"),
           ),
           this.definition("Deck orientation", "Choose the direction of the card sequence.",
             (setting) => this.renderLayoutChoice(setting, "deckOrientation", { horizontal: "Horizontal", vertical: "Vertical" })),
@@ -100,7 +101,7 @@ export class SlipboxSettingTab extends PluginSettingTab {
           this.definition(
             "Show lower Fan headers at bottom",
             "In vertical Fan, replace the footer with the header on cards below the focused card. Normal headers and footers return when selected or moved above it.",
-            (setting) => this.renderFanHeadersAtBottom(setting),
+            (setting) => this.renderToggle(setting, "fanHeadersAtBottom"),
           ),
           this.definition(
             "Card splay",
@@ -170,12 +171,12 @@ export class SlipboxSettingTab extends PluginSettingTab {
           this.definition(
             "Main card size",
             "Fixed Deck dimensions: small 720 × 480 px, medium 840 × 560 px, or large 960 × 640 px. Pan to see content outside the pane.",
-            (setting) => this.renderMainCardSize(setting),
+            (setting) => this.renderCardSize(setting, "mainCardSize"),
           ),
           this.definition(
             "Desk card size",
             "Maximum working-pile card width: small 280 px, medium 360 px, or large 440 px. Desk cards remain smaller than main cards.",
-            (setting) => this.renderDeskCardSize(setting),
+            (setting) => this.renderCardSize(setting, "deskCardSize"),
           ),
         ],
       },
@@ -186,32 +187,32 @@ export class SlipboxSettingTab extends PluginSettingTab {
           this.definition(
             "Restrict pasting in viewed cards",
             "In the Slipbox Desk viewed-card editor, allow paste for only one word or one complete Wiki or Markdown link or embed. Ordinary Markdown views are unaffected.",
-            (setting) => this.renderRestrictViewedCardPaste(setting),
+            (setting) => this.renderToggle(setting, "restrictViewedCardPaste"),
           ),
           this.definition(
             "Preview links on hover",
             "Show Obsidian Page Preview popovers for links and backlinks inside Slipbox Desk cards.",
-            (setting) => this.renderPreviewLinksOnHover(setting),
+            (setting) => this.renderToggle(setting, "previewLinksOnHover"),
           ),
           this.definition(
             "Follow links from cards",
             "Allow links, backlinks, and supplementary branch labels inside Slipbox Desk cards to navigate. Open note actions remain available.",
-            (setting) => this.renderFollowLinksFromCards(setting),
+            (setting) => this.renderToggle(setting, "followLinksFromCards"),
           ),
           this.definition(
             "Protect text present when editing begins",
             "Prevent a filed card’s existing body text from being deleted, replaced, or reordered during a viewed-card editing session. Text added during that session remains editable. Ordinary Markdown views are unaffected.",
-            (setting) => this.renderProtectFiledCardText(setting),
+            (setting) => this.renderToggle(setting, "protectFiledCardText"),
           ),
           this.definition(
             "Show automatic backlinks",
             "Reserve a footer on filed Deck and viewed cards for backlinks from Obsidian’s link graph. Turn off to remove the footer entirely; links written in card bodies are unaffected.",
-            (setting) => this.renderShowAutomaticBacklinks(setting),
+            (setting) => this.renderToggle(setting, "showAutomaticBacklinks"),
           ),
           this.definition(
             "Allow scrolling in cards",
             "Allow rendered Deck and viewed cards to scroll when their content does not fit. Turn off to show each card from the top and clip content beyond its bottom edge. Desk cards already clip; the viewed-card editor and ordinary Markdown views remain scrollable.",
-            (setting) => this.renderAllowCardScrolling(setting),
+            (setting) => this.renderToggle(setting, "allowCardScrolling"),
           ),
         ],
       },
@@ -424,111 +425,16 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
   }
 
-  private renderShowTitle(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.showTitleInDeck)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          showTitleInDeck: value,
-        }));
-    });
-  }
-
-  private renderShowTooltips(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.showTooltips)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          showTooltips: value,
-        }));
-    });
-  }
-
-  private renderShowDeckMap(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.showDeckMap)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          showDeckMap: value,
-        }));
-    });
-  }
-
-  private renderRestrictViewedCardPaste(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.restrictViewedCardPaste)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          restrictViewedCardPaste: value,
-        }));
-    });
-  }
-
-  private renderPreviewLinksOnHover(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.previewLinksOnHover)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          previewLinksOnHover: value,
-        }));
-    });
-  }
-
-  private renderFollowLinksFromCards(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.followLinksFromCards)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          followLinksFromCards: value,
-        }));
-    });
-  }
-
-  private renderProtectFiledCardText(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.protectFiledCardText)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          protectFiledCardText: value,
-        }));
-    });
-  }
-
-  private renderShowAutomaticBacklinks(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.showAutomaticBacklinks)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          showAutomaticBacklinks: value,
-        }));
-    });
-  }
-
-  private renderAllowCardScrolling(setting: Setting): void {
-    setting.addToggle((toggle) => {
-      toggle
-        .setValue(this.slipbox.settings.allowCardScrolling)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          allowCardScrolling: value,
-        }));
-    });
-  }
-
-  private renderFanHeadersAtBottom(setting: Setting): void {
+  private renderToggle(
+    setting: Setting,
+    key: "showTitleInDeck" | "showTooltips" | "showDeckMap" |
+      "restrictViewedCardPaste" | "previewLinksOnHover" | "followLinksFromCards" |
+      "protectFiledCardText" | "showAutomaticBacklinks" | "allowCardScrolling" |
+      "fanHeadersAtBottom",
+  ): void {
     setting.addToggle((toggle) => toggle
-      .setValue(this.slipbox.settings.fanHeadersAtBottom)
-      .onChange((fanHeadersAtBottom) => void this.save({
-        ...this.slipbox.settings, fanHeadersAtBottom,
-      })));
+      .setValue(this.slipbox.settings[key])
+      .onChange((value) => void this.save({ ...this.slipbox.settings, [key]: value })));
   }
 
   private renderDeckAmount(
@@ -551,30 +457,16 @@ export class SlipboxSettingTab extends PluginSettingTab {
     });
   }
 
-  private renderMainCardSize(setting: Setting): void {
+  private renderCardSize(setting: Setting, key: "mainCardSize" | "deskCardSize"): void {
     setting.addDropdown((dropdown) => {
       dropdown
         .addOption("small", "Small")
         .addOption("medium", "Medium")
         .addOption("large", "Large")
-        .setValue(this.slipbox.settings.mainCardSize)
+        .setValue(this.slipbox.settings[key])
         .onChange((value) => void this.save({
           ...this.slipbox.settings,
-          mainCardSize: normalizeCardSize(value),
-        }));
-    });
-  }
-
-  private renderDeskCardSize(setting: Setting): void {
-    setting.addDropdown((dropdown) => {
-      dropdown
-        .addOption("small", "Small")
-        .addOption("medium", "Medium")
-        .addOption("large", "Large")
-        .setValue(this.slipbox.settings.deskCardSize)
-        .onChange((value) => void this.save({
-          ...this.slipbox.settings,
-          deskCardSize: normalizeCardSize(value),
+          [key]: normalizeCardSize(value),
         }));
     });
   }
@@ -985,8 +877,4 @@ export class SlipboxSettingTab extends PluginSettingTab {
       new Notice(`Could not save Slipbox Desk settings: ${errorMessage(error)}`);
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

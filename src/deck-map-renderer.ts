@@ -1,11 +1,11 @@
-import type { DeckOrientation } from "./settings.js";
 import type {
   DeckMapReadout,
   DeckMapRenderableLandmark,
   DeckMapSection,
 } from "./deck-map.js";
+import { createHtmlElement } from "./dom.js";
+import type { DeckOrientation } from "./settings.js";
 
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 interface SectionElements {
   readonly root: HTMLElement;
@@ -207,11 +207,8 @@ export class DeckMapRenderer {
     element.classList.toggle("is-on-desk", landmark.onDesk);
   }
 
-  private create(tag: string, className: string): HTMLElement {
-    const element = this.rootElement.ownerDocument.createElementNS(
-      HTML_NAMESPACE,
-      tag,
-    );
+  private create(tag: keyof HTMLElementTagNameMap, className: string): HTMLElement {
+    const element = createHtmlElement(this.rootElement.ownerDocument, tag);
     element.className = className;
     return element;
   }

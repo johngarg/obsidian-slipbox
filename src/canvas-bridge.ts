@@ -4,6 +4,7 @@ import {
   normalizePath,
   type App,
 } from "obsidian";
+import { errorMessage } from "./value-utils.js";
 
 import {
   layoutFilesOnCanvas,
@@ -167,8 +168,4 @@ export class CanvasBridge {
       }
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

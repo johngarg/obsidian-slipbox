@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { buildLocalBranchModel } from "./helpers/local-branch-model.js";
 
 import type {
   ExplicitBranch,
   ExplicitBranchIndex,
 } from "../src/branch-links.js";
+import { buildInferredStructure } from "../src/inferred-structure.js";
 import {
-  buildLocalBranchModel,
   LocalBranchProjector,
   LocalBranchProjectorCache,
   localBranchTargets,
   type LocalBranchCard,
 } from "../src/local-branch-model.js";
-import { buildInferredStructure } from "../src/inferred-structure.js";
 
 const cards = (addresses: readonly string[]): LocalBranchCard[] =>
   addresses.map((address, index) => ({
@@ -1165,7 +1165,6 @@ describe("local branch model", () => {
     const inferred = {
       nodesByAddress: baseInferred.nodesByAddress,
       rootAddresses: baseInferred.rootAddresses,
-      addressesByDepth: baseInferred.addressesByDepth,
       get orderedAddresses() {
         orderedAddressReads += 1;
         return baseInferred.orderedAddresses;

@@ -23,14 +23,3 @@ export function toggleDeckMapVisibility(
     deckMapOverride: !(state.deckMapOverride ?? showDeckMapSetting),
   };
 }
-
-export function applyDeckMapVisibility(
-  deckMap: HTMLElement | null,
-  state: DeckMapVisibility,
-  showDeckMapSetting: boolean,
-  cardCount: number,
-): void {
-  if (deckMap !== null) {
-    deckMap.hidden = !deckMapIsVisible(state, showDeckMapSetting, cardCount);
-  }
-}

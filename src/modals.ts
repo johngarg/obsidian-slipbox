@@ -11,19 +11,19 @@ import {
 import type { DeckBookmark } from "./bookmarks.js";
 import type { VaultCardIndex } from "./card-index.js";
 import {
-  issueListDescription,
-  type DuplicateAddressPolicy,
-} from "./card-metadata.js";
-import {
   matchCardLinkSuggestions,
   type CardLinkSuggestion,
 } from "./card-link-suggestions.js";
-import { modalChoice, type ModalChoice } from "./modal-choice.js";
-import { filterLocalBranchTargets } from "./local-branch-target-search.js";
+import {
+  issueListDescription,
+  type DuplicateAddressPolicy,
+} from "./card-metadata.js";
 import type {
   LocalBranchDeparture,
   LocalBranchTarget,
 } from "./local-branch-model.js";
+import { filterLocalBranchTargets } from "./local-branch-target-search.js";
+import { modalChoice, type ModalChoice } from "./modal-choice.js";
 
 export class TextPromptModal extends Modal {
   private settled = false;
@@ -317,66 +317,6 @@ export function promptForText(
       initialValue,
       resolve,
     ).open();
-  });
-}
-
-class ConfirmationModal extends Modal {
-  private settled = false;
-
-  constructor(
-    app: App,
-    private readonly heading: string,
-    private readonly message: string,
-    private readonly confirmLabel: string,
-    private readonly resolveChoice: (confirmed: boolean) => void,
-  ) {
-    super(app);
-  }
-
-  override onOpen(): void {
-    const { contentEl } = this;
-    contentEl.addClass("slipbox-modal");
-    contentEl.createEl("h2", { text: this.heading });
-    contentEl.createEl("p", { text: this.message });
-    const actions = contentEl.createDiv({ cls: "slipbox-modal-actions" });
-    const cancel = actions.createEl("button", { text: "Keep", type: "button" });
-    const confirm = actions.createEl("button", {
-      text: this.confirmLabel,
-      type: "button",
-      cls: "mod-warning",
-    });
-    cancel.addEventListener("click", () => this.finish(false));
-    confirm.addEventListener("click", () => this.finish(true));
-    activateDefaultButtonOnEnter(contentEl, confirm);
-    confirm.focus({ preventScroll: true });
-  }
-
-  override onClose(): void {
-    this.contentEl.empty();
-    if (!this.settled) {
-      this.settled = true;
-      this.resolveChoice(false);
-    }
-  }
-
-  private finish(confirmed: boolean): void {
-    if (this.settled) {
-      return;
-    }
-    this.settled = true;
-    this.resolveChoice(confirmed);
-    this.close();
-  }
-}
-
-export function confirmAction(
-  app: App,
-  heading: string,
-  message: string,
-  confirmLabel: string,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    new ConfirmationModal(app, heading, message, confirmLabel, resolve).open();
   });
 }
 

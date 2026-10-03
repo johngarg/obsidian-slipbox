@@ -26,13 +26,13 @@ export function beginPointerActionAfterGate(
   event: PointerEvent,
   gate: PointerActionGate,
   action: () => void,
-): void {
+): () => void {
   const currentTarget = event.currentTarget;
   const document = currentTarget !== null && "ownerDocument" in currentTarget
     ? currentTarget.ownerDocument as Document
     : null;
   if (document === null) {
-    return;
+    return () => {};
   }
   const pointerId = event.pointerId;
   let pointerActive = true;
@@ -54,6 +54,7 @@ export function beginPointerActionAfterGate(
       action();
     }
   }).finally(cleanup);
+  return () => { pointerActive = false; cleanup(); };
 }
 
 /**
@@ -63,7 +64,7 @@ export function beginPointerActionAfterGate(
  */
 export function beginThresholdPointerDrag(
   options: ThresholdPointerDragOptions,
-): void {
+): () => void {
   const {
     captureTarget,
     pointerId,
@@ -73,8 +74,10 @@ export function beginThresholdPointerDrag(
   } = options;
   const document = captureTarget.ownerDocument;
   let dragging = false;
+  let active = true;
 
   const cleanup = (): void => {
+    active = false;
     document.removeEventListener("pointermove", move);
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
@@ -85,7 +88,7 @@ export function beginThresholdPointerDrag(
     }
   };
   const move = (event: PointerEvent): void => {
-    if (event.pointerId !== pointerId) {
+    if (!active || event.pointerId !== pointerId) {
       return;
     }
     const deltaX = event.clientX - startX;
@@ -108,7 +111,7 @@ export function beginThresholdPointerDrag(
     options.onDragMove(event, deltaX, deltaY);
   };
   const finish = (event: PointerEvent): void => {
-    if (event.pointerId !== pointerId) {
+    if (!active || event.pointerId !== pointerId) {
       return;
     }
     cleanup();
@@ -120,8 +123,8 @@ export function beginThresholdPointerDrag(
     event.stopPropagation();
     options.onDrop(event);
   };
-  const cancel = (event: PointerEvent): void => {
-    if (event.pointerId !== pointerId) {
+  const cancel = (event?: PointerEvent): void => {
+    if (!active || (event !== undefined && event.pointerId !== pointerId)) {
       return;
     }
     cleanup();
@@ -132,6 +135,7 @@ export function beginThresholdPointerDrag(
   document.addEventListener("pointermove", move);
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);
+  return () => cancel();
 }
 
 /** Resolve intent once after crossing the drag threshold. Ties pan the workspace. */

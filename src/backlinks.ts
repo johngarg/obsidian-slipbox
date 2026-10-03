@@ -51,22 +51,6 @@ export function indexFiledBacklinks<T extends FiledCardRecord>(
   return sourcesByTarget;
 }
 
-/** Choose the longest leading run of complete addresses that fits beside `+N`. */
-export function fitBacklinkPrefix(
-  availableWidth: number,
-  itemWidths: readonly number[],
-  separatorWidth: number,
-  overflowWidth: (hiddenCount: number) => number,
-): BacklinkFit {
-  return fitMeasuredBacklinkPrefix(
-    availableWidth,
-    itemWidths,
-    itemWidths.length,
-    separatorWidth,
-    overflowWidth,
-  );
-}
-
 /**
  * Fit a backlink prefix when only a bounded leading set has DOM measurements.
  * `totalCount` may exceed `itemWidths.length`; the unmeasured tail is always

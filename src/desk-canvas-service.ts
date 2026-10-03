@@ -1,4 +1,5 @@
 import type { TFile } from "obsidian";
+import { errorMessage } from "./value-utils.js";
 
 import type { CanvasWriteResult } from "./canvas-bridge.js";
 import { normalizeCanvasPath } from "./canvas-layout.js";
@@ -101,8 +102,4 @@ export class DeskCanvasService {
       : ` Skipped ${skipped} existing node${skipped === 1 ? "" : "s"}.`;
     this.environment.notify(`${summary}${existing}`);
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

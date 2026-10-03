@@ -325,11 +325,8 @@ export class ViewedCardRenderer {
         component,
       );
       this.environment.links.attach(rendered, file.path, "rendered-link");
-      configureRenderedCardBody(
-        target,
-        this.environment.settings().allowCardScrolling,
-        this.environment.session.snapshot?.scrollTop ?? 0,
-      );
+      // Restore scrolling after content expands: an early clamped scroll event
+      // would overwrite the session's saved position.
       await rendering;
       if (this.component !== component || !target.isConnected) return;
       this.environment.links.outline(rendered, file);

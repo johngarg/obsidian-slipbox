@@ -177,6 +177,52 @@ for (const outcome of ['load', 'error']) test('text remains visible while an ima
   assert.equal(s.renderer.bodyEl.textContent, 'Original');
 });
 
+for (const scrollDuringRender of [false, true]) test(
+  'delayed content preserves ' + (scrollDuringRender ? 'the user\'s new scroll position' : 'the saved scroll position'),
+  async t => {
+    let finish, maxScrollTop = 0;
+    const s = subject(t, async (text, target) => {
+      target.createEl('p', { text });
+      maxScrollTop = 100;
+      await new Promise(resolve => finish = resolve);
+      maxScrollTop = 1000;
+    });
+    s.env.settings().allowCardScrolling = true;
+    s.session.setScrollTop('A.md', 500);
+    const job = s.renderer.render(s.stage);
+    const body = s.renderer.bodyEl;
+    let actualScrollTop = 0;
+    // Happy DOM has no layout. Model browser clamping and asynchronous scroll
+    // events so incomplete content cannot silently replace the saved position.
+    Object.defineProperty(body, 'scrollTop', {
+      configurable: true,
+      get: () => actualScrollTop,
+      set(value) {
+        const next = Math.min(maxScrollTop, Math.max(0, value));
+        if (next === actualScrollTop) return;
+        actualScrollTop = next;
+        setImmediate(() => body.dispatchEvent(new s.window.Event('scroll')));
+      },
+    });
+    await tick();
+    await tick();
+    assert.equal(body.textContent, 'Original');
+    assert.equal(s.session.snapshot.scrollTop, 500);
+
+    if (scrollDuringRender) {
+      body.scrollTop = 60;
+      await tick();
+      assert.equal(s.session.snapshot.scrollTop, 60);
+    }
+    finish();
+    await job;
+    await tick();
+    const expected = scrollDuringRender ? 60 : 500;
+    assert.equal(body.scrollTop, expected);
+    assert.equal(s.session.snapshot.scrollTop, expected);
+  },
+);
+
 test('visible links respect navigation policy while rendering and after asynchronous additions', async t => {
   let finish, initial, added;
   const s = subject(t, async (_text, target) => {

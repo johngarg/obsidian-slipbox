@@ -11,6 +11,7 @@ initial public beta.
 - Rejected bookmark additions no longer leave a card looking bookmarked.
 - Viewed cards preserve Markdown postprocessor interactions and updates, and
   display rendered text while images and other asynchronous content load.
+- Viewed cards retain their saved scroll position while asynchronous content loads.
 
 ### Improved
 

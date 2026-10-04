@@ -21,3 +21,14 @@ export function configureRenderedCardBody(
   body.scrollTop = scrollTop;
   return scrollTop;
 }
+
+/** Static card previews show saved task state without offering unsaved toggles. */
+export function disableRenderedCardTaskCheckboxes(element: HTMLElement): void {
+  if (element.closest(".slipbox-card-scroll, .slipbox-desk-card-preview") === null) {
+    return;
+  }
+  element.querySelectorAll<HTMLInputElement>("input.task-list-item-checkbox")
+    .forEach((checkbox) => {
+      checkbox.disabled = true;
+    });
+}

@@ -8,6 +8,8 @@ initial public beta.
 
 ### Fixed
 
+- Task checkboxes in Deck cards, Desk previews and viewed cards are read-only,
+  preventing visual toggles that do not save to the note.
 - Rejected bookmark additions no longer leave a card looking bookmarked.
 - Viewed cards preserve Markdown postprocessor interactions and updates, and
   display rendered text while images and other asynchronous content load.

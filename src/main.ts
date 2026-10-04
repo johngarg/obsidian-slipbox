@@ -23,6 +23,7 @@ import {
 } from "./card-index-config.js";
 import { CardIndexRuntime } from "./card-index-runtime.js";
 import { CardIndex } from "./card-index.js";
+import { disableRenderedCardTaskCheckboxes } from "./card-display.js";
 import { issueStatusSummary } from "./card-metadata.js";
 import { CardService } from "./card-service.js";
 import {
@@ -199,6 +200,8 @@ export default class SlipboxPlugin extends Plugin {
       notify: (message) => { new Notice(message); },
     });
     this.addSettingTab(new SlipboxSettingTab(this.app, this, this));
+
+    this.registerMarkdownPostProcessor(disableRenderedCardTaskCheckboxes);
 
     this.registerView(
       DECK_VIEW_TYPE,

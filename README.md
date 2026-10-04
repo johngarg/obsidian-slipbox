@@ -33,6 +33,8 @@ The strictest paper-like experience might be too extreme for some users. For thi
 
 The Deck is the canonical sequence, while the Desk is a temporary working area beside it. Cards on the Desk keep their filed address and remain in the Deck. Slipbox Desk integrates with Obsidian Canvas, and piles can be moved easily to an existing or new canvas.
 
+Task checkboxes in rendered cards show their saved state and cannot be toggled. Edit the Markdown in the inline editor or open the note in Obsidian to change a task.
+
 ## Installation
 
 Slipbox Desk requires Obsidian 1.13.0 or later and is available on desktop only.

@@ -11,7 +11,6 @@ import {
   createPile,
   cyclePileTopCard,
   deskCardPrimaryClickIntent,
-  initialDeskFromUnfiled,
   insertionIndexForPoint,
   mergePiles,
   moveCardBetweenPiles,
@@ -59,7 +58,7 @@ describe("working piles", () => {
   });
 
   test("constructs one deterministic newest-first pile from unfiled cards", () => {
-    const state = initialDeskFromUnfiled([
+    const state = reconcileDesk(EMPTY_DESK, [
       unfiled("B.md", 20),
       unfiled("C.md", 30),
       unfiled("A.md", 20),
@@ -87,7 +86,7 @@ describe("working piles", () => {
   });
 
   test("places a new unfiled card in its own positioned pile", () => {
-    const state = initialDeskFromUnfiled([
+    const state = reconcileDesk(EMPTY_DESK, [
       unfiled("Existing.md", 1),
       unfiled("New.md", 2),
     ], "home");
@@ -412,7 +411,7 @@ describe("working piles", () => {
   });
 
   test("adds newly discovered unfiled cards to the home pile without reordering it", () => {
-    const state = initialDeskFromUnfiled([unfiled("Old.md", 1)], "home");
+    const state = reconcileDesk(EMPTY_DESK, [unfiled("Old.md", 1)], "home");
     const next = reconcileDesk(state, [
       unfiled("Newest.md", 3),
       unfiled("Middle.md", 2),
@@ -425,7 +424,7 @@ describe("working piles", () => {
 
   test("creates a new unfiled pile after the original has disappeared", () => {
     const withoutHome = removeCard(
-      initialDeskFromUnfiled([unfiled("Old.md", 1)], "home"),
+      reconcileDesk(EMPTY_DESK, [unfiled("Old.md", 1)], "home"),
       "Old.md",
     );
     const next = reconcileDesk(withoutHome, [unfiled("New.md", 2)], "replacement");

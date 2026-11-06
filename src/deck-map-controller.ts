@@ -149,11 +149,6 @@ export class DeckMapController {
     this.updateAria();
   }
 
-  updateRenderedWindow(renderedWindow: DeckMapWindow | null): void {
-    this.renderedWindow = renderedWindow;
-    this.updateAria();
-  }
-
   setVisible(visible: boolean): void {
     this.rootElement.hidden = !visible;
     if (!visible) {

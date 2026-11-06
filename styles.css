@@ -2244,14 +2244,6 @@ button.slipbox-card-color-choice.is-no-color::after {
   white-space: nowrap;
 }
 
-.slipbox-file-path {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: var(--font-ui-smaller);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .slipbox-modal-actions {
   display: flex;
   justify-content: flex-end;

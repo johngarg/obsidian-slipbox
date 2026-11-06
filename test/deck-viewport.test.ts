@@ -88,7 +88,7 @@ describe("DeckViewport", () => {
     assert.equal(viewport.moveBy(2, TEN_CARDS), true);
     assert.equal(viewport.anchorPath, "6.md");
     assert.equal(viewport.position(TEN_CARDS), 3.5);
-    viewport.centre(TEN_CARDS);
+    viewport.placeAt(6, TEN_CARDS);
     assert.equal(viewport.position(TEN_CARDS), 6);
 
     assert.equal(viewport.moveBy(20, TEN_CARDS), true);
@@ -208,22 +208,6 @@ describe("DeckViewport", () => {
       end: 23,
     });
   });
-
-  test("requests a new render window only near a mounted edge", () => {
-    const paths = Array.from({ length: 24 }, (_, index) => `${index}.md`);
-    const deck = cards(...paths);
-    const viewport = new DeckViewport();
-    viewport.navigate("10.md", deck);
-    viewport.recordRenderedWindow(deck, geometry(Number(viewport.anchorPath?.split(".")[0])));
-
-    assert.equal(viewport.needsRenderWindowRefresh(deck), false);
-    viewport.placeAt(9, deck);
-    assert.equal(viewport.needsRenderWindowRefresh(deck), true);
-    viewport.placeAt(10, deck);
-    assert.equal(viewport.needsRenderWindowRefresh(deck), false);
-    viewport.placeAt(11, deck);
-    assert.equal(viewport.needsRenderWindowRefresh(deck), true);
-  });
 });
 
 
@@ -242,11 +226,10 @@ describe("DeckViewport anchor cache", () => {
       viewport.panTo(viewport.position(deck) + (step < 500 ? 0.1 : -0.1), deck);
       viewport.placeAt(viewport.position(deck), deck);
       viewport.recordRenderedWindow(deck, geometry(viewport.position(deck)));
-      viewport.needsRenderWindowRefresh(deck);
     }
     assert.ok(Math.abs(viewport.position(deck) - 9000) < 1e-6);
     viewport.moveBy(2, deck);
-    viewport.centre(deck);
+    viewport.placeAt(9002, deck);
     assert.equal(viewport.position(deck), 9002);
     assert.equal(scans, 1);
   });

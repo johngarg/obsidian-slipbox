@@ -6,11 +6,11 @@ import type {
   ExplicitBranchIndex,
 } from "../src/branch-links.js";
 import {
-  buildLocalBranchModel,
   LocalBranchProjector,
   LocalBranchProjectorCache,
   localBranchTargets,
   type LocalBranchCard,
+  type LocalBranchModelInput,
 } from "../src/local-branch-model.js";
 import { buildInferredStructure } from "../src/inferred-structure.js";
 
@@ -47,6 +47,13 @@ function group(
     result.set(path, [...result.get(path) ?? [], branch]);
   }
   return result;
+}
+
+function buildLocalBranchModel(input: LocalBranchModelInput) {
+  return new LocalBranchProjector(input).modelForPath(
+    input.activePath,
+    input.expandedDepartureId ?? null,
+  );
 }
 
 function model(

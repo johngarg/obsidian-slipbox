@@ -210,14 +210,6 @@ export function cardFootprint(options: CardMotionOptions, motion = cardMotionSty
   return (along * Math.cos(angle) + across * Math.sin(angle)) * motion.scale / 2;
 }
 
-/** Use a selected card's index as the centred discrete viewport target. */
-export function centredViewportPosition(
-  targetIndex: number,
-  cardCount: number,
-): number {
-  return clampViewportPosition(targetIndex, cardCount);
-}
-
 /** Move an integral number of Deck positions and clamp at either boundary. */
 export function deckIndexByDelta(
   activeIndex: number,

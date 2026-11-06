@@ -4,7 +4,6 @@ import { describe, test } from "node:test";
 import {
   cyclePileFocusTarget,
   pileFocusLocationForSwap,
-  rememberPileFocus,
   swapPileFocusTarget,
   wrappedPileCardNeighbour,
   type PileFocusLocation,
@@ -127,7 +126,7 @@ describe("Deck and remembered-pile swapping", () => {
     if (landed === null) {
       assert.fail("expected cycling to land on a pile");
     }
-    const remembered = rememberPileFocus(null, landed);
+    const remembered = landed.surface === "desk" ? landed.pileId : null;
     const returned = swapPileFocusTarget(ids, landed, remembered, true);
     assert.deepEqual(returned, deck());
     assert.deepEqual(swapPileFocusTarget(ids, deck(), remembered, true), pile("one"));

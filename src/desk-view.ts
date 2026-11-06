@@ -176,27 +176,8 @@ export class DeskRenderer {
     this.filingEditor = null;
   }
 
-  get isFilingInputFocused(): boolean {
-    const input = this.filingEditor?.input;
-    return input !== undefined && input.ownerDocument.activeElement === input;
-  }
-
   get filingInput(): HTMLInputElement | null {
     return this.filingEditor?.input ?? null;
-  }
-
-  focusFilingInput(): void {
-    const input = this.filingEditor?.input;
-    input?.win.requestAnimationFrame(() => this.focusFilingInputNow());
-  }
-
-  focusFilingInputNow(): void {
-    const input = this.filingEditor?.input;
-    if (input === undefined) {
-      return;
-    }
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
   }
 
   updateFilingState(state: FilingSessionSnapshot): void {

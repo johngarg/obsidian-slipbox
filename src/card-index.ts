@@ -181,10 +181,6 @@ export class CardIndex {
     return this.current.backlinksByTargetPath.get(path) ?? NO_BACKLINKS;
   }
 
-  outgoingBranchesForPath(path: string): readonly ExplicitBranch[] {
-    return this.current.explicitBranches.outgoingBySourcePath.get(path) ?? NO_BRANCHES;
-  }
-
   incomingBranchesForPath(path: string): readonly ExplicitBranch[] {
     return this.current.explicitBranches.incomingByTargetPath.get(path) ?? NO_BRANCHES;
   }

@@ -1172,7 +1172,6 @@ describe("local branch model", () => {
     const inferred = {
       nodesByAddress: baseInferred.nodesByAddress,
       rootAddresses: baseInferred.rootAddresses,
-      addressesByDepth: baseInferred.addressesByDepth,
       get orderedAddresses() {
         orderedAddressReads += 1;
         return baseInferred.orderedAddresses;

@@ -304,7 +304,6 @@ export class DeckView extends ItemView {
   private deckMapController: DeckMapController | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private cardDimensions: CardDimensionsController | null = null;
-  private readonly cardHeaderButtonControllers = new Set<CardHeaderButtonController>();
   private viewedCardHeaderButtonController: CardHeaderButtonController | null = null;
   private positioningFrame: number | null = null;
   private positioningRetriesRemaining = 0;
@@ -2843,9 +2842,7 @@ export class DeckView extends ItemView {
       this.renderComponents.delete(path);
       this.cardFooters.removeCard(element);
       this.cardSignatures.removeCard(element);
-      const controller = this.cardHeaderControllers.get(element);
-      controller?.disconnect();
-      if (controller !== undefined) this.cardHeaderButtonControllers.delete(controller);
+      this.cardHeaderControllers.get(element)?.disconnect();
       this.cardHeaderControllers.delete(element);
       clearCardTooltip(element);
       element.remove();
@@ -2964,7 +2961,6 @@ export class DeckView extends ItemView {
         tooltipPlacement: "bottom",
         run: (action) => this.runCardAction(action, card.path, "deck"),
       });
-      this.cardHeaderButtonControllers.add(headerController);
       this.cardHeaderControllers.set(cardEl, headerController);
 
       const scroll = frame.createDiv({ cls: "slipbox-card-scroll markdown-rendered" });
@@ -3575,10 +3571,9 @@ export class DeckView extends ItemView {
   }
 
   private clearCardHeaderButtonControllers(): void {
-    for (const controller of this.cardHeaderButtonControllers) {
+    for (const controller of this.cardHeaderControllers.values()) {
       controller.disconnect();
     }
-    this.cardHeaderButtonControllers.clear();
     this.cardHeaderControllers.clear();
   }
 

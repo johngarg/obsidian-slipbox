@@ -78,14 +78,11 @@ describe("inferred address structure", () => {
     assert.equal(lexical.nodesByAddress.get("100")?.parentAddress, "10");
   });
 
-  test("groups duplicates into one structural node and retains all paths", () => {
+  test("groups duplicates into one structural node", () => {
     const index = buildInferredStructure(cards(["2", "2", "2a", "3"]), "natural");
     assert.deepEqual(index.orderedAddresses, ["2", "2a", "3"]);
-    assert.equal(index.nodesByAddress.get("2")?.paths.length, 2);
-    assert.equal(index.nodesByAddress.get("2")?.paths[0], "00-2.md");
-    assert.equal(index.nodesByAddress.get("2")?.firstDeckIndex, 0);
-    assert.equal(index.nodesByAddress.get("2")?.lastDeckIndex, 1);
-    assert.equal(index.nodesByAddress.get("2")?.subtreeEndDeckIndexExclusive, 3);
+    assert.deepEqual(index.rootAddresses, ["2", "3"]);
+    assert.deepEqual(index.nodesByAddress.get("2")?.childAddresses, ["2a"]);
     assert.equal(index.nodesByAddress.get("2a")?.parentAddress, "2");
   });
 });

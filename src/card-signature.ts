@@ -68,8 +68,7 @@ interface RenderedCardSignature {
 
 /** Keep canonical address DOM stable while independently refreshing branch metadata. */
 export class CardSignatureManager {
-  private readonly entries = new Set<RenderedCardSignature>();
-  private readonly entriesBySignature = new Map<HTMLElement, RenderedCardSignature>();
+  private readonly entries = new Map<HTMLElement, RenderedCardSignature>();
   private resizeObserver: ResizeObserver | null = null;
   private ownerWindow: Window | null = null;
   private layoutFrame: number | null = null;
@@ -127,8 +126,7 @@ export class CardSignatureManager {
       intrinsicWidth: null,
       fitKey: null,
     };
-    this.entries.add(entry);
-    this.entriesBySignature.set(signature, entry);
+    this.entries.set(signature, entry);
     this.configureLayout(signature, intrinsicSizer);
     this.populate(entry, this.environment.branchesForPath(options.path));
     return address;
@@ -136,7 +134,7 @@ export class CardSignatureManager {
 
   /** Refresh branch-derived DOM without replacing the signature or address. */
   refreshBranches(): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       const branches = this.environment.branchesForPath(entry.path);
       const shouldShow = this.environment.showBranchLabels() && branches.length > 0;
       if (
@@ -155,7 +153,7 @@ export class CardSignatureManager {
     const signature = card.querySelector<HTMLElement>(".slipbox-card-signature");
     const entry = signature === null
       ? undefined
-      : this.entriesBySignature.get(signature);
+      : this.entries.get(signature);
     if (entry === undefined || entry.interactive === interactive) {
       return;
     }
@@ -187,13 +185,12 @@ export class CardSignatureManager {
   }
 
   removeCard(card: HTMLElement): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       if (!card.contains(entry.signature)) continue;
       if (this.overflowEntry === entry) this.closeOverflowMenu();
       this.resizeObserver?.unobserve(entry.signature);
       this.resizeObserver?.unobserve(entry.intrinsicSizer);
-      this.entries.delete(entry);
-      this.entriesBySignature.delete(entry.signature);
+      this.entries.delete(entry.signature);
     }
   }
 
@@ -202,7 +199,6 @@ export class CardSignatureManager {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.entries.clear();
-    this.entriesBySignature.clear();
     const ownerWindow = this.ownerWindow;
     if (ownerWindow !== null && this.layoutFrame !== null) {
       ownerWindow.cancelAnimationFrame(this.layoutFrame);
@@ -309,7 +305,7 @@ export class CardSignatureManager {
     }
     this.layoutFrame = null;
     this.layoutTimer = null;
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       this.layout(entry);
     }
   }

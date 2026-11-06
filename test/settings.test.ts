@@ -327,7 +327,7 @@ describe("Slipbox settings", () => {
     assert.equal(normalized.titleSource, "filename");
   });
 
-  test("gives every registered action a unique command and target", () => {
+  test("gives every registered action a unique command", () => {
     const commandIds = SLIPBOX_ACTION_DEFINITIONS.map((definition) =>
       definition.commandId
     );
@@ -352,28 +352,10 @@ describe("Slipbox settings", () => {
     );
     assert.equal(
       SLIPBOX_ACTION_DEFINITIONS.every((definition) =>
-        definition.commandName !== "" && definition.target !== undefined
+        definition.commandName !== ""
       ),
       true,
     );
-    for (const action of ["next-pile", "previous-pile", "swap-deck-pile"] as const) {
-      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
-        candidate.id === action
-      );
-      assert.equal(definition?.scope, "active-view");
-      assert.equal(definition?.target, "view");
-    }
-    for (const action of [
-      "toggle-pile",
-      "previous-card-in-pile",
-      "next-card-in-pile",
-    ] as const) {
-      const definition = SLIPBOX_ACTION_DEFINITIONS.find((candidate) =>
-        candidate.id === action
-      );
-      assert.equal(definition?.scope, "active-view");
-      assert.equal(definition?.target, "focused-card");
-    }
   });
 
   test("preserves customized and deliberately empty copy-link settings", () => {

@@ -59,8 +59,7 @@ type ResizeObserverWindow = Window & {
 
 /** Shared, view-agnostic renderer for the fixed card backlink footer. */
 export class CardFooterManager {
-  private readonly entries = new Set<RenderedFooter>();
-  private readonly entriesByFooter = new Map<HTMLElement, RenderedFooter>();
+  private readonly entries = new Map<HTMLElement, RenderedFooter>();
   private resizeObserver: ResizeObserver | null = null;
   private ownerWindow: ResizeObserverWindow | null = null;
   private layoutFrame: number | null = null;
@@ -87,8 +86,7 @@ export class CardFooterManager {
 
     this.populate(entry, options.backlinks);
 
-    this.entries.add(entry);
-    this.entriesByFooter.set(footer, entry);
+    this.entries.set(footer, entry);
     this.applyInteractiveState(entry);
     const ownerWindow = footer.ownerDocument.defaultView;
     if (ownerWindow !== null) {
@@ -103,7 +101,7 @@ export class CardFooterManager {
   refreshBacklinks(
     backlinksForPath: (sourcePath: string) => readonly FiledCard[],
   ): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       const backlinks = backlinksForPath(entry.sourcePath);
       if (
         entry.backlinks.length === backlinks.length &&
@@ -129,7 +127,7 @@ export class CardFooterManager {
     if (footer === null) {
       return;
     }
-    const entry = this.entriesByFooter.get(footer);
+    const entry = this.entries.get(footer);
     if (entry === undefined || entry.interactive === interactive) {
       return;
     }
@@ -156,12 +154,11 @@ export class CardFooterManager {
   }
 
   removeCard(card: HTMLElement): void {
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       if (!card.contains(entry.footer)) continue;
       if (this.overflowEntry === entry) this.closeOverflowMenu();
       this.resizeObserver?.unobserve(entry.footer);
-      this.entries.delete(entry);
-      this.entriesByFooter.delete(entry.footer);
+      this.entries.delete(entry.footer);
     }
   }
 
@@ -169,7 +166,6 @@ export class CardFooterManager {
     this.closeOverflowMenu();
     this.resizeObserver?.disconnect();
     this.entries.clear();
-    this.entriesByFooter.clear();
     if (this.ownerWindow !== null && this.layoutFrame !== null) {
       this.ownerWindow.cancelAnimationFrame(this.layoutFrame);
       this.layoutFrame = null;
@@ -240,7 +236,7 @@ export class CardFooterManager {
       ownerWindow.clearTimeout(this.layoutTimer);
       this.layoutTimer = null;
     }
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       this.layout(entry);
     }
   }
@@ -262,7 +258,7 @@ export class CardFooterManager {
     const resizeObserver = new ownerWindow.ResizeObserver(() =>
       this.scheduleLayout());
     this.resizeObserver = resizeObserver;
-    for (const entry of this.entries) {
+    for (const entry of this.entries.values()) {
       resizeObserver.observe(entry.footer);
     }
   }

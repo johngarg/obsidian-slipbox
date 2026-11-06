@@ -115,9 +115,6 @@ export interface DeckKeyBinding {
   readonly key: string;
 }
 
-export type SlipboxActionScope = "active-view" | "global";
-export type SlipboxActionTarget = "deck-anchor" | "focused-card" | "view" | "global";
-
 export interface SlipboxActionDefinition {
   readonly id: SlipboxAction;
   readonly label: string;
@@ -126,8 +123,6 @@ export interface SlipboxActionDefinition {
   readonly defaultBindings: readonly DeckKeyBinding[];
   readonly commandId: string;
   readonly commandName: string;
-  readonly scope: SlipboxActionScope;
-  readonly target: SlipboxActionTarget;
 }
 
 const binding = (
@@ -137,7 +132,7 @@ const binding = (
 
 const BASE_ACTION_DEFINITIONS: readonly Omit<
   SlipboxActionDefinition,
-  "commandId" | "commandName" | "scope" | "target"
+  "commandId" | "commandName"
 >[] = [
   {
     id: "previous-card",
@@ -451,53 +446,11 @@ const ACTION_COMMAND_IDS: Partial<Record<SlipboxAction, string>> = {
   problems: "show-card-problems",
 };
 
-const FOCUSED_CARD_ACTIONS = new Set<SlipboxAction>([
-  "open-note",
-  "copy-link",
-  "toggle-desk",
-  "toggle-desk-without-focus",
-  "toggle-bookmark",
-  "pull-into-pile",
-  "toggle-pile",
-  "previous-card-in-pile",
-  "next-card-in-pile",
-  "edit-card",
-  "show-card-in-deck",
-  "toggle-viewed-card",
-  "file-card",
-  "move-desk-card-left",
-  "move-desk-card-right",
-  "delete-card",
-]);
-
-const GLOBAL_ACTIONS = new Set<SlipboxAction>(["bookmarks", "problems"]);
-
-const VIEW_ACTIONS = new Set<SlipboxAction>([
-  "toggle-deck-orientation",
-  "toggle-local-branch-view",
-  "toggle-deck-map",
-  "confirm-filing",
-  "cancel-filing",
-  "collapse-all-piles",
-  "return-all-filed-cards",
-  "next-pile",
-  "previous-pile",
-  "swap-deck-pile",
-]);
-
 export const SLIPBOX_ACTION_DEFINITIONS: readonly SlipboxActionDefinition[] =
   BASE_ACTION_DEFINITIONS.map((definition) => ({
     ...definition,
     commandId: ACTION_COMMAND_IDS[definition.id] ?? definition.id,
     commandName: definition.label,
-    scope: GLOBAL_ACTIONS.has(definition.id) ? "global" : "active-view",
-    target: GLOBAL_ACTIONS.has(definition.id)
-      ? "global"
-      : FOCUSED_CARD_ACTIONS.has(definition.id)
-        ? "focused-card"
-        : VIEW_ACTIONS.has(definition.id)
-          ? "view"
-          : "deck-anchor",
   }));
 
 export type DeckOrientation = "horizontal" | "vertical";

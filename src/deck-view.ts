@@ -1416,7 +1416,7 @@ export class DeckView extends ItemView {
         break;
       case "toggle-bookmark":
         if (card !== null) {
-          void this.toggleCardBookmark(card.path);
+          void this.plugin.bookmarks.toggle(card.path);
         }
         break;
       case "find-address-first":
@@ -1681,17 +1681,7 @@ export class DeckView extends ItemView {
       new Notice("Focus a Deck card before adding a bookmark.");
       return;
     }
-    const bookmarkedPaths = this.bookmarkedPaths();
-    bookmarkedPaths.add(path);
-    this.updateBookmarkUi(bookmarkedPaths);
     await this.plugin.bookmarks.add(path);
-  }
-
-  async removeBookmark(path: string): Promise<void> {
-    const bookmarkedPaths = this.bookmarkedPaths();
-    bookmarkedPaths.delete(path);
-    this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.bookmarks.remove(path);
   }
 
   private showBookmarks(): void {
@@ -1701,7 +1691,7 @@ export class DeckView extends ItemView {
       label: (path) => this.plugin.cards.filedLabel(path),
       visit: (path) => void this.jumpToPath(path),
       addCurrent: () => this.addBookmarkToCurrent(),
-      remove: (path) => this.removeBookmark(path),
+      remove: (path) => this.plugin.bookmarks.remove(path),
     }).open();
   }
 
@@ -3629,17 +3619,6 @@ export class DeckView extends ItemView {
     }
   }
 
-  private async toggleCardBookmark(path: string): Promise<void> {
-    const bookmarkedPaths = this.bookmarkedPaths();
-    if (bookmarkedPaths.has(path)) {
-      bookmarkedPaths.delete(path);
-    } else {
-      bookmarkedPaths.add(path);
-    }
-    this.updateBookmarkUi(bookmarkedPaths);
-    await this.plugin.bookmarks.toggle(path);
-  }
-
   private attachInternalLinkInteractions(
     target: HTMLElement,
     sourcePath: string,
@@ -4415,7 +4394,8 @@ export class DeckView extends ItemView {
     });
   }
 
-  private updateBookmarkUi(bookmarkedPaths = this.bookmarkedPaths()): void {
+  private updateBookmarkUi(): void {
+    const bookmarkedPaths = this.bookmarkedPaths();
     for (const cardEl of this.renderedCards) {
       const path = cardEl.dataset.path;
       if (path === undefined) {

@@ -673,21 +673,6 @@ export function normalizeCardSpread(value: unknown): number {
   return Math.min(MAX_CARD_SPREAD, Math.max(MIN_CARD_SPREAD, spread));
 }
 
-export function hasTitleAddressPropertyCollision(value: unknown): boolean {
-  if (!isRecord(value) || value.titleSource !== "frontmatter") {
-    return false;
-  }
-  const addressProperty = normalizePropertyName(
-    value.addressProperty,
-    DEFAULT_SETTINGS.addressProperty,
-  );
-  const titleProperty = normalizePropertyName(
-    value.titleProperty,
-    DEFAULT_SETTINGS.titleProperty,
-  );
-  return addressProperty === titleProperty;
-}
-
 export function normalizeKeyBinding(value: unknown): DeckKeyBinding | null {
   if (!isRecord(value) || typeof value.key !== "string" || value.key === "") {
     return null;

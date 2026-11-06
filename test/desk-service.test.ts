@@ -70,12 +70,6 @@ describe("DeskService", () => {
     assert.equal(publications(), 1);
   });
 
-  test("rejects unavailable cards after the coordinated refresh", async () => {
-    const { service, notices } = subject(false);
-    assert.equal(await service.putFile(FILE), false);
-    assert.deepEqual(notices, ["Only an available filed card can be put on the Desk."]);
-  });
-
   test("owns replacement, pile IDs, paths, rename, and deletion", async () => {
     const { service, publications } = subject();
     const id = service.createPileId();

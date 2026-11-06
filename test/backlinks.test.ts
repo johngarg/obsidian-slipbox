@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  fitBacklinkPrefix,
   fitMeasuredBacklinkPrefix,
   indexFiledBacklinks,
 } from "../src/backlinks.js";
@@ -131,6 +130,12 @@ describe("filed backlink index", () => {
 
 describe("backlink footer fitting", () => {
   const overflow = (count: number): number => String(count).length * 6 + 8;
+  const fitBacklinkPrefix = (
+    available: number,
+    widths: readonly number[],
+    separator: number,
+    overflowWidth: (hiddenCount: number) => number,
+  ) => fitMeasuredBacklinkPrefix(available, widths, widths.length, separator, overflowWidth);
 
   it("shows every address when the complete row fits", () => {
     assert.deepEqual(fitBacklinkPrefix(34, [10, 10, 10], 2, overflow), {

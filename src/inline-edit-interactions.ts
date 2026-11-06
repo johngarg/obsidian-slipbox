@@ -156,27 +156,6 @@ export function isInlineEditBodyTarget(
   ) === null;
 }
 
-/** Keep every wheel gesture originating in the editor away from Deck navigation. */
-export function shouldNavigateDeckFromWheel(
-  event: WheelEvent,
-  inlineEditor: HTMLTextAreaElement | null,
-): boolean {
-  const eventPath = event.composedPath();
-  if (
-    inlineEditor !== null &&
-    eventPath.includes(inlineEditor)
-  ) {
-    return false;
-  }
-  if (eventPath.some((target) => {
-    const classList = (target as { classList?: DOMTokenList }).classList;
-    return classList?.contains("slipbox-local-branch-scroller") === true;
-  })) {
-    return false;
-  }
-  return Math.abs(event.deltaX) > Math.abs(event.deltaY);
-}
-
 const LOCAL_BRANCH_INTERACTIVE_SELECTOR = [
   ".slipbox-local-branch-node",
   ".slipbox-local-branch-gap",

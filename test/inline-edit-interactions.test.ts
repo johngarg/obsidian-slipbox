@@ -11,7 +11,6 @@ import {
   resolveDeckEscapeAction,
   shouldBeginDeckPan,
   shouldFinishInlineEditFromPointerDown,
-  shouldNavigateDeckFromWheel,
 } from "../src/inline-edit-interactions.js";
 import {
   advancePendingDeckCommand,
@@ -224,82 +223,6 @@ describe("inline edit entry interactions", () => {
     assert.equal(isInlineEditBodyTarget(editable as unknown as EventTarget, htmlBody), false);
     assert.equal(isInlineEditBodyTarget(outside as unknown as EventTarget, htmlBody), false);
   });
-
-  test("keeps nested wheel gestures native while retaining Deck navigation", () => {
-    const window = new Window();
-    const stage = window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "div",
-    );
-    const textarea = window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "textarea",
-    );
-    const branchScroller = window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "div",
-    );
-    branchScroller.classList.add("slipbox-local-branch-scroller");
-    const branchGraph = window.document.createElementNS(
-      "http://www.w3.org/1999/xhtml",
-      "svg",
-    );
-    branchScroller.append(branchGraph);
-    stage.append(textarea, branchScroller);
-    window.document.body.append(stage);
-    let navigations = 0;
-    stage.addEventListener("wheel", (event) => {
-      if (!shouldNavigateDeckFromWheel(
-        event as unknown as WheelEvent,
-        textarea as unknown as HTMLTextAreaElement,
-      )) {
-        return;
-      }
-      event.preventDefault();
-      navigations += 1;
-    });
-
-    const editorWheel = new window.WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      deltaX: -80,
-      deltaY: 12,
-    });
-    textarea.dispatchEvent(editorWheel);
-    assert.equal(navigations, 0);
-    assert.equal(editorWheel.defaultPrevented, false);
-
-    const branchWheel = new window.WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      deltaX: -80,
-      deltaY: 12,
-    });
-    branchGraph.dispatchEvent(branchWheel);
-    assert.equal(navigations, 0);
-    assert.equal(branchWheel.defaultPrevented, false);
-
-    const deckWheel = new window.WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      deltaX: -80,
-      deltaY: 12,
-    });
-    stage.dispatchEvent(deckWheel);
-    assert.equal(navigations, 1);
-    assert.equal(deckWheel.defaultPrevented, true);
-
-    const verticalDeckWheel = new window.WheelEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      deltaX: 12,
-      deltaY: -80,
-    });
-    stage.dispatchEvent(verticalDeckWheel);
-    assert.equal(navigations, 1);
-    assert.equal(verticalDeckWheel.defaultPrevented, false);
-  });
-
 });
 
 describe("inline-aware Deck action dispatch", () => {

@@ -54,13 +54,6 @@ export const EMPTY_DESK: DeskState = {
   unfiledPileId: null,
 };
 
-export function initialDeskFromUnfiled(
-  candidates: readonly DeskCardCandidate[],
-  pileId: string,
-): DeskState {
-  return reconcileDesk(EMPTY_DESK, candidates, pileId);
-}
-
 export function createPile(
   state: DeskState,
   pileId: string,
@@ -87,10 +80,6 @@ export function createPile(
     cards: unique,
   });
   return cleanDesk({ ...state, piles });
-}
-
-export function removeEmptyPiles(state: DeskState): DeskState {
-  return cleanDesk(state);
 }
 
 export function addUniqueCardToPile(

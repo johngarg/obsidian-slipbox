@@ -608,11 +608,6 @@ export class DeckView extends ItemView {
     this.rememberScrollPositions();
     this.unloadRenderComponents();
     this.deckFrames.cancel();
-    if (this.positioningFrame !== null) {
-      this.contentEl.win.cancelAnimationFrame(this.positioningFrame);
-      this.positioningFrame = null;
-    }
-    this.positioningRetriesRemaining = 0;
     this.cancelRenderWindowRefresh();
     this.bookmarkEdgeTabs.clear();
     this.drawerTransition.reset();
@@ -627,16 +622,12 @@ export class DeckView extends ItemView {
     this.renderedCards = [];
     this.viewedCardSession.reset();
     this.clearViewedCardDom();
-    this.stageEl = null;
-    this.spaceEl = null;
-    this.deckCardsEl = null;
     this.cardFocus = null;
     this.viewedFocusFromDeckNavigation = false;
     this.lastFocusedPileId = null;
     this.lastPileFocusWasViewed = false;
     this.spaceOffsetX = 0;
     this.spaceOffsetY = 0;
-    this.renderedCards = [];
     this.deckMapController?.dispose();
     this.deckMapController = null;
     this.deckShellEl = null;
@@ -671,10 +662,6 @@ export class DeckView extends ItemView {
   get focusedFiledCard(): FiledCard | null {
     const file = this.focusedCardFile;
     return file === null ? null : this.plugin.index.filedByFile(file) ?? null;
-  }
-
-  get cardFocusState(): CardFocus | null {
-    return this.cardFocus;
   }
 
   get focusedDeckCardPath(): string | null {
@@ -1021,10 +1008,6 @@ export class DeckView extends ItemView {
     this.assignCardFocus(firstPile !== undefined && firstCard !== undefined
       ? deskCardFocus(firstCard.cardRef, firstPile.id)
       : null);
-  }
-
-  get isFiling(): boolean {
-    return this.filingSession.isActive;
   }
 
   private get filingInput(): HTMLInputElement | null {

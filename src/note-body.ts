@@ -28,16 +28,10 @@ export function splitNoteBody(
   };
 }
 
-/** Replace only the note body while retaining every prefix byte verbatim. */
-export function replaceNoteBody(
-  source: string,
-  contentStart: number,
-  body: string,
-): string {
-  return splitNoteBody(source, contentStart).prefix + body;
-}
-
-/** Replace a body only when the latest source still contains the expected body. */
+/**
+ * Replace only the note body, retaining every prefix byte verbatim, and only
+ * when the latest source still contains the expected body.
+ */
 export function replaceNoteBodyIfUnchanged(
   source: string,
   contentStart: number,

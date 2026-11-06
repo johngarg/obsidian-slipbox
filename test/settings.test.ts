@@ -8,7 +8,6 @@ import {
   MIN_CARD_SPREAD,
   DEFAULT_SETTINGS,
   formatKeyBinding,
-  hasTitleAddressPropertyCollision,
   keyBindingFromKeyboardEvent,
   keyBindingConflict,
   metadataPropertyError,
@@ -322,15 +321,10 @@ describe("Slipbox settings", () => {
       titleSource: "frontmatter",
       titleProperty: "card-key",
     };
-    assert.equal(hasTitleAddressPropertyCollision(raw), true);
     const normalized = normalizeSettings(raw);
     assert.equal(normalized.addressProperty, "card-key");
     assert.equal(normalized.titleProperty, "card-key");
     assert.equal(normalized.titleSource, "filename");
-    assert.equal(hasTitleAddressPropertyCollision({
-      ...raw,
-      titleSource: "filename",
-    }), false);
   });
 
   test("gives every registered action a unique command and target", () => {

@@ -90,30 +90,6 @@ export class DeskService {
     }
   }
 
-  async putFile(file: TFile): Promise<boolean> {
-    if (this.contains(file.path)) {
-      return true;
-    }
-    let available = false;
-    await this.environment.indexRuntime.refresh({
-      afterReconcile: () => {
-        available = this.environment.indexRuntime.index.filedByFile(file) !== undefined;
-        if (available) {
-          this.current = toggleFiledCard(
-            this.current,
-            { cardRef: file.path, kind: "filed" },
-            this.createPileId(),
-          );
-        }
-      },
-    });
-    if (!available) {
-      this.environment.notify("Only an available filed card can be put on the Desk.");
-      return false;
-    }
-    return this.contains(file.path);
-  }
-
   contains(path: string): boolean {
     return deskContains(this.current, path);
   }

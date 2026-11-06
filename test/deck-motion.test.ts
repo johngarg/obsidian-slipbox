@@ -9,7 +9,6 @@ import {
   cardMotionStyle,
   type DeckGeometry,
   cardStackOrder,
-  centredViewportPosition,
   clampViewportPosition,
   deckIndexByDelta,
   stationarySelectionOffset,
@@ -161,10 +160,10 @@ describe("free Deck motion", () => {
   });
 
   test("centres discrete navigation targets and clamps Deck boundaries", () => {
-    assert.equal(centredViewportPosition(2, 6), 2);
-    assert.equal(centredViewportPosition(-1, 6), 0);
-    assert.equal(centredViewportPosition(6, 6), 5);
-    assert.equal(centredViewportPosition(0, 0), 0);
+    assert.equal(clampViewportPosition(2, 6), 2);
+    assert.equal(clampViewportPosition(-1, 6), 0);
+    assert.equal(clampViewportPosition(6, 6), 5);
+    assert.equal(clampViewportPosition(0, 0), 0);
   });
 
   test("moves exactly ten Deck positions, clamps, and remains repeatable", () => {
